@@ -1,0 +1,88 @@
+import {
+  isDbGeneratedEntry,
+  isEntryBlocked,
+  isOutlineOrSummaryIndexEntry,
+  normalizeWorldbookComment,
+} from './blocked';
+import { processTemplateText } from '../tasks/template-process';
+import { scanTriggeredWorldbookEntries } from './scan';
+import type { PlotWorldbookConfig } from '../tasks/schema';
+
+import type { WorldbookEntry } from '@types/function/worldbook';
+
+type DecoratedEntry = WorldbookEntry & { bookName: string; normalizedComment: string };
+
+async function resolveBookNames(config: PlotWorldbookConfig): Promise<string[]> {
+  if (config.source === 'manual') {
+    return [...new Set(config.manualSelection.filter(Boolean))];
+  }
+  try {
+    const charBooks = getCharWorldbookNames('current');
+    const names: string[] = [];
+    if (charBooks.primary) names.push(charBooks.primary);
+    names.push(...charBooks.additional);
+    return [...new Set(names.filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
+function decorateEntry(entry: WorldbookEntry, bookName: string): DecoratedEntry {
+  const normalizedComment = normalizeWorldbookComment(entry.name);
+  return { ...entry, bookName, normalizedComment };
+}
+
+function isSelectedEntry(entry: DecoratedEntry, config: PlotWorldbookConfig): boolean {
+  const enabledMap = config.enabledEntries || {};
+  const hasAnySelection = Object.keys(enabledMap).length > 0;
+  if (!hasAnySelection) return true;
+  if (isDbGeneratedEntry(entry.normalizedComment)) return true;
+  const list = enabledMap[entry.bookName];
+  if (list == null || !Array.isArray(list)) return true;
+  return list.includes(entry.uid);
+}
+
+async function formatWorldbookEntries(
+  entries: WorldbookEntry[],
+  messageId: number,
+): Promise<string> {
+  const parts: string[] = [];
+  for (const entry of entries) {
+    const title = await processTemplateText(entry.name || 'Entry', messageId);
+    const content = await processTemplateText(entry.content || '', messageId);
+    if (!title && !content) continue;
+    parts.push(`# ${title || 'Entry'}\n${content}`);
+  }
+  return parts.join('\n\n');
+}
+
+export async function getWorldbookContentForPostProcess(
+  config: PlotWorldbookConfig,
+  baseScanText: string,
+  messageId: number,
+): Promise<string> {
+  const bookNames = await resolveBookNames(config);
+  if (bookNames.length === 0) return '';
+
+  const allEntries: DecoratedEntry[] = [];
+  for (const bookName of bookNames) {
+    try {
+      const entries = await getWorldbook(bookName);
+      for (const entry of entries) {
+        const decorated = decorateEntry(entry, bookName);
+        if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
+        if (!isDbGeneratedEntry(decorated.normalizedComment) && isEntryBlocked(entry)) continue;
+        if (!isSelectedEntry(decorated, config)) continue;
+        allEntries.push(decorated);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (allEntries.length === 0) return '';
+  const triggered = scanTriggeredWorldbookEntries(allEntries, baseScanText);
+  return formatWorldbookEntries(triggered, messageId);
+}
+
+export { resolveBookNames };

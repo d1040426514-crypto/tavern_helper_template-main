@@ -1,0 +1,989 @@
+/* AI 回复后处理 · 主题色由 ui/theme.ts 注入；此处仅作 JS 加载前的结构 fallback */
+.acu-pp-root {
+  font-family: var(--acu-font-ui);
+  font-size: var(--acu-font-size-body);
+  line-height: var(--acu-line-height-body);
+  color: var(--acu-text-1);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+.acu-pp-root *,
+.acu-pp-root *::before,
+.acu-pp-root *::after {
+  box-sizing: border-box;
+}
+
+/* ── 遮罩与窗口 ── */
+.acu-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--acu-overlay-bg);
+  backdrop-filter: blur(var(--acu-overlay-backdrop-blur));
+  -webkit-backdrop-filter: blur(var(--acu-overlay-backdrop-blur));
+  z-index: 10050;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: acu-pp-overlay-in 0.24s ease-out;
+}
+
+@keyframes acu-pp-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.acu-window {
+  position: relative;
+  width: min(920px, 96vw);
+  max-height: 90vh;
+  background: var(--acu-bg-0);
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-lg);
+  box-shadow: var(--acu-shadow);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: acu-pp-window-in 0.22s ease-out;
+}
+
+@keyframes acu-pp-window-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(-14px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.acu-window-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  background: var(--acu-bg-1);
+  border-bottom: 1px solid var(--acu-border);
+  font-weight: 600;
+  font-size: var(--acu-font-size-panel-title);
+  color: var(--acu-text-1);
+}
+
+.acu-window-header-end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.acu-theme-switch {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  overflow: hidden;
+  background: var(--acu-bg-2);
+}
+
+.acu-theme-btn {
+  border: 0;
+  border-right: 1px solid var(--acu-border);
+  background: transparent;
+  color: var(--acu-text-2);
+  padding: 4px 10px;
+  min-height: 28px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--acu-font-size-caption);
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.acu-theme-btn:last-child {
+  border-right: 0;
+}
+
+.acu-theme-btn:hover:not(.active) {
+  background: var(--acu-hover-overlay);
+  color: var(--acu-text-1);
+}
+
+.acu-theme-btn.active {
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-weight: 600;
+}
+
+.acu-theme-btn:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--acu-accent-glow);
+}
+
+.acu-window-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.acu-window-title-mark {
+  width: 30px;
+  height: 30px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--acu-radius-sm);
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-size: var(--acu-font-size-caption);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.acu-window-body {
+  padding: 18px;
+  overflow: auto;
+  flex: 1;
+  background: var(--acu-bg-0);
+}
+
+.acu-window-footer {
+  padding: 12px 18px;
+  border-top: 1px solid var(--acu-border);
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  background: var(--acu-bg-1);
+}
+
+.acu-footer-nav,
+.acu-footer-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.acu-page-indicator {
+  font-size: var(--acu-font-size-caption);
+  color: var(--acu-text-3);
+  min-width: 48px;
+  text-align: center;
+}
+
+/* ── 分页标签 ── */
+.acu-page-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 10px 14px;
+  background: var(--acu-bg-1);
+  border-bottom: 1px solid var(--acu-border);
+}
+
+.acu-page-tab {
+  flex: 1;
+  border: 0;
+  background: transparent;
+  padding: 8px 10px;
+  font-size: var(--acu-font-size-body-lg);
+  font-family: inherit;
+  color: var(--acu-text-3);
+  cursor: pointer;
+  border-radius: var(--acu-radius-sm);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.acu-page-tab:hover {
+  color: var(--acu-text-1);
+  background: var(--acu-hover-overlay);
+}
+
+.acu-page-tab.active {
+  color: var(--acu-on-accent);
+  background: var(--acu-accent);
+  font-weight: 600;
+  box-shadow: none;
+}
+
+.acu-page {
+  min-height: 200px;
+}
+
+/* ── 面板区块 ── */
+.acu-section {
+  background: var(--acu-bg-1);
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-md);
+  padding: 16px;
+  margin-bottom: 14px;
+}
+
+.acu-section h4 {
+  margin: 0 0 10px;
+  font-size: var(--acu-font-size-panel-title);
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--acu-text-1);
+}
+
+.acu-notes {
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-3);
+  margin-bottom: 8px;
+  line-height: var(--acu-line-height-body);
+}
+
+.acu-notes--sm {
+  font-size: var(--acu-font-size-caption);
+  line-height: 1.45;
+  margin-bottom: 4px;
+}
+
+.acu-game-time-format-hint {
+  margin: 4px 0 10px;
+  padding: 8px 10px;
+  border-left: 2px solid var(--acu-border);
+  background: var(--acu-bg-2);
+  border-radius: var(--acu-radius-sm);
+}
+
+.acu-game-time-format-hint__title {
+  font-weight: 600;
+  color: var(--acu-text-2);
+  margin-bottom: 6px;
+}
+
+.acu-game-time-format-list {
+  margin: 0 0 4px;
+  padding-left: 1.2em;
+}
+
+.acu-game-time-format-list li {
+  margin-bottom: 2px;
+}
+
+.acu-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+
+.acu-row label {
+  color: var(--acu-text-2);
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-subsection {
+  background: color-mix(in srgb, var(--acu-bg-2) 72%, var(--acu-bg-1));
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+}
+
+.acu-subsection h5 {
+  margin: 0 0 8px;
+  font-size: var(--acu-font-size-body-lg);
+  font-weight: 600;
+  color: var(--acu-text-1);
+}
+
+.acu-prompt-group {
+  margin-bottom: 10px;
+}
+
+.acu-prompt-group__toolbar {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.acu-prompt-group .acu-textarea {
+  margin-top: 6px;
+}
+
+/* ── 表单控件（高优先级，覆盖酒馆全局 select/textarea 样式） ── */
+.acu-pp-root .acu-input:not([type='checkbox']):not([type='radio']),
+.acu-pp-root .acu-select,
+.acu-pp-root .acu-textarea {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  padding: 6px 9px;
+  min-height: 32px;
+  background-color: var(--acu-bg-2) !important;
+  color: var(--acu-text-1) !important;
+  font: inherit;
+  font-size: var(--acu-font-size-body);
+  caret-color: var(--acu-text-1);
+  transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.acu-pp-root .acu-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 28px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='currentColor' d='M2.5 4.5 6 8l3.5-3.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+  background-size: 12px;
+}
+
+.acu-pp-root .acu-select option,
+.acu-pp-root .acu-select optgroup {
+  background-color: var(--acu-bg-1) !important;
+  color: var(--acu-text-1) !important;
+}
+
+.acu-pp-root .acu-input:hover:not(:disabled),
+.acu-pp-root .acu-select:hover:not(:disabled),
+.acu-pp-root .acu-textarea:hover:not(:disabled) {
+  background-color: color-mix(in srgb, var(--acu-hover-overlay) 100%, var(--acu-bg-2));
+  border-color: var(--acu-border-2);
+}
+
+.acu-pp-root .acu-input:focus,
+.acu-pp-root .acu-select:focus,
+.acu-pp-root .acu-textarea:focus {
+  outline: none;
+  border-color: var(--acu-accent);
+  box-shadow: 0 0 0 2px var(--acu-accent-glow);
+}
+
+.acu-pp-root .acu-textarea {
+  width: 100%;
+  min-height: 88px;
+  padding: 8px 10px;
+  line-height: var(--acu-line-height-body);
+  resize: vertical;
+}
+
+.acu-pp-root .acu-textarea::placeholder,
+.acu-pp-root .acu-input::placeholder {
+  color: var(--acu-text-3);
+  opacity: 1;
+}
+
+.acu-pp-root .acu-input[type='checkbox'],
+.acu-pp-root .acu-row input[type='checkbox'],
+.acu-pp-root .acu-row input[type='radio'] {
+  accent-color: var(--acu-accent);
+  background-color: transparent;
+  border: 0;
+  min-height: auto;
+}
+
+/* ── 按钮 ── */
+.acu-btn {
+  border: 0;
+  background: var(--acu-bg-2);
+  color: var(--acu-text-1);
+  border-radius: var(--acu-radius-sm);
+  padding: 6px 12px;
+  min-height: 32px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--acu-font-size-body-lg);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.acu-btn:hover:not(:disabled) {
+  background: linear-gradient(var(--acu-hover-overlay), var(--acu-hover-overlay)), var(--acu-bg-2);
+}
+
+.acu-btn:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--acu-accent-glow);
+}
+
+.acu-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.acu-btn.primary {
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-weight: 500;
+}
+
+.acu-btn.primary:hover:not(:disabled) {
+  background: var(--acu-accent-2);
+}
+
+.acu-btn.danger {
+  background: color-mix(in srgb, var(--acu-danger) 10%, transparent);
+  color: var(--acu-danger);
+}
+
+.acu-btn.danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--acu-danger) 18%, transparent);
+}
+
+.acu-btn--sm {
+  min-height: 28px;
+  padding: 4px 10px;
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-input--sm {
+  min-height: 28px;
+  padding: 4px 8px;
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-preset-section .acu-row {
+  margin-bottom: 6px;
+}
+
+.acu-preset-actions,
+.acu-preset-rename-row {
+  gap: 6px;
+  margin-bottom: 0;
+}
+
+.acu-preset-actions {
+  flex-wrap: wrap;
+}
+
+.acu-preset-actions .acu-btn--sm {
+  flex: 0 1 auto;
+}
+
+.acu-window-close {
+  min-width: 32px;
+  padding: 6px 10px;
+  font-size: 18px;
+  line-height: 1;
+  color: var(--acu-text-3);
+}
+
+.acu-window-close:hover:not(:disabled) {
+  color: var(--acu-danger);
+  background: color-mix(in srgb, var(--acu-danger) 10%, transparent);
+}
+
+/* ── 世界书列表 ── */
+.qrf_worldbook_list {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  background: var(--acu-bg-2);
+}
+
+.qrf_worldbook_list_item {
+  padding: 9px 12px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--acu-border-2);
+  color: var(--acu-text-2);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.qrf_worldbook_list_item:last-child {
+  border-bottom: 0;
+}
+
+.qrf_worldbook_list_item:hover {
+  background: var(--acu-hover-overlay);
+  color: var(--acu-text-1);
+}
+
+.qrf_worldbook_list_item.selected {
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-weight: 600;
+}
+
+.qrf_worldbook_entry_list {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  padding: 8px 10px;
+  background: var(--acu-bg-2);
+}
+
+.wb-group-title {
+  font-weight: 600;
+  margin: 10px 0 6px;
+  color: var(--acu-text-1);
+  font-size: var(--acu-font-size-body-lg);
+}
+
+/* ── 任务标签 ── */
+.acu-task-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.task-card {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 0;
+  border-radius: var(--acu-radius-sm);
+  cursor: pointer;
+  background: var(--acu-bg-2);
+  color: var(--acu-text-2);
+  font-size: var(--acu-font-size-body);
+  transition: background 0.15s ease, color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.task-card:hover {
+  background: var(--acu-hover-overlay);
+  color: var(--acu-text-1);
+}
+
+.task-card.active {
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-weight: 600;
+}
+
+.acu-task-editor {
+  margin-top: 12px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--acu-text-3) 14%, transparent);
+}
+
+/* ── 占位符说明 ── */
+.acu-placeholder-legend {
+  font-size: var(--acu-font-size-caption);
+  color: var(--acu-text-2);
+  background: color-mix(in srgb, var(--acu-bg-2) 80%, transparent);
+  border: 1px solid var(--acu-border);
+  border-left: 3px solid var(--acu-accent);
+  border-radius: var(--acu-radius-sm);
+  padding: 12px 14px;
+  line-height: var(--acu-line-height-body);
+}
+
+.acu-placeholder-legend strong {
+  display: block;
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-1);
+  margin-bottom: 6px;
+}
+
+.acu-placeholder-item {
+  margin-bottom: 3px;
+}
+
+.acu-placeholder-item code {
+  font-size: var(--acu-font-size-caption);
+  font-family: var(--acu-font-mono);
+  color: var(--acu-accent-2);
+}
+
+.acu-field-label {
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-2);
+  min-width: 64px;
+}
+
+.acu-preset-section .acu-field-label {
+  font-size: var(--acu-font-size-caption);
+  min-width: 56px;
+}
+
+.acu-preset-section .acu-select {
+  min-height: 28px;
+  padding: 4px 28px 4px 8px;
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-preset-actions {
+  margin-bottom: 0;
+}
+
+/* ── 运行日志 ── */
+.acu-run-log-card {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  background: var(--acu-bg-2);
+}
+
+.acu-run-log-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.acu-run-log-header strong {
+  color: var(--acu-text-1);
+  font-size: var(--acu-font-size-body-lg);
+}
+
+.acu-run-log-label {
+  font-size: var(--acu-font-size-body);
+  font-weight: 600;
+  color: var(--acu-text-2);
+  margin: 8px 0 4px;
+}
+
+.acu-run-log-block {
+  margin-bottom: 8px;
+}
+
+.acu-run-log-role {
+  font-size: var(--acu-font-size-caption);
+  font-family: var(--acu-font-mono);
+  color: var(--acu-accent-2);
+  margin-bottom: 4px;
+}
+
+.acu-run-log-pre {
+  margin: 0;
+  padding: 10px 12px;
+  background: var(--acu-bg-1);
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  font-size: var(--acu-font-size-caption);
+  line-height: var(--acu-line-height-body);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 240px;
+  overflow: auto;
+  font-family: var(--acu-font-mono);
+  color: var(--acu-text-1);
+}
+
+.acu-run-log-pre--reasoning {
+  border-style: dashed;
+  color: var(--acu-text-2);
+  max-height: 200px;
+}
+
+.acu-log-ok {
+  color: var(--acu-success);
+  font-size: var(--acu-font-size-body);
+  font-weight: 600;
+}
+
+.acu-log-warn {
+  color: var(--acu-warning);
+  font-size: var(--acu-font-size-body);
+  font-weight: 600;
+}
+
+.acu-log-err {
+  color: var(--acu-danger);
+  font-size: var(--acu-font-size-body);
+  font-weight: 600;
+}
+
+/* ── API 预设面板（对齐数据库本体 ApiConfigPanel） ── */
+.acu-form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+  min-width: 0;
+}
+
+.acu-form-row--stack .acu-notes {
+  margin-bottom: 0;
+}
+
+.acu-api-config-panel__hint {
+  margin: 0;
+}
+
+.acu-api-config-panel__select-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) max-content max-content;
+  gap: 6px;
+  align-items: stretch;
+}
+
+.acu-api-config-panel__editor {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 8px;
+}
+
+.acu-api-config-panel__editor-section {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.acu-api-config-panel__inline-action {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.acu-api-config-panel__two-col {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.acu-api-config-panel__muted {
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-api-config-panel__danger {
+  color: var(--acu-danger);
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-api-config-panel__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.acu-icon-btn {
+  min-width: 32px;
+  padding-inline: 8px;
+}
+
+.acu-segmented {
+  display: inline-flex;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  overflow: hidden;
+  background: var(--acu-bg-2);
+  flex-wrap: wrap;
+}
+
+.acu-segmented__btn {
+  border: 0;
+  border-right: 1px solid var(--acu-border);
+  background: transparent;
+  color: var(--acu-text-2);
+  padding: 6px 12px;
+  min-height: 32px;
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--acu-font-size-body);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.acu-segmented__btn:last-child {
+  border-right: 0;
+}
+
+.acu-segmented__btn:hover:not(.active) {
+  background: var(--acu-hover-overlay);
+  color: var(--acu-text-1);
+}
+
+.acu-segmented__btn.active {
+  background: var(--acu-accent);
+  color: var(--acu-on-accent);
+  font-weight: 600;
+}
+
+.acu-message {
+  padding: 10px 12px;
+  border-radius: var(--acu-radius-sm);
+  font-size: var(--acu-font-size-body);
+  margin-bottom: 10px;
+}
+
+.acu-message--warn {
+  background: color-mix(in srgb, var(--acu-warning) 12%, transparent);
+  color: var(--acu-warning);
+  border: 1px solid color-mix(in srgb, var(--acu-warning) 24%, transparent);
+}
+
+.acu-message--error {
+  background: color-mix(in srgb, var(--acu-danger) 12%, transparent);
+  color: var(--acu-danger);
+  border: 1px solid color-mix(in srgb, var(--acu-danger) 24%, transparent);
+}
+
+.acu-preset-dd {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.acu-preset-dd__trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  padding: 6px 9px;
+  background-color: var(--acu-bg-2) !important;
+  color: var(--acu-text-1) !important;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  font: inherit;
+  font-size: var(--acu-font-size-body);
+  cursor: pointer;
+}
+
+.acu-preset-dd__trigger:hover:not(:disabled) {
+  border-color: var(--acu-border-2);
+  background-color: color-mix(in srgb, var(--acu-hover-overlay) 100%, var(--acu-bg-2)) !important;
+}
+
+.acu-preset-dd__trigger:disabled,
+.acu-preset-dd--disabled {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.acu-preset-dd__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+}
+
+.acu-preset-dd__caret {
+  color: var(--acu-text-3);
+  transition: transform 0.15s ease;
+}
+
+.acu-preset-dd__caret--open {
+  transform: rotate(180deg);
+}
+
+.acu-preset-dd__menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 10060;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--acu-bg-1);
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  box-shadow: var(--acu-shadow);
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.acu-preset-dd__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: var(--acu-font-size-body-lg);
+  color: var(--acu-text-2);
+}
+
+.acu-preset-dd__item:hover {
+  background: var(--acu-hover-overlay);
+  color: var(--acu-text-1);
+}
+
+.acu-preset-dd__item--active {
+  color: var(--acu-on-accent);
+  background: var(--acu-accent);
+}
+
+.acu-preset-dd__item-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.acu-preset-dd__item-meta {
+  font-size: var(--acu-font-size-caption);
+  color: var(--acu-text-3);
+  white-space: nowrap;
+}
+
+.acu-preset-dd__item--active .acu-preset-dd__item-meta,
+.acu-preset-dd__item--active .acu-preset-dd__star,
+.acu-preset-dd__item--active .acu-preset-dd__check {
+  color: var(--acu-on-accent);
+}
+
+.acu-preset-dd__star {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  color: var(--acu-text-3);
+  cursor: pointer;
+  border-radius: var(--acu-radius-sm);
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-preset-dd__star:hover {
+  color: var(--acu-text-1);
+  background: var(--acu-hover-overlay);
+}
+
+.acu-preset-dd__check {
+  font-size: var(--acu-font-size-caption);
+}
+
+.acu-preset-dd__empty {
+  padding: 12px;
+  text-align: center;
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-body);
+}
+
+@media (max-width: 640px) {
+  .acu-api-config-panel__two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .acu-window-body {
+    padding: 14px;
+  }
+
+  .acu-page-tabs {
+    padding: 8px 10px;
+    gap: 2px;
+  }
+
+  .acu-page-tab {
+    padding: 8px 6px;
+    font-size: var(--acu-font-size-body);
+  }
+
+  .acu-window-footer {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .acu-footer-nav,
+  .acu-footer-actions {
+    width: 100%;
+    justify-content: center;
+  }
+}
