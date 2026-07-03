@@ -2,11 +2,13 @@ import { z } from 'zod';
 import { normalizePromptRole } from './prompt-role';
 
 export const PromptGroupSchema = z.object({
+  name: z.string().default(''),
   role: z.preprocess(
     value => (typeof value === 'string' ? normalizePromptRole(value) : value),
     z.enum(['system', 'user', 'assistant']).default('user'),
   ),
   content: z.string().default(''),
+  enabled: z.boolean().default(true),
 });
 
 export const TimeSourceSchema = z.discriminatedUnion('type', [
@@ -39,20 +41,10 @@ export const TaskScheduleSchema = z.object({
     .optional(),
 });
 
-export const PostProcessTaskSchema = z.object({
-  id: z.string(),
-  name: z.string().default('未命名任务'),
-  enabled: z.boolean().default(true),
-  stage: z.number().int().min(1).default(1),
-  order: z.number().int().default(0),
-  promptGroups: z.array(PromptGroupSchema).default([]),
-  extractInjectTags: z.array(z.string()).default(['result']),
-  mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
-  maxRetries: z.number().int().min(1).default(3),
-  minLength: z.number().int().min(0).default(0),
-  skipIfTagsFound: z.array(z.string()).optional(),
-  apiPresetName: z.string().default(''),
-  schedule: TaskScheduleSchema.optional(),
+export const PlotWorldbookConfigSchema = z.object({
+  source: z.enum(['character', 'manual']).default('character'),
+  manualSelection: z.array(z.string()).default([]),
+  enabledEntries: z.record(z.string(), z.array(z.number())).default({}),
 });
 
 export const ApiConfigSchema = z.object({
@@ -78,15 +70,34 @@ export const ApiPresetBindingSchema = z.object({
   updatedAt: z.number(),
 });
 
-export const PlotWorldbookConfigSchema = z.object({
-  source: z.enum(['character', 'manual']).default('character'),
-  manualSelection: z.array(z.string()).default([]),
-  enabledEntries: z.record(z.string(), z.array(z.number())).default({}),
-});
-
 export const ContextTagRuleSchema = z.object({
   start: z.string().default(''),
   end: z.string().default(''),
+});
+
+export const TaskContextConfigSchema = z.object({
+  contextTurnCount: z.number().int().min(0).default(3),
+  contextExtractRules: z.array(ContextTagRuleSchema).default([]),
+  contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
+});
+
+export const PostProcessTaskSchema = z.object({
+  id: z.string(),
+  name: z.string().default('未命名任务'),
+  enabled: z.boolean().default(true),
+  stage: z.number().int().min(1).default(1),
+  promptGroups: z.array(PromptGroupSchema).default([]),
+  extractInjectTags: z.array(z.string()).default(['result']), // 裸标签名或 标签@属性，如 item@id
+  mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
+  maxRetries: z.number().int().min(1).default(3),
+  minLength: z.number().int().min(0).default(0),
+  skipIfTagsFound: z.array(z.string()).optional(),
+  apiPresetName: z.string().default(''),
+  schedule: TaskScheduleSchema.optional(),
+  plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
+  plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
+  contextMode: z.enum(['inherit', 'custom']).default('inherit'),
+  contextConfig: TaskContextConfigSchema.optional(),
 });
 
 /** @deprecated 旧版规则，加载时自动迁移为 ContextTagRule */
@@ -98,6 +109,7 @@ export const ContextExcludeRuleSchema = z.object({
 export const RunLogMessageSchema = z.object({
   role: z.enum(['system', 'user', 'assistant']),
   content: z.string().default(''),
+  name: z.string().default(''),
 });
 
 export const RunLogTaskResultSchema = z.object({
@@ -108,21 +120,16 @@ export const RunLogTaskResultSchema = z.object({
   skipReason: z.string().optional(),
   success: z.boolean().optional(),
   preview: z.string().optional(),
+  extractedTags: z.record(z.string(), z.string()).optional(),
   durationMs: z.number().optional(),
   promptMessages: z.array(RunLogMessageSchema).default([]),
   aiOutput: z.string().default(''),
   aiReasoning: z.string().optional().default(''),
 });
 
-export const CustomVariableSchema = z.object({
-  key: z.string(),
-  value: z.string().default(''),
-});
-
 export const PostProcessPresetSchema = z.object({
   name: z.string(),
   tasks: z.array(PostProcessTaskSchema).default([]),
-  customVariables: z.array(CustomVariableSchema).default([]),
   finalInjectTemplate: z.string().default(''),
   tagVariableInjectTemplate: z.string().default(''),
   contextTurnCount: z.number().int().min(0).default(3),
@@ -133,6 +140,8 @@ export const PostProcessPresetSchema = z.object({
     manualSelection: [],
     enabledEntries: {},
   }),
+  taskPlotWorldbookOverridesEnabled: z.boolean().default(false),
+  taskContextOverridesEnabled: z.boolean().default(false),
 });
 
 export const ScheduleStateEntrySchema = z.object({
@@ -140,6 +149,20 @@ export const ScheduleStateEntrySchema = z.object({
   lastRunGameTimeRaw: z.string().optional(),
   lastRunGameTimeMs: z.number().optional(),
   lastRunAt: z.number().optional(),
+});
+
+/** 存于 SillyTavern chatMetadata 的聊天级任务预设快照键 */
+export const CHAT_SCOPE_METADATA_KEY = '_post_process_chat_scope';
+
+/** 聊天快照预设内部名称（不出现在全局 presets 列表） */
+export const CHAT_SNAPSHOT_PRESET_NAME = '__chat_snapshot__';
+
+export const ChatTaskScopeStateSchema = z.object({
+  mode: z.enum(['chat_override', 'inherit_global']).default('inherit_global'),
+  snapshot: PostProcessPresetSchema.optional(),
+  originPresetName: z.string().default(''),
+  updatedAt: z.number().default(0),
+  source: z.enum(['api', 'ui', 'inherit']).default('inherit'),
 });
 
 export const ScriptSettingsSchema = z
@@ -158,7 +181,6 @@ export const ScriptSettingsSchema = z
     defaultTaskApiPreset: z.string().default(''),
     taskApiPresetOverridesById: z.record(z.string(), z.string()).default({}),
     tasks: z.array(PostProcessTaskSchema).default([]),
-    customVariables: z.array(CustomVariableSchema).default([]),
     contextTurnCount: z.number().int().min(0).default(3),
     contextExtractRules: z.array(ContextTagRuleSchema).default([]),
     contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
@@ -167,6 +189,8 @@ export const ScriptSettingsSchema = z
       manualSelection: [],
       enabledEntries: {},
     }),
+    taskPlotWorldbookOverridesEnabled: z.boolean().default(false),
+    taskContextOverridesEnabled: z.boolean().default(false),
     finalInjectTemplate: z.string().default(''),
     tagVariableInjectTemplate: z.string().default(''),
     presets: z.array(PostProcessPresetSchema).default([]),
@@ -179,6 +203,12 @@ export const ScriptSettingsSchema = z
         taskResults: z.array(RunLogTaskResultSchema).default([]),
       })
       .default({ taskResults: [] }),
+    messageVarRetention: z
+      .object({
+        enabled: z.boolean().default(true),
+        keepFloors: z.number().int().min(1).default(20),
+      })
+      .default({ enabled: true, keepFloors: 20 }),
     uiThemeId: z.string().default('creamy-minimal'),
   })
   .prefault({});
@@ -188,6 +218,7 @@ export type ApiConfig = z.infer<typeof ApiConfigSchema>;
 export type ApiPreset = z.infer<typeof ApiPresetSchema>;
 export type ApiPresetBinding = z.infer<typeof ApiPresetBindingSchema>;
 export type PlotWorldbookConfig = z.infer<typeof PlotWorldbookConfigSchema>;
+export type TaskContextConfig = z.infer<typeof TaskContextConfigSchema>;
 export type PostProcessPreset = z.infer<typeof PostProcessPresetSchema>;
 export type ScriptSettings = z.infer<typeof ScriptSettingsSchema>;
 export type ContextTagRule = z.infer<typeof ContextTagRuleSchema>;
@@ -195,3 +226,4 @@ export type RunLogMessage = z.infer<typeof RunLogMessageSchema>;
 export type RunLogTaskResult = z.infer<typeof RunLogTaskResultSchema>;
 export type ScheduleStateEntry = z.infer<typeof ScheduleStateEntrySchema>;
 export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;
+export type ChatTaskScopeState = z.infer<typeof ChatTaskScopeStateSchema>;

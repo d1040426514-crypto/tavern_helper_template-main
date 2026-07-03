@@ -9,7 +9,8 @@ import {
   resolveMessageId,
   writeAddonData,
 } from './store';
-import { AddonData, AddonSchema, DEFAULT_ADDON_DATA } from './schema';
+import { stripAddonHiddenFieldsForDisplay } from './display';
+import { AddonData, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
 import { wrapAddonData, AddonWrapper } from './update';
 
 type AddonMessageOption = Extract<VariableOption, { type: 'message' }>;
@@ -23,11 +24,21 @@ export const Addon = {
 
   getAddonData(options: AddonMessageOption): AddonWrapper {
     if (!hasChatMessages()) {
-      return wrapAddonData(AddonSchema.parse(DEFAULT_ADDON_DATA));
+      return wrapAddonData(DEFAULT_ADDON_DATA);
     }
     const message_id = resolveAddonMessageId(options);
-    const addon_data = getAddonDataFromStore(message_id) ?? AddonSchema.parse(DEFAULT_ADDON_DATA);
+    const addon_data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
     return wrapAddonData(addon_data);
+  },
+
+  /** 供提示词/世界书使用：隐藏 降临、平行演化 等前端控制字段 */
+  getDisplayAddonData(options: AddonMessageOption): AddonWrapper {
+    if (!hasChatMessages()) {
+      return wrapAddonData(DEFAULT_ADDON_DATA);
+    }
+    const message_id = resolveAddonMessageId(options);
+    const addon_data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
+    return wrapAddonData(normalizeAddonData(stripAddonHiddenFieldsForDisplay(addon_data)) as AddonData);
   },
 
   replaceAddonData(data: AddonWrapper, options: AddonMessageOption): void {
@@ -35,7 +46,7 @@ export const Addon = {
       return;
     }
     const message_id = resolveAddonMessageId(options);
-    writeAddonData(message_id, AddonSchema.parse(data.addon_data));
+    writeAddonData(message_id, normalizeAddonData(data.addon_data));
   },
 
   parseMessage(message: string, old_data: AddonWrapper): Promise<AddonWrapper | undefined> {

@@ -18,8 +18,9 @@ import {
   mergeRelayTagMap,
   type RelayTagMap,
 } from './utils';
-import type { PostProcessTask, ScriptSettings } from './schema';
+import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
+import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
 
 export interface TaskRunResult {
   taskId: string;
@@ -33,17 +34,17 @@ export interface TaskRunResult {
   injectOnlyTagNames: string[];
   rawResponse: string;
   reasoningContent?: string;
-  promptMessages: { role: 'system' | 'user' | 'assistant'; content: string }[];
+  promptMessages: RunLogMessage[];
   durationMs: number;
   stage: number;
 }
 
 const processingIds = new Set<number>();
 let silentGenerationDepth = 0;
-let lastPromptMessages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+let lastPromptMessages: RunLogMessage[] = [];
 let lastPlaceholderVars: Record<string, string> = {};
 
-export function getLastPromptMessages(): { role: 'system' | 'user' | 'assistant'; content: string }[] {
+export function getLastPromptMessages(): RunLogMessage[] {
   return _.cloneDeep(lastPromptMessages);
 }
 
@@ -77,7 +78,7 @@ async function runSingleTask(
   ctx: SharedContext,
   relayTagMap: RelayTagMap,
   scheduleCtx: ScheduleContext,
-  options?: { signal?: AbortSignal; onProgress?: (message: string) => void },
+  options?: { signal?: AbortSignal },
 ): Promise<TaskRunResult> {
   const start = Date.now();
   checkRunCancelled(options?.signal);
@@ -154,7 +155,6 @@ async function runSingleTask(
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     checkRunCancelled(options?.signal);
-    options?.onProgress?.(`正在执行任务：${task.name}（阶段 ${task.stage}）`);
     try {
       silentGenerationDepth++;
       const apiResult = await callWithResolvedApi(
@@ -208,8 +208,12 @@ async function runSingleTask(
   };
 }
 
-function groupTasksByStage(tasks: PostProcessTask[]): PostProcessTask[][] {
-  const sorted = [...tasks].sort((a, b) => a.stage - b.stage || a.order - b.order);
+function groupTasksByStage(tasks: PostProcessTask[], listOrder: PostProcessTask[]): PostProcessTask[][] {
+  const indexById = new Map(listOrder.map((t, i) => [t.id, i]));
+  const sorted = [...tasks].sort((a, b) => {
+    if (a.stage !== b.stage) return a.stage - b.stage;
+    return (indexById.get(a.id) ?? 0) - (indexById.get(b.id) ?? 0);
+  });
   const groups: PostProcessTask[][] = [];
   let currentStage = -1;
   for (const task of sorted) {
@@ -222,11 +226,65 @@ function groupTasksByStage(tasks: PostProcessTask[]): PostProcessTask[][] {
   return groups;
 }
 
+interface StageProgressReporter {
+  setRunning(taskId: string): void;
+  setFinished(taskId: string, result: TaskRunResult): void;
+  pushSnapshot(): void;
+}
+
+function createStageProgressReporter(
+  stageTasks: PostProcessTask[],
+  stageNo: number,
+  onProgress?: (update: TaskProgressUpdate) => void,
+): StageProgressReporter {
+  const tasks: TaskProgressItem[] = stageTasks.map(t => ({
+    taskId: t.id,
+    taskName: t.name,
+    status: 'pending',
+  }));
+
+  const pushSnapshot = () => {
+    const snapshot: TaskProgressSnapshot = {
+      headline:
+        stageTasks.length === 1
+          ? `正在执行任务：${stageTasks[0]!.name}（阶段 ${stageNo}）`
+          : `正在执行阶段 ${stageNo}`,
+      stageNo,
+      tasks: tasks.map(t => ({ ...t })),
+    };
+    onProgress?.(snapshot);
+  };
+
+  return {
+    setRunning(taskId: string) {
+      const item = tasks.find(t => t.taskId === taskId);
+      if (item) item.status = 'running';
+      pushSnapshot();
+    },
+    setFinished(taskId: string, result: TaskRunResult) {
+      const item = tasks.find(t => t.taskId === taskId);
+      if (!item) return;
+      if (result.skipped) {
+        item.status = 'skipped';
+        item.detail = result.skipReason;
+      } else if (result.success) {
+        item.status = 'done';
+        item.detail = undefined;
+      } else {
+        item.status = 'failed';
+        item.detail = result.skipReason;
+      }
+      pushSnapshot();
+    },
+    pushSnapshot,
+  };
+}
+
 export interface RunPostProcessOptions {
   bypassSchedule?: boolean;
   isRerun?: boolean;
   signal?: AbortSignal;
-  onProgress?: (message: string) => void;
+  onProgress?: (update: TaskProgressUpdate) => void;
 }
 
 export async function runPostProcessTasks(
@@ -256,20 +314,21 @@ export async function runPostProcessTasks(
   let cancelled = false;
 
   try {
-    for (const stageTasks of groupTasksByStage(enabledTasks)) {
+    for (const stageTasks of groupTasksByStage(enabledTasks, settings.tasks)) {
       checkRunCancelled(options?.signal);
       const stageNo = stageTasks[0]?.stage ?? 1;
-      const stageTaskNames = stageTasks.map(t => t.name).join('、');
-      if (stageTasks.length === 1) {
-        options?.onProgress?.(`正在执行任务：${stageTaskNames}（阶段 ${stageNo}）`);
-      } else {
-        options?.onProgress?.(`正在执行阶段 ${stageNo}：${stageTaskNames}`);
-      }
+      const reporter = createStageProgressReporter(stageTasks, stageNo, options?.onProgress);
+      reporter.pushSnapshot();
 
       const stageRelayTagMap = new Map(aggregatedRelayTags);
-      const runOptions = { signal: options?.signal, onProgress: options?.onProgress };
+      const runOptions = { signal: options?.signal };
       const stageResults = await Promise.all(
-        stageTasks.map(task => runSingleTask(task, ctx, stageRelayTagMap, scheduleCtx, runOptions)),
+        stageTasks.map(async task => {
+          reporter.setRunning(task.id);
+          const result = await runSingleTask(task, ctx, stageRelayTagMap, scheduleCtx, runOptions);
+          reporter.setFinished(task.id, result);
+          return result;
+        }),
       );
       checkRunCancelled(options?.signal);
       results.push(...stageResults);

@@ -125,13 +125,14 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     return {
       name,
       tasks: _.cloneDeep(s.tasks),
-      customVariables: _.cloneDeep(s.customVariables),
       finalInjectTemplate: s.finalInjectTemplate,
       tagVariableInjectTemplate: s.tagVariableInjectTemplate,
       contextTurnCount: s.contextTurnCount,
       contextExtractRules: _.cloneDeep(s.contextExtractRules),
       contextExcludeRules: _.cloneDeep(s.contextExcludeRules),
       plotWorldbookConfig: _.cloneDeep(s.plotWorldbookConfig),
+      taskPlotWorldbookOverridesEnabled: s.taskPlotWorldbookOverridesEnabled,
+      taskContextOverridesEnabled: s.taskContextOverridesEnabled,
     };
   }
 
@@ -158,13 +159,14 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     if (!preset) return;
     settings.value.activePresetName = presetName;
     settings.value.tasks = _.cloneDeep(preset.tasks);
-    settings.value.customVariables = _.cloneDeep(preset.customVariables);
     settings.value.finalInjectTemplate = preset.finalInjectTemplate;
     settings.value.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
     settings.value.contextTurnCount = preset.contextTurnCount;
     settings.value.contextExtractRules = _.cloneDeep(preset.contextExtractRules);
     settings.value.contextExcludeRules = _.cloneDeep(preset.contextExcludeRules);
     settings.value.plotWorldbookConfig = _.cloneDeep(preset.plotWorldbookConfig);
+    settings.value.taskPlotWorldbookOverridesEnabled = preset.taskPlotWorldbookOverridesEnabled ?? false;
+    settings.value.taskContextOverridesEnabled = preset.taskContextOverridesEnabled ?? false;
     persist();
   }
 
@@ -175,6 +177,19 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     else settings.value.presets.push(cloned);
     applyPreset(cloned.name);
     return cloned.name;
+  }
+
+  function deleteTaskPreset(name: string): boolean {
+    if (settings.value.presets.length <= 1) return false;
+    const idx = settings.value.presets.findIndex(p => p.name === name);
+    if (idx < 0) return false;
+    settings.value.presets.splice(idx, 1);
+    if (settings.value.activePresetName === name) {
+      const next = settings.value.presets[0]?.name;
+      if (next) applyPreset(next);
+    }
+    persist();
+    return true;
   }
 
   function presetNameFromFileName(fileName?: string): string {
@@ -196,13 +211,14 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
       const preset: PostProcessPreset = {
         name,
         tasks: s.tasks,
-        customVariables: s.customVariables,
         finalInjectTemplate: s.finalInjectTemplate,
         tagVariableInjectTemplate: s.tagVariableInjectTemplate,
         contextTurnCount: s.contextTurnCount,
         contextExtractRules: s.contextExtractRules,
         contextExcludeRules: s.contextExcludeRules,
         plotWorldbookConfig: s.plotWorldbookConfig,
+        taskPlotWorldbookOverridesEnabled: s.taskPlotWorldbookOverridesEnabled ?? false,
+        taskContextOverridesEnabled: s.taskContextOverridesEnabled ?? false,
       };
 
       if (s.apiPresets.length) {
@@ -230,5 +246,5 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     }
   });
 
-  return { settings, persist, reload, applyPreset, importPresetFromJson, saveActivePreset, saveAsNewPreset };
+  return { settings, persist, reload, applyPreset, importPresetFromJson, saveActivePreset, saveAsNewPreset, deleteTaskPreset };
 });

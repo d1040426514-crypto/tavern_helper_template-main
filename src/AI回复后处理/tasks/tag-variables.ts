@@ -1,12 +1,14 @@
 import { processTemplateText } from './template-process';
 import type { ScriptSettings } from './schema';
 import {
+  expandWritableKeysFromPlaceholder,
+  formatTagValueForInject,
   getPlotPlaceholderTagNames,
-  getPlotTagMapValue,
   mergeRelayTagMap,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
+import { parseExtractTagSpec } from './tag-extract';
 
 export const TAG_DATA_ROOT_KEY = 'post_process_tags';
 
@@ -77,7 +79,12 @@ export function buildInjectOnlyTagsUnion(tasks: ScriptSettings['tasks']): Set<st
     if (!task.enabled) continue;
     for (const tag of task.extractInjectTags ?? []) {
       const t = tag.trim();
-      if (t) set.add(t);
+      if (!t) continue;
+      set.add(t);
+      const spec = parseExtractTagSpec(t);
+      if (spec && !spec.attrName) {
+        set.add(spec.tagName);
+      }
     }
   }
   return set;
@@ -183,6 +190,67 @@ function getTagNamesFromVariableTemplate(template: string, successful: TagAggreg
   return new Set(getPlotPlaceholderTagNames(text));
 }
 
+export type PostProcessWritableTaskResult = {
+  success?: boolean;
+  skipped?: boolean;
+  taskId: string;
+  taskName: string;
+  extractedTags?: Record<string, string>;
+};
+
+export function buildExtractedBlockFromTags(tags: Record<string, string> | undefined): string {
+  if (!tags || typeof tags !== 'object') return '';
+  return Object.entries(tags)
+    .filter(([, value]) => String(value ?? '').trim())
+    .map(([tag, content]) => formatTagValueForInject(tag, content))
+    .join('\n\n');
+}
+
+function toTagAggregateInput(r: PostProcessWritableTaskResult): TagAggregateInput {
+  const extractedTags = r.extractedTags ?? {};
+  return {
+    success: !!r.success,
+    skipped: r.skipped,
+    extractedTags,
+    extractedBlock: buildExtractedBlockFromTags(extractedTags),
+    taskId: r.taskId,
+    taskName: r.taskName,
+  };
+}
+
+export function getPostProcessWritableTagNames(
+  settings: ScriptSettings,
+  taskResults: PostProcessWritableTaskResult[],
+): Set<string> {
+  const template = settings.tagVariableInjectTemplate?.trim();
+  if (!template) return new Set();
+
+  const successful = taskResults.filter(r => r.success && !r.skipped).map(toTagAggregateInput);
+  const placeholderNames = getTagNamesFromVariableTemplate(template, successful);
+  const aggregated = aggregateTaskTagResults(successful);
+  const availableKeys = [...aggregated.keys()];
+
+  const writable = new Set<string>();
+  for (const name of placeholderNames) {
+    for (const key of expandWritableKeysFromPlaceholder(name, availableKeys)) {
+      writable.add(key);
+    }
+  }
+  return writable;
+}
+
+export function pickTagsForPostProcessWrite(
+  tags: Record<string, string>,
+  writable: Set<string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const tagName of writable) {
+    if (!(tagName in tags)) continue;
+    out[tagName] = tags[tagName] ?? '';
+  }
+  return out;
+}
+
 export function registerTagVariableInheritance(): EventOnReturn {
   const onMessage = (message_id: number) => {
     errorCatched(() => inheritTagVariables(message_id))();
@@ -205,6 +273,28 @@ export function registerTagVariableInheritance(): EventOnReturn {
   };
 }
 
+export function writeFloorTagValues(messageId: number, tags: Record<string, string>): void {
+  if (!isAccessibleMessageFloor(messageId)) {
+    throw new Error(`消息楼层 ${messageId} 不可访问`);
+  }
+
+  updateVariablesWith(
+    variables => {
+      migrateLegacyTagsOnFloor(variables);
+      const current = readTagContainer(variables);
+      const next = { ...current };
+      for (const [tagName, value] of Object.entries(tags)) {
+        const text = String(value ?? '').trim();
+        if (text) next[tagName] = text;
+        else delete next[tagName];
+      }
+      variables[TAG_DATA_ROOT_KEY] = next;
+      return variables;
+    },
+    { type: 'message', message_id: messageId },
+  );
+}
+
 export async function applyTagVariableInjectTemplate(
   settings: ScriptSettings,
   results: TagAggregateInput[],
@@ -221,12 +311,15 @@ export async function applyTagVariableInjectTemplate(
   if (!tagNames.size) return;
 
   const toWrite: Record<string, string> = {};
-  for (const tagName of tagNames) {
-    const entry = getPlotTagMapValue(aggregated, tagName);
-    if (!entry.found || !entry.value.length) continue;
-    const inner = entry.value.filter(Boolean).join('\n\n').trim();
-    if (!inner) continue;
-    toWrite[tagName] = inner;
+  for (const placeholderName of tagNames) {
+    for (const key of expandWritableKeysFromPlaceholder(placeholderName, aggregated.keys())) {
+      const mapKey = [...aggregated.keys()].find(k => k.toLowerCase() === key.toLowerCase());
+      if (!mapKey) continue;
+      const values = aggregated.get(mapKey) ?? [];
+      const inner = values.filter(Boolean).join('\n\n').trim();
+      if (!inner) continue;
+      toWrite[mapKey] = inner;
+    }
   }
 
   if (!Object.keys(toWrite).length) return;

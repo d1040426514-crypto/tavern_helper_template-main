@@ -1,10 +1,20 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import { storeToRefs } from 'pinia';
-import { useSettingsStore } from '../settings';
+import type { PlotWorldbookConfig } from '../tasks/schema';
 import { shouldShowEntryInUi } from '../worldbook/blocked';
 
-const { settings } = storeToRefs(useSettingsStore());
+withDefaults(
+  defineProps<{
+    embedded?: boolean;
+    title?: string;
+  }>(),
+  {
+    embedded: false,
+    title: '$1 默认世界书',
+  },
+);
+
+const config = defineModel<PlotWorldbookConfig>('config', { required: true });
 
 const bookFilter = ref('');
 const entryFilter = ref('');
@@ -13,12 +23,12 @@ const entryGroups = ref<
   { bookName: string; entries: { uid: number; label: string; checked: boolean; disabled: boolean }[] }[]
 >([]);
 
-const cfg = computed(() => settings.value.plotWorldbookConfig);
+const cfg = computed(() => config.value);
 
 const worldbookSource = computed({
-  get: () => settings.value.plotWorldbookConfig.source,
+  get: () => config.value.source,
   set: (value: 'character' | 'manual') => {
-    settings.value.plotWorldbookConfig.source = value;
+    config.value = { ...config.value, source: value };
   },
 });
 
@@ -48,11 +58,11 @@ const filteredBooks = computed(() => {
 });
 
 function toggleBook(name: string) {
-  const list = [...settings.value.plotWorldbookConfig.manualSelection];
+  const list = [...config.value.manualSelection];
   const idx = list.indexOf(name);
   if (idx >= 0) list.splice(idx, 1);
   else list.push(name);
-  settings.value.plotWorldbookConfig.manualSelection = list;
+  config.value = { ...config.value, manualSelection: list };
   void refreshEntries();
 }
 
@@ -70,14 +80,15 @@ async function refreshEntries() {
     bookNames = [...new Set(bookNames.filter(Boolean))];
 
     const groups: typeof entryGroups.value = [];
+    const enabledEntries = { ...cfg.value.enabledEntries };
     for (const bookName of bookNames) {
       const entries = await getWorldbook(bookName);
-      if (!cfg.value.enabledEntries[bookName]) {
-        cfg.value.enabledEntries[bookName] = entries
+      if (!enabledEntries[bookName]) {
+        enabledEntries[bookName] = entries
           .filter(e => shouldShowEntryInUi({ name: e.name }))
           .map(e => e.uid);
       }
-      const enabled = cfg.value.enabledEntries[bookName] ?? [];
+      const enabled = enabledEntries[bookName] ?? [];
       const visible = entries
         .filter(e => shouldShowEntryInUi({ name: e.name }))
         .map(e => ({
@@ -88,6 +99,7 @@ async function refreshEntries() {
         }));
       if (visible.length) groups.push({ bookName, entries: visible });
     }
+    config.value = { ...config.value, enabledEntries };
     entryGroups.value = groups;
   } finally {
     loading.value = false;
@@ -102,7 +114,10 @@ function toggleEntry(bookName: string, uid: number, checked: boolean) {
     const i = list.indexOf(uid);
     if (i >= 0) list.splice(i, 1);
   }
-  cfg.value.enabledEntries = { ...cfg.value.enabledEntries, [bookName]: list };
+  config.value = {
+    ...config.value,
+    enabledEntries: { ...config.value.enabledEntries, [bookName]: list },
+  };
 }
 
 function selectAllEntries(select: boolean) {
@@ -111,7 +126,7 @@ function selectAllEntries(select: boolean) {
     next[g.bookName] = select ? g.entries.map(e => e.uid) : [];
     for (const e of g.entries) e.checked = select;
   }
-  cfg.value.enabledEntries = next;
+  config.value = { ...config.value, enabledEntries: next };
 }
 
 const filteredGroups = computed(() => {
@@ -146,10 +161,12 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="acu-section">
-    <h4>后处理世界书选择（独立）</h4>
-    <p class="acu-notes">仅影响本脚本后处理，不会影响数据库插件填表/读取世界书的选择。</p>
-    <div class="acu-row">
+  <div :class="embedded ? 'acu-subsection acu-plot-worldbook-embedded' : 'acu-section'">
+    <template v-if="!embedded">
+      <h4>{{ title }}</h4>
+      <p class="acu-notes">任务未自定义 $1 世界书时，含 $1 占位符的任务使用此配置。不影响数据库插件填表/读取世界书的选择。</p>
+    </template>
+    <div class="acu-row acu-row--inline">
       <label><input v-model="worldbookSource" type="radio" value="character" /> 角色卡绑定</label>
       <label><input v-model="worldbookSource" type="radio" value="manual" /> 手动选择</label>
     </div>
@@ -172,7 +189,7 @@ onMounted(async () => {
         {{ book }}
       </div>
     </div>
-    <div class="acu-row" style="margin-top: 12px">
+    <div class="acu-row acu-row--btn-grid" style="margin-top: 12px">
       <strong>启用的世界书条目</strong>
       <button class="acu-btn" type="button" @click="selectAllEntries(true)">全选</button>
       <button class="acu-btn" type="button" @click="selectAllEntries(false)">全不选</button>
@@ -183,7 +200,7 @@ onMounted(async () => {
     <div v-else class="qrf_worldbook_entry_list">
       <div v-for="group in filteredGroups" :key="group.bookName">
         <div class="wb-group-title">{{ group.bookName }}</div>
-        <label v-for="entry in group.entries" :key="entry.uid" class="acu-row">
+        <label v-for="entry in group.entries" :key="entry.uid" class="acu-row acu-row--inline">
           <input
             type="checkbox"
             :checked="(cfg.enabledEntries[group.bookName] ?? []).includes(entry.uid)"

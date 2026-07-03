@@ -4,13 +4,24 @@ import {
   isOutlineOrSummaryIndexEntry,
   normalizeWorldbookComment,
 } from './blocked';
+import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { scanTriggeredWorldbookEntries } from './scan';
-import type { PlotWorldbookConfig } from '../tasks/schema';
+import type { ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
 type DecoratedEntry = WorldbookEntry & { bookName: string; normalizedComment: string };
+
+/** 条目宏/EJS 完成后：排除规则 + worldbook_context 包装（对齐 shujuku 剧情 $1 替换） */
+export function finalizePlotWorldbookPlaceholderContent(
+  raw: string,
+  excludeRules: ContextTagRule[],
+): string {
+  const filtered = applyExcludeRulesToText(raw, excludeRules).trim();
+  if (!filtered) return '';
+  return `\n<worldbook_context>\n${filtered}\n</worldbook_context>\n`;
+}
 
 async function resolveBookNames(config: PlotWorldbookConfig): Promise<string[]> {
   if (config.source === 'manual') {

@@ -3,7 +3,9 @@ import { reloadOnChatChange } from '@util/script';
 import { Addon } from './global-api';
 import { applyAddonUpdateFromMessage, backfillChatAddonData, processFloor } from './store';
 
-export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA } from './schema';
+export { randomMinorTitle, refreshNarrativeGuidanceDetails } from './narrative-guidance';
+export { ADDON_HIDDEN_FROM_PROMPT_KEYS, stripAddonHiddenFieldsForDisplay } from './display';
+export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
 export type { AddonData } from './schema';
 export { AddonEvent } from './events';
 export { applyMvuLikePatch, extractAddonJsonPatchOps, extractAddonJsonPatchOpsWithIssues, parseJsonPatchOps } from './patch';

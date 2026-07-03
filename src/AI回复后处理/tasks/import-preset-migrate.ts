@@ -25,7 +25,9 @@ function migratePromptGroups(task: MutableRecord): void {
     const item = group as MutableRecord;
     return {
       ...item,
+      name: typeof item.name === 'string' ? item.name : '',
       role: normalizePromptRole(item.role),
+      enabled: item.enabled !== false,
     };
   });
 }
@@ -36,6 +38,7 @@ function migrateTaskList(tasks: unknown): void {
     if (!task || typeof task !== 'object') continue;
     migrateExtractTags(task as MutableRecord);
     migratePromptGroups(task as MutableRecord);
+    delete (task as MutableRecord).order;
   }
 }
 

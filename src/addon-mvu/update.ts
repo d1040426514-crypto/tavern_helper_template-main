@@ -1,7 +1,7 @@
 import { shouldShowAddonUpdateErrors } from './config';
 import { AddonEvent } from './events';
 import { applyMvuLikePatch, extractAddonJsonPatchOpsWithIssues, MvuJsonPatchOp, PatchIssue } from './patch';
-import { AddonData, AddonSchema } from './schema';
+import { AddonData, normalizeAddonData } from './schema';
 
 export type AddonWrapper = {
   addon_data: AddonData;
@@ -70,11 +70,11 @@ export async function updateAddonFromMessage(
   const { data: patched, issues: apply_issues } = applyMvuLikePatch(_.cloneDeep(base), ops);
   const issues = [...parse_issues, ...apply_issues];
 
-  let new_wrapper = wrapAddonData(AddonSchema.parse(patched));
+  let new_wrapper = wrapAddonData(normalizeAddonData(patched));
 
   if (options.emitEvents) {
     await eventEmit(AddonEvent.VARIABLE_UPDATE_ENDED, new_wrapper, old_wrapper);
-    new_wrapper = wrapAddonData(AddonSchema.parse(new_wrapper.addon_data));
+    new_wrapper = wrapAddonData(normalizeAddonData(new_wrapper.addon_data));
   }
 
   notifyIssues(issues);

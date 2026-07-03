@@ -1,0 +1,27 @@
+---
+<%_
+function stripAddonForDisplay(data) {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
+  const copy = _.cloneDeep(data);
+  const hidden = new Set(['降临', '平行演化']);
+  const planes = copy.位面;
+  if (planes && typeof planes === 'object' && !Array.isArray(planes)) {
+    for (const plane of Object.values(planes)) {
+      if (!plane || typeof plane !== 'object' || Array.isArray(plane)) continue;
+      for (const key of hidden) delete plane[key];
+      const points = plane.岁月史书?.特异点;
+      if (points && typeof points === 'object' && !Array.isArray(points)) {
+        for (const sp of Object.values(points)) {
+          if (sp && typeof sp === 'object' && !Array.isArray(sp)) {
+            for (const key of hidden) delete sp[key];
+          }
+        }
+      }
+    }
+  }
+  return copy;
+}
+_%>
+<addon_status_current_variable>
+<%- YAML.stringify(stripAddonForDisplay(getvar('addon_data')), { blockQuote: 'literal' }) %>
+</addon_status_current_variable>

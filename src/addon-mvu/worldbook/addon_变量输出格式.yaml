@@ -1,0 +1,31 @@
+---
+addon变量输出格式:
+  rule:
+    - you must output the addon update analysis and the actual update commands at once in the end of the next reply
+    - the update commands works like the **JSON Patch (RFC 6902)** standard, must be a valid JSON array containing operation objects, but supports the following operations instead:
+      - replace: replace the value of existing paths
+      - delta: update the value of existing number paths by a delta value
+      - insert: insert new items into an object or array (using `-` as array index intends appending to the end)
+      - remove
+      - move
+    - paths are relative to addon_data root (e.g. `/位面/某世界/岁月史书/正史/某演变纪名/描述`, not `/addon_data/位面/...`)
+    - boolean fields must be JSON true/false, never strings like "true" or "false"
+    - don't update field names starts with `_` as they are readonly
+    - do not update paths containing 降临 or 平行演化 (frontend-controlled, reserved for UI)
+    - 叙事指导.细节层 is auto-refreshed each turn by addon-mvu script (minor arcana draw); prefer updating 宏观层/发展层 and event fields instead
+  format: |-
+    <UpdateAddonVariable>
+    <Analysis>$(IN ENGLISH, no more than 80 words)
+    - ${calculate time passed: ...}
+    - ${decide whether dramatic updates are allowed: yes/no}
+    - ${analyze every addon variable based on its corresponding check: ...}
+    </Analysis>
+    <AddonJSONPatch>
+    [
+      { "op": "replace", "path": "${/path/to/variable}", "value": "${new_value}" },
+      { "op": "insert", "path": "${/path/to/object/new_key}", "value": "${new_value}" },
+      { "op": "remove", "path": "${/path/to/object/key}" },
+      ...
+    ]
+    </AddonJSONPatch>
+    </UpdateAddonVariable>

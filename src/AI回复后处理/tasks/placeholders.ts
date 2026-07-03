@@ -1,5 +1,9 @@
 import { resolveSummaryIndexContent } from '../bridge/summary-index';
-import { getWorldbookContentForPostProcess } from '../worldbook/content';
+import { buildAssistantContextSlice, buildPlotWorldbookBaseScanText } from './assistant-context';
+import {
+  finalizePlotWorldbookPlaceholderContent,
+  getWorldbookContentForPostProcess,
+} from '../worldbook/content';
 import {
   buildCurrentFloorTagMap,
   buildInjectOnlyTagsUnion,
@@ -9,18 +13,17 @@ import {
 import { processTemplateText } from './template-process';
 import {
   buildTaskWorldbookTriggerText,
+  isPromptGroupEnabled,
   replacePlaceholdersInText,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
-import { sanitizeAiContextForPostProcess, sanitizeUserInputForPostProcess } from './sanitize-context';
+import { resolveTaskPlotWorldbookConfig } from './plot-worldbook-config';
+import { settingsWithTaskContext } from './context-config';
 import { shieldScriptPlaceholders, unshieldScriptPlaceholders } from './placeholder-shield';
-import {
-  applyContextTagFilters,
-  normalizeContextTagRules,
-} from './context-tags';
+import { normalizeContextTagRules } from './context-tags';
 import type { DataSnapshot } from '../bridge/database-api';
-import type { PostProcessTask, ScriptSettings } from './schema';
+import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import { normalizePromptRole } from './prompt-role';
 
 export interface SharedContext {
@@ -35,33 +38,8 @@ export interface SharedContext {
   injectOnlyTagsUnion: Set<string>;
 }
 
-function applyContextFilters(text: string, settings: ScriptSettings): string {
-  const extractRules = normalizeContextTagRules(settings.contextExtractRules);
-  const excludeRules = normalizeContextTagRules(settings.contextExcludeRules);
-  return applyContextTagFilters(text, extractRules, excludeRules);
-}
-
 function buildContext7(settings: ScriptSettings, messageId: number, aiText: string): string {
-  const n = Math.max(0, settings.contextTurnCount);
-  const endId = messageId >= 0 ? messageId : getLastMessageId();
-  if (n === 0 && !aiText.trim()) return '';
-  if (n === 0) {
-    return sanitizeAiContextForPostProcess(applyContextFilters(aiText, settings));
-  }
-  try {
-    if (endId < 0) return sanitizeAiContextForPostProcess(applyContextFilters(aiText, settings));
-    const msgs = getChatMessages(`0-${endId}`);
-    const assistantMsgs = msgs.filter(m => m.role === 'assistant');
-    const slice = assistantMsgs.slice(-n);
-    const joined = slice
-      .map(m => sanitizeAiContextForPostProcess(applyContextFilters(m.message, settings)))
-      .filter(Boolean)
-      .join('\n\n');
-    if (joined.trim()) return joined;
-  } catch {
-    // fall through
-  }
-  return sanitizeAiContextForPostProcess(applyContextFilters(aiText, settings));
+  return buildAssistantContextSlice(settings, messageId, aiText);
 }
 
 async function resolve$5(settings: ScriptSettings, snapshot: DataSnapshot, messageId: number): Promise<string> {
@@ -85,14 +63,6 @@ export async function buildSharedContext(
     userText = '';
   }
 
-  const customVarMap: Record<string, string> = {};
-  for (const v of settings.customVariables) {
-    if (!v.key) continue;
-    const val = await processTemplateText(v.value, messageId);
-    customVarMap[v.key] = val;
-    customVarMap[`{{${v.key}}}`] = val;
-  }
-
   const $7 = buildContext7(settings, messageId, aiText);
   const $5 = await resolve$5(settings, snapshot, messageId);
 
@@ -112,7 +82,6 @@ export async function buildSharedContext(
   }
 
   const vars: Record<string, string> = {
-    ...customVarMap,
     $1: '',
     $5,
     $7,
@@ -148,23 +117,34 @@ export async function resolveTaskPlaceholders(
   ctx: SharedContext,
   relayTagMap: RelayTagMap,
 ): Promise<Record<string, string>> {
-  const needs$1 = task.promptGroups.some(g => g.content.includes('$1'));
+  const needs$1 = task.promptGroups.some(g => isPromptGroupEnabled(g) && g.content.includes('$1'));
+  const needs$7 = task.promptGroups.some(g => isPromptGroupEnabled(g) && g.content.includes('$7'));
+  const taskContextSettings = settingsWithTaskContext(ctx.settings, task);
   const vars = { ...ctx.vars };
+
+  if (needs$7) {
+    vars.$7 = buildContext7(taskContextSettings, ctx.messageId, ctx.aiText);
+  }
+
   if (needs$1) {
     if (!ctx.taskWorldbookCache.has(task.id)) {
-      const baseScan = [ctx.userText, ctx.aiText].filter(Boolean).join('\n');
+      const baseScan = buildPlotWorldbookBaseScanText(taskContextSettings, ctx.messageId, ctx.aiText);
       const triggerText = buildTaskWorldbookTriggerText(
         task.promptGroups,
         relayTagMap,
         ctx.messageVarHistoryMap,
         ctx.injectOnlyTagsUnion,
+        { historyFallback: 'all-tags' },
       );
+      const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
       const wb = await getWorldbookContentForPostProcess(
-        ctx.settings.plotWorldbookConfig,
-        [baseScan, triggerText].join('\n'),
+        wbConfig,
+        [baseScan, triggerText].filter(Boolean).join('\n'),
         ctx.messageId,
       );
-      ctx.taskWorldbookCache.set(task.id, wb);
+      const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);
+      const finalized = finalizePlotWorldbookPlaceholderContent(wb, excludeRules);
+      ctx.taskWorldbookCache.set(task.id, finalized);
     }
     vars.$1 = ctx.taskWorldbookCache.get(task.id) ?? '';
   }
@@ -178,9 +158,10 @@ export async function renderTaskMessages(
   messageVarHistoryMap: RelayTagMap,
   injectOnlyTagsUnion: Set<string>,
   messageId: number,
-): Promise<{ role: 'system' | 'user' | 'assistant'; content: string }[]> {
-  const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [];
+): Promise<RunLogMessage[]> {
+  const messages: RunLogMessage[] = [];
   for (const g of task.promptGroups) {
+    if (!isPromptGroupEnabled(g)) continue;
     const shield = shieldScriptPlaceholders(g.content);
     let content = await processTemplateText(shield.text, messageId);
     content = unshieldScriptPlaceholders(content, shield.tokens);
@@ -195,6 +176,7 @@ export async function renderTaskMessages(
     messages.push({
       role: normalizePromptRole(g.role),
       content,
+      name: g.name ?? '',
     });
   }
   return messages;

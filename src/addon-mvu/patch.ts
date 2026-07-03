@@ -33,8 +33,13 @@ function parseJsonPointer(path: string): string[] {
     .map(decodeJsonPointerSegment);
 }
 
+const FRONTEND_CONTROLLED_SEGMENTS = new Set(['降临', '平行演化']);
+
 function isReadonlyPath(segments: string[]): boolean {
-  return segments.some(segment => segment.startsWith('_'));
+  return (
+    segments.some(segment => segment.startsWith('_')) ||
+    segments.some(segment => FRONTEND_CONTROLLED_SEGMENTS.has(segment))
+  );
 }
 
 function getAtPath(root: unknown, segments: string[]): unknown {

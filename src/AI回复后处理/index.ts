@@ -1,5 +1,9 @@
 import './ui/acu-theme.css';
 import { reloadOnChatChange } from '@util/script';
+import { mountAcuPostProcessAPI } from './bridge/post-process-api';
+import { getCurrentChatKey } from './api/chat-key';
+import { readChatTaskScope } from './tasks/chat-task-scope';
+import { emitChatScopeChanged } from './tasks/events';
 import { applyInjectVariableUpdates } from './tasks/inject-variable-update';
 import { registerTrigger, rerunCurrentFloor } from './tasks/trigger';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
@@ -53,6 +57,13 @@ $(() => {
   const offTagInherit = registerTagVariableInheritance();
   const offChat = reloadOnChatChange();
 
+  mountAcuPostProcessAPI();
+
+  const offChatScopeNotify = eventOn(tavern_events.CHAT_CHANGED, () => {
+    const scope = readChatTaskScope();
+    void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
+  });
+
   const w = window as unknown as Record<string, unknown>;
   w.__acuPpGetLastDeferDispatch = getLastDeferDispatch;
   w.__acuPpGetLastPromptMessages = getLastPromptMessages;
@@ -68,6 +79,7 @@ $(() => {
     offTrigger.stop();
     offTagInherit.stop();
     offChat.stop();
+    offChatScopeNotify.stop();
     closeSettingsWindow();
   });
 });

@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import { hasApiBodyExtras } from '../api/api-preset-utils';
 import AcuPresetDropdown from './AcuPresetDropdown.vue';
+import { acuConfirm } from './composables/useAcuConfirm';
 import { useApiPresetPanel } from './composables/useApiPresetPanel';
 
 const {
@@ -26,10 +27,10 @@ const {
   loadModelsForActive,
 } = useApiPresetPanel();
 
-function confirmDeletePreset() {
+async function confirmDeletePreset() {
   const name = activePreset.value?.name;
   if (!name) return;
-  if (!window.confirm(`删除 API 预设「${name}」？`)) return;
+  if (!(await acuConfirm({ message: `删除 API 预设「${name}」？` }))) return;
   deletePreset(name);
 }
 

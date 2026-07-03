@@ -101,13 +101,22 @@ export function buildCustomApiFromConfig(apiConfig: ApiConfig): CustomApiConfig 
   return custom_api;
 }
 
+export function omitPromptLogName<T extends { name?: string }>(message: T): Omit<T, 'name'> {
+  const { name: _omit, ...rest } = message;
+  return rest;
+}
+
+export function omitPromptLogNames<T extends { name?: string }>(messages: T[]): Omit<T, 'name'>[] {
+  return messages.map(omitPromptLogName);
+}
+
 export function buildChatCompletionPayload(
-  messages: { role: string; content: string }[],
+  messages: { role: string; content: string; name?: string }[],
   apiConfig: ApiConfig,
 ): Record<string, unknown> {
   const model = (apiConfig.model || '').replace(/^models\//, '');
   return {
-    messages,
+    messages: omitPromptLogNames(messages),
     model,
     max_tokens: apiConfig.max_tokens ?? 60000,
     temperature: apiConfig.temperature ?? 1,

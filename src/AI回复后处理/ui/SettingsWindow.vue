@@ -1,12 +1,53 @@
 <script setup lang="ts">
-import { computed, inject, ref } from 'vue';
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
 import type { PostProcessTask } from '../tasks/schema';
 import { PLACEHOLDER_LEGEND } from '../tasks/utils';
+import {
+  getPostProcessWritableTagNames,
+  pickTagsForPostProcessWrite,
+  writeFloorTagValues,
+} from '../tasks/tag-variables';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
+import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
 import PlotWorldbookSection from './PlotWorldbookSection.vue';
+import TaskPlotWorldbookPanel from './TaskPlotWorldbookPanel.vue';
+import Context7Section from './Context7Section.vue';
+import TaskContextPanel from './TaskContextPanel.vue';
 import ApiConfigPanel from './ApiConfigPanel.vue';
+import AcuToggle from './AcuToggle.vue';
+import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
+import AcuHelpPanel from './AcuHelpPanel.vue';
+import AcuConfirmDialog from './AcuConfirmDialog.vue';
+import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
+import { useTaskClipboard } from './composables/useTaskClipboard';
+import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
+import {
+  addPromptGroup as addPromptGroupInStore,
+  clearChatScope,
+  createTask as createTaskInStore,
+  deleteTask as deleteTaskInStore,
+  duplicateTask as duplicateTaskInStore,
+  getChatScopeState,
+  listTasks,
+  movePromptGroup as movePromptGroupInStore,
+  moveTask as moveTaskInStore,
+  removePromptGroup as removePromptGroupInStore,
+  replaceTasks,
+  setTaskEnabled as setTaskEnabledInStore,
+  updatePresetFields,
+  updateTask as updateTaskInStore,
+} from '../tasks/task-store';
+import { resolveEffectiveSettings } from '../tasks/effective-settings';
+import { loadSettings } from '../settings';
+import type { PlotWorldbookConfig, TaskContextConfig } from '../tasks/schema';
+import {
+  ACU_PP_CHAT_SCOPE_CHANGED,
+  ACU_PP_TASKS_CHANGED,
+  type TasksChangedPayload,
+} from '../tasks/events';
+import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
 import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
 import { ensureAcuToastStyles } from './toast-styles';
 import { acuToast } from './toast';
@@ -15,17 +56,181 @@ const closeWindow = inject<() => void>('closeSettings', () => {});
 
 const store = useSettingsStore();
 const { settings } = storeToRefs(store);
+const { clipboard, hasClipboard, copyTask: copyTaskToClipboard } = useTaskClipboard();
 
 const selectedTaskId = ref(settings.value.tasks[0]?.id ?? '');
-const taskPresetNewNameInput = ref('');
+const viewTasks = ref<PostProcessTask[]>([]);
+const chatScopeInfo = ref(getChatScopeState());
+const chatScopeActive = ref(!!getChatScopeState());
+
+const displayTasks = computed(() => (chatScopeActive.value ? viewTasks.value : settings.value.tasks));
+
+const defaultContextConfigRef = ref<TaskContextConfig>({
+  contextTurnCount: settings.value.contextTurnCount,
+  contextExtractRules: _.cloneDeep(settings.value.contextExtractRules),
+  contextExcludeRules: _.cloneDeep(settings.value.contextExcludeRules),
+});
+
+function buildPresetFieldsPatch() {
+  return {
+    contextTurnCount: settings.value.contextTurnCount,
+    contextExtractRules: _.cloneDeep(settings.value.contextExtractRules),
+    contextExcludeRules: _.cloneDeep(settings.value.contextExcludeRules),
+    plotWorldbookConfig: _.cloneDeep(settings.value.plotWorldbookConfig),
+    taskPlotWorldbookOverridesEnabled: settings.value.taskPlotWorldbookOverridesEnabled,
+    taskContextOverridesEnabled: settings.value.taskContextOverridesEnabled,
+  };
+}
+
+async function flushPendingWrites(): Promise<void> {
+  if (persistViewTasksTimer) {
+    clearTimeout(persistViewTasksTimer);
+    persistViewTasksTimer = null;
+    if (chatScopeActive.value) {
+      await replaceTasks(viewTasks.value, 'ui');
+    }
+  }
+  if (persistPresetFieldsTimer) {
+    clearTimeout(persistPresetFieldsTimer);
+    persistPresetFieldsTimer = null;
+    if (chatScopeActive.value) {
+      await updatePresetFields(buildPresetFieldsPatch(), 'ui');
+    }
+  }
+}
+
+type RefreshTaskViewOptions = {
+  skipTaskReload?: boolean;
+};
+
+async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> {
+  await flushPendingWrites();
+  const scope = getChatScopeState();
+  chatScopeInfo.value = scope;
+  chatScopeActive.value = !!scope;
+  if (scope && !options?.skipTaskReload) {
+    viewTasks.value = listTasks();
+    if (!viewTasks.value.some(t => t.id === selectedTaskId.value)) {
+      selectedTaskId.value = viewTasks.value[0]?.id ?? '';
+    }
+  } else if (!scope) {
+    viewTasks.value = [];
+  }
+  syncPresetFieldsFromEffective();
+}
+
+function syncPresetFieldsFromEffective() {
+  syncingPresetView = true;
+  const effective = resolveEffectiveSettings(loadSettings());
+  settings.value.contextTurnCount = effective.contextTurnCount;
+  settings.value.contextExtractRules = _.cloneDeep(effective.contextExtractRules);
+  settings.value.contextExcludeRules = _.cloneDeep(effective.contextExcludeRules);
+  settings.value.plotWorldbookConfig = _.cloneDeep(effective.plotWorldbookConfig);
+  settings.value.taskPlotWorldbookOverridesEnabled = effective.taskPlotWorldbookOverridesEnabled;
+  settings.value.taskContextOverridesEnabled = effective.taskContextOverridesEnabled;
+  defaultContextConfigRef.value = {
+    contextTurnCount: effective.contextTurnCount,
+    contextExtractRules: _.cloneDeep(effective.contextExtractRules),
+    contextExcludeRules: _.cloneDeep(effective.contextExcludeRules),
+  };
+  syncingPresetView = false;
+}
+
+let persistPresetFieldsTimer: ReturnType<typeof setTimeout> | null = null;
+let syncingPresetView = false;
+
+async function persistPresetFieldsNow(): Promise<void> {
+  if (syncingPresetView || !chatScopeActive.value) return;
+  if (persistPresetFieldsTimer) {
+    clearTimeout(persistPresetFieldsTimer);
+    persistPresetFieldsTimer = null;
+  }
+  await updatePresetFields(buildPresetFieldsPatch(), 'ui');
+}
+
+function schedulePersistPresetFields() {
+  if (syncingPresetView || !chatScopeActive.value) return;
+  if (persistPresetFieldsTimer) clearTimeout(persistPresetFieldsTimer);
+  persistPresetFieldsTimer = setTimeout(() => {
+    persistPresetFieldsTimer = null;
+    void persistPresetFieldsNow();
+  }, 300);
+}
+
+watch(
+  defaultContextConfigRef,
+  v => {
+    settings.value.contextTurnCount = v.contextTurnCount;
+    settings.value.contextExtractRules = v.contextExtractRules;
+    settings.value.contextExcludeRules = v.contextExcludeRules;
+    schedulePersistPresetFields();
+  },
+  { deep: true },
+);
+
+watch(
+  () => settings.value.plotWorldbookConfig,
+  () => schedulePersistPresetFields(),
+  { deep: true },
+);
+
+const plotWorldbookConfigModel = computed<PlotWorldbookConfig>({
+  get: () => settings.value.plotWorldbookConfig,
+  set(v) {
+    settings.value.plotWorldbookConfig = v;
+    schedulePersistPresetFields();
+  },
+});
+
+const taskPlotWorldbookOverridesModel = computed({
+  get: () => settings.value.taskPlotWorldbookOverridesEnabled,
+  set(v: boolean) {
+    settings.value.taskPlotWorldbookOverridesEnabled = v;
+    if (chatScopeActive.value) {
+      void persistPresetFieldsNow();
+      return;
+    }
+    schedulePersistPresetFields();
+  },
+});
+
+const taskContextOverridesModel = computed({
+  get: () => settings.value.taskContextOverridesEnabled,
+  set(v: boolean) {
+    settings.value.taskContextOverridesEnabled = v;
+    if (chatScopeActive.value) {
+      void persistPresetFieldsNow();
+      return;
+    }
+    schedulePersistPresetFields();
+  },
+});
+
+void refreshTaskView();
+
+let persistViewTasksTimer: ReturnType<typeof setTimeout> | null = null;
+function schedulePersistViewTasks() {
+  if (!chatScopeActive.value) return;
+  if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
+  persistViewTasksTimer = setTimeout(() => {
+    void replaceTasks(viewTasks.value, 'ui');
+  }, 300);
+}
+
+watch(viewTasks, schedulePersistViewTasks, { deep: true });
 const importFileInput = ref<HTMLInputElement | null>(null);
 const currentPage = ref(1);
+const messageVarRetentionHelpOpen = ref(false);
+const gameTimeFormatHelpOpen = ref(false);
+const extractInjectTagsHelpOpen = ref(false);
+const tagVariableInjectHelpOpen = ref(false);
+const finalInjectHelpOpen = ref(false);
 
 const PAGE_TABS = [
-  { id: 1, label: 'API' },
-  { id: 2, label: '世界书与上下文' },
-  { id: 3, label: '任务' },
-  { id: 4, label: '日志' },
+  { id: 1, label: 'API', shortLabel: 'API' },
+  { id: 2, label: '世界书与上下文', shortLabel: '上下文' },
+  { id: 3, label: '任务', shortLabel: '任务' },
+  { id: 4, label: '日志', shortLabel: '日志' },
 ] as const;
 
 const UI_THEMES = BUILTIN_UI_THEMES;
@@ -46,17 +251,32 @@ function selectUiTheme(themeId: string) {
 
 function goToPage(page: number) {
   currentPage.value = Math.min(4, Math.max(1, page));
+  if (currentPage.value === 2 || currentPage.value === 3) {
+    void refreshTaskView();
+  }
 }
 
-const selectedTask = computed(() => settings.value.tasks.find(t => t.id === selectedTaskId.value));
+const selectedTask = computed(() => displayTasks.value.find(t => t.id === selectedTaskId.value));
+
+const selectedTaskEnabledModel = computed({
+  get: () => selectedTask.value?.enabled ?? true,
+  set(v: boolean) {
+    const task = selectedTask.value;
+    if (!task) return;
+    task.enabled = v;
+    if (chatScopeActive.value) {
+      void setTaskEnabledInStore(task.id, v, 'ui');
+    }
+  },
+});
 
 const selectedRoundInterval = computed({
   get: () => selectedTask.value?.schedule?.roundInterval ?? 0,
   set: (v: number) => {
     const task = selectedTask.value;
     if (!task) return;
-    task.schedule = task.schedule ?? { mode: 'round' };
-    task.schedule.roundInterval = v;
+    ensureTaskSchedule(task);
+    task.schedule!.roundInterval = v;
   },
 });
 
@@ -70,32 +290,16 @@ const scheduleMode = computed({
   set: (v: 'round' | 'time') => {
     const task = selectedTask.value;
     if (!task) return;
-    task.schedule = task.schedule ?? { mode: v };
-    task.schedule.mode = v;
-    ensureTimeInterval(task);
-    task.schedule.timeInterval!.enabled = v === 'time';
+    task.schedule = mergeTaskSchedule(task.schedule, { mode: v });
   },
 });
-
-function ensureTimeInterval(task: PostProcessTask) {
-  task.schedule = task.schedule ?? { mode: 'round' };
-  if (!task.schedule.timeInterval) {
-    task.schedule.timeInterval = {
-      enabled: false,
-      value: 1,
-      unit: 'hour',
-      timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
-      onParseFail: 'skip',
-    };
-  }
-}
 
 const timeIntervalValue = computed({
   get: () => selectedTask.value?.schedule?.timeInterval?.value ?? 1,
   set: (v: number) => {
     const task = selectedTask.value;
     if (!task) return;
-    ensureTimeInterval(task);
+    ensureTaskSchedule(task);
     task.schedule!.timeInterval!.value = v;
   },
 });
@@ -105,7 +309,7 @@ const timeIntervalUnit = computed({
   set: (v: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year') => {
     const task = selectedTask.value;
     if (!task) return;
-    ensureTimeInterval(task);
+    ensureTaskSchedule(task);
     task.schedule!.timeInterval!.unit = v;
   },
 });
@@ -115,7 +319,7 @@ const timeSourceType = computed({
   set: (v: 'message_tag' | 'variable') => {
     const task = selectedTask.value;
     if (!task) return;
-    ensureTimeInterval(task);
+    ensureTaskSchedule(task);
     const ti = task.schedule!.timeInterval!;
     if (v === 'message_tag') {
       ti.timeSource = { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' };
@@ -188,54 +392,223 @@ const timeOnParseFail = computed({
   set: (v: 'skip' | 'run' | 'wall_clock') => {
     const task = selectedTask.value;
     if (!task) return;
-    ensureTimeInterval(task);
+    ensureTaskSchedule(task);
     task.schedule!.timeInterval!.onParseFail = v;
   },
 });
 
-function newTaskId() {
-  return `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+function insertClonedTask(cloned: PostProcessTask, afterTaskId?: string): void {
+  if (chatScopeActive.value) {
+    const arr = [...viewTasks.value];
+    if (afterTaskId) {
+      const index = arr.findIndex(t => t.id === afterTaskId);
+      if (index >= 0) {
+        arr.splice(index + 1, 0, cloned);
+      } else {
+        arr.push(cloned);
+      }
+    } else {
+      arr.push(cloned);
+    }
+    void replaceTasks(arr, 'ui').then(() => {
+      void refreshTaskView();
+      selectedTaskId.value = cloned.id;
+    });
+    return;
+  }
+  const arr = settings.value.tasks;
+  if (afterTaskId) {
+    const index = arr.findIndex(t => t.id === afterTaskId);
+    if (index >= 0) {
+      arr.splice(index + 1, 0, cloned);
+      selectedTaskId.value = cloned.id;
+      return;
+    }
+  }
+  arr.push(cloned);
+  selectedTaskId.value = cloned.id;
 }
 
-function addTask() {
+function duplicateSelectedTask(): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  if (chatScopeActive.value) {
+    void duplicateTaskInStore(task.id, { afterTaskId: task.id }, 'ui').then(t => {
+      void refreshTaskView();
+      selectedTaskId.value = t.id;
+      acuToast('success', `已复制为新副本「${t.name}」`);
+    });
+    return;
+  }
+  const cloned = cloneTaskForInsert(task, displayTasks.value);
+  insertClonedTask(cloned, task.id);
+  acuToast('success', `已复制为新副本「${cloned.name}」`);
+}
+
+function copySelectedTask(): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  copyTaskToClipboard(task, settings.value.activePresetName);
+  acuToast('success', `已跨预设复制「${task.name.trim() || '未命名任务'}」`);
+}
+
+function pasteTask(): void {
+  const source = clipboard.value;
+  if (!source) {
+    acuToast('warning', '剪贴板为空，请先复制任务');
+    return;
+  }
+  const cloned = cloneTaskForInsert(source, displayTasks.value);
+  insertClonedTask(cloned, selectedTaskId.value || undefined);
+  acuToast('success', `已粘贴为「${cloned.name}」`);
+}
+
+async function addTask() {
+  if (chatScopeActive.value) {
+    const task = await createTaskInStore(undefined, 'ui');
+    void refreshTaskView();
+    selectedTaskId.value = task.id;
+    return;
+  }
   const task: PostProcessTask = {
     id: newTaskId(),
     name: '新任务',
     enabled: true,
     stage: 1,
-    order: settings.value.tasks.length,
     extractInjectTags: ['result'],
     mergeStrategy: 'concat',
     maxRetries: 3,
     minLength: 0,
     apiPresetName: '',
-    promptGroups: [{ role: 'user', content: '当前 AI 回复：$7' }],
+    plotWorldbookMode: 'inherit',
+    contextMode: 'inherit',
+    promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
   };
   settings.value.tasks.push(task);
   selectedTaskId.value = task.id;
 }
 
-function removeTask(id: string) {
-  settings.value.tasks = settings.value.tasks.filter(t => t.id !== id);
+function moveTask(index: number, delta: -1 | 1) {
+  if (chatScopeActive.value) {
+    const task = displayTasks.value[index];
+    if (!task) return;
+    void moveTaskInStore(task.id, delta, 'ui').then(() => void refreshTaskView());
+    return;
+  }
+  const arr = settings.value.tasks;
+  const target = index + delta;
+  if (target < 0 || target >= arr.length) return;
+  const [item] = arr.splice(index, 1);
+  arr.splice(target, 0, item);
+}
+
+async function removeTask(id: string) {
+  const task = displayTasks.value.find(t => t.id === id);
+  if (!task) return;
+  const label = task.name?.trim() || '未命名任务';
+  if (!(await acuConfirm({ message: `删除任务「${label}」？` }))) return;
+  if (chatScopeActive.value) {
+    await deleteTaskInStore(id, 'ui');
+    void refreshTaskView();
+  } else {
+    settings.value.tasks = settings.value.tasks.filter(t => t.id !== id);
+  }
   if (selectedTaskId.value === id) {
-    selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+    selectedTaskId.value = displayTasks.value[0]?.id ?? '';
   }
 }
 
-function movePromptGroup(index: number, delta: -1 | 1): void {
+async function removePromptGroup(index: number): Promise<void> {
   const task = selectedTask.value;
   if (!task) return;
-  const groups = task.promptGroups;
-  const target = index + delta;
-  if (target < 0 || target >= groups.length) return;
-  const [item] = groups.splice(index, 1);
-  groups.splice(target, 0, item);
+  const pg = task.promptGroups[index];
+  const label = pg?.name?.trim() ? `「${pg.name.trim()}」` : `第 ${index + 1} 段`;
+  if (!(await acuConfirm({ message: `删除提示词段 ${label}？` }))) return;
+  try {
+    if (!chatScopeActive.value) store.persist();
+    await removePromptGroupInStore(task.id, index, 'ui');
+    if (chatScopeActive.value) void refreshTaskView();
+    else store.reload();
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : '无法删除提示词段');
+  }
 }
 
-function applyBuiltinPreset(name: string) {
+async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
+  const task = selectedTask.value;
+  if (!task) return;
+  try {
+    if (!chatScopeActive.value) store.persist();
+    await movePromptGroupInStore(task.id, index, delta, 'ui');
+    if (chatScopeActive.value) void refreshTaskView();
+    else store.reload();
+  } catch {
+    // 边界不可移动时静默忽略
+  }
+}
+
+async function addPromptGroup(): Promise<void> {
+  const task = selectedTask.value;
+  if (!task) return;
+  if (!chatScopeActive.value) store.persist();
+  await addPromptGroupInStore(task.id, undefined, 'ui');
+  if (chatScopeActive.value) void refreshTaskView();
+  else store.reload();
+}
+
+async function applyBuiltinPreset(name: string) {
+  if (chatScopeActive.value) {
+    if (
+      !(await acuConfirm({
+        message: '切换预设将清除当前聊天的临时快照，是否继续？',
+      }))
+    ) {
+      return;
+    }
+    await clearChatScope('ui');
+    void refreshTaskView();
+  }
   store.applyPreset(name);
   selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
 }
+
+async function handleClearChatScope() {
+  if (
+    !(await acuConfirm({
+      message: '清除当前聊天的临时快照？将恢复使用全局活动预设的任务。',
+    }))
+  ) {
+    return;
+  }
+  await clearChatScope('ui');
+    void refreshTaskView();
+  selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+  acuToast('success', '已清除聊天快照');
+}
+
+let offTasksChanged: EventOnReturn | null = null;
+let offChatScopeChanged: EventOnReturn | null = null;
+
+onMounted(() => {
+  void refreshTaskView();
+  offTasksChanged = eventOn(ACU_PP_TASKS_CHANGED, (payload?: TasksChangedPayload) => {
+    if (payload?.source === 'ui') {
+      void refreshTaskView({ skipTaskReload: true });
+      return;
+    }
+    void refreshTaskView();
+  });
+  offChatScopeChanged = eventOn(ACU_PP_CHAT_SCOPE_CHANGED, () => {
+    void refreshTaskView();
+  });
+});
+
+onUnmounted(() => {
+  offTasksChanged?.stop();
+  offChatScopeChanged?.stop();
+  if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
+  if (persistPresetFieldsTimer) clearTimeout(persistPresetFieldsTimer);
+});
 
 async function handleRerun() {
   const { rerunCurrentFloor } = await import('../tasks/trigger');
@@ -253,20 +626,85 @@ function saveTaskPreset() {
   }
 }
 
-function saveTaskPresetAsNew() {
-  const name = taskPresetNewNameInput.value.trim();
-  if (!name) {
-    acuToast('warning','请输入新预设名称');
+async function confirmRenameSelectedTask(): Promise<void> {
+  const task = selectedTask.value;
+  if (!task) return;
+  const newName = await acuPrompt({
+    title: '重命名任务',
+    message: '请输入新的任务名称：',
+    confirmText: '确定',
+    danger: false,
+    prompt: {
+      placeholder: '任务名称',
+      defaultValue: task.name,
+    },
+  });
+  if (!newName) return;
+  if (newName === (task.name?.trim() || '')) return;
+  const otherNames = new Set(
+    displayTasks.value.filter(t => t.id !== task.id).map(t => t.name.trim()),
+  );
+  if (otherNames.has(newName)) {
+    acuToast('warning', `任务「${newName}」已存在，请换一个名称`);
     return;
   }
+  if (!settings.value.activePresetName.trim()) {
+    acuToast('warning', '请先选择当前预设');
+    return;
+  }
+  task.name = newName;
+  if (chatScopeActive.value) {
+    schedulePersistViewTasks();
+    acuToast('success', `任务已重命名为「${newName}」`);
+    return;
+  }
+  if (store.saveActivePreset()) {
+    acuToast('success', `任务已重命名为「${newName}」并已保存预设`);
+  }
+}
+
+async function confirmSaveTaskPresetAsNew(): Promise<void> {
+  const name = await acuPrompt({
+    title: '保存为新预设',
+    message: '请输入新预设名称：',
+    confirmText: '保存',
+    danger: false,
+    prompt: {
+      placeholder: '新预设名称',
+      defaultValue: settings.value.activePresetName,
+    },
+  });
+  if (!name) return;
   if (settings.value.presets.some(p => p.name === name)) {
-    acuToast('warning',`预设「${name}」已存在，请换一个名称`);
+    acuToast('warning', `预设「${name}」已存在，请换一个名称`);
     return;
   }
   const saved = store.saveAsNewPreset(name);
   if (saved) {
-    taskPresetNewNameInput.value = '';
-    acuToast('success',`已保存为新预设「${saved}」`);
+    acuToast('success', `已保存为新预设「${saved}」`);
+  }
+}
+
+async function confirmDeleteTaskPreset(): Promise<void> {
+  const name = settings.value.activePresetName.trim();
+  if (!name) {
+    acuToast('warning', '请先选择要删除的预设');
+    return;
+  }
+  if (settings.value.presets.length <= 1) {
+    acuToast('warning', '至少需保留 1 个任务预设');
+    return;
+  }
+  if (
+    !(await acuConfirm({
+      message: `删除任务预设「${name}」？\n当前编辑中的任务与上下文配置将切换到其他预设。`,
+    }))
+  ) {
+    return;
+  }
+  if (store.deleteTaskPreset(name)) {
+    selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+    acuToast('success', `已删除任务预设「${name}」`);
   }
 }
 
@@ -300,22 +738,6 @@ async function onImportPresetFile(event: Event) {
   }
 }
 
-function addContextExtractRule() {
-  settings.value.contextExtractRules.push({ start: '', end: '' });
-}
-
-function removeContextExtractRule(index: number) {
-  settings.value.contextExtractRules.splice(index, 1);
-}
-
-function addContextExcludeRule() {
-  settings.value.contextExcludeRules.push({ start: '', end: '' });
-}
-
-function removeContextExcludeRule(index: number) {
-  settings.value.contextExcludeRules.splice(index, 1);
-}
-
 function formatRunLogTime(at?: number): string {
   if (!at) return '';
   return new Date(at).toLocaleString('zh-CN');
@@ -344,6 +766,133 @@ function runLogAiOutputText(r: { aiOutput?: string }): string {
 
 function runLogAiReasoningText(r: { aiReasoning?: string }): string {
   return String(r.aiReasoning ?? '').trim();
+}
+
+function runLogDurationText(durationMs: number): string {
+  const minutes = durationMs / 60_000;
+  if (minutes < 10) return `${minutes.toFixed(2)}min`;
+  if (minutes < 100) return `${minutes.toFixed(1)}min`;
+  return `${Math.round(minutes)}min`;
+}
+
+function runLogPromptSegmentTitle(msg: { role: string; name?: string }): string {
+  const segmentName = msg.name?.trim() || '未命名段';
+  return `[${msg.role}] ${segmentName}`;
+}
+
+function runLogExtractedTagEntries(r: { extractedTags?: Record<string, string> }): [string, string][] {
+  const tags = r.extractedTags;
+  if (!tags || typeof tags !== 'object') return [];
+  return Object.entries(tags).filter(([, value]) => String(value ?? '').trim());
+}
+
+function runLogWritableTagNames(): Set<string> {
+  return getPostProcessWritableTagNames(settings.value, settings.value.lastRunStatus?.taskResults ?? []);
+}
+
+function runLogWritableTagEntries(r: { extractedTags?: Record<string, string> }): [string, string][] {
+  const writable = runLogWritableTagNames();
+  return runLogExtractedTagEntries(r).filter(([tag]) => writable.has(tag));
+}
+
+function runLogOtherTagEntries(r: { extractedTags?: Record<string, string> }): [string, string][] {
+  const writable = runLogWritableTagNames();
+  return runLogExtractedTagEntries(r).filter(([tag]) => !writable.has(tag));
+}
+
+const runLogTagDrafts = ref<Record<string, Record<string, string>>>({});
+const runLogTagEditMode = ref<Record<string, boolean>>({});
+
+function initRunLogTagDrafts(): void {
+  const drafts: Record<string, Record<string, string>> = {};
+  const editMode: Record<string, boolean> = {};
+  for (const r of settings.value.lastRunStatus?.taskResults ?? []) {
+    if (!r.taskId) continue;
+    drafts[r.taskId] = _.cloneDeep(r.extractedTags ?? {});
+    editMode[r.taskId] = false;
+  }
+  runLogTagDrafts.value = drafts;
+  runLogTagEditMode.value = editMode;
+}
+
+watch(
+  () => [settings.value.lastRunStatus?.messageId, settings.value.lastRunStatus?.at] as const,
+  () => initRunLogTagDrafts(),
+  { immediate: true },
+);
+
+function isRunLogTagEditing(taskId: string): boolean {
+  return !!runLogTagEditMode.value[taskId];
+}
+
+function revertRunLogTagDraft(taskId: string): void {
+  const result = settings.value.lastRunStatus?.taskResults?.find(t => t.taskId === taskId);
+  if (!result) return;
+  runLogTagDrafts.value[taskId] = _.cloneDeep(result.extractedTags ?? {});
+}
+
+function toggleRunLogTagEdit(taskId: string): void {
+  if (isRunLogTagEditing(taskId)) {
+    revertRunLogTagDraft(taskId);
+    runLogTagEditMode.value[taskId] = false;
+  } else {
+    runLogTagEditMode.value[taskId] = true;
+  }
+}
+
+function isRunLogTagDraftDirty(taskId: string): boolean {
+  const result = settings.value.lastRunStatus?.taskResults?.find(t => t.taskId === taskId);
+  if (!result) return false;
+  const draft = runLogTagDrafts.value[taskId] ?? {};
+  const saved = result.extractedTags ?? {};
+  const writable = runLogWritableTagNames();
+  for (const key of writable) {
+    if (String(draft[key] ?? '').trim() !== String(saved[key] ?? '').trim()) return true;
+  }
+  return false;
+}
+
+function saveRunLogTaskTags(taskId: string): void {
+  const messageId = settings.value.lastRunStatus?.messageId;
+  if (messageId == null) {
+    acuToast('warning', '无运行楼层信息，无法保存');
+    return;
+  }
+  const msg = getChatMessages(messageId)[0];
+  if (!msg || msg.role !== 'assistant') {
+    acuToast('warning', '目标楼层不存在或不是 AI 回复楼');
+    return;
+  }
+  const draft = runLogTagDrafts.value[taskId];
+  if (!draft) return;
+
+  const writable = runLogWritableTagNames();
+  const toWrite = pickTagsForPostProcessWrite(draft, writable);
+  if (!Object.keys(toWrite).length) {
+    acuToast('warning', '当前模板未声明可写入的标签，或本任务无可写入摘取');
+    return;
+  }
+
+  try {
+    writeFloorTagValues(messageId, toWrite);
+    const result = settings.value.lastRunStatus?.taskResults?.find(t => t.taskId === taskId);
+    if (result) {
+      const next = { ...(result.extractedTags ?? {}) };
+      for (const key of writable) {
+        if (!(key in draft)) continue;
+        const text = String(draft[key] ?? '').trim();
+        if (text) next[key] = draft[key];
+        else delete next[key];
+      }
+      result.extractedTags = next;
+    }
+    store.persist();
+    runLogTagEditMode.value[taskId] = false;
+    acuToast('success', '已写入本层 post_process_tags');
+  } catch (e) {
+    console.error('[AI回复后处理] 保存摘取标签失败:', e);
+    acuToast('error', `保存失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 </script>
 
@@ -381,53 +930,67 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
           :class="{ active: currentPage === tab.id }"
           @click="goToPage(tab.id)"
         >
-          {{ tab.label }}
+          <span class="acu-page-tab__full">{{ tab.label }}</span>
+          <span class="acu-page-tab__short">{{ tab.shortLabel }}</span>
         </button>
       </div>
       <div class="acu-window-body">
         <div v-show="currentPage === 1" class="acu-page">
           <div class="acu-section">
-            <label class="acu-row">
-              <input v-model="settings.enabled" type="checkbox" />
-              启用 AI 回复后处理
-            </label>
+            <div class="acu-row acu-row--inline">
+              <AcuToggle v-model="settings.enabled" label="启用 AI 回复后处理" />
+            </div>
+            <div class="acu-row acu-row--inline">
+              <AcuToggle v-model="settings.messageVarRetention.enabled" label="自动清理旧楼层变量" />
+            </div>
+            <div class="acu-row">
+              <label class="acu-label-with-help">
+                仅保留最近
+                <AcuHelpIconBtn
+                  v-model:open="messageVarRetentionHelpOpen"
+                  panel-id="message-var-retention-help"
+                  label="消息楼层变量保留说明"
+                />
+              </label>
+              <input
+                v-model.number="settings.messageVarRetention.keepFloors"
+                class="acu-input"
+                type="number"
+                min="1"
+                step="1"
+                style="width: 72px"
+                :disabled="!settings.messageVarRetention.enabled"
+              />
+              <span>楼的消息楼层变量</span>
+            </div>
+            <AcuHelpPanel
+              v-model:open="messageVarRetentionHelpOpen"
+              id="message-var-retention-help"
+              label="消息楼层变量保留说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin: 0">
+                每次后处理执行完成后，自动删除更早楼层的<strong>全部</strong>消息楼层变量（含
+                <code>stat_data</code> 与 <code>post_process_tags</code>），<strong>不可恢复</strong>。最新楼始终保留，不影响变量继承。
+              </p>
+            </AcuHelpPanel>
           </div>
 
           <ApiConfigPanel />
         </div>
 
         <div v-show="currentPage === 2" class="acu-page">
-          <PlotWorldbookSection />
-
-          <div class="acu-section">
-            <h4>标签筛选（$7 上下文）</h4>
-            <div class="acu-row">
-              <label>最近</label>
-              <input v-model.number="settings.contextTurnCount" class="acu-input" type="number" min="0" step="1" style="width: 72px" />
-              <span>条 AI 楼层作为 $7 占位符上下文</span>
-              <span class="acu-notes">（0 = 不注入历史 AI 正文）</span>
-            </div>
-            <div class="acu-subsection">
-              <h5>提取规则</h5>
-              <p class="acu-notes">对每条 AI 楼正文，仅保留匹配以下「开始词～结束词」边界的最后一次出现片段（先提取后排除）。开始词可填残缺开标签（如 <code>&lt;tp</code>），可匹配 <code>&lt;tp&gt;</code>、<code>&lt;tp="…"&gt;</code> 等形式；结束词请写完整边界（如 <code>&lt;/tp&gt;</code>）。</p>
-              <div v-for="(rule, idx) in settings.contextExtractRules" :key="'ex-' + idx" class="acu-row">
-                <input v-model="rule.start" class="acu-input" placeholder="开始词（如 &lt;tp 或 &lt;think&gt;）" style="flex: 1" />
-                <input v-model="rule.end" class="acu-input" placeholder="结束词（如 &lt;/think&gt;）" style="flex: 1" />
-                <button class="acu-btn danger" type="button" @click="removeContextExtractRule(idx)">删除</button>
-              </div>
-              <button class="acu-btn" type="button" @click="addContextExtractRule">+ 添加提取规则</button>
-            </div>
-            <div class="acu-subsection">
-              <h5>排除规则</h5>
-              <p class="acu-notes">对每条 AI 楼正文，移除匹配以下边界的最后一次出现片段。开始词支持残缺开标签前缀（如 <code>&lt;tp</code>），结束词请写完整边界。</p>
-              <div v-for="(rule, idx) in settings.contextExcludeRules" :key="'rm-' + idx" class="acu-row">
-                <input v-model="rule.start" class="acu-input" placeholder="开始词（如 &lt;tp 或 &lt;thinking&gt;）" style="flex: 1" />
-                <input v-model="rule.end" class="acu-input" placeholder="结束词（如 &lt;/thinking&gt;）" style="flex: 1" />
-                <button class="acu-btn danger" type="button" @click="removeContextExcludeRule(idx)">删除</button>
-              </div>
-              <button class="acu-btn" type="button" @click="addContextExcludeRule">+ 添加排除规则</button>
-            </div>
-          </div>
+          <PlotWorldbookSection v-model:config="plotWorldbookConfigModel" />
+          <TaskPlotWorldbookPanel
+            v-model:enabled="taskPlotWorldbookOverridesModel"
+            :tasks="displayTasks"
+            :default-plot-worldbook-config="plotWorldbookConfigModel"
+          />
+          <Context7Section v-model:config="defaultContextConfigRef" />
+          <TaskContextPanel
+            v-model:enabled="taskContextOverridesModel"
+            :tasks="displayTasks"
+            :default-context-config="defaultContextConfigRef"
+          />
 
           <div class="acu-section">
             <h4>占位符说明</h4>
@@ -436,7 +999,7 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
                 <code>{{ item.code }}</code> — {{ item.desc }}
               </div>
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
-                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出中摘取各标签最后一次出现，供后续阶段的
+                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例），供后续阶段的
                 <code v-pre>{{标签名}}</code> 占位符使用。
               </p>
             </div>
@@ -446,66 +1009,181 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
         <div v-show="currentPage === 3" class="acu-page">
           <div class="acu-section acu-preset-section">
             <h4>预设</h4>
-            <p class="acu-notes">切换预设会加载对应任务模板；修改后请点击「保存预设」写回当前预设，或填写新名称后「重命名并保存为新预设」。</p>
-            <div class="acu-row">
-              <label class="acu-field-label">当前预设</label>
+            <p class="acu-notes">切换预设会加载对应任务模板；修改后请点击保存图标写回当前预设，或点击另存为图标输入新名称保存。</p>
+            <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
+              当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API 或本页任务编辑仅影响此聊天，不会修改全局活动预设。
+              <button class="acu-btn acu-btn--sm" type="button" style="margin-left: 8px" @click="handleClearChatScope">
+                清除快照
+              </button>
+            </div>
+            <div class="acu-row acu-preset-toolbar">
               <select
                 :value="settings.activePresetName"
-                class="acu-select"
-                style="flex: 2"
+                class="acu-select acu-preset-select"
                 @change="applyBuiltinPreset(($event.target as HTMLSelectElement).value)"
               >
                 <option v-for="p in settings.presets" :key="p.name" :value="p.name">{{ p.name }}</option>
               </select>
-            </div>
-            <div class="acu-row acu-preset-actions">
-              <button class="acu-btn acu-btn--sm" type="button" @click="triggerImportPreset">导入预设</button>
-              <button class="acu-btn acu-btn--sm" type="button" @click="exportPresetJson">导出 JSON</button>
-              <button class="acu-btn acu-btn--sm primary" type="button" @click="saveTaskPreset">保存预设</button>
-              <input
-                ref="importFileInput"
-                type="file"
-                accept=".json,application/json"
-                hidden
-                @change="onImportPresetFile"
-              />
-            </div>
-            <div class="acu-row acu-preset-rename-row">
-              <input
-                v-model="taskPresetNewNameInput"
-                class="acu-input acu-input--sm"
-                placeholder="新预设名称"
-                style="flex: 2"
-              />
-              <button class="acu-btn acu-btn--sm" type="button" @click="saveTaskPresetAsNew">重命名并保存为新预设</button>
+              <div class="acu-preset-actions">
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  type="button"
+                  title="导入预设"
+                  aria-label="导入预设"
+                  @click="triggerImportPreset"
+                >
+                  <i class="fa-fw fa-solid fa-file-import" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  type="button"
+                  title="导出 JSON"
+                  aria-label="导出 JSON"
+                  @click="exportPresetJson"
+                >
+                  <i class="fa-fw fa-solid fa-file-export" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn primary"
+                  type="button"
+                  title="保存预设"
+                  aria-label="保存预设"
+                  @click="saveTaskPreset"
+                >
+                  <i class="fa-fw fa-solid fa-floppy-disk" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  type="button"
+                  title="另存为新预设"
+                  aria-label="另存为新预设"
+                  @click="confirmSaveTaskPresetAsNew"
+                >
+                  <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn danger"
+                  type="button"
+                  title="至少需保留 1 个预设"
+                  aria-label="删除预设"
+                  :disabled="settings.presets.length <= 1"
+                  @click="confirmDeleteTaskPreset"
+                >
+                  <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+                <input
+                  ref="importFileInput"
+                  type="file"
+                  accept=".json,application/json"
+                  hidden
+                  @change="onImportPresetFile"
+                />
+              </div>
             </div>
           </div>
 
           <div class="acu-section">
             <h4>后处理任务</h4>
+            <p class="acu-notes" style="margin-top: 0">
+              「跨预设复制」后可切换其他任务预设再「粘贴」；切换预设前请自行保存当前修改。
+            </p>
             <div class="acu-task-tabs">
               <span
-                v-for="task in settings.tasks"
+                v-for="(task, idx) in displayTasks"
                 :key="task.id"
                 class="task-card"
-                :class="{ active: task.id === selectedTaskId }"
+                :class="{ active: task.id === selectedTaskId, 'task-card--disabled': !task.enabled }"
                 @click="selectedTaskId = task.id"
               >
-                {{ task.name }}
+                <span class="task-card__stage" :title="`执行阶段 ${task.stage}`">S{{ task.stage }}</span>
+                <span class="task-card__name">{{ task.name }}</span>
+                <span v-if="!task.enabled" class="task-card__flag">停用</span>
+                <template v-if="task.id === selectedTaskId">
+                  <button
+                    class="task-card__move"
+                    type="button"
+                    title="向左移动"
+                    :disabled="idx === 0"
+                    @click.stop="moveTask(idx, -1)"
+                  >
+                    ◀
+                  </button>
+                  <button
+                    class="task-card__move"
+                    type="button"
+                    title="向右移动"
+                    :disabled="idx === displayTasks.length - 1"
+                    @click.stop="moveTask(idx, 1)"
+                  >
+                    ▶
+                  </button>
+                </template>
               </span>
-              <button class="acu-btn" type="button" @click="addTask">+ 添加</button>
+              <button
+                class="acu-btn acu-btn--sm acu-icon-btn"
+                type="button"
+                title="添加任务"
+                aria-label="添加任务"
+                @click="addTask"
+              >
+                <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+              </button>
             </div>
             <div v-if="selectedTask" class="acu-task-editor">
-              <div class="acu-row">
-                <input v-model="selectedTask.name" class="acu-input" placeholder="任务名称" />
-                <label><input v-model="selectedTask.enabled" type="checkbox" /> 启用</label>
-                <button class="acu-btn danger" type="button" @click="removeTask(selectedTask.id)">删除</button>
+              <div class="acu-row acu-row--inline acu-task-editor__toolbar">
+                <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />
+                <div class="acu-task-editor__actions">
+                  <button
+                    class="acu-btn acu-btn--sm acu-icon-btn"
+                    type="button"
+                    title="重命名任务"
+                    aria-label="重命名任务"
+                    @click="confirmRenameSelectedTask"
+                  >
+                    <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    class="acu-btn acu-btn--sm acu-icon-btn"
+                    type="button"
+                    title="复制为新副本"
+                    aria-label="复制为新副本"
+                    @click="duplicateSelectedTask"
+                  >
+                    <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    class="acu-btn acu-btn--sm acu-icon-btn"
+                    type="button"
+                    title="跨预设复制"
+                    aria-label="跨预设复制"
+                    @click="copySelectedTask"
+                  >
+                    <i class="fa-fw fa-solid fa-clipboard" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    class="acu-btn acu-btn--sm acu-icon-btn"
+                    type="button"
+                    title="粘贴"
+                    aria-label="粘贴"
+                    :disabled="!hasClipboard"
+                    @click="pasteTask"
+                  >
+                    <i class="fa-fw fa-solid fa-paste" aria-hidden="true"></i>
+                  </button>
+                  <button
+                    class="acu-btn acu-btn--sm acu-icon-btn danger"
+                    type="button"
+                    title="删除任务"
+                    aria-label="删除任务"
+                    @click="removeTask(selectedTask.id)"
+                  >
+                    <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                  </button>
+                </div>
               </div>
               <div class="acu-row">
                 <label>执行阶段</label>
                 <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
-                <label>同阶段结果排列顺序</label>
-                <input v-model.number="selectedTask.order" class="acu-input" type="number" min="0" step="1" />
                 <label>API 预设</label>
                 <select v-model="selectedTask.apiPresetName" class="acu-select">
                   <option value="">全局默认</option>
@@ -515,10 +1193,10 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
               <div class="acu-subsection">
                 <h5>执行策略</h5>
                 <p class="acu-notes">回合间隔与时间间隔分别配置，选择其中一项逻辑执行（手动重跑忽略调度）。</p>
-                <div class="acu-row">
-                  <label><input v-model="scheduleMode" type="radio" value="round" /> 按回合间隔</label>
-                  <label><input v-model="scheduleMode" type="radio" value="time" /> 按游戏时间间隔</label>
-                </div>
+              <div class="acu-row acu-row--inline">
+                <label><input v-model="scheduleMode" type="radio" value="round" /> 按回合间隔</label>
+                <label><input v-model="scheduleMode" type="radio" value="time" /> 按游戏时间间隔</label>
+              </div>
                 <div v-if="scheduleMode === 'round'" class="acu-row">
                   <label>每隔</label>
                   <input v-model.number="selectedRoundInterval" class="acu-input" type="number" min="0" step="1" style="width: 72px" />
@@ -542,7 +1220,7 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
                   <p v-if="showMvuDeferHint" class="acu-notes">
                     使用最新消息楼层变量（stat_data）作为游戏时间时，全部任务将在 MVU 变量更新完成后再执行。
                   </p>
-                  <div class="acu-row">
+                  <div class="acu-row acu-row--inline">
                     <label>时间数据来源</label>
                     <label><input v-model="timeSourceType" type="radio" value="message_tag" /> 正文标签</label>
                     <label><input v-model="timeSourceType" type="radio" value="variable" /> 楼层变量</label>
@@ -581,10 +1259,21 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
                       <option value="wall_clock">使用系统时间</option>
                     </select>
                   </div>
-                  <div class="acu-game-time-format-hint">
-                    <p class="acu-notes acu-notes--sm acu-game-time-format-hint__title">支持的时间格式</p>
+                  <div class="acu-heading-with-help">
+                    <span class="acu-collapsible-help__inline-title">支持的时间格式</span>
+                    <AcuHelpIconBtn
+                      v-model:open="gameTimeFormatHelpOpen"
+                      panel-id="game-time-format-help"
+                      label="支持的时间格式说明"
+                    />
+                  </div>
+                  <AcuHelpPanel
+                    v-model:open="gameTimeFormatHelpOpen"
+                    id="game-time-format-help"
+                    label="支持的时间格式说明"
+                  >
                     <p class="acu-notes acu-notes--sm">{{ GAME_TIME_FORMAT_HELP.preprocess }}</p>
-                    <ul class="acu-game-time-format-list">
+                    <ul class="acu-collapsible-help__list">
                       <li
                         v-for="(line, idx) in GAME_TIME_FORMAT_HELP.examples"
                         :key="idx"
@@ -593,29 +1282,81 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
                         {{ line }}
                       </li>
                     </ul>
-                    <p class="acu-notes acu-notes--sm">{{ GAME_TIME_FORMAT_HELP.footnote }}</p>
-                  </div>
+                    <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ GAME_TIME_FORMAT_HELP.footnote }}</p>
+                  </AcuHelpPanel>
                 </template>
               </div>
-              <div class="acu-row">
-                <label>提取写入标签</label>
+              <div class="acu-row acu-row--extract-tags">
+                <label class="acu-label-with-help" for="extract-inject-tags-input">
+                  提取写入标签
+                  <AcuHelpIconBtn
+                    v-model:open="extractInjectTagsHelpOpen"
+                    panel-id="extract-inject-tags-help"
+                    label="摘取机制说明"
+                  />
+                </label>
                 <input
+                  id="extract-inject-tags-input"
                   class="acu-input"
                   style="flex: 1"
-                  placeholder="如 recall,supplement"
+                  placeholder="如 recall,supplement 或 item@id"
                   :value="(selectedTask.extractInjectTags ?? []).join(',')"
                   @input="selectedTask.extractInjectTags = ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean)"
                 />
               </div>
-              <p class="acu-notes" style="margin: 0 0 8px">
-                <strong>提取写入标签</strong>：从任务输出摘取标签内容，供「消息楼层标签变量注入」与「聊天注入设置」模板中显式的 <code v-pre>{{标签名}}</code> 使用；提示词中首次缺同轮 relay 时，正常后处理读当前楼 <code>post_process_tags</code>（含继承），重跑后处理任务读上一楼；之后仍走阶段中转。
-              </p>
-              <div class="acu-row">
+              <AcuHelpPanel
+                v-model:open="extractInjectTagsHelpOpen"
+                id="extract-inject-tags-help"
+                label="提取写入标签说明"
+              >
+                <p class="acu-notes acu-notes--sm acu-extract-tags-help__intro">{{ EXTRACT_INJECT_TAGS_HELP.intro }}</p>
+                <div
+                  v-for="mode in EXTRACT_INJECT_TAGS_HELP.modes"
+                  :key="mode.config"
+                  class="acu-extract-tags-help__mode"
+                >
+                  <p class="acu-extract-tags-help__mode-title">
+                    {{ mode.title }}：<code>{{ mode.config }}</code>
+                  </p>
+                  <p class="acu-notes acu-notes--sm">{{ mode.rule }}</p>
+                  <p class="acu-extract-tags-help__example">
+                    <span class="acu-extract-tags-help__example-label">示例</span>
+                    <code>{{ mode.example }}</code>
+                  </p>
+                </div>
+                <p class="acu-extract-tags-help__section-title">模板占位符</p>
+                <ul class="acu-extract-tags-help__list">
+                  <li v-for="(item, idx) in EXTRACT_INJECT_TAGS_HELP.placeholders" :key="idx" class="acu-notes acu-notes--sm">
+                    <template v-if="'code' in item && item.code">
+                      <code>{{ item.code }}</code> {{ item.desc }}
+                    </template>
+                    <template v-else>{{ item.desc }}</template>
+                  </li>
+                </ul>
+                <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">{{ EXTRACT_INJECT_TAGS_HELP.relay }}</p>
+              </AcuHelpPanel>
+              <div class="acu-row acu-row--inline">
                 <label>最大重试次数</label>
                 <input v-model.number="selectedTask.maxRetries" class="acu-input" type="number" min="1" step="1" style="width: 96px" />
+                <label>最小回复字数</label>
+                <input v-model.number="selectedTask.minLength" class="acu-input" type="number" min="0" step="1" style="width: 96px" />
               </div>
-              <div v-for="(pg, idx) in selectedTask.promptGroups" :key="idx" class="acu-prompt-group">
+              <p class="acu-notes" style="margin: 0 0 8px">
+                最小回复字数填 0 表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
+              </p>
+              <div
+                v-for="(pg, idx) in selectedTask.promptGroups"
+                :key="idx"
+                class="acu-prompt-group"
+                :class="{ 'acu-prompt-group--disabled': pg.enabled === false }"
+              >
                 <div class="acu-row acu-prompt-group__toolbar">
+                  <input
+                    v-model="pg.name"
+                    class="acu-input acu-prompt-group__name"
+                    type="text"
+                    placeholder="未命名段"
+                  />
                   <select v-model="pg.role" class="acu-select">
                     <option value="system">system</option>
                     <option value="user">user</option>
@@ -639,21 +1380,55 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
                   >
                     下移
                   </button>
-                  <button class="acu-btn danger acu-btn--sm" type="button" @click="selectedTask.promptGroups.splice(idx, 1)">删段</button>
+                  <div class="acu-prompt-group__enable">
+                    <AcuToggle
+                      :model-value="pg.enabled !== false"
+                      aria-label="启用本段"
+                      @update:model-value="pg.enabled = $event"
+                    />
+                  </div>
+                  <button
+                    class="acu-btn danger acu-btn--sm acu-prompt-group__delete"
+                    type="button"
+                    @click="removePromptGroup(idx)"
+                  >
+                    删段
+                  </button>
                 </div>
                 <textarea v-model="pg.content" class="acu-textarea" />
               </div>
-              <button class="acu-btn" type="button" @click="selectedTask.promptGroups.push({ role: 'user', content: '' })">
+              <button class="acu-btn" type="button" @click="addPromptGroup">
                 + 提示词段
               </button>
             </div>
           </div>
 
           <div class="acu-section">
-            <h4>消息楼层标签变量注入</h4>
-            <p class="acu-notes" style="margin-top: 0">
-              仅模板中显式出现的 <code v-pre>{{标签名}}</code> 会写入当前 AI 楼消息变量 <code>post_process_tags.{标签名}</code>（标签内文）。变量随楼层自动继承。
-            </p>
+            <div class="acu-heading-with-help">
+              <h4>消息楼层标签变量注入</h4>
+              <AcuHelpIconBtn
+                v-model:open="tagVariableInjectHelpOpen"
+                panel-id="tag-variable-inject-help"
+                label="消息楼层标签变量注入说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="tagVariableInjectHelpOpen"
+              id="tag-variable-inject-help"
+              label="消息楼层标签变量注入说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin-top: 0">
+                仅该注入模板中显式出现的 <code v-pre>{{标签名}}</code> 会写入当前 AI 楼消息变量
+                <code>post_process_tags.{标签名}</code>。变量随楼层自动继承，供下轮后处理解读存档数据。
+              </p>
+              <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                存档数据可用酒馆助手宏
+                <code v-pre>{{get_message_variable::post_process_tags.{标签名}}}</code>
+                或 EJS 代码
+                <code v-pre>&lt;%= getMessageVar('post_process_tags.{标签名}') %&gt;</code>
+                获取。
+              </p>
+            </AcuHelpPanel>
             <textarea
               v-model="settings.tagVariableInjectTemplate"
               class="acu-textarea"
@@ -662,11 +1437,24 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
           </div>
 
           <div class="acu-section">
-            <h4>聊天注入设置</h4>
-            <p class="acu-notes" style="margin-top: 0">
-              渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{标签名}}</code>。不写入消息楼层变量。
-              若注入内容含 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code>，注入后将分别触发 MVU <code>stat_data</code> 与 <code>addon_data</code> 更新（仅解析注入块，各一次）。
-            </p>
+            <div class="acu-heading-with-help">
+              <h4>聊天注入设置</h4>
+              <AcuHelpIconBtn
+                v-model:open="finalInjectHelpOpen"
+                panel-id="final-inject-help"
+                label="聊天注入设置说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="finalInjectHelpOpen"
+              id="final-inject-help"
+              label="聊天注入设置说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin: 0">
+                渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{标签名}}</code>。不写入消息楼层变量。
+                若注入内容含 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code>，注入后将分别触发 MVU <code>stat_data</code> 与 <code>addon_data</code> 更新（仅解析注入块，各一次）。
+              </p>
+            </AcuHelpPanel>
             <textarea v-model="settings.finalInjectTemplate" class="acu-textarea" placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}" />
           </div>
         </div>
@@ -678,37 +1466,122 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
               当前楼层 #{{ settings.lastRunStatus.messageId }}
               <span v-if="settings.lastRunStatus.at"> · {{ formatRunLogTime(settings.lastRunStatus.at) }}</span>
             </div>
-            <div v-if="settings.lastRunStatus.taskResults?.length">
-              <div v-for="r in settings.lastRunStatus.taskResults" :key="r.taskId" class="acu-run-log-card">
-                <div class="acu-run-log-header">
-                  <strong>{{ r.taskName }}</strong>
-                  <span v-if="r.stage != null" class="acu-notes">阶段 {{ r.stage }}</span>
-                  <span :class="r.skipped ? 'acu-log-warn' : r.success ? 'acu-log-ok' : 'acu-log-err'">
+            <div v-if="settings.lastRunStatus.taskResults?.length" class="acu-run-log-task-list">
+              <details
+                v-for="r in settings.lastRunStatus.taskResults"
+                :key="r.taskId"
+                class="acu-run-log-task"
+              >
+                <summary class="acu-run-log-task__summary">
+                  <strong class="acu-run-log-task__name">{{ r.taskName }}</strong>
+                  <span v-if="r.stage != null" class="acu-notes acu-run-log-task__meta">阶段 {{ r.stage }}</span>
+                  <span
+                    class="acu-run-log-task__status"
+                    :class="r.skipped ? 'acu-log-warn' : r.success ? 'acu-log-ok' : 'acu-log-err'"
+                  >
                     {{ runLogStatusText(r) }}
                   </span>
-                  <span v-if="r.durationMs != null" class="acu-notes">{{ r.durationMs }}ms</span>
+                  <span v-if="r.durationMs != null" class="acu-notes acu-run-log-task__meta">{{ runLogDurationText(r.durationMs) }}</span>
+                </summary>
+                <div class="acu-run-log-task__body">
+                  <template v-if="runLogWritableTagEntries(r).length">
+                    <div class="acu-run-log-tags__head">
+                      <div class="acu-run-log-label acu-run-log-tags__title">摘取标签</div>
+                      <div class="acu-run-log-tags__toolbar">
+                        <button
+                          type="button"
+                          class="acu-btn acu-btn--sm acu-icon-btn acu-run-log-tags__edit"
+                          :class="{ 'acu-run-log-tags__edit--active': isRunLogTagEditing(r.taskId) }"
+                          :title="isRunLogTagEditing(r.taskId) ? '退出编辑' : '编辑摘取标签'"
+                          :aria-pressed="isRunLogTagEditing(r.taskId)"
+                          @click="toggleRunLogTagEdit(r.taskId)"
+                        >
+                          <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
+                        </button>
+                        <button
+                          type="button"
+                          class="acu-btn acu-btn--sm acu-run-log-tags__save"
+                          :class="{ 'acu-run-log-tags__save--dirty': isRunLogTagDraftDirty(r.taskId) }"
+                          :disabled="!isRunLogTagEditing(r.taskId)"
+                          @click="saveRunLogTaskTags(r.taskId)"
+                        >
+                          保存摘取标签
+                        </button>
+                      </div>
+                    </div>
+                    <p class="acu-notes acu-run-log-tags__hint">
+                      保存后仅更新本层 <code>post_process_tags</code> 中「消息楼层标签变量注入」模板声明的标签，不修改 AI 楼文末注入块。
+                    </p>
+                    <div class="acu-run-log-tags">
+                      <details
+                        v-for="[tag] in runLogWritableTagEntries(r)"
+                        :key="tag"
+                        class="acu-run-log-tags__item"
+                      >
+                        <summary class="acu-run-log-tags__summary">{{ tag }}</summary>
+                        <div class="acu-run-log-tags__body">
+                          <textarea
+                            v-if="runLogTagDrafts[r.taskId]"
+                            v-model="runLogTagDrafts[r.taskId][tag]"
+                            class="acu-textarea acu-run-log-tags__input"
+                            :class="{ 'acu-run-log-tags__input--locked': !isRunLogTagEditing(r.taskId) }"
+                            :readonly="!isRunLogTagEditing(r.taskId)"
+                            rows="4"
+                          />
+                        </div>
+                      </details>
+                    </div>
+                  </template>
+                  <template v-if="runLogOtherTagEntries(r).length">
+                    <div class="acu-run-log-label acu-run-log-tags--other__title">其他摘取（不写入 post_process_tags）</div>
+                    <p class="acu-notes acu-run-log-tags__hint acu-run-log-tags--other__hint">
+                      以下标签仅用于文末注入或同轮中转，不会写入本层消息变量。
+                    </p>
+                    <div class="acu-run-log-tags acu-run-log-tags--other">
+                      <details
+                        v-for="[tag, value] in runLogOtherTagEntries(r)"
+                        :key="tag"
+                        class="acu-run-log-tags__item acu-run-log-tags--other__item"
+                      >
+                        <summary class="acu-run-log-tags__summary">{{ tag }}</summary>
+                        <pre class="acu-run-log-pre acu-run-log-tags--other__body">{{ value }}</pre>
+                      </details>
+                    </div>
+                  </template>
+                  <template v-if="r.promptMessages?.length">
+                    <div class="acu-run-log-label">请求提示词</div>
+                    <details
+                      v-for="(msg, idx) in r.promptMessages"
+                      :key="idx"
+                      class="acu-run-log-prompt"
+                    >
+                      <summary class="acu-run-log-prompt__summary">
+                        {{ runLogPromptSegmentTitle(msg) }}
+                      </summary>
+                      <pre class="acu-run-log-pre acu-run-log-prompt__body">{{ msg.content }}</pre>
+                    </details>
+                  </template>
+                  <template v-else-if="r.skipped || !r.success">
+                    <div class="acu-run-log-label">请求提示词</div>
+                    <div class="acu-notes">（本任务未发起 API 请求）</div>
+                  </template>
+                  <template v-if="runLogHadApiRequest(r)">
+                    <div class="acu-run-log-label">AI 输出</div>
+                    <details class="acu-run-log-prompt">
+                      <summary class="acu-run-log-prompt__summary">展开查看</summary>
+                      <pre v-if="runLogAiOutputText(r)" class="acu-run-log-pre acu-run-log-prompt__body">{{ runLogAiOutputText(r) }}</pre>
+                      <div v-else class="acu-notes acu-run-log-prompt__body">（无输出内容）</div>
+                    </details>
+                  </template>
+                  <template v-if="runLogAiReasoningText(r)">
+                    <div class="acu-run-log-label">推理内容 (reasoning_content)</div>
+                    <details class="acu-run-log-prompt">
+                      <summary class="acu-run-log-prompt__summary">展开查看</summary>
+                      <pre class="acu-run-log-pre acu-run-log-pre--reasoning acu-run-log-prompt__body">{{ runLogAiReasoningText(r) }}</pre>
+                    </details>
+                  </template>
                 </div>
-                <template v-if="r.promptMessages?.length">
-                  <div class="acu-run-log-label">请求提示词</div>
-                  <div v-for="(msg, idx) in r.promptMessages" :key="idx" class="acu-run-log-block">
-                    <div class="acu-run-log-role">[{{ msg.role }}]</div>
-                    <pre class="acu-run-log-pre">{{ msg.content }}</pre>
-                  </div>
-                </template>
-                <template v-else-if="r.skipped || !r.success">
-                  <div class="acu-run-log-label">请求提示词</div>
-                  <div class="acu-notes">（本任务未发起 API 请求）</div>
-                </template>
-                <div v-if="runLogHadApiRequest(r)" class="acu-run-log-output-section">
-                  <div class="acu-run-log-label">AI 输出</div>
-                  <pre v-if="runLogAiOutputText(r)" class="acu-run-log-pre">{{ runLogAiOutputText(r) }}</pre>
-                  <div v-else class="acu-notes">（无输出内容）</div>
-                </div>
-                <div v-if="runLogAiReasoningText(r)" class="acu-run-log-reasoning-section">
-                  <div class="acu-run-log-label">推理内容 (reasoning_content)</div>
-                  <pre class="acu-run-log-pre acu-run-log-pre--reasoning">{{ runLogAiReasoningText(r) }}</pre>
-                </div>
-              </div>
+              </details>
             </div>
             <div v-else class="acu-notes">尚无运行记录</div>
           </div>
@@ -726,6 +1599,7 @@ function runLogAiReasoningText(r: { aiReasoning?: string }): string {
         </div>
       </div>
     </div>
+    <AcuConfirmDialog />
   </div>
 </template>
 

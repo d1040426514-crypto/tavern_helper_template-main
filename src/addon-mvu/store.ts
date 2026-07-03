@@ -1,7 +1,9 @@
 import { prettifyErrorWithInput } from '@util/common';
 
+import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
+import { stripInvalidStrictBooleans } from './schema';
 import { updateAddonFromMessage } from './update';
-import { ADDON_KEY, AddonData, AddonSchema, DEFAULT_ADDON_DATA } from './schema';
+import { ADDON_KEY, AddonData, AddonSchema, normalizeAddonData } from './schema';
 
 /** 当前聊天是否至少有一楼可访问的消息 */
 export function hasChatMessages(): boolean {
@@ -43,22 +45,25 @@ export function getAddonData(message_id: number): AddonData | undefined {
   if (raw === undefined || raw === null) {
     return undefined;
   }
-  const result = AddonSchema.safeParse(raw);
+  const result = AddonSchema.safeParse(stripInvalidStrictBooleans(raw));
   if (result.success) {
-    if (!_.isEqual(raw, result.data)) {
-      writeAddonData(message_id, result.data);
+    const normalized = normalizeAddonData(result.data);
+    if (!_.isEqual(raw, normalized)) {
+      writeAddonData(message_id, normalized);
     }
-    return result.data;
+    return normalized;
   }
   console.warn(`[addon-mvu] 第 ${message_id} 楼 addon_data 校验失败, 将尝试 prefault 修复:\n`, prettifyErrorWithInput(result.error));
-  return AddonSchema.parse(raw);
+  const normalized = normalizeAddonData(raw);
+  writeAddonData(message_id, normalized);
+  return normalized;
 }
 
 export function writeAddonData(message_id: number, addon: AddonData): void {
   if (!isAccessibleMessageFloor(message_id)) {
     return;
   }
-  const parsed = AddonSchema.parse(addon);
+  const parsed = normalizeAddonData(addon);
   updateVariablesWith(
     variables => {
       _.set(variables, ADDON_KEY, parsed);
@@ -71,7 +76,7 @@ export function writeAddonData(message_id: number, addon: AddonData): void {
 /** 将上一楼 addon_data 拷贝到当前楼; 首楼或无前楼时使用默认值 */
 export function inheritAddon(message_id: number): AddonData {
   const previous = message_id > 0 ? getAddonData(message_id - 1) : undefined;
-  const inherited = AddonSchema.parse(previous ?? DEFAULT_ADDON_DATA);
+  const inherited = normalizeAddonData(previous);
   writeAddonData(message_id, inherited);
   return inherited;
 }
@@ -108,11 +113,16 @@ export async function processFloor(message_id: number): Promise<void> {
     emitEvents: true,
     message_content: chat_message.message,
   });
-  if (result === undefined) {
-    return;
+
+  let data = inherited;
+  if (result !== undefined) {
+    data = result.data;
   }
 
-  writeAddonData(message_id, result.data);
+  const refreshed = refreshNarrativeGuidanceDetails(data);
+  if (!_.isEqual(refreshed, inherited)) {
+    writeAddonData(message_id, refreshed);
+  }
 }
 
 /** 为当前聊天中缺失 addon_data 的楼层补全继承链 */
@@ -141,11 +151,13 @@ export async function applyAddonUpdateFromMessage(
     emitEvents: true,
     message_content: message,
   });
-  if (result !== undefined) {
-    writeAddonData(message_id, result.data);
-    return result.data;
+
+  const data = result !== undefined ? result.data : base;
+  const refreshed = refreshNarrativeGuidanceDetails(data);
+  if (!_.isEqual(refreshed, base)) {
+    writeAddonData(message_id, refreshed);
   }
-  return base;
+  return refreshed;
 }
 
 /** 从第 0 楼起依次 inherit + parse, 重建全部 addon_data 链 */

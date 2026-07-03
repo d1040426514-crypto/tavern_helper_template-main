@@ -1,6 +1,7 @@
 import {
   buildChatCompletionPayload,
   buildCustomApiFromConfig,
+  omitPromptLogNames,
 } from './api-preset-utils';
 import type { ResolvedApi } from './resolve';
 import type { ApiConfig } from '../tasks/schema';
@@ -126,20 +127,21 @@ async function callViaGenerateRaw(
 }
 
 export async function callWithResolvedApi(
-  messages: RolePrompt[],
+  messages: (RolePrompt & { name?: string })[],
   resolved: ResolvedApi,
   generationId?: string,
 ): Promise<ApiCallResult> {
+  const apiMessages = omitPromptLogNames(messages);
   const genId = generationId || `post-process-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { apiConfig } = resolved;
   assertCustomApiConfig(apiConfig);
   registerGenerationId(genId);
   try {
     try {
-      return await callViaChatCompletionService(messages, apiConfig);
+      return await callViaChatCompletionService(apiMessages, apiConfig);
     } catch (err) {
       console.warn('[AI回复后处理] ChatCompletionService 失败，回退 generateRaw:', err);
-      return await callViaGenerateRaw(messages, genId, apiConfig);
+      return await callViaGenerateRaw(apiMessages, genId, apiConfig);
     }
   } finally {
     unregisterGenerationId(genId);

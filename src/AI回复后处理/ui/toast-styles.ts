@@ -101,9 +101,42 @@ function buildToastCss(tokens: ThemeTokens): string {
       line-height: 1.45;
       color: ${t.text1};
     }
+    #toast-container .acu-pp-toast .acu-pp-progress-headline {
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: ${t.text1};
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-list {
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-item {
+      font-size: 12px;
+      line-height: 1.5;
+      color: ${t.text2};
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-item--running {
+      color: ${t.text1};
+      font-weight: 600;
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-item--done {
+      color: ${t.success};
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-item--failed {
+      color: ${t.danger};
+    }
+    #toast-container .acu-pp-toast .acu-pp-progress-task-detail {
+      font-weight: 400;
+      color: ${t.text3};
+    }
     @media (max-width: 520px) {
       #toast-container .acu-pp-toast.toast {
-        width: min(320px, calc(100vw - 16px)) !important;
+        width: calc(100vw - 16px) !important;
+        max-width: calc(100vw - 16px) !important;
         padding: 10px 12px 10px 42px !important;
       }
       #toast-container .acu-pp-toast.toast::before {
@@ -111,6 +144,14 @@ function buildToastCss(tokens: ThemeTokens): string {
         width: 22px;
         height: 22px;
         font-size: 11px;
+      }
+      #toast-container .acu-pp-toast .acu-pp-toast-row {
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+      #toast-container .acu-pp-toast .acu-pp-stop-btn {
+        min-height: 36px;
+        flex: 1 1 auto;
       }
     }
   `;

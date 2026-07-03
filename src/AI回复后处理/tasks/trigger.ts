@@ -1,5 +1,6 @@
 import { captureDataSnapshot } from '../bridge/database-api';
 import { loadSettings, saveSettings } from '../settings';
+import { resolveEffectiveSettings } from './effective-settings';
 import { injectToAiFloor } from './inject';
 import { applyInjectVariableUpdates } from './inject-variable-update';
 import {
@@ -24,6 +25,7 @@ import {
   isTaskProgressStopping,
   showTaskProgressToast,
   updateTaskProgressToast,
+  type TaskProgressUpdate,
 } from '../ui/task-progress-toast';
 import { registerMvuDeferredTrigger, isMvuDeferActive } from './mvu-trigger-defer';
 import { acuToast } from '../ui/toast';
@@ -44,6 +46,7 @@ function persistRunStatus(
       skipReason: r.skipReason,
       success: r.success,
       preview: r.extractedBlock.slice(0, 200),
+      extractedTags: _.cloneDeep(r.extractedTags),
       durationMs: r.durationMs,
       promptMessages: _.cloneDeep(r.promptMessages),
       aiOutput: r.rawResponse,
@@ -58,7 +61,8 @@ export async function handleMessageReceived(
   type: string,
   options?: { bypassSchedule?: boolean; force?: boolean; isRerun?: boolean },
 ): Promise<void> {
-  const settings = loadSettings();
+  const baseSettings = loadSettings();
+  const settings = resolveEffectiveSettings(baseSettings);
   if (!settings.enabled && !options?.force) return;
   if (type !== 'normal' && !options?.force) return;
   if (isPostProcessSilent()) return;
@@ -74,9 +78,9 @@ export async function handleMessageReceived(
     requestCancelRun();
   });
 
-  const onProgress = (message: string) => {
+  const onProgress = (update: TaskProgressUpdate) => {
     if (isTaskProgressStopping()) return;
-    updateTaskProgressToast(message);
+    updateTaskProgressToast(update);
   };
 
   try {
@@ -88,7 +92,7 @@ export async function handleMessageReceived(
       onProgress,
     });
 
-    persistRunStatus(settings, messageId, results);
+    persistRunStatus(baseSettings, messageId, results);
 
     if (cancelled) {
       acuToast('warning', '后处理已由用户取消');
@@ -96,14 +100,19 @@ export async function handleMessageReceived(
     }
 
     const hasSuccess = results.some(r => r.success && !r.skipped);
-    if (!hasSuccess) return;
+    if (hasSuccess) {
+      await applyTagVariableInjectTemplate(settings, results, messageId);
 
-    await applyTagVariableInjectTemplate(settings, results, messageId);
+      const injectOnlyTagsUnion = buildInjectOnlyTagsUnion(settings.tasks);
+      const aiBlock = await mergeAiFloorInjectBlock(settings, results, messageId, injectOnlyTagsUnion);
+      await injectToAiFloor(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
+      await applyInjectVariableUpdates(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
+    }
 
-    const injectOnlyTagsUnion = buildInjectOnlyTagsUnion(settings.tasks);
-    const aiBlock = await mergeAiFloorInjectBlock(settings, results, messageId, injectOnlyTagsUnion);
-    await injectToAiFloor(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
-    await applyInjectVariableUpdates(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
+    if (settings.messageVarRetention?.enabled) {
+      const { cleanupOldMessageFloorVariables } = await import('./message-var-retention');
+      cleanupOldMessageFloorVariables(settings.messageVarRetention.keepFloors);
+    }
   } catch (e) {
     console.error('[AI回复后处理]', e);
     acuToast('error', `后处理失败: ${e instanceof Error ? e.message : String(e)}`);

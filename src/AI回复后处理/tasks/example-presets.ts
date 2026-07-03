@@ -9,7 +9,6 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         name: '空模板任务',
         enabled: true,
         stage: 1,
-        order: 0,
         extractInjectTags: ['result'],
         promptGroups: [
           {
@@ -23,13 +22,14 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         ],
       },
     ],
-    customVariables: [],
     tagVariableInjectTemplate: '<post_process_data>\n{{result}}\n</post_process_data>',
     finalInjectTemplate: '',
     contextTurnCount: 3,
     contextExtractRules: [],
     contextExcludeRules: [],
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
+    taskPlotWorldbookOverridesEnabled: false,
+    taskContextOverridesEnabled: false,
   },
   {
     name: '回复质检',
@@ -39,7 +39,6 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         name: '回复质检',
         enabled: true,
         stage: 1,
-        order: 0,
         extractInjectTags: ['consistency', 'issues'],
         promptGroups: [
           {
@@ -53,7 +52,6 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         ],
       },
     ],
-    customVariables: [],
     tagVariableInjectTemplate:
       '<consistency_check_data>\n<consistency>{{consistency}}</consistency>\n<issues>{{issues}}</issues>\n</consistency_check_data>',
     finalInjectTemplate: '',
@@ -61,6 +59,8 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     contextExtractRules: [],
     contextExcludeRules: [],
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
+    taskPlotWorldbookOverridesEnabled: false,
+    taskContextOverridesEnabled: false,
   },
   {
     name: '后续选项生成',
@@ -70,7 +70,6 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         name: '选项生成',
         enabled: true,
         stage: 1,
-        order: 0,
         extractInjectTags: ['choices'],
         schedule: { roundInterval: 0 },
         promptGroups: [
@@ -85,12 +84,13 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         ],
       },
     ],
-    customVariables: [{ key: 'language', value: '简体中文' }],
     tagVariableInjectTemplate: '{{choices}}',
     finalInjectTemplate: '',
     contextTurnCount: 2,
     contextExcludeRules: [],
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
+    taskPlotWorldbookOverridesEnabled: false,
+    taskContextOverridesEnabled: false,
   },
 ];
 
@@ -98,13 +98,14 @@ export function getDefaultSettingsPartial() {
   const preset = BUILTIN_PRESETS[0];
   return {
     tasks: preset.tasks,
-    customVariables: preset.customVariables,
     tagVariableInjectTemplate: preset.tagVariableInjectTemplate,
     finalInjectTemplate: preset.finalInjectTemplate,
     contextTurnCount: preset.contextTurnCount,
     contextExtractRules: preset.contextExtractRules,
     contextExcludeRules: preset.contextExcludeRules,
     plotWorldbookConfig: preset.plotWorldbookConfig,
+    taskPlotWorldbookOverridesEnabled: preset.taskPlotWorldbookOverridesEnabled ?? false,
+    taskContextOverridesEnabled: preset.taskContextOverridesEnabled ?? false,
     presets: BUILTIN_PRESETS,
     activePresetName: preset.name,
   };

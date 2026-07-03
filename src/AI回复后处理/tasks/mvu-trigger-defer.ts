@@ -1,4 +1,5 @@
 import { loadSettings } from '../settings';
+import { resolveEffectiveSettings } from './effective-settings';
 import { isProcessing } from './runtime';
 import { needsMvuDeferredRun } from './schedule';
 
@@ -51,7 +52,7 @@ function tryDispatchHead(handler: MessageHandler, via: DeferDispatchVia): void {
 }
 
 function shouldEnqueueDefer(): boolean {
-  return mvuAvailable && needsMvuDeferredRun(loadSettings());
+  return mvuAvailable && needsMvuDeferredRun(resolveEffectiveSettings(loadSettings()));
 }
 
 async function waitForMvuReady(): Promise<boolean> {
@@ -84,7 +85,7 @@ async function initMvuEndedListener(handler: MessageHandler): Promise<void> {
   }
   mvuAvailable = true;
   offMvuEnded = eventOn(Mvu.events.VARIABLE_UPDATE_ENDED, () => {
-    if (!needsMvuDeferredRun(loadSettings())) return;
+    if (!needsMvuDeferredRun(resolveEffectiveSettings(loadSettings()))) return;
     tryDispatchHead(handler, 'ended');
   });
 }
