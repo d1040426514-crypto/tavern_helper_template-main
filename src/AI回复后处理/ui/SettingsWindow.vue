@@ -970,14 +970,6 @@ function saveRunLogTaskTags(taskId: string): void {
               <AcuToggle v-model="settings.messageVarRetention.enabled" label="自动清理旧楼层变量" />
             </div>
             <div class="acu-row">
-              <label class="acu-label-with-help">
-                仅保留最近
-                <AcuHelpIconBtn
-                  v-model:open="messageVarRetentionHelpOpen"
-                  panel-id="message-var-retention-help"
-                  label="消息楼层变量保留说明"
-                />
-              </label>
               <input
                 v-model.number="settings.messageVarRetention.keepFloors"
                 class="acu-input"
@@ -987,7 +979,14 @@ function saveRunLogTaskTags(taskId: string): void {
                 style="width: 72px"
                 :disabled="!settings.messageVarRetention.enabled"
               />
-              <span>楼的消息楼层变量</span>
+              <label class="acu-label-with-help">
+                要保留变量的最近楼层数
+                <AcuHelpIconBtn
+                  v-model:open="messageVarRetentionHelpOpen"
+                  panel-id="message-var-retention-help"
+                  label="消息楼层变量保留说明"
+                />
+              </label>
             </div>
             <AcuHelpPanel
               v-model:open="messageVarRetentionHelpOpen"
