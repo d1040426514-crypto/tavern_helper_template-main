@@ -1,8 +1,7 @@
 name: bump_deps
 
+# 定时自动 bump 已关闭；需要时可于 GitHub Actions 页手动 workflow_dispatch
 on:
-  schedule:
-    - cron: 0 0 */3 * *
   workflow_dispatch:
 
 permissions:

@@ -1,12 +1,7 @@
 name: bundle
 
+# push 自动 bundle 已关闭；需要时可于 GitHub Actions 页手动 workflow_dispatch
 on:
-  push:
-    branches:
-      - master
-      - main
-    paths-ignore:
-      - dist/**
   workflow_dispatch:
 
 permissions:
