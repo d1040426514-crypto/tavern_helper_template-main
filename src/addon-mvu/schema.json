@@ -312,7 +312,7 @@
             "$ref": "#/$defs/__schema2"
           }
         },
-        "近距离事件": {
+        "当前区域事件": {
           "default": {},
           "type": "object",
           "propertyNames": {
@@ -385,7 +385,7 @@
             "$ref": "#/$defs/__schema3"
           }
         },
-        "近距离团体": {
+        "当前区域团体": {
           "default": {},
           "type": "object",
           "propertyNames": {

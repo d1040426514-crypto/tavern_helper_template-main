@@ -136,7 +136,7 @@ declare namespace Addon {
     位面?: Record<string, 位面条目>;
     事件?: {
       世界背景事件?: Record<string, 事件条目>;
-      近距离事件?: Record<string, 事件条目>;
+      当前区域事件?: Record<string, 事件条目>;
     };
     秘闻?: Record<
       string,
@@ -157,7 +157,7 @@ declare namespace Addon {
     >;
     团体?: {
       世界背景团体?: Record<string, 团体条目>;
-      近距离团体?: Record<string, 团体条目>;
+      当前区域团体?: Record<string, 团体条目>;
     };
     因果回响?: Record<
       string,

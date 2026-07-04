@@ -62,7 +62,7 @@ const minorArcana: TarotCard[] = [
   { name: '星币国王' },
 ];
 
-const EVENT_CATEGORIES = ['世界背景事件', '近距离事件'] as const;
+const EVENT_CATEGORIES = ['世界背景事件', '当前区域事件'] as const;
 
 function drawRandom(pool: TarotCard[], count: number): Array<TarotCard & { reversed: boolean }> {
   const picks: Array<TarotCard & { reversed: boolean }> = [];

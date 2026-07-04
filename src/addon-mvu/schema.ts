@@ -177,7 +177,7 @@ const 事件条目Schema = z
 const 事件Schema = z
   .object({
     世界背景事件: z.record(z.string(), 事件条目Schema).prefault({}),
-    近距离事件: z.record(z.string(), 事件条目Schema).prefault({}),
+    当前区域事件: z.record(z.string(), 事件条目Schema).prefault({}),
   })
   .prefault({});
 
@@ -214,7 +214,7 @@ const 团体条目Schema = z
 const 团体Schema = z
   .object({
     世界背景团体: z.record(z.string(), 团体条目Schema).prefault({}),
-    近距离团体: z.record(z.string(), 团体条目Schema).prefault({}),
+    当前区域团体: z.record(z.string(), 团体条目Schema).prefault({}),
   })
   .prefault({});
 
