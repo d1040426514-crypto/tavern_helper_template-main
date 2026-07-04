@@ -261,10 +261,14 @@ export async function updatePresetFields(
   if (useSnapshot) {
     const wasActive = isChatOverrideActive(readChatTaskScope());
     const scope = await ensureChatOverride(settings, source);
-    const snapshot = PostProcessPresetSchema.parse({
+    const mergedSnapshot = {
       ...scope.snapshot!,
       ..._.cloneDeep(fields),
-    });
+    };
+    // #region agent log
+    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'task-store.ts:updatePresetFields',message:'before snapshot write',data:{source,manualSelection:mergedSnapshot.plotWorldbookConfig?.manualSelection,fieldManual:fields.plotWorldbookConfig?.manualSelection},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+    // #endregion
+    const snapshot = PostProcessPresetSchema.parse(mergedSnapshot);
     const next = ChatTaskScopeStateSchema.parse({
       ...scope,
       snapshot,

@@ -780,6 +780,51 @@
   font-size: var(--acu-font-size-body-lg);
 }
 
+.qrf_worldbook_entry_row {
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+
+.qrf_worldbook_entry_cb {
+  flex-shrink: 0;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  appearance: auto;
+  -webkit-appearance: checkbox;
+}
+
+.qrf_worldbook_entry_cb--active {
+  accent-color: var(--acu-accent);
+  outline: 1px solid var(--acu-accent);
+  outline-offset: 1px;
+}
+
+.qrf_worldbook_entry_cb--locked {
+  accent-color: var(--acu-text-3);
+  outline: 1px solid var(--acu-border);
+  outline-offset: 1px;
+  cursor: not-allowed;
+  opacity: 0.75;
+}
+
+.qrf_worldbook_entry_label {
+  color: var(--acu-text-2);
+  line-height: 1.35;
+}
+
+.qrf_worldbook_entry_label--locked {
+  color: var(--acu-text-3);
+  text-decoration: line-through;
+  opacity: 0.65;
+}
+
+.qrf_worldbook_entry_row--locked {
+  opacity: 0.85;
+}
+
 /* ── 任务标签 ── */
 .acu-task-tabs {
   display: flex;

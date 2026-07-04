@@ -4,6 +4,7 @@ import {
   isOutlineOrSummaryIndexEntry,
   normalizeWorldbookComment,
 } from './blocked';
+import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { scanTriggeredWorldbookEntries } from './scan';
@@ -83,6 +84,7 @@ export async function getWorldbookContentForPostProcess(
         const decorated = decorateEntry(entry, bookName);
         if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
         if (!isDbGeneratedEntry(decorated.normalizedComment) && isEntryBlocked(entry)) continue;
+        if (!isDbGeneratedEntry(decorated.normalizedComment) && !isPlotWorldbookEntrySelectable(entry)) continue;
         if (!isSelectedEntry(decorated, config)) continue;
         allEntries.push(decorated);
       }

@@ -82,29 +82,34 @@ function buildPresetFieldsPatch() {
   };
 }
 
-async function flushPendingWrites(): Promise<void> {
+type FlushPendingWritesOptions = {
+  skipPresetFlush?: boolean;
+  skipTasksFlush?: boolean;
+};
+
+type RefreshTaskViewOptions = FlushPendingWritesOptions & {
+  skipTaskReload?: boolean;
+};
+
+async function flushPendingWrites(options?: FlushPendingWritesOptions): Promise<void> {
   if (persistViewTasksTimer) {
     clearTimeout(persistViewTasksTimer);
     persistViewTasksTimer = null;
-    if (chatScopeActive.value) {
+    if (chatScopeActive.value && !options?.skipTasksFlush) {
       await replaceTasks(viewTasks.value, 'ui');
     }
   }
   if (persistPresetFieldsTimer) {
     clearTimeout(persistPresetFieldsTimer);
     persistPresetFieldsTimer = null;
-    if (chatScopeActive.value) {
+    if (chatScopeActive.value && !options?.skipPresetFlush) {
       await updatePresetFields(buildPresetFieldsPatch(), 'ui');
     }
   }
 }
 
-type RefreshTaskViewOptions = {
-  skipTaskReload?: boolean;
-};
-
 async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> {
-  await flushPendingWrites();
+  await flushPendingWrites(options);
   const scope = getChatScopeState();
   chatScopeInfo.value = scope;
   chatScopeActive.value = !!scope;
@@ -139,6 +144,29 @@ function syncPresetFieldsFromEffective() {
 let persistPresetFieldsTimer: ReturnType<typeof setTimeout> | null = null;
 let syncingPresetView = false;
 
+let persistPlotWorldbookChain: Promise<void> = Promise.resolve();
+
+async function persistPlotWorldbookConfigNow(): Promise<void> {
+  if (syncingPresetView) return;
+  const patch = { plotWorldbookConfig: _.cloneDeep(settings.value.plotWorldbookConfig) };
+  if (chatScopeActive.value) {
+    await updatePresetFields(patch, 'ui');
+    return;
+  }
+  store.saveActivePreset();
+}
+
+function onPlotWorldbookConfigUpdate(v: PlotWorldbookConfig): void {
+  if (syncingPresetView) return;
+  // #region agent log
+  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'SettingsWindow.vue:onPlotWorldbookConfigUpdate',message:'plotWorldbook config update',data:{manualSelection:v.manualSelection,source:v.source,chatScopeActive:chatScopeActive.value},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
+  // #endregion
+  settings.value.plotWorldbookConfig = v;
+  persistPlotWorldbookChain = persistPlotWorldbookChain
+    .then(() => persistPlotWorldbookConfigNow())
+    .catch(() => undefined);
+}
+
 async function persistPresetFieldsNow(): Promise<void> {
   if (syncingPresetView || !chatScopeActive.value) return;
   if (persistPresetFieldsTimer) {
@@ -167,20 +195,6 @@ watch(
   },
   { deep: true },
 );
-
-watch(
-  () => settings.value.plotWorldbookConfig,
-  () => schedulePersistPresetFields(),
-  { deep: true },
-);
-
-const plotWorldbookConfigModel = computed<PlotWorldbookConfig>({
-  get: () => settings.value.plotWorldbookConfig,
-  set(v) {
-    settings.value.plotWorldbookConfig = v;
-    schedulePersistPresetFields();
-  },
-});
 
 const taskPlotWorldbookOverridesModel = computed({
   get: () => settings.value.taskPlotWorldbookOverridesEnabled,
@@ -596,7 +610,19 @@ onMounted(() => {
       void refreshTaskView({ skipTaskReload: true });
       return;
     }
-    void refreshTaskView();
+    if (persistPresetFieldsTimer) {
+      clearTimeout(persistPresetFieldsTimer);
+      persistPresetFieldsTimer = null;
+    }
+    if (persistViewTasksTimer) {
+      clearTimeout(persistViewTasksTimer);
+      persistViewTasksTimer = null;
+    }
+    void refreshTaskView({
+      skipTaskReload: true,
+      skipPresetFlush: true,
+      skipTasksFlush: true,
+    });
   });
   offChatScopeChanged = eventOn(ACU_PP_CHAT_SCOPE_CHANGED, () => {
     void refreshTaskView();
@@ -979,11 +1005,14 @@ function saveRunLogTaskTags(taskId: string): void {
         </div>
 
         <div v-show="currentPage === 2" class="acu-page">
-          <PlotWorldbookSection v-model:config="plotWorldbookConfigModel" />
+          <PlotWorldbookSection
+            :config="settings.plotWorldbookConfig"
+            @update:config="onPlotWorldbookConfigUpdate"
+          />
           <TaskPlotWorldbookPanel
             v-model:enabled="taskPlotWorldbookOverridesModel"
             :tasks="displayTasks"
-            :default-plot-worldbook-config="plotWorldbookConfigModel"
+            :default-plot-worldbook-config="settings.plotWorldbookConfig"
           />
           <Context7Section v-model:config="defaultContextConfigRef" />
           <TaskContextPanel

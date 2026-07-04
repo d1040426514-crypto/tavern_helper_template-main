@@ -2,6 +2,11 @@
 import { computed, onMounted, ref, watch } from 'vue';
 import type { PlotWorldbookConfig } from '../tasks/schema';
 import { shouldShowEntryInUi } from '../worldbook/blocked';
+import {
+  isPlotWorldbookEntrySelectable,
+  sanitizePlotWorldbookEnabledUids,
+  selectablePlotWorldbookEntryUids,
+} from '../worldbook/plot-entry-select';
 
 withDefaults(
   defineProps<{
@@ -62,31 +67,66 @@ function toggleBook(name: string) {
   const idx = list.indexOf(name);
   if (idx >= 0) list.splice(idx, 1);
   else list.push(name);
-  config.value = { ...config.value, manualSelection: list };
-  void refreshEntries();
+  const next = { ...config.value, manualSelection: list };
+  // #region agent log
+  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:toggleBook',message:'toggleBook',data:{name,manualSelection:list,source:next.source},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+  // #endregion
+  config.value = next;
+  void refreshEntries({ manualSelection: list, source: 'manual' });
 }
 
-async function refreshEntries() {
+function entriesEqual(
+  a: Record<string, number[]>,
+  b: Record<string, number[]>,
+): boolean {
+  const keys = new Set([...Object.keys(a), ...Object.keys(b)]);
+  for (const key of keys) {
+    const left = [...(a[key] ?? [])].sort((x, y) => x - y);
+    const right = [...(b[key] ?? [])].sort((x, y) => x - y);
+    if (left.length !== right.length || left.some((v, i) => v !== right[i])) return false;
+  }
+  return true;
+}
+
+async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: PlotWorldbookConfig['source'] }) {
   loading.value = true;
+  const activeSource = snapshot?.source ?? cfg.value.source;
+  const activeManualSelection = snapshot?.manualSelection ?? [...cfg.value.manualSelection];
+  const preservedSource = activeSource;
+  const preservedManualSelection = [...activeManualSelection];
   try {
     let bookNames: string[] = [];
-    if (cfg.value.source === 'manual') {
-      bookNames = [...cfg.value.manualSelection];
+    if (activeSource === 'manual') {
+      bookNames = [...activeManualSelection];
     } else {
       const charBooks = getCharWorldbookNames('current');
       if (charBooks.primary) bookNames.push(charBooks.primary);
       bookNames.push(...charBooks.additional);
     }
     bookNames = [...new Set(bookNames.filter(Boolean))];
+    // #region agent log
+    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:refreshEntries',message:'refresh bookNames',data:{bookNames,activeManualSelection,cfgManualSelection:cfg.value.manualSelection,snapshotProvided:!!snapshot},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
+    // #endregion
 
     const groups: typeof entryGroups.value = [];
     const enabledEntries = { ...cfg.value.enabledEntries };
+    const initialEnabledEntries = { ...cfg.value.enabledEntries };
     for (const bookName of bookNames) {
       const entries = await getWorldbook(bookName);
-      if (!enabledEntries[bookName]) {
-        enabledEntries[bookName] = entries
-          .filter(e => shouldShowEntryInUi({ name: e.name }))
-          .map(e => e.uid);
+      const selectableUids = selectablePlotWorldbookEntryUids(entries);
+      if (enabledEntries[bookName] === undefined) {
+        enabledEntries[bookName] = selectableUids;
+        // #region agent log
+        fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:refreshEntries',message:'default init selectable uids',data:{bookName,selectableCount:selectableUids.length,visibleCount:entries.filter(e=>shouldShowEntryInUi({name:e.name})).length,stEnabledCount:entries.filter(e=>e.enabled&&shouldShowEntryInUi({name:e.name})).length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
+        // #endregion
+      } else {
+        const prev = enabledEntries[bookName] ?? [];
+        const sanitized = sanitizePlotWorldbookEnabledUids(entries, prev);
+        const prevKey = [...prev].sort((a, b) => a - b).join(',');
+        const sanitizedKey = [...sanitized].sort((a, b) => a - b).join(',');
+        if (prevKey !== sanitizedKey) {
+          enabledEntries[bookName] = sanitized;
+        }
       }
       const enabled = enabledEntries[bookName] ?? [];
       const visible = entries
@@ -95,11 +135,18 @@ async function refreshEntries() {
           uid: e.uid,
           label: e.name || `条目 ${e.uid}`,
           checked: enabled.includes(e.uid),
-          disabled: !e.enabled,
+          disabled: !isPlotWorldbookEntrySelectable(e),
         }));
       if (visible.length) groups.push({ bookName, entries: visible });
     }
-    config.value = { ...config.value, enabledEntries };
+    if (!entriesEqual(initialEnabledEntries, enabledEntries)) {
+      config.value = {
+        ...config.value,
+        source: preservedSource,
+        manualSelection: preservedManualSelection,
+        enabledEntries,
+      };
+    }
     entryGroups.value = groups;
   } finally {
     loading.value = false;
@@ -107,6 +154,9 @@ async function refreshEntries() {
 }
 
 function toggleEntry(bookName: string, uid: number, checked: boolean) {
+  const group = entryGroups.value.find(g => g.bookName === bookName);
+  const entry = group?.entries.find(e => e.uid === uid);
+  if (entry?.disabled) return;
   const list = [...(cfg.value.enabledEntries[bookName] ?? [])];
   if (checked) {
     if (!list.includes(uid)) list.push(uid);
@@ -123,8 +173,13 @@ function toggleEntry(bookName: string, uid: number, checked: boolean) {
 function selectAllEntries(select: boolean) {
   const next = { ...cfg.value.enabledEntries };
   for (const g of entryGroups.value) {
-    next[g.bookName] = select ? g.entries.map(e => e.uid) : [];
-    for (const e of g.entries) e.checked = select;
+    next[g.bookName] = select
+      ? g.entries.filter(e => !e.disabled).map(e => e.uid)
+      : [];
+    // #region agent log
+    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:selectAllEntries',message:'bulk select',data:{bookName:g.bookName,select,selectedCount:next[g.bookName].length,totalVisible:g.entries.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
+    // #endregion
+    for (const e of g.entries) e.checked = select && !e.disabled;
   }
   config.value = { ...config.value, enabledEntries: next };
 }
@@ -193,21 +248,30 @@ onMounted(async () => {
       <strong>启用的世界书条目</strong>
       <button class="acu-btn" type="button" @click="selectAllEntries(true)">全选</button>
       <button class="acu-btn" type="button" @click="selectAllEntries(false)">全不选</button>
-      <button class="acu-btn" type="button" @click="refreshEntries">刷新条目</button>
     </div>
     <input v-model="entryFilter" class="acu-input" placeholder="筛选条目/世界书..." style="width: 100%; margin-bottom: 8px" />
     <div v-if="loading" class="acu-notes">加载中...</div>
     <div v-else class="qrf_worldbook_entry_list">
       <div v-for="group in filteredGroups" :key="group.bookName">
         <div class="wb-group-title">{{ group.bookName }}</div>
-        <label v-for="entry in group.entries" :key="entry.uid" class="acu-row acu-row--inline">
+        <label
+          v-for="entry in group.entries"
+          :key="entry.uid"
+          class="acu-row acu-row--inline qrf_worldbook_entry_row"
+          :class="{ 'qrf_worldbook_entry_row--locked': entry.disabled }"
+        >
           <input
             type="checkbox"
+            class="qrf_worldbook_entry_cb"
+            :class="entry.disabled ? 'qrf_worldbook_entry_cb--locked' : 'qrf_worldbook_entry_cb--active'"
             :checked="(cfg.enabledEntries[group.bookName] ?? []).includes(entry.uid)"
             :disabled="entry.disabled"
             @change="toggleEntry(group.bookName, entry.uid, ($event.target as HTMLInputElement).checked)"
           />
-          <span>{{ entry.label }}</span>
+          <span
+            class="qrf_worldbook_entry_label"
+            :class="{ 'qrf_worldbook_entry_label--locked': entry.disabled }"
+          >{{ entry.label }}</span>
         </label>
       </div>
     </div>

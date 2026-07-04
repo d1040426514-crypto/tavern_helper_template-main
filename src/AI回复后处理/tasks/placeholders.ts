@@ -19,6 +19,7 @@ import {
   type RelayTagMap,
 } from './utils';
 import { resolveTaskPlotWorldbookConfig } from './plot-worldbook-config';
+import { sanitizeUserInputForPostProcess } from './sanitize-context';
 import { settingsWithTaskContext } from './context-config';
 import { shieldScriptPlaceholders, unshieldScriptPlaceholders } from './placeholder-shield';
 import { normalizeContextTagRules } from './context-tags';
