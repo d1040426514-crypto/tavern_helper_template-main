@@ -3,9 +3,11 @@ import { computed, ref, watch } from 'vue';
 import { hasApiBodyExtras } from '../api/api-preset-utils';
 import {
   applyDeepSeekStructuredTemplate,
+  applyStrictJsonToDraft,
   applyThinkingModeToDraft,
   DEEPSEEK_STRUCTURED_HELP_LINES,
   DEEPSEEK_STRUCTURED_TEMPLATE_HINT,
+  isDeepSeekStructuredBodyParams,
   readThinkingMode,
   restoreDeepSeekDraftSnapshot,
   snapshotDeepSeekDraftFields,
@@ -49,6 +51,13 @@ const cotEnabled = computed({
   get: () => readThinkingMode(activeDraft.bodyParams) === 'enabled',
   set: (enabled: boolean) => {
     applyThinkingModeToDraft(activeDraft, enabled ? 'enabled' : 'disabled');
+  },
+});
+
+const strictJsonEnabled = computed({
+  get: () => isDeepSeekStructuredBodyParams(activeDraft.bodyParams),
+  set: (enabled: boolean) => {
+    applyStrictJsonToDraft(activeDraft, enabled, cotEnabled.value);
   },
 });
 
@@ -201,6 +210,12 @@ const showBodyExtrasWarning = computed(() =>
             v-model:open="deepSeekHelpOpen"
             panel-id="deepseek-structured-help"
             label="DeepSeek 结构化输出说明"
+          />
+          <AcuToggle
+            v-if="deepSeekToolbarVisible"
+            v-model="strictJsonEnabled"
+            label="开启 严格 JSON 变量响应"
+            label-position="before"
           />
           <AcuToggle
             v-if="deepSeekToolbarVisible"

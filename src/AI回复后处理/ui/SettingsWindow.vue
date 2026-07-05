@@ -241,6 +241,7 @@ const importFileInput = ref<HTMLInputElement | null>(null);
 const currentPage = ref(1);
 const messageVarRetentionHelpOpen = ref(false);
 const gameTimeFormatHelpOpen = ref(false);
+const chatExtractTagsHelpOpen = ref(false);
 const extractInjectTagsHelpOpen = ref(false);
 const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
@@ -1139,6 +1140,70 @@ function saveRunLogTaskTags(taskId: string): void {
                   @change="onImportPresetFile"
                 />
               </div>
+            </div>
+          </div>
+
+          <div class="acu-section">
+            <div class="acu-heading-with-help">
+              <h4>聊天摘取标签</h4>
+              <AcuHelpIconBtn
+                v-model:open="chatExtractTagsHelpOpen"
+                panel-id="chat-extract-tags-help"
+                label="聊天摘取标签说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="chatExtractTagsHelpOpen"
+              id="chat-extract-tags-help"
+              label="聊天摘取标签说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin-top: 0">
+                预设级配置，从酒馆主聊天正文摘取标签并直接写入当前楼层 <code>post_process_tags</code>，无需「消息楼层标签变量注入」模板。与任务级「提取写入标签」独立；同 key 时当轮任务摘取优先。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                <strong>用户输入</strong>：在 <code>MESSAGE_SENT</code> 最后阶段（<code>eventMakeLast</code>）从最终用户消息摘取，写入用户楼变量，供下一 AI 楼继承。
+              </p>
+              <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                <strong>AI 输出</strong>：在后处理任务开始前从当前 AI 楼正文摘取并写入，供当轮任务 <code v-pre>{{标签名}}</code> 与聊天注入引用。语法同任务级：裸名或 <code>item@id</code>。
+              </p>
+            </AcuHelpPanel>
+            <div class="acu-row acu-row--extract-tags">
+              <label class="acu-label-with-help" for="chat-extract-user-tags">用户输入摘取</label>
+              <input
+                id="chat-extract-user-tags"
+                class="acu-input"
+                style="flex: 1"
+                placeholder="逗号分隔，如 input,context 或 item@id；留空=关闭"
+                :value="(settings.chatExtractTags?.user ?? []).join(',')"
+                @input="
+                  settings.chatExtractTags = {
+                    user: ($event.target as HTMLInputElement).value
+                      .split(',')
+                      .map(s => s.trim())
+                      .filter(Boolean),
+                    assistant: settings.chatExtractTags?.assistant ?? [],
+                  }
+                "
+              />
+            </div>
+            <div class="acu-row acu-row--extract-tags">
+              <label class="acu-label-with-help" for="chat-extract-assistant-tags">AI 输出摘取</label>
+              <input
+                id="chat-extract-assistant-tags"
+                class="acu-input"
+                style="flex: 1"
+                placeholder="逗号分隔，如 gametxt,summary 或 item@id；留空=关闭"
+                :value="(settings.chatExtractTags?.assistant ?? []).join(',')"
+                @input="
+                  settings.chatExtractTags = {
+                    user: settings.chatExtractTags?.user ?? [],
+                    assistant: ($event.target as HTMLInputElement).value
+                      .split(',')
+                      .map(s => s.trim())
+                      .filter(Boolean),
+                  }
+                "
+              />
             </div>
           </div>
 

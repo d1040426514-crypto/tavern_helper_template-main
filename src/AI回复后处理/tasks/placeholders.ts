@@ -172,6 +172,7 @@ export async function renderTaskMessages(
       relayTagMap,
       messageVarHistoryMap,
       injectOnlyTagsUnion,
+      { historyFallback: 'all-tags' },
     );
     if (!content.trim()) continue;
     messages.push({

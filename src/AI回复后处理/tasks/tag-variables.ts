@@ -339,11 +339,10 @@ export async function mergeAiFloorInjectBlock(
   settings: ScriptSettings,
   results: TagAggregateInput[],
   messageId: number,
-  injectOnlyTagsUnion: Set<string>,
 ): Promise<string> {
   const successful = results.filter(r => r.success && !r.skipped);
   const aggregated = aggregateTaskTagResults(successful);
-  const emptyHistory: RelayTagMap = new Map();
+  const historyMap = buildCurrentFloorTagMap(messageId);
 
   const template = settings.finalInjectTemplate?.trim();
   if (!template) return '';
@@ -353,8 +352,8 @@ export async function mergeAiFloorInjectBlock(
     out = out.split(`{{task:${r.taskName}}}`).join(r.extractedBlock);
     out = out.split(`{{task:${r.taskId}}}`).join(r.extractedBlock);
   }
-  out = replacePlotTagPlaceholdersWithHistory(out, aggregated, emptyHistory, injectOnlyTagsUnion, {
-    restrictToInjectOnly: true,
+  out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
+    historyFallback: 'all-tags',
   });
   return processTemplateText(out, messageId);
 }

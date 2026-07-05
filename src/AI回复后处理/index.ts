@@ -6,6 +6,7 @@ import { readChatTaskScope } from './tasks/chat-task-scope';
 import { emitChatScopeChanged } from './tasks/events';
 import { applyInjectVariableUpdates } from './tasks/inject-variable-update';
 import { registerTrigger, rerunCurrentFloor } from './tasks/trigger';
+import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import {
   debugStopMvuEndedListener,
@@ -54,6 +55,7 @@ $(() => {
   });
 
   const offTrigger = registerTrigger();
+  const offChatTagExtract = registerUserChatTagExtractTrigger();
   const offTagInherit = registerTagVariableInheritance();
   const offChat = reloadOnChatChange();
 
@@ -77,6 +79,7 @@ $(() => {
   $(window).on('pagehide', () => {
     menuEntry.destroy();
     offTrigger.stop();
+    offChatTagExtract.stop();
     offTagInherit.stop();
     offChat.stop();
     offChatScopeNotify.stop();

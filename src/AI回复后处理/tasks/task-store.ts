@@ -48,6 +48,7 @@ export type PresetFieldsPatch = Partial<{
   taskContextOverridesEnabled: boolean;
   finalInjectTemplate: string;
   tagVariableInjectTemplate: string;
+  chatExtractTags: ScriptSettings['chatExtractTags'];
 }>;
 
 type PromptGroup = z.infer<typeof PromptGroupSchema>;
@@ -213,6 +214,7 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   settings.tasks = _.cloneDeep(preset.tasks);
   settings.finalInjectTemplate = preset.finalInjectTemplate;
   settings.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
+  settings.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
   settings.contextTurnCount = preset.contextTurnCount;
   settings.contextExtractRules = _.cloneDeep(preset.contextExtractRules);
   settings.contextExcludeRules = _.cloneDeep(preset.contextExcludeRules);

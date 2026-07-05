@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createEmptyApiPresetDraft } from './api-preset-utils';
 import {
   applyDeepSeekStructuredTemplate,
+  applyStrictJsonToDraft,
   applyThinkingModeToDraft,
   buildDeepSeekBodyParams,
   readThinkingMode,
@@ -41,6 +42,34 @@ test('COT enabled sets thinking enabled and includeReasoning', () => {
 test('buildDeepSeekBodyParams toggles thinking type', () => {
   assert.match(buildDeepSeekBodyParams(false), /type: disabled/);
   assert.match(buildDeepSeekBodyParams(true), /type: enabled/);
+});
+
+test('buildDeepSeekBodyParams without strictJson only has thinking', () => {
+  const body = buildDeepSeekBodyParams(false, false);
+  assert.doesNotMatch(body, /response_format/);
+  assert.match(body, /thinking:\s*\n\s*type:\s*disabled/);
+});
+
+test('applyStrictJsonToDraft off only changes bodyParams', () => {
+  const draft = createEmptyApiPresetDraft();
+  applyStrictJsonToDraft(draft, true, false);
+  assert.equal(draft.customPromptPostProcessing, 'strict');
+  assert.match(draft.excludeBodyParams, /top_p/);
+
+  applyStrictJsonToDraft(draft, false, false);
+  assert.doesNotMatch(draft.bodyParams, /response_format/);
+  assert.match(draft.bodyParams, /thinking:\s*\n\s*type:\s*disabled/);
+  assert.equal(draft.customPromptPostProcessing, 'strict');
+  assert.match(draft.excludeBodyParams, /top_p/);
+});
+
+test('applyStrictJsonToDraft on restores full structured params', () => {
+  const draft = createEmptyApiPresetDraft();
+  applyStrictJsonToDraft(draft, true, true);
+  assert.match(draft.bodyParams, /json_object/);
+  assert.equal(readThinkingMode(draft.bodyParams), 'enabled');
+  assert.equal(draft.customPromptPostProcessing, 'strict');
+  assert.match(draft.excludeBodyParams, /top_p/);
 });
 
 test('snapshot and restore round-trip', () => {

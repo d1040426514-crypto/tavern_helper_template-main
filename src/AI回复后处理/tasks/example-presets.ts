@@ -30,6 +30,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    chatExtractTags: { user: [], assistant: [] },
   },
   {
     name: '回复质检',
@@ -61,6 +62,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    chatExtractTags: { user: [], assistant: [] },
   },
   {
     name: '后续选项生成',
@@ -91,6 +93,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    chatExtractTags: { user: [], assistant: [] },
   },
 ];
 

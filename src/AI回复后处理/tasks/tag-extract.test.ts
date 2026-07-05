@@ -72,6 +72,30 @@ test('placeholder item expands all', () => {
   assert.ok(!out.includes('<item><item'));
 });
 
+test('historyFallback all-tags without injectOnly whitelist', () => {
+  const history: RelayTagMap = new Map([['archived', ['saved']]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{archived}}', new Map(), history, new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, '<archived>saved</archived>');
+});
+
+test('relay wins over history with all-tags fallback', () => {
+  const relay: RelayTagMap = new Map([['foo', ['new']]]);
+  const history: RelayTagMap = new Map([['foo', ['old']]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{foo}}', relay, history, new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, '<foo>new</foo>');
+});
+
+test('all-tags fallback empty when neither relay nor history', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('x{{missing}}y', new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, 'xy');
+});
+
 if (process.exitCode) {
   process.exit(process.exitCode);
 }

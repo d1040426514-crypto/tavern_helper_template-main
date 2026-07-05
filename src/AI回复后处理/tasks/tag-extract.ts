@@ -138,6 +138,14 @@ export interface InjectTagExtractionResult {
   resolvedKeys: string[];
 }
 
+export function getChatExtractTagSpecs(
+  chatExtractTags: { user?: string[]; assistant?: string[] } | undefined,
+  source: 'user' | 'assistant',
+): string[] {
+  const specs = chatExtractTags?.[source] ?? [];
+  return specs.map(t => t.trim()).filter(Boolean);
+}
+
 export function extractInjectTagsFromResponse(
   text: string,
   extractInjectTags: string[] = [],
@@ -217,5 +225,5 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     { desc: '引用时输出完整标签块，保留原始属性，避免双重包裹' },
   ],
   relay:
-    '同轮 relay 优先；提示词中首次缺同轮 relay 时，正常后处理读当前楼 post_process_tags（含继承），重跑后处理任务读上一楼。供「消息楼层标签变量注入」与「聊天注入设置」中显式占位符使用。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。重跑后处理任务读上一楼。供「消息楼层标签变量注入」与「聊天注入设置」中显式占位符使用。',
 } as const;

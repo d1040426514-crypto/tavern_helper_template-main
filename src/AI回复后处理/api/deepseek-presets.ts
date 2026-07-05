@@ -6,9 +6,8 @@ export const DEEPSEEK_STRUCTURED_BODY_PARAMS_BASE = `response_format:
 export const DEEPSEEK_STRUCTURED_EXCLUDE_BODY_PARAMS = 'top_p, reasoning_effort';
 
 export const DEEPSEEK_STRUCTURED_HELP_LINES = [
-  '写入 response_format: json_object，并启用 custom_prompt_post_processing: strict。',
-  '排除 top_p、reasoning_effort；prompt 须含 json 字样。',
-  '默认 thinking: disabled，结构化变量任务更稳。',
+  '开启「严格 JSON 变量响应」时写入 response_format: json_object，并启用 custom_prompt_post_processing: strict、排除 top_p / reasoning_effort。',
+  '关闭严格 JSON 时仅从附加主体参数移除 response_format，保留 thinking；Prompt 后处理与排除参数不变。',
   '开启 COT 后改为 thinking: enabled，并设置 include_reasoning: true。',
 ];
 
@@ -37,12 +36,11 @@ export function restoreDeepSeekDraftSnapshot(draft: ApiPresetDraft, snapshot: De
   draft.reasoningEffort = snapshot.reasoningEffort;
 }
 
-export function buildDeepSeekBodyParams(cotEnabled: boolean): string {
+export function buildDeepSeekBodyParams(cotEnabled: boolean, strictJson = true): string {
   const thinkingType: ThinkingMode = cotEnabled ? 'enabled' : 'disabled';
-  return `${DEEPSEEK_STRUCTURED_BODY_PARAMS_BASE}
-
-thinking:
-  type: ${thinkingType}`;
+  const thinkingBlock = `thinking:\n  type: ${thinkingType}`;
+  if (!strictJson) return thinkingBlock;
+  return `${DEEPSEEK_STRUCTURED_BODY_PARAMS_BASE}\n\n${thinkingBlock}`;
 }
 
 export function isDeepSeekStructuredBodyParams(bodyParams: string): boolean {
@@ -61,7 +59,7 @@ export function applyThinkingModeToBodyParams(bodyParams: string, mode: Thinking
   if (/thinking\s*:\s*\n\s*type\s*:\s*(enabled|disabled)/i.test(source)) {
     return source.replace(/thinking\s*:\s*\n\s*type\s*:\s*(enabled|disabled)/i, thinkingBlock);
   }
-  if (!source) return `${DEEPSEEK_STRUCTURED_BODY_PARAMS_BASE}\n\n${thinkingBlock}`;
+  if (!source) return thinkingBlock;
   return `${source}\n\n${thinkingBlock}`;
 }
 
@@ -70,18 +68,30 @@ export function applyThinkingModeToDraft(draft: ApiPresetDraft, mode: ThinkingMo
   draft.includeReasoning = mode === 'enabled';
 }
 
-/** 一键写入 DeepSeek 结构化 JSON 输出推荐参数 */
-export function applyDeepSeekStructuredTemplate(
+/** 切换是否写入 response_format: json_object；开启时一并写入 strict 后处理与排除参数 */
+export function applyStrictJsonToDraft(
   draft: ApiPresetDraft,
-  options?: { cotEnabled?: boolean },
+  strictJson: boolean,
+  cotEnabled: boolean,
 ): void {
-  const cotEnabled = options?.cotEnabled ?? false;
-  draft.bodyParams = buildDeepSeekBodyParams(cotEnabled);
-  draft.excludeBodyParams = DEEPSEEK_STRUCTURED_EXCLUDE_BODY_PARAMS;
-  draft.customPromptPostProcessing = 'strict';
+  draft.bodyParams = buildDeepSeekBodyParams(cotEnabled, strictJson);
+  if (strictJson) {
+    draft.excludeBodyParams = DEEPSEEK_STRUCTURED_EXCLUDE_BODY_PARAMS;
+    draft.customPromptPostProcessing = 'strict';
+  }
   draft.includeReasoning = cotEnabled;
   draft.reasoningEffort = 'medium';
 }
 
+/** 一键写入 DeepSeek 推荐参数（默认含严格 JSON + thinking disabled） */
+export function applyDeepSeekStructuredTemplate(
+  draft: ApiPresetDraft,
+  options?: { cotEnabled?: boolean; strictJson?: boolean },
+): void {
+  const cotEnabled = options?.cotEnabled ?? false;
+  const strictJson = options?.strictJson !== false;
+  applyStrictJsonToDraft(draft, strictJson, cotEnabled);
+}
+
 export const DEEPSEEK_STRUCTURED_TEMPLATE_HINT =
-  'DeepSeek 结构化输出：已设置 json_object、thinking disabled、strict 后处理；prompt 须含 json 字样。';
+  'DeepSeek 预设：已应用 thinking disabled；严格 JSON 与 COT 可在下方开关调整。';

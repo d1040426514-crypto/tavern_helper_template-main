@@ -248,14 +248,23 @@ export function replacePlotTagPlaceholders(
   return replacePlotTagPlaceholdersWithHistory(text, relayTagMap, historyTagMap, new Set());
 }
 
+function shouldUseHistoryFallback(
+  tagName: string,
+  injectOnlyTags: Set<string>,
+  historyFallback: 'inject-only' | 'all-tags',
+): boolean {
+  return historyFallback === 'all-tags' || isPlaceholderInjectAllowed(tagName, injectOnlyTags);
+}
+
 export function replacePlotTagPlaceholdersWithHistory(
   text: string,
   relayTagMap: RelayTagMap,
   messageVarHistoryMap: RelayTagMap,
   injectOnlyTags: Set<string>,
-  options?: { restrictToInjectOnly?: boolean },
+  options?: { restrictToInjectOnly?: boolean; historyFallback?: 'inject-only' | 'all-tags' },
 ): string {
   const re = new RegExp(PLOT_TAG_PLACEHOLDER_RE.source, 'g');
+  const historyFallback = options?.historyFallback ?? 'inject-only';
 
   return String(text || '').replace(re, (placeholder, rawName: string) => {
     const tagName = rawName.trim();
@@ -263,15 +272,19 @@ export function replacePlotTagPlaceholdersWithHistory(
 
     if (options?.restrictToInjectOnly) {
       if (!isPlaceholderInjectAllowed(tagName, injectOnlyTags)) return '';
-      const out = resolvePlaceholderInjectText(relayTagMap, tagName);
-      if (out) return out;
+      const relayOut = resolvePlaceholderInjectText(relayTagMap, tagName);
+      if (relayOut) return relayOut;
+      if (shouldUseHistoryFallback(tagName, injectOnlyTags, historyFallback)) {
+        const histOut = resolvePlaceholderInjectText(messageVarHistoryMap, tagName);
+        if (histOut) return histOut;
+      }
       return '';
     }
 
     const relayOut = resolvePlaceholderInjectText(relayTagMap, tagName);
     if (relayOut) return relayOut;
 
-    if (isPlaceholderInjectAllowed(tagName, injectOnlyTags)) {
+    if (shouldUseHistoryFallback(tagName, injectOnlyTags, historyFallback)) {
       const histOut = resolvePlaceholderInjectText(messageVarHistoryMap, tagName);
       if (histOut) return histOut;
     }
@@ -358,7 +371,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；提取写入标签在 relay 缺省时从 post_process_tags 回退。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退（只要楼层变量有值即可引用，不限于提取写入标签白名单）。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
   },
   { code: '{{task:任务名}}', desc: '聊天注入模板中的任务结果占位' },
   {

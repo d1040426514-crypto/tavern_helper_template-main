@@ -140,11 +140,17 @@ export const RunLogTaskResultSchema = z.object({
   aiReasoning: z.string().optional().default(''),
 });
 
+export const ChatExtractTagsConfigSchema = z.object({
+  user: z.array(z.string()).default([]),
+  assistant: z.array(z.string()).default([]),
+});
+
 export const PostProcessPresetSchema = z.object({
   name: z.string(),
   tasks: z.array(PostProcessTaskSchema).default([]),
   finalInjectTemplate: z.string().default(''),
   tagVariableInjectTemplate: z.string().default(''),
+  chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
   contextTurnCount: z.number().int().min(0).default(3),
   contextExtractRules: z.array(ContextTagRuleSchema).default([]),
   contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
@@ -206,6 +212,7 @@ export const ScriptSettingsSchema = z
     taskContextOverridesEnabled: z.boolean().default(false),
     finalInjectTemplate: z.string().default(''),
     tagVariableInjectTemplate: z.string().default(''),
+    chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
     presets: z.array(PostProcessPresetSchema).default([]),
     activePresetName: z.string().default(''),
     scheduleState: z.record(z.string(), ScheduleStateEntrySchema).default({}),
@@ -227,6 +234,7 @@ export const ScriptSettingsSchema = z
   .prefault({});
 
 export type PostProcessTask = z.infer<typeof PostProcessTaskSchema>;
+export type ChatExtractTagsConfig = z.infer<typeof ChatExtractTagsConfigSchema>;
 export type ApiConfig = z.infer<typeof ApiConfigSchema>;
 export type ApiPreset = z.infer<typeof ApiPresetSchema>;
 export type ApiPresetBinding = z.infer<typeof ApiPresetBindingSchema>;

@@ -15,11 +15,8 @@ import {
   runPostProcessTasks,
   unmarkProcessing,
 } from './runtime';
-import {
-  applyTagVariableInjectTemplate,
-  buildInjectOnlyTagsUnion,
-  mergeAiFloorInjectBlock,
-} from './tag-variables';
+import { applyAssistantChatTagExtract } from './chat-tag-extract';
+import { applyTagVariableInjectTemplate, mergeAiFloorInjectBlock } from './tag-variables';
 import {
   hideTaskProgressToast,
   isTaskProgressStopping,
@@ -84,6 +81,8 @@ export async function handleMessageReceived(
   };
 
   try {
+    applyAssistantChatTagExtract(messageId, settings, { isRerun: options?.isRerun ?? false });
+
     const snapshot = captureDataSnapshot();
     const { results, cancelled } = await runPostProcessTasks(settings, snapshot, messageId, {
       bypassSchedule: options?.bypassSchedule ?? false,
@@ -103,8 +102,7 @@ export async function handleMessageReceived(
     if (hasSuccess) {
       await applyTagVariableInjectTemplate(settings, results, messageId);
 
-      const injectOnlyTagsUnion = buildInjectOnlyTagsUnion(settings.tasks);
-      const aiBlock = await mergeAiFloorInjectBlock(settings, results, messageId, injectOnlyTagsUnion);
+      const aiBlock = await mergeAiFloorInjectBlock(settings, results, messageId);
       await injectToAiFloor(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
       await applyInjectVariableUpdates(messageId, aiBlock, { isRerun: options?.isRerun ?? false });
     }
