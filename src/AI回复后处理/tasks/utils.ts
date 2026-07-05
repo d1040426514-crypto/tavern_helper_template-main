@@ -361,6 +361,10 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
     desc: '同轮 relay 优先；提取写入标签在 relay 缺省时从 post_process_tags 回退。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
   },
   { code: '{{task:任务名}}', desc: '聊天注入模板中的任务结果占位' },
+  {
+    code: 'structuredOutputMode',
+    desc: '任务级严格 JSON 变量更新（mvu_json_patch / addon_json_patch）：需配合 API 预设 DeepSeek 结构化模板；解析失败会重试，成功则归一化为 <UpdateVariable> 包裹块',
+  },
   { code: '{{char}} 等', desc: '提示词段在脚本占位符替换后，会再经酒馆宏、助手宏与 EJS 模板处理' },
   {
     code: 'post_process_tags',

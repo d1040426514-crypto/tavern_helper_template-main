@@ -10,6 +10,13 @@ export interface ApiPresetDraft {
   bodyParams: string;
   excludeBodyParams: string;
   requestHeaders: string;
+  customPromptPostProcessing: 'none' | 'strict';
+  includeReasoning: boolean;
+  reasoningEffort: 'low' | 'medium' | 'high';
+}
+
+export interface ApiPayloadOverrides {
+  customPromptPostProcessing?: 'none' | 'strict';
 }
 
 export function createEmptyApiPresetDraft(): ApiPresetDraft {
@@ -23,6 +30,9 @@ export function createEmptyApiPresetDraft(): ApiPresetDraft {
     bodyParams: '',
     excludeBodyParams: '',
     requestHeaders: '',
+    customPromptPostProcessing: 'none',
+    includeReasoning: false,
+    reasoningEffort: 'medium',
   };
 }
 
@@ -38,6 +48,9 @@ export function apiPresetDraftFromPreset(preset: ApiPreset): ApiPresetDraft {
     bodyParams: cfg.bodyParams || '',
     excludeBodyParams: cfg.excludeBodyParams || '',
     requestHeaders: cfg.requestHeaders || '',
+    customPromptPostProcessing: cfg.customPromptPostProcessing ?? 'none',
+    includeReasoning: cfg.includeReasoning ?? false,
+    reasoningEffort: cfg.reasoningEffort ?? 'medium',
   };
 }
 
@@ -54,6 +67,9 @@ export function apiPresetFromDraft(draft: ApiPresetDraft): ApiPreset {
       bodyParams: draft.bodyParams || '',
       excludeBodyParams: draft.excludeBodyParams || '',
       requestHeaders: draft.requestHeaders || '',
+      customPromptPostProcessing: draft.customPromptPostProcessing ?? 'none',
+      includeReasoning: draft.includeReasoning ?? false,
+      reasoningEffort: draft.reasoningEffort ?? 'medium',
     },
   };
 }
@@ -85,7 +101,8 @@ export function hasApiBodyExtras(apiConfig: ApiConfig): boolean {
   return Boolean(
     apiConfig.bodyParams?.trim() ||
       apiConfig.excludeBodyParams?.trim() ||
-      apiConfig.requestHeaders?.trim(),
+      apiConfig.requestHeaders?.trim() ||
+      apiConfig.customPromptPostProcessing === 'strict',
   );
 }
 
@@ -113,8 +130,11 @@ export function omitPromptLogNames<T extends { name?: string }>(messages: T[]): 
 export function buildChatCompletionPayload(
   messages: { role: string; content: string; name?: string }[],
   apiConfig: ApiConfig,
+  overrides?: ApiPayloadOverrides,
 ): Record<string, unknown> {
   const model = (apiConfig.model || '').replace(/^models\//, '');
+  const customPromptPostProcessing =
+    overrides?.customPromptPostProcessing ?? apiConfig.customPromptPostProcessing ?? 'none';
   return {
     messages: omitPromptLogNames(messages),
     model,
@@ -123,11 +143,11 @@ export function buildChatCompletionPayload(
     top_p: 0.95,
     stream: false,
     chat_completion_source: 'custom',
-    include_reasoning: false,
-    reasoning_effort: 'medium',
+    include_reasoning: apiConfig.includeReasoning ?? false,
+    reasoning_effort: apiConfig.reasoningEffort ?? 'medium',
     enable_web_search: false,
     request_images: false,
-    custom_prompt_post_processing: 'none',
+    custom_prompt_post_processing: customPromptPostProcessing,
     reverse_proxy: apiConfig.url,
     proxy_password: '',
     custom_url: apiConfig.url,

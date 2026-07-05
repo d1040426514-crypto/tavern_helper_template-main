@@ -14,7 +14,7 @@ addon变量输出格式:
     - do not update paths containing 降临 or 平行演化 (frontend-controlled, reserved for UI)
     - 叙事指导.细节层 is auto-refreshed each turn by addon-mvu script (minor arcana draw); prefer updating 宏观层/发展层 and event fields instead
   format: |-
-    <UpdateAddonVariable>
+    <UpdateVariable>
     <Analysis>$(IN ENGLISH, no more than 80 words)
     - ${calculate time passed: ...}
     - ${decide whether dramatic updates are allowed: yes/no}
@@ -28,4 +28,4 @@ addon变量输出格式:
       ...
     ]
     </AddonJSONPatch>
-    </UpdateAddonVariable>
+    </UpdateVariable>

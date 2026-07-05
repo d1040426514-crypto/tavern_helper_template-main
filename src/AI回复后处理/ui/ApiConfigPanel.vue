@@ -1,9 +1,23 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { hasApiBodyExtras } from '../api/api-preset-utils';
+import {
+  applyDeepSeekStructuredTemplate,
+  applyThinkingModeToDraft,
+  DEEPSEEK_STRUCTURED_HELP_LINES,
+  DEEPSEEK_STRUCTURED_TEMPLATE_HINT,
+  readThinkingMode,
+  restoreDeepSeekDraftSnapshot,
+  snapshotDeepSeekDraftFields,
+  type DeepSeekDraftSnapshot,
+} from '../api/deepseek-presets';
 import AcuPresetDropdown from './AcuPresetDropdown.vue';
+import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
+import AcuHelpPanel from './AcuHelpPanel.vue';
+import AcuToggle from './AcuToggle.vue';
 import { acuConfirm } from './composables/useAcuConfirm';
 import { useApiPresetPanel } from './composables/useApiPresetPanel';
+import { acuToast } from './toast';
 
 const {
   settings,
@@ -27,12 +41,52 @@ const {
   loadModelsForActive,
 } = useApiPresetPanel();
 
+const deepSeekToolbarVisible = ref(false);
+const deepSeekHelpOpen = ref(false);
+const deepSeekSnapshot = ref<DeepSeekDraftSnapshot | null>(null);
+
+const cotEnabled = computed({
+  get: () => readThinkingMode(activeDraft.bodyParams) === 'enabled',
+  set: (enabled: boolean) => {
+    applyThinkingModeToDraft(activeDraft, enabled ? 'enabled' : 'disabled');
+  },
+});
+
+function resetDeepSeekToolbar() {
+  deepSeekToolbarVisible.value = false;
+  deepSeekSnapshot.value = null;
+}
+
 async function confirmDeletePreset() {
   const name = activePreset.value?.name;
   if (!name) return;
   if (!(await acuConfirm({ message: `删除 API 预设「${name}」？` }))) return;
   deletePreset(name);
+  resetDeepSeekToolbar();
 }
+
+function toggleDeepSeekStructuredOutput() {
+  if (deepSeekToolbarVisible.value && deepSeekSnapshot.value) {
+    restoreDeepSeekDraftSnapshot(activeDraft, deepSeekSnapshot.value);
+    deepSeekSnapshot.value = null;
+    deepSeekToolbarVisible.value = false;
+    acuToast('success', '已恢复一键应用前的 API 配置。');
+    return;
+  }
+  deepSeekSnapshot.value = snapshotDeepSeekDraftFields(activeDraft);
+  applyDeepSeekStructuredTemplate(activeDraft, { cotEnabled: false });
+  deepSeekToolbarVisible.value = true;
+  acuToast('success', DEEPSEEK_STRUCTURED_TEMPLATE_HINT);
+}
+
+function handleSyncActiveDraft() {
+  resetDeepSeekToolbar();
+  syncActiveDraft();
+}
+
+watch(activePresetName, () => {
+  resetDeepSeekToolbar();
+});
 
 const showBodyExtrasWarning = computed(() =>
   hasApiBodyExtras({
@@ -43,6 +97,9 @@ const showBodyExtrasWarning = computed(() =>
     bodyParams: activeDraft.bodyParams,
     excludeBodyParams: activeDraft.excludeBodyParams,
     requestHeaders: activeDraft.requestHeaders,
+    customPromptPostProcessing: activeDraft.customPromptPostProcessing,
+    includeReasoning: activeDraft.includeReasoning,
+    reasoningEffort: activeDraft.reasoningEffort,
   }),
 );
 </script>
@@ -131,8 +188,47 @@ const showBodyExtrasWarning = computed(() =>
       </div>
 
       <div class="acu-api-config-panel__editor-section">
+        <div class="acu-deepseek-actions">
+          <button
+            class="acu-btn acu-btn--sm acu-deepseek-btn"
+            :class="{ 'acu-deepseek-btn--active': deepSeekToolbarVisible }"
+            type="button"
+            @click="toggleDeepSeekStructuredOutput()"
+          >
+            一键 DeepSeek 结构化输出
+          </button>
+          <AcuHelpIconBtn
+            v-model:open="deepSeekHelpOpen"
+            panel-id="deepseek-structured-help"
+            label="DeepSeek 结构化输出说明"
+          />
+          <AcuToggle
+            v-if="deepSeekToolbarVisible"
+            v-model="cotEnabled"
+            label="开启COT"
+            label-position="before"
+          />
+        </div>
+        <AcuHelpPanel
+          v-model:open="deepSeekHelpOpen"
+          id="deepseek-structured-help"
+          label="DeepSeek 结构化输出说明"
+        >
+          <ul class="acu-collapsible-help__list">
+            <li v-for="(line, idx) in DEEPSEEK_STRUCTURED_HELP_LINES" :key="idx" class="acu-notes acu-notes--sm">
+              {{ line }}
+            </li>
+          </ul>
+        </AcuHelpPanel>
         <div v-if="showBodyExtrasWarning" class="acu-message acu-message--warn">
           已填写 body/headers 扩展时会合并到自定义 API 请求体；后处理已禁用 ST 预设压扁。
+        </div>
+        <div class="acu-form-row">
+          <label class="acu-field-label">Prompt 后处理</label>
+          <select v-model="activeDraft.customPromptPostProcessing" class="acu-select">
+            <option value="none">none</option>
+            <option value="strict">strict（DeepSeek 推荐）</option>
+          </select>
         </div>
         <div class="acu-form-row acu-form-row--stack">
           <label class="acu-field-label">附加主体参数</label>
@@ -140,8 +236,8 @@ const showBodyExtrasWarning = computed(() =>
           <textarea
             v-model="activeDraft.bodyParams"
             class="acu-textarea"
-            rows="3"
-            placeholder="response_format:&#10;  type: json_object&#10;top_k: 50"
+            rows="4"
+            placeholder="response_format:&#10;  type: json_object&#10;thinking:&#10;  type: disabled"
           />
         </div>
         <div class="acu-form-row acu-form-row--stack">
@@ -159,7 +255,7 @@ const showBodyExtrasWarning = computed(() =>
       <div v-if="activeDraftError" class="acu-message acu-message--error">{{ activeDraftError }}</div>
 
       <div class="acu-api-config-panel__actions">
-        <button class="acu-btn acu-btn--sm" type="button" :disabled="!activeDraftDirty" @click="syncActiveDraft()">
+        <button class="acu-btn acu-btn--sm" type="button" :disabled="!activeDraftDirty" @click="handleSyncActiveDraft()">
           放弃修改
         </button>
         <button class="acu-btn acu-btn--sm primary" type="submit" :disabled="!activeDraftDirty">

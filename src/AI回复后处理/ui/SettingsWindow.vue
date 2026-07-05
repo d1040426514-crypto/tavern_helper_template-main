@@ -11,6 +11,11 @@ import {
 } from '../tasks/tag-variables';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
+import { STRUCTURED_OUTPUT_MODE_HELP } from '../tasks/strict-variable-response';
+import {
+  syncStructuredOutputPromptGroup,
+  updateStructuredOutputRulesCacheFromPromptGroups,
+} from '../tasks/structured-output-prompt-rules';
 import PlotWorldbookSection from './PlotWorldbookSection.vue';
 import TaskPlotWorldbookPanel from './TaskPlotWorldbookPanel.vue';
 import Context7Section from './Context7Section.vue';
@@ -237,6 +242,7 @@ const currentPage = ref(1);
 const messageVarRetentionHelpOpen = ref(false);
 const gameTimeFormatHelpOpen = ref(false);
 const extractInjectTagsHelpOpen = ref(false);
+const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
 
@@ -271,6 +277,32 @@ function goToPage(page: number) {
 }
 
 const selectedTask = computed(() => displayTasks.value.find(t => t.id === selectedTaskId.value));
+
+watch(
+  () => selectedTask.value?.structuredOutputMode,
+  (mode, oldMode) => {
+    const task = selectedTask.value;
+    if (!task || mode == null || mode === oldMode) return;
+    syncStructuredOutputPromptGroup(task, mode);
+  },
+);
+
+watch(selectedTaskId, () => {
+  const task = selectedTask.value;
+  if (task?.structuredOutputMode && task.structuredOutputMode !== 'off') {
+    syncStructuredOutputPromptGroup(task, task.structuredOutputMode);
+  }
+});
+
+watch(
+  () => selectedTask.value?.promptGroups,
+  () => {
+    const task = selectedTask.value;
+    if (!task) return;
+    updateStructuredOutputRulesCacheFromPromptGroups(task);
+  },
+  { deep: true },
+);
 
 const selectedTaskEnabledModel = computed({
   get: () => selectedTask.value?.enabled ?? true,
@@ -1368,7 +1400,34 @@ function saveRunLogTaskTags(taskId: string): void {
                 <input v-model.number="selectedTask.maxRetries" class="acu-input" type="number" min="1" step="1" style="width: 96px" />
                 <label>最小回复字数</label>
                 <input v-model.number="selectedTask.minLength" class="acu-input" type="number" min="0" step="1" style="width: 96px" />
+                <label class="acu-label-with-help">
+                  结构化 JSON 输出
+                  <AcuHelpIconBtn
+                    v-model:open="structuredOutputHelpOpen"
+                    panel-id="structured-output-help"
+                    label="结构化 JSON 输出说明"
+                  />
+                </label>
+                <select v-model="selectedTask.structuredOutputMode" class="acu-select" style="min-width: 140px">
+                  <option value="off">关闭（XML 标签）</option>
+                  <option value="mvu_json_patch">MVU JSON Patch</option>
+                  <option value="addon_json_patch">Addon JSON Patch</option>
+                </select>
               </div>
+              <AcuHelpPanel
+                v-model:open="structuredOutputHelpOpen"
+                id="structured-output-help"
+                label="结构化 JSON 输出说明"
+              >
+                <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.intro }}</p>
+                <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.apiPreset }}</p>
+                <ul class="acu-collapsible-help__list">
+                  <li v-for="mode in STRUCTURED_OUTPUT_MODE_HELP.modes" :key="mode.value" class="acu-notes acu-notes--sm">
+                    <strong>{{ mode.title }}</strong>：{{ mode.desc }}
+                  </li>
+                </ul>
+                <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ STRUCTURED_OUTPUT_MODE_HELP.retry }}</p>
+              </AcuHelpPanel>
               <p class="acu-notes" style="margin: 0 0 8px">
                 最小回复字数填 0 表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
               </p>

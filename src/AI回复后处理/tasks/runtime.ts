@@ -18,6 +18,14 @@ import {
   mergeRelayTagMap,
   type RelayTagMap,
 } from './utils';
+import {
+  appendStrictJsonPromptToMessages,
+  apiConfigRequiresChatCompletionPath,
+  enrichApiConfigForStructuredTask,
+  extractStrictVariableResponse,
+  hasCompleteVariableXml,
+  type ActiveStructuredOutputMode,
+} from './strict-variable-response';
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
@@ -71,6 +79,26 @@ export function isProcessing(messageId: number): boolean {
 function taskHasSkipTags(task: PostProcessTask, aiText: string): boolean {
   if (!task.skipIfTagsFound?.length) return false;
   return task.skipIfTagsFound.some(tag => aiText.toLowerCase().includes(`<${tag.toLowerCase()}>`));
+}
+
+function getStructuredOutputMode(task: PostProcessTask): ActiveStructuredOutputMode | null {
+  const mode = task.structuredOutputMode ?? 'off';
+  if (mode === 'off') return null;
+  return mode;
+}
+
+function resolveStructuredResponse(
+  rawResponse: string,
+  mode: ActiveStructuredOutputMode,
+): { ok: true; text: string } | { ok: false; error: string } {
+  const strict = extractStrictVariableResponse(rawResponse, mode);
+  if (strict.ok && strict.normalizedXml) {
+    return { ok: true, text: strict.normalizedXml };
+  }
+  if (hasCompleteVariableXml(rawResponse, mode)) {
+    return { ok: true, text: rawResponse.trim() };
+  }
+  return { ok: false, error: strict.retryHint || strict.error || '严格 JSON 解析失败' };
 }
 
 async function runSingleTask(
@@ -146,21 +174,31 @@ async function runSingleTask(
   }
 
   const resolvedApi = getEffectiveApi(ctx.settings, task.id, task.apiPresetName);
+  const structuredMode = getStructuredOutputMode(task);
+  const apiConfig = structuredMode
+    ? enrichApiConfigForStructuredTask(resolvedApi.apiConfig, structuredMode)
+    : resolvedApi.apiConfig;
+  const apiMessages = structuredMode ? appendStrictJsonPromptToMessages(messages, structuredMode) : messages;
   const maxRetries = task.maxRetries ?? 3;
   let rawResponse = '';
   let reasoningContent: string | undefined;
   let lastError = '';
+  let processedResponse = '';
 
-  lastPromptMessages = _.cloneDeep(messages);
+  lastPromptMessages = _.cloneDeep(apiMessages);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     checkRunCancelled(options?.signal);
     try {
       silentGenerationDepth++;
       const apiResult = await callWithResolvedApi(
-        messages,
-        resolvedApi,
+        apiMessages,
+        { apiConfig },
         `post-process-${task.id}-${ctx.messageId}-${attempt}`,
+        {
+          disallowGenerateRawFallback: structuredMode != null || apiConfigRequiresChatCompletionPath(apiConfig),
+          payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
+        },
       );
       rawResponse = apiResult.content;
       reasoningContent = apiResult.reasoningContent;
@@ -174,6 +212,21 @@ async function runSingleTask(
       silentGenerationDepth = Math.max(0, silentGenerationDepth - 1);
     }
     checkRunCancelled(options?.signal);
+
+    if (structuredMode) {
+      const resolved = resolveStructuredResponse(rawResponse, structuredMode);
+      if (resolved.ok) {
+        processedResponse = resolved.text;
+        break;
+      }
+      lastError = resolved.error;
+      if (attempt < maxRetries - 1) {
+        await abortableDelay(1000, options?.signal);
+      }
+      continue;
+    }
+
+    processedResponse = rawResponse;
     if ((rawResponse?.trim().length ?? 0) >= (task.minLength ?? 0)) break;
     lastError = '响应过短';
     if (attempt < maxRetries - 1) {
@@ -181,13 +234,19 @@ async function runSingleTask(
     }
   }
 
-  const plotExtraction = extractPlotTagsFromResponse(rawResponse, task.extractInjectTags ?? []);
+  if (!processedResponse && rawResponse) {
+    processedResponse = structuredMode ? '' : rawResponse;
+  }
+
+  const plotExtraction = extractPlotTagsFromResponse(processedResponse || rawResponse, task.extractInjectTags ?? []);
   const hasTags = Object.keys(plotExtraction.extractedTags).length > 0;
+  const responseForBlock = processedResponse || rawResponse;
   const extractedBlock = hasTags
     ? plotExtraction.injectedFragments.join('\n\n')
-    : rawResponse.trim();
+    : responseForBlock.trim();
 
-  const success = hasTags || extractedBlock.length >= (task.minLength ?? 0);
+  const structuredSuccess = structuredMode != null && processedResponse.trim().length > 0;
+  const success = structuredSuccess || hasTags || extractedBlock.length >= (task.minLength ?? 0);
   if (success) {
     updateScheduleStateAfterRun(ctx.settings, task, scheduleCtx);
   }

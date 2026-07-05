@@ -1,7 +1,9 @@
 import {
   buildChatCompletionPayload,
   buildCustomApiFromConfig,
+  hasApiBodyExtras,
   omitPromptLogNames,
+  type ApiPayloadOverrides,
 } from './api-preset-utils';
 import type { ResolvedApi } from './resolve';
 import type { ApiConfig } from '../tasks/schema';
@@ -12,6 +14,12 @@ type RolePrompt = { role: 'system' | 'user' | 'assistant'; content: string };
 export interface ApiCallResult {
   content: string;
   reasoningContent?: string;
+}
+
+export interface ApiCallOptions {
+  payloadOverrides?: ApiPayloadOverrides;
+  /** 结构化 API 参数需 CC 路径；为 true 时禁止 generateRaw 回退 */
+  disallowGenerateRawFallback?: boolean;
 }
 
 type ChoiceMessage = {
@@ -78,7 +86,11 @@ function assertCustomApiConfig(apiConfig: ApiConfig): void {
   if (!apiConfig.model?.trim()) throw new Error('API 预设需填写模型名');
 }
 
-async function callViaChatCompletionService(messages: RolePrompt[], apiConfig: ApiConfig): Promise<ApiCallResult> {
+async function callViaChatCompletionService(
+  messages: RolePrompt[],
+  apiConfig: ApiConfig,
+  options?: ApiCallOptions,
+): Promise<ApiCallResult> {
   const parent = window.parent as Window & {
     SillyTavern?: { getContext?: () => { ChatCompletionService?: {
       processRequest: (
@@ -93,7 +105,7 @@ async function callViaChatCompletionService(messages: RolePrompt[], apiConfig: A
   if (!service?.processRequest) {
     throw new Error('酒馆 ChatCompletionService 不可用');
   }
-  const body = buildChatCompletionPayload(messages, apiConfig);
+  const body = buildChatCompletionPayload(messages, apiConfig, options?.payloadOverrides);
   const result = await service.processRequest(body, {}, true, null);
   return extractApiCallResult(result);
 }
@@ -126,10 +138,15 @@ async function callViaGenerateRaw(
   return { content: typeof result === 'string' ? result : '' };
 }
 
+function shouldDisallowGenerateRawFallback(apiConfig: ApiConfig, options?: ApiCallOptions): boolean {
+  return Boolean(options?.disallowGenerateRawFallback || hasApiBodyExtras(apiConfig));
+}
+
 export async function callWithResolvedApi(
   messages: (RolePrompt & { name?: string })[],
   resolved: ResolvedApi,
   generationId?: string,
+  options?: ApiCallOptions,
 ): Promise<ApiCallResult> {
   const apiMessages = omitPromptLogNames(messages);
   const genId = generationId || `post-process-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -138,8 +155,14 @@ export async function callWithResolvedApi(
   registerGenerationId(genId);
   try {
     try {
-      return await callViaChatCompletionService(apiMessages, apiConfig);
+      return await callViaChatCompletionService(apiMessages, apiConfig, options);
     } catch (err) {
+      if (shouldDisallowGenerateRawFallback(apiConfig, options)) {
+        const detail = err instanceof Error ? err.message : String(err);
+        throw new Error(
+          `ChatCompletionService 失败且无法回退 generateRaw（结构化 API 参数需 CC 路径）: ${detail}`,
+        );
+      }
       console.warn('[AI回复后处理] ChatCompletionService 失败，回退 generateRaw:', err);
       return await callViaGenerateRaw(apiMessages, genId, apiConfig);
     }
@@ -153,6 +176,7 @@ export async function callWithApiConfig(
   messages: RolePrompt[],
   apiConfig: ApiConfig,
   generationId?: string,
+  options?: ApiCallOptions,
 ): Promise<ApiCallResult> {
-  return callWithResolvedApi(messages, { apiConfig }, generationId);
+  return callWithResolvedApi(messages, { apiConfig }, generationId, options);
 }

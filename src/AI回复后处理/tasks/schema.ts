@@ -58,6 +58,10 @@ export const ApiConfigSchema = z.object({
   bodyParams: z.string().default(''),
   excludeBodyParams: z.string().default(''),
   requestHeaders: z.string().default(''),
+  /** SillyTavern custom_prompt_post_processing；DeepSeek 结构化输出推荐 strict */
+  customPromptPostProcessing: z.enum(['none', 'strict']).default('none'),
+  includeReasoning: z.boolean().default(false),
+  reasoningEffort: z.enum(['low', 'medium', 'high']).default('medium'),
 });
 
 export const ApiPresetSchema = z.object({
@@ -98,6 +102,15 @@ export const PostProcessTaskSchema = z.object({
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
   contextMode: z.enum(['inherit', 'custom']).default('inherit'),
   contextConfig: TaskContextConfigSchema.optional(),
+  /** 严格 JSON 变量更新：将 AI 纯 JSON 归一化为 UpdateVariable 包裹块 */
+  structuredOutputMode: z.enum(['off', 'mvu_json_patch', 'addon_json_patch']).default('off'),
+  /** 任务级保存的结构化变量输出规则（切换模式时恢复） */
+  structuredOutputRules: z
+    .object({
+      mvu: z.string().optional(),
+      addon: z.string().optional(),
+    })
+    .optional(),
 });
 
 /** @deprecated 旧版规则，加载时自动迁移为 ContextTagRule */
