@@ -1,19 +1,28 @@
 import {
   buildCompositeKey,
+  buildExtractSpecKey,
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
+  parseCompositeKey,
   parseCompositePlaceholder,
+  parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  sortAttrValues,
   type ExtractTagSpec,
 } from './tag-extract';
 
 export type RelayTagMap = Map<string, string[]>;
 
 export {
+  buildAttrGroupKey,
   buildCompositeKey,
+  buildExtractSpecKey,
   compositePlaceholderToKey,
+  parseCompositeKey,
   parseCompositePlaceholder,
+  parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  sortAttrValues,
   type ExtractTagSpec,
 } from './tag-extract';
 
@@ -46,6 +55,7 @@ export interface PlotTagExtractionResult {
   injectOnlyTagNames: string[];
 }
 
+/** @deprecated 请使用 isStoredFullBlockForKey(key, value) */
 export function isFullBlockTagValue(value: string): boolean {
   const v = String(value ?? '').trimStart();
   return v.startsWith('<') && v.includes('>');
@@ -56,10 +66,31 @@ export function bareTagNameFromKey(key: string): string {
   return at === -1 ? key : key.slice(0, at);
 }
 
+/** 判断 value 是否已是 key 对应标签名的完整开标签块（避免裸名 inner 含子标签时误判） */
+export function isStoredFullBlockForKey(key: string, value: string): boolean {
+  const v = String(value ?? '').trimStart();
+  if (!v.startsWith('<') || !v.includes('>')) return false;
+
+  const bare = bareTagNameFromKey(key);
+  if (!bare) return false;
+
+  const openPrefix = `<${bare.toLowerCase()}`;
+  const vLower = v.toLowerCase();
+  if (!vLower.startsWith(openPrefix)) return false;
+
+  const next = vLower[openPrefix.length];
+  if (next === undefined) return true;
+  if (next === '>' || next === '/' || next === ' ' || next === '\t' || next === '\n' || next === '\r') {
+    return true;
+  }
+  if (/[a-z0-9_-]/i.test(next)) return false;
+  return true;
+}
+
 export function formatTagValueForInject(key: string, value: string): string {
   const v = String(value ?? '').trim();
   if (!v) return '';
-  if (isFullBlockTagValue(v)) return v;
+  if (isStoredFullBlockForKey(key, v)) return v;
   const bare = bareTagNameFromKey(key);
   return `<${bare}>${v}</${bare}>`;
 }
@@ -132,7 +163,61 @@ export function collectRelayKeysForBareTag(tagMap: RelayTagMap, bareTagName: str
   return keys.sort((a, b) => a.localeCompare(b));
 }
 
+/** 收集 tag@attr=* 复合 key（不含裸 tag key） */
+export function collectCompositeKeysForAttrSpec(
+  tagMap: RelayTagMap,
+  spec: { tagName: string; attrName: string },
+): string[] {
+  const prefix = `${spec.tagName}@${spec.attrName}=`.toLowerCase();
+  const keyByAttr = new Map<string, string>();
+  for (const k of tagMap.keys()) {
+    if (!k.toLowerCase().startsWith(prefix)) continue;
+    const parsed = parseCompositeKey(k);
+    if (parsed) keyByAttr.set(parsed.attrValue, k);
+  }
+  return sortAttrValues([...keyByAttr.keys()]).map(v => keyByAttr.get(v)!);
+}
+
+export function collectAttrValuesFromRelay(
+  tagMap: RelayTagMap,
+  spec: { tagName: string; attrName: string },
+): string[] {
+  const values: string[] = [];
+  for (const key of collectCompositeKeysForAttrSpec(tagMap, spec)) {
+    const parsed = parseCompositeKey(key);
+    if (parsed) values.push(parsed.attrValue);
+  }
+  return sortAttrValues([...new Set(values)]);
+}
+
+export function resolveDynamicAttrInjectText(
+  tagMap: RelayTagMap,
+  placeholderName: string,
+): string {
+  const dyn = parseDynamicAttrPlaceholder(placeholderName);
+  if (!dyn) return '';
+  const keys = collectCompositeKeysForAttrSpec(tagMap, dyn);
+  const parts: string[] = [];
+  for (const key of keys) {
+    const values = tagMap.get(key) ?? [];
+    const formatted = formatTagValuesForInject(key, values);
+    if (formatted) parts.push(formatted);
+  }
+  return parts.join('\n\n');
+}
+
 export function resolvePlaceholderBlocks(tagMap: RelayTagMap, placeholderName: string): string[] {
+  const dyn = parseDynamicAttrPlaceholder(placeholderName);
+  if (dyn) {
+    const blocks: string[] = [];
+    for (const key of collectCompositeKeysForAttrSpec(tagMap, dyn)) {
+      for (const v of tagMap.get(key) ?? []) {
+        if (v) blocks.push(v);
+      }
+    }
+    return blocks;
+  }
+
   const compositeKey = compositePlaceholderToKey(placeholderName);
   if (compositeKey) {
     const mapKey = findMapKeyIgnoreCase(tagMap, compositeKey);
@@ -152,6 +237,10 @@ export function resolvePlaceholderBlocks(tagMap: RelayTagMap, placeholderName: s
 }
 
 export function resolvePlaceholderInjectText(tagMap: RelayTagMap, placeholderName: string): string {
+  const dynOut = resolveDynamicAttrInjectText(tagMap, placeholderName);
+  if (dynOut) return dynOut;
+  if (parseDynamicAttrPlaceholder(placeholderName)) return '';
+
   const compositeKey = compositePlaceholderToKey(placeholderName);
   if (compositeKey) {
     const mapKey = findMapKeyIgnoreCase(tagMap, compositeKey);
@@ -183,6 +272,15 @@ export function isPlaceholderInjectAllowed(placeholderName: string, injectOnlyTa
       for (const spec of injectOnlyTags) {
         if (spec.toLowerCase() === specKey) return true;
       }
+    }
+    return false;
+  }
+
+  const dyn = parseDynamicAttrPlaceholder(placeholderName);
+  if (dyn) {
+    const specKey = buildExtractSpecKey(dyn.tagName, dyn.attrName).toLowerCase();
+    for (const spec of injectOnlyTags) {
+      if (spec.toLowerCase() === specKey) return true;
     }
     return false;
   }
@@ -337,6 +435,14 @@ export function expandWritableKeysFromPlaceholder(
   placeholderName: string,
   availableKeys: Iterable<string>,
 ): string[] {
+  const dyn = parseDynamicAttrPlaceholder(placeholderName);
+  if (dyn) {
+    return collectCompositeKeysForAttrSpec(
+      new Map([...availableKeys].map(k => [k, []])),
+      dyn,
+    );
+  }
+
   const compositeKey = compositePlaceholderToKey(placeholderName);
   if (compositeKey) {
     const keys = [...availableKeys];
@@ -371,7 +477,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退（只要楼层变量有值即可引用，不限于提取写入标签白名单）。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退（只要楼层变量有值即可引用，不限于提取写入标签白名单）。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id}} 展开全部 item@id=*（按属性值排序）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
   },
   { code: '{{task:任务名}}', desc: '聊天注入模板中的任务结果占位' },
   {

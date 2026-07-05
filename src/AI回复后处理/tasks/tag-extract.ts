@@ -18,6 +18,43 @@ export function buildCompositeKey(tagName: string, attrName: string, attrValue: 
   return `${tagName}@${attrName}=${attrValue}`;
 }
 
+/** 动态属性占位符 {{tag@attr}}（无 =值） */
+export function parseDynamicAttrPlaceholder(name: string): { tagName: string; attrName: string } | null {
+  const trimmed = name.trim();
+  const atIdx = trimmed.indexOf('@');
+  if (atIdx === -1) return null;
+  const eqIdx = trimmed.indexOf('=', atIdx + 1);
+  if (eqIdx !== -1) return null;
+  const tagName = trimmed.slice(0, atIdx).trim();
+  const attrName = trimmed.slice(atIdx + 1).trim();
+  if (!tagName || !attrName) return null;
+  return { tagName, attrName };
+}
+
+export function buildAttrGroupKey(tagName: string, attrName: string): string {
+  return `${tagName}_${attrName}`;
+}
+
+export function buildExtractSpecKey(tagName: string, attrName: string): string {
+  return `${tagName}@${attrName}`;
+}
+
+export function sortAttrValues(values: string[]): string[] {
+  return [...values].sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+}
+
+export function parseCompositeKey(key: string): { tagName: string; attrName: string; attrValue: string } | null {
+  const atIdx = key.indexOf('@');
+  if (atIdx === -1) return null;
+  const eqIdx = key.indexOf('=', atIdx + 1);
+  if (eqIdx === -1) return null;
+  const tagName = key.slice(0, atIdx);
+  const attrName = key.slice(atIdx + 1, eqIdx);
+  const attrValue = key.slice(eqIdx + 1);
+  if (!tagName || !attrName) return null;
+  return { tagName, attrName, attrValue };
+}
+
 function isValidOpenTagPrefixMatch(source: string, startIdx: number, prefixLen: number): boolean {
   if (startIdx > 0 && source[startIdx - 1] === '/') return false;
   const ch = source[startIdx + prefixLen];
@@ -209,7 +246,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     {
       title: '裸名',
       config: 'result',
-      rule: '扫描所有 <result>…</result>，只取最后一次，存内文；引用时包回 <result>…</result>。',
+      rule: '扫描所有 <result>…</result>，只取最后一次，存内文；引用时包回 <result>…</result>。内文可含子标签（如容器内的 <npc>），引用时会保留外层标签。',
       example: '<result>旧</result><result>新</result> → key result = "新"',
     },
     {
@@ -219,11 +256,58 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       example: '<item id="1">A</item><item id="2">B</item> → item@id=1、item@id=2',
     },
   ],
-  placeholders: [
-    { code: '{{item}}', desc: '展开全部相关实例（裸 item 与所有 item@id=*）' },
-    { code: '{{item@id=1}}', desc: '精确引用单个实例' },
-    { desc: '引用时输出完整标签块，保留原始属性，避免双重包裹' },
-  ],
+  dynamicPlaceholders: {
+    title: '动态属性占位符',
+    intro:
+      '配置「标签@属性」（如 item@id）后，AI 须输出带该属性的开标签（如 <item id="1">…</item>）。摘取结果写入 relay key item@id=1、item@id=2…，并同步到楼层变量 post_process_tags.item_id.1 等嵌套结构。',
+    tips: [
+      {
+        code: '{{item@id}}',
+        desc: '动态（无 = 值）：在注入模板或提示词中批量展开全部 item@id=* 实例；副本族任务的提示词须使用此种形式。',
+      },
+      {
+        code: '{{item@id=1}}',
+        desc: '精确（带 = 值）：只展开单个实例，适合固定引用某一属性值。',
+      },
+      {
+        code: '{{item}}',
+        desc: '展开裸 key item 与全部 item@id=* 实例。',
+      },
+      {
+        desc: '引用时输出完整标签块，保留原始属性，避免双重包裹。',
+      },
+    ],
+  },
+  replicaFamily: {
+    title: '副本族（与动态占位符联动）',
+    intro:
+      '当某一阶段需要对「上一阶段枚举出的多个属性实例」分别调用 API 时，可将该任务设为副本族：原本仅保存提示词模板，运行时按 relay 自动生成 N 个副本并并行执行。',
+    steps: [
+      {
+        title: '1. 上一阶段枚举',
+        desc: '在较早阶段的任务「提取写入标签」中配置 item@id（或其它 标签@属性），让 AI 输出多个带属性值的标签块，写入 relay。',
+      },
+      {
+        title: '2. 配置副本族任务',
+        desc: '本任务提示词中含且仅含一种动态占位符（如 {{item@id}}，不带 = 值）。可与 {{result}}、$7 等其它占位符并存，但不能同时出现两种 {{tag@attr}}。',
+      },
+      {
+        title: '3. 启用任务',
+        desc: '勾选「启用」后任务标记为「副本族」。原本不参与 API 调用，仅作为模板；UI 中自动生成的副本 tab 会隐藏。',
+      },
+      {
+        title: '4. 运行时同步',
+        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表，按数量生成副本「基名 属性值」（如「副本族处理 1」「副本族处理 2」），各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式后并行调用 API。',
+      },
+    ],
+    notes: [
+      '上一阶段 relay 无可用属性实例时，整组副本族跳过。',
+      '关闭「启用」会删除已生成的副本并取消副本族标记。',
+      '选中副本族原本后，可通过任务 tab 下方的副本族切换条预览各副本提示词。',
+    ],
+    example:
+      'S1「枚举 item」（提取写入标签 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
+  },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。重跑后处理任务读上一楼。供「消息楼层标签变量注入」与「聊天注入设置」中显式占位符使用。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族在进入该阶段前同步读取上一阶段 relay 中的 标签@属性=* 列表。重跑后处理任务读上一楼。供「消息楼层标签变量注入」与「聊天注入设置」中显式占位符使用。',
 } as const;

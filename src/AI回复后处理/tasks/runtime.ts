@@ -1,5 +1,5 @@
-import { getEffectiveApi } from '../api/resolve';
-import { callWithResolvedApi } from '../api/call';
+import { resolveTaskApiPresetChain } from '../api/resolve';
+import { callTaskApiWithRouteFallback } from '../api/task-api-route';
 import {
   buildSharedContext,
   renderTaskMessages,
@@ -20,8 +20,6 @@ import {
 } from './utils';
 import {
   appendStrictJsonPromptToMessages,
-  apiConfigRequiresChatCompletionPath,
-  enrichApiConfigForStructuredTask,
   extractStrictVariableResponse,
   hasCompleteVariableXml,
   type ActiveStructuredOutputMode,
@@ -29,6 +27,14 @@ import {
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
+import {
+  disableReplicaFamilyOnTasks,
+  enableReplicaFamilyOnTask,
+  getReplicaDisplaySuffix,
+  getReplicaFamilyBaseName,
+  getReplicaFamilyGroupId,
+  prepareStageTasksWithReplicaSync,
+} from './replica-family';
 
 export interface TaskRunResult {
   taskId: string;
@@ -45,6 +51,7 @@ export interface TaskRunResult {
   promptMessages: RunLogMessage[];
   durationMs: number;
   stage: number;
+  apiPresetUsed?: string;
 }
 
 const processingIds = new Set<number>();
@@ -173,17 +180,15 @@ async function runSingleTask(
     };
   }
 
-  const resolvedApi = getEffectiveApi(ctx.settings, task.id, task.apiPresetName);
+  const presetChain = resolveTaskApiPresetChain(ctx.settings, task.id, task);
   const structuredMode = getStructuredOutputMode(task);
-  const apiConfig = structuredMode
-    ? enrichApiConfigForStructuredTask(resolvedApi.apiConfig, structuredMode)
-    : resolvedApi.apiConfig;
   const apiMessages = structuredMode ? appendStrictJsonPromptToMessages(messages, structuredMode) : messages;
   const maxRetries = task.maxRetries ?? 3;
   let rawResponse = '';
   let reasoningContent: string | undefined;
   let lastError = '';
   let processedResponse = '';
+  let apiPresetUsed: string | undefined;
 
   lastPromptMessages = _.cloneDeep(apiMessages);
 
@@ -191,17 +196,16 @@ async function runSingleTask(
     checkRunCancelled(options?.signal);
     try {
       silentGenerationDepth++;
-      const apiResult = await callWithResolvedApi(
+      const apiResult = await callTaskApiWithRouteFallback(
         apiMessages,
-        { apiConfig },
+        ctx.settings,
+        presetChain,
+        structuredMode,
         `post-process-${task.id}-${ctx.messageId}-${attempt}`,
-        {
-          disallowGenerateRawFallback: structuredMode != null || apiConfigRequiresChatCompletionPath(apiConfig),
-          payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
-        },
       );
       rawResponse = apiResult.content;
       reasoningContent = apiResult.reasoningContent;
+      apiPresetUsed = apiResult.usedPresetName;
     } catch (e) {
       if (e instanceof RunCancelledError || isRunCancelled(options?.signal)) {
         throw new RunCancelledError();
@@ -264,6 +268,7 @@ async function runSingleTask(
     promptMessages: messages,
     durationMs: Date.now() - start,
     stage: task.stage,
+    apiPresetUsed,
   };
 }
 
@@ -294,20 +299,42 @@ interface StageProgressReporter {
 function createStageProgressReporter(
   stageTasks: PostProcessTask[],
   stageNo: number,
+  allTasks: PostProcessTask[],
   onProgress?: (update: TaskProgressUpdate) => void,
 ): StageProgressReporter {
-  const tasks: TaskProgressItem[] = stageTasks.map(t => ({
-    taskId: t.id,
-    taskName: t.name,
-    status: 'pending',
-  }));
+  const familyGroups = new Map<string, PostProcessTask[]>();
+  for (const t of stageTasks) {
+    const gid = getReplicaFamilyGroupId(t);
+    if (!gid) continue;
+    const list = familyGroups.get(gid) ?? [];
+    list.push(t);
+    familyGroups.set(gid, list);
+  }
+
+  const sharedFamilyHeadline =
+    familyGroups.size === 1 && stageTasks.length >= 2 && stageTasks.every(t => getReplicaFamilyGroupId(t))
+      ? `正在执行任务：${getReplicaFamilyBaseName(stageTasks[0]!, allTasks)}（阶段 ${stageNo}）`
+      : null;
+
+  const tasks: TaskProgressItem[] = stageTasks.map(t => {
+    const suffix = getReplicaDisplaySuffix(t);
+    const base = getReplicaFamilyGroupId(t) ? getReplicaFamilyBaseName(t, allTasks) : t.name;
+    const displayName = suffix ? `${base} ${suffix}` : t.name;
+    const shortName = suffix && getReplicaFamilyGroupId(t) && stageTasks.length >= 2 ? suffix : displayName;
+    return {
+      taskId: t.id,
+      taskName: shortName,
+      status: 'pending' as const,
+    };
+  });
 
   const pushSnapshot = () => {
     const snapshot: TaskProgressSnapshot = {
       headline:
-        stageTasks.length === 1
+        sharedFamilyHeadline ??
+        (stageTasks.length === 1
           ? `正在执行任务：${stageTasks[0]!.name}（阶段 ${stageNo}）`
-          : `正在执行阶段 ${stageNo}`,
+          : `正在执行阶段 ${stageNo}`),
       stageNo,
       tasks: tasks.map(t => ({ ...t })),
     };
@@ -373,10 +400,35 @@ export async function runPostProcessTasks(
   let cancelled = false;
 
   try {
-    for (const stageTasks of groupTasksByStage(enabledTasks, settings.tasks)) {
+    for (const stageTasksRaw of groupTasksByStage(enabledTasks, settings.tasks)) {
       checkRunCancelled(options?.signal);
-      const stageNo = stageTasks[0]?.stage ?? 1;
-      const reporter = createStageProgressReporter(stageTasks, stageNo, options?.onProgress);
+      const stageNo = stageTasksRaw[0]?.stage ?? 1;
+
+      const prepared = prepareStageTasksWithReplicaSync(stageTasksRaw, settings.tasks, aggregatedRelayTags);
+      settings.tasks = prepared.allTasks;
+
+      const stageTasks = prepared.tasks;
+      const skippedRootResults: TaskRunResult[] = prepared.skippedRoots.map(root => ({
+        taskId: root.id,
+        taskName: root.name,
+        success: false,
+        skipped: true,
+        skipReason: '副本族：上一阶段 relay 无可用属性实例',
+        extractedBlock: '',
+        extractedTags: {},
+        injectOnlyTagNames: [],
+        rawResponse: '',
+        promptMessages: [],
+        durationMs: 0,
+        stage: root.stage,
+      }));
+
+      if (!stageTasks.length) {
+        results.push(...skippedRootResults);
+        continue;
+      }
+
+      const reporter = createStageProgressReporter(stageTasks, stageNo, settings.tasks, options?.onProgress);
       reporter.pushSnapshot();
 
       const stageRelayTagMap = new Map(aggregatedRelayTags);
@@ -390,7 +442,7 @@ export async function runPostProcessTasks(
         }),
       );
       checkRunCancelled(options?.signal);
-      results.push(...stageResults);
+      results.push(...skippedRootResults, ...stageResults);
 
       for (const r of stageResults) {
         if (r.success && Object.keys(r.extractedTags).length) {

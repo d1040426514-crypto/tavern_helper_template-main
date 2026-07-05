@@ -29,6 +29,12 @@ import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
 import { useTaskClipboard } from './composables/useTaskClipboard';
 import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
 import {
+  disableReplicaFamilyOnTasks,
+  enableReplicaFamilyOnTask,
+  scanDynamicAttrPlaceholders,
+  syncReplicaFamily,
+} from '../tasks/replica-family';
+import {
   addPromptGroup as addPromptGroupInStore,
   clearChatScope,
   createTask as createTaskInStore,
@@ -69,6 +75,80 @@ const chatScopeInfo = ref(getChatScopeState());
 const chatScopeActive = ref(!!getChatScopeState());
 
 const displayTasks = computed(() => (chatScopeActive.value ? viewTasks.value : settings.value.tasks));
+
+/** 任务 tab 列表：隐藏副本族副本（仅显示原本与普通任务） */
+const taskTabTasks = computed(() => displayTasks.value.filter(t => !t.replicaFamilyRootId));
+
+const selectedReplicaViewId = ref<string | null>(null);
+
+const selectedTask = computed(() => taskTabTasks.value.find(t => t.id === selectedTaskId.value));
+
+const replicaFamilyMembers = computed(() => {
+  const root = selectedTask.value;
+  if (!root?.syncAsReplicaFamily) return [];
+  return displayTasks.value.filter(t => t.replicaFamilyRootId === root.id);
+});
+
+const editorTask = computed(() => {
+  const root = selectedTask.value;
+  if (!root?.syncAsReplicaFamily || !selectedReplicaViewId.value) return root;
+  return displayTasks.value.find(t => t.id === selectedReplicaViewId.value) ?? root;
+});
+
+const isViewingReplicaMember = computed(
+  () => !!selectedReplicaViewId.value && selectedReplicaViewId.value !== selectedTask.value?.id,
+);
+
+function collectUsedApiPresetNames(task: PostProcessTask | null | undefined): Set<string> {
+  const used = new Set<string>();
+  if (!task) return used;
+  const primary = String(task.apiPresetName || '').trim();
+  if (primary) used.add(primary);
+  for (const name of task.apiPresetFallbackNames ?? []) {
+    const normalized = String(name || '').trim();
+    if (normalized) used.add(normalized);
+  }
+  return used;
+}
+
+const availableFallbackPresetsForAdd = computed(() => {
+  const used = collectUsedApiPresetNames(selectedTask.value);
+  return settings.value.apiPresets.filter(p => !used.has(p.name));
+});
+
+function ensureTaskFallbackNames(task: PostProcessTask) {
+  if (!task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
+}
+
+function addTaskApiFallback() {
+  const task = selectedTask.value;
+  if (!task) return;
+  ensureTaskFallbackNames(task);
+  const next = availableFallbackPresetsForAdd.value[0];
+  if (!next) {
+    acuToast('warning', '没有可添加的备用预设');
+    return;
+  }
+  task.apiPresetFallbackNames.push(next.name);
+}
+
+function removeTaskApiFallback(index: number) {
+  const task = selectedTask.value;
+  if (!task?.apiPresetFallbackNames) return;
+  task.apiPresetFallbackNames.splice(index, 1);
+}
+
+watch(
+  selectedTask,
+  task => {
+    if (task && !task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
+  },
+  { immediate: true },
+);
+
+watch(selectedTaskId, () => {
+  selectedReplicaViewId.value = null;
+});
 
 const defaultContextConfigRef = ref<TaskContextConfig>({
   contextTurnCount: settings.value.contextTurnCount,
@@ -277,8 +357,6 @@ function goToPage(page: number) {
   }
 }
 
-const selectedTask = computed(() => displayTasks.value.find(t => t.id === selectedTaskId.value));
-
 watch(
   () => selectedTask.value?.structuredOutputMode,
   (mode, oldMode) => {
@@ -310,9 +388,29 @@ const selectedTaskEnabledModel = computed({
   set(v: boolean) {
     const task = selectedTask.value;
     if (!task) return;
-    task.enabled = v;
     if (chatScopeActive.value) {
-      void setTaskEnabledInStore(task.id, v, 'ui');
+      void setTaskEnabledInStore(task.id, v, 'ui')
+        .then(() => refreshTaskView())
+        .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+      return;
+    }
+    try {
+      let tasks = [...settings.value.tasks];
+      if (v) {
+        if (scanDynamicAttrPlaceholders(task).length) {
+          const enabledRoot = enableReplicaFamilyOnTask({ ...task, enabled: true });
+          tasks = tasks.map(t => (t.id === task.id ? enabledRoot : t));
+          tasks = syncReplicaFamily(enabledRoot, [], tasks);
+        } else {
+          tasks = tasks.map(t => (t.id === task.id ? { ...t, enabled: true } : t));
+        }
+      } else {
+        tasks = disableReplicaFamilyOnTasks(task, tasks);
+      }
+      settings.value.tasks = tasks;
+      selectedReplicaViewId.value = null;
+    } catch (e) {
+      acuToast('warning', e instanceof Error ? e.message : String(e));
     }
   },
 });
@@ -527,6 +625,7 @@ async function addTask() {
     maxRetries: 3,
     minLength: 0,
     apiPresetName: '',
+    apiPresetFallbackNames: [],
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -536,16 +635,18 @@ async function addTask() {
 }
 
 function moveTask(index: number, delta: -1 | 1) {
+  const task = taskTabTasks.value[index];
+  if (!task) return;
   if (chatScopeActive.value) {
-    const task = displayTasks.value[index];
-    if (!task) return;
     void moveTaskInStore(task.id, delta, 'ui').then(() => void refreshTaskView());
     return;
   }
   const arr = settings.value.tasks;
-  const target = index + delta;
+  const fullIndex = arr.findIndex(t => t.id === task.id);
+  if (fullIndex < 0) return;
+  const target = fullIndex + delta;
   if (target < 0 || target >= arr.length) return;
-  const [item] = arr.splice(index, 1);
+  const [item] = arr.splice(fullIndex, 1);
   arr.splice(target, 0, item);
 }
 
@@ -1061,7 +1162,7 @@ function saveRunLogTaskTags(taskId: string): void {
               </div>
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
                 相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例），供后续阶段的
-                <code v-pre>{{标签名}}</code> 占位符使用。
+                <code v-pre>{{标签名}}</code> 占位符使用。多实例分别调用 API 的场景（副本族）见任务页「提取写入标签」说明。
               </p>
             </div>
           </div>
@@ -1214,7 +1315,7 @@ function saveRunLogTaskTags(taskId: string): void {
             </p>
             <div class="acu-task-tabs">
               <span
-                v-for="(task, idx) in displayTasks"
+                v-for="(task, idx) in taskTabTasks"
                 :key="task.id"
                 class="task-card"
                 :class="{ active: task.id === selectedTaskId, 'task-card--disabled': !task.enabled }"
@@ -1222,7 +1323,8 @@ function saveRunLogTaskTags(taskId: string): void {
               >
                 <span class="task-card__stage" :title="`执行阶段 ${task.stage}`">S{{ task.stage }}</span>
                 <span class="task-card__name">{{ task.name }}</span>
-                <span v-if="!task.enabled" class="task-card__flag">停用</span>
+                <span v-if="task.syncAsReplicaFamily" class="task-card__flag">副本族</span>
+                <span v-else-if="!task.enabled" class="task-card__flag">停用</span>
                 <template v-if="task.id === selectedTaskId">
                   <button
                     class="task-card__move"
@@ -1237,7 +1339,7 @@ function saveRunLogTaskTags(taskId: string): void {
                     class="task-card__move"
                     type="button"
                     title="向右移动"
-                    :disabled="idx === displayTasks.length - 1"
+                    :disabled="idx === taskTabTasks.length - 1"
                     @click.stop="moveTask(idx, 1)"
                   >
                     ▶
@@ -1255,6 +1357,33 @@ function saveRunLogTaskTags(taskId: string): void {
               </button>
             </div>
             <div v-if="selectedTask" class="acu-task-editor">
+              <div
+                v-if="selectedTask.syncAsReplicaFamily && replicaFamilyMembers.length"
+                class="replica-family-bar"
+              >
+                <span class="replica-family-bar__label">副本族</span>
+                <button
+                  type="button"
+                  class="replica-family-bar__pill"
+                  :class="{ active: !selectedReplicaViewId }"
+                  @click="selectedReplicaViewId = null"
+                >
+                  原本
+                </button>
+                <button
+                  v-for="rep in replicaFamilyMembers"
+                  :key="rep.id"
+                  type="button"
+                  class="replica-family-bar__pill"
+                  :class="{ active: selectedReplicaViewId === rep.id }"
+                  @click="selectedReplicaViewId = rep.id"
+                >
+                  {{ rep.replicaFamilyAttrValue ?? rep.name }}
+                </button>
+              </div>
+              <p v-if="isViewingReplicaMember" class="acu-notes replica-family-bar__hint">
+                当前为副本预览（占位符已替换为精确属性值）；编辑请切回「原本」。
+              </p>
               <div class="acu-row acu-row--inline acu-task-editor__toolbar">
                 <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />
                 <div class="acu-task-editor__actions">
@@ -1309,11 +1438,46 @@ function saveRunLogTaskTags(taskId: string): void {
               <div class="acu-row">
                 <label>执行阶段</label>
                 <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
-                <label>API 预设</label>
-                <select v-model="selectedTask.apiPresetName" class="acu-select">
-                  <option value="">全局默认</option>
-                  <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                </select>
+              </div>
+              <div class="acu-subsection acu-api-routing-section">
+                <div class="acu-row">
+                  <label>主要 API 预设</label>
+                  <select v-model="selectedTask.apiPresetName" class="acu-select">
+                    <option value="">全局默认</option>
+                    <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                  </select>
+                </div>
+                <div class="acu-api-routing-fallbacks">
+                  <label class="acu-field-label">备用 API 预设</label>
+                  <p class="acu-notes acu-notes--sm" style="margin: 4px 0 8px">
+                    API 异常时按顺序尝试备用；字数/摘取失败仍在主要预设上重试。
+                  </p>
+                  <div
+                    v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
+                    :key="`fb-${fbIndex}-${fallbackName}`"
+                    class="acu-row acu-api-routing-fallback-row"
+                  >
+                    <select v-model="selectedTask.apiPresetFallbackNames![fbIndex]" class="acu-select">
+                      <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                    </select>
+                    <button
+                      class="acu-btn acu-btn--sm"
+                      type="button"
+                      title="删除此备用"
+                      @click="removeTaskApiFallback(fbIndex)"
+                    >
+                      删除
+                    </button>
+                  </div>
+                  <button
+                    class="acu-btn acu-btn--sm"
+                    type="button"
+                    :disabled="!availableFallbackPresetsForAdd.length"
+                    @click="addTaskApiFallback"
+                  >
+                    + 添加备用
+                  </button>
+                </div>
               </div>
               <div class="acu-subsection">
                 <h5>执行策略</h5>
@@ -1449,15 +1613,43 @@ function saveRunLogTaskTags(taskId: string): void {
                     <code>{{ mode.example }}</code>
                   </p>
                 </div>
-                <p class="acu-extract-tags-help__section-title">模板占位符</p>
+                <p class="acu-extract-tags-help__section-title">{{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.title }}</p>
+                <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.intro }}</p>
                 <ul class="acu-extract-tags-help__list">
-                  <li v-for="(item, idx) in EXTRACT_INJECT_TAGS_HELP.placeholders" :key="idx" class="acu-notes acu-notes--sm">
-                    <template v-if="'code' in item && item.code">
-                      <code>{{ item.code }}</code> {{ item.desc }}
+                  <li
+                    v-for="(tip, idx) in EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.tips"
+                    :key="`dyn-${idx}`"
+                    class="acu-notes acu-notes--sm"
+                  >
+                    <template v-if="'code' in tip && tip.code">
+                      <code>{{ tip.code }}</code> {{ tip.desc }}
                     </template>
-                    <template v-else>{{ item.desc }}</template>
+                    <template v-else>{{ tip.desc }}</template>
                   </li>
                 </ul>
+                <p class="acu-extract-tags-help__section-title">{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.title }}</p>
+                <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.intro }}</p>
+                <div
+                  v-for="step in EXTRACT_INJECT_TAGS_HELP.replicaFamily.steps"
+                  :key="step.title"
+                  class="acu-extract-tags-help__mode"
+                >
+                  <p class="acu-extract-tags-help__mode-title">{{ step.title }}</p>
+                  <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ step.desc }}</p>
+                </div>
+                <ul class="acu-extract-tags-help__list">
+                  <li
+                    v-for="(note, idx) in EXTRACT_INJECT_TAGS_HELP.replicaFamily.notes"
+                    :key="`rep-note-${idx}`"
+                    class="acu-notes acu-notes--sm"
+                  >
+                    {{ note }}
+                  </li>
+                </ul>
+                <p class="acu-extract-tags-help__example">
+                  <span class="acu-extract-tags-help__example-label">典型流程</span>
+                  <code>{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.example }}</code>
+                </p>
                 <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">{{ EXTRACT_INJECT_TAGS_HELP.relay }}</p>
               </AcuHelpPanel>
               <div class="acu-row acu-row--inline">
@@ -1497,8 +1689,8 @@ function saveRunLogTaskTags(taskId: string): void {
                 最小回复字数填 0 表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
               </p>
               <div
-                v-for="(pg, idx) in selectedTask.promptGroups"
-                :key="idx"
+                v-for="(pg, idx) in (isViewingReplicaMember && editorTask ? editorTask.promptGroups : selectedTask.promptGroups)"
+                :key="isViewingReplicaMember ? `rep-${idx}` : idx"
                 class="acu-prompt-group"
                 :class="{ 'acu-prompt-group--disabled': pg.enabled === false }"
               >
@@ -1508,8 +1700,10 @@ function saveRunLogTaskTags(taskId: string): void {
                     class="acu-input acu-prompt-group__name"
                     type="text"
                     placeholder="未命名段"
+                    :readonly="isViewingReplicaMember"
+                    :disabled="isViewingReplicaMember"
                   />
-                  <select v-model="pg.role" class="acu-select">
+                  <select v-model="pg.role" class="acu-select" :disabled="isViewingReplicaMember">
                     <option value="system">system</option>
                     <option value="user">user</option>
                     <option value="assistant">assistant</option>
@@ -1518,7 +1712,7 @@ function saveRunLogTaskTags(taskId: string): void {
                     class="acu-btn acu-btn--sm"
                     type="button"
                     title="上移"
-                    :disabled="idx === 0"
+                    :disabled="idx === 0 || isViewingReplicaMember"
                     @click="movePromptGroup(idx, -1)"
                   >
                     上移
@@ -1527,7 +1721,7 @@ function saveRunLogTaskTags(taskId: string): void {
                     class="acu-btn acu-btn--sm"
                     type="button"
                     title="下移"
-                    :disabled="idx === selectedTask.promptGroups.length - 1"
+                    :disabled="idx === selectedTask.promptGroups.length - 1 || isViewingReplicaMember"
                     @click="movePromptGroup(idx, 1)"
                   >
                     下移
@@ -1536,20 +1730,32 @@ function saveRunLogTaskTags(taskId: string): void {
                     <AcuToggle
                       :model-value="pg.enabled !== false"
                       aria-label="启用本段"
+                      :disabled="isViewingReplicaMember"
                       @update:model-value="pg.enabled = $event"
                     />
                   </div>
                   <button
                     class="acu-btn danger acu-btn--sm acu-prompt-group__delete"
                     type="button"
+                    :disabled="isViewingReplicaMember"
                     @click="removePromptGroup(idx)"
                   >
                     删段
                   </button>
                 </div>
-                <textarea v-model="pg.content" class="acu-textarea" />
+                <textarea
+                  v-model="pg.content"
+                  class="acu-textarea"
+                  :readonly="isViewingReplicaMember"
+                  :disabled="isViewingReplicaMember"
+                />
               </div>
-              <button class="acu-btn" type="button" @click="addPromptGroup">
+              <button
+                v-if="!isViewingReplicaMember"
+                class="acu-btn"
+                type="button"
+                @click="addPromptGroup"
+              >
                 + 提示词段
               </button>
             </div>

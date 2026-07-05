@@ -397,6 +397,18 @@
   color: var(--acu-text-3);
 }
 
+.acu-api-routing-section {
+  margin-bottom: 8px;
+}
+
+.acu-api-routing-fallbacks {
+  margin-top: 4px;
+}
+
+.acu-api-routing-fallback-row {
+  margin-bottom: 6px;
+}
+
 .acu-row {
   display: flex;
   gap: 8px;
@@ -832,6 +844,45 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 6px;
+}
+
+.replica-family-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--acu-radius, 6px);
+  background: var(--acu-surface-2, rgba(255, 255, 255, 0.04));
+  border: 1px solid var(--acu-border, rgba(255, 255, 255, 0.08));
+}
+
+.replica-family-bar__label {
+  font-size: 12px;
+  font-weight: 600;
+  opacity: 0.75;
+  margin-right: 4px;
+}
+
+.replica-family-bar__pill {
+  border: 1px solid var(--acu-border, rgba(255, 255, 255, 0.12));
+  background: transparent;
+  color: inherit;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.replica-family-bar__pill.active {
+  background: var(--acu-accent, #4a9eff);
+  border-color: var(--acu-accent, #4a9eff);
+  color: #fff;
+}
+
+.replica-family-bar__hint {
+  margin: 0 0 8px;
 }
 
 .task-card {

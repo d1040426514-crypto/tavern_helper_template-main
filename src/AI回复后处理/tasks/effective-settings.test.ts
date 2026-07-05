@@ -32,7 +32,7 @@ const snapshotConfig: PlotWorldbookConfig = {
 
 const baseSettings = {
   tasks: globalTasks,
-  activePresetName: '回复质检',
+  activePresetName: '空模板',
   contextTurnCount: 3,
   plotWorldbookConfig: globalConfig,
   taskPlotWorldbookOverridesEnabled: false,
@@ -55,7 +55,7 @@ const snapshotPreset: PostProcessPreset = {
 const mockScope = {
   mode: 'chat_override' as const,
   snapshot: snapshotPreset,
-  originPresetName: '回复质检',
+  originPresetName: '空模板',
   updatedAt: Date.now(),
   source: 'api' as const,
 };

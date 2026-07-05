@@ -97,6 +97,8 @@ export const PostProcessTaskSchema = z.object({
   minLength: z.number().int().min(0).default(0),
   skipIfTagsFound: z.array(z.string()).optional(),
   apiPresetName: z.string().default(''),
+  /** 备用 API 预设名（有序）；API 异常时依次尝试 */
+  apiPresetFallbackNames: z.array(z.string()).default([]),
   schedule: TaskScheduleSchema.optional(),
   plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
@@ -111,6 +113,16 @@ export const PostProcessTaskSchema = z.object({
       addon: z.string().optional(),
     })
     .optional(),
+  /** 同步为副本族：原本模板，运行时按 relay 自动同步副本 */
+  syncAsReplicaFamily: z.boolean().optional(),
+  /** 副本指向原本任务 id */
+  replicaFamilyRootId: z.string().optional(),
+  /** 副本绑定的属性值 */
+  replicaFamilyAttrValue: z.string().optional(),
+  /** 原本记录的动态 spec，如 item@id */
+  replicaFamilySpec: z.string().optional(),
+  /** 副本族基名（不含属性值后缀） */
+  replicaFamilyBaseName: z.string().optional(),
 });
 
 /** @deprecated 旧版规则，加载时自动迁移为 ContextTagRule */
@@ -138,6 +150,7 @@ export const RunLogTaskResultSchema = z.object({
   promptMessages: z.array(RunLogMessageSchema).default([]),
   aiOutput: z.string().default(''),
   aiReasoning: z.string().optional().default(''),
+  apiPresetUsed: z.string().optional(),
 });
 
 export const ChatExtractTagsConfigSchema = z.object({

@@ -23,6 +23,7 @@ import {
   updatePromptGroup,
   updateTask,
   updateTaskApiPreset,
+  updateTaskApiPresetRouting,
   updateTaskContext,
   updateTaskExecutionOptions,
   updateTaskExtractTags,
@@ -30,6 +31,7 @@ import {
   updateTaskSchedule,
   updateTaskStage,
   type PresetFieldsPatch,
+  type TaskApiPresetRoutingPatch,
   type TaskExecutionOptionsPatch,
   type TaskSchedulePatch,
   type TaskWriteSource,
@@ -40,7 +42,7 @@ import { PromptGroupSchema } from '../tasks/schema';
 
 type PromptGroup = z.infer<typeof PromptGroupSchema>;
 
-export type { TaskExecutionOptionsPatch, TaskSchedulePatch } from '../tasks/task-store';
+export type { TaskExecutionOptionsPatch, TaskSchedulePatch, TaskApiPresetRoutingPatch } from '../tasks/task-store';
 
 export interface AcuPostProcessTaskAPI {
   listTasks(): PostProcessTask[];
@@ -67,6 +69,7 @@ export interface AcuPostProcessTaskAPI {
   updateTaskExtractTags(taskId: string, tags: string[]): Promise<PostProcessTask>;
   updateTaskExecutionOptions(taskId: string, patch: TaskExecutionOptionsPatch): Promise<PostProcessTask>;
   updateTaskApiPreset(taskId: string, presetName: string): Promise<PostProcessTask>;
+  updateTaskApiPresetRouting(taskId: string, patch: TaskApiPresetRoutingPatch): Promise<PostProcessTask>;
   addPromptGroup(taskId: string, group?: Partial<PromptGroup>): Promise<PostProcessTask>;
   removePromptGroup(taskId: string, index: number): Promise<PostProcessTask>;
   movePromptGroup(taskId: string, index: number, delta: -1 | 1): Promise<PostProcessTask>;
@@ -119,6 +122,8 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => updateTaskExecutionOptions(taskId, patch, 'api')) as Promise<PostProcessTask>,
   updateTaskApiPreset: (taskId, presetName) =>
     apiCall(() => updateTaskApiPreset(taskId, presetName, 'api')) as Promise<PostProcessTask>,
+  updateTaskApiPresetRouting: (taskId, patch) =>
+    apiCall(() => updateTaskApiPresetRouting(taskId, patch, 'api')) as Promise<PostProcessTask>,
   addPromptGroup: (taskId, group) =>
     apiCall(() => addPromptGroup(taskId, group, 'api')) as Promise<PostProcessTask>,
   removePromptGroup: (taskId, index) =>

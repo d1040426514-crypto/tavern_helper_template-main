@@ -112,6 +112,34 @@ check('formatTagValueForInject 完整块原样', () => {
   assert.equal(formatTagValueForInject('item@id=1', block), block);
 });
 
+check('formatTagValueForInject 裸名 inner 含子标签仍包外层', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const out = formatTagValueForInject('不在场npc', inner);
+  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+});
+
+check('formatTagValueForInject 裸名已是自身完整块原样', () => {
+  const block = '<不在场npc><npc act="李明">李明</npc></不在场npc>';
+  assert.equal(formatTagValueForInject('不在场npc', block), block);
+});
+
+check('formatTagValueForInject npc@act 复合 key 完整块原样', () => {
+  const block = '<npc act="李明">李明</npc>';
+  assert.equal(formatTagValueForInject('npc@act=李明', block), block);
+});
+
+check('formatTagValueForInject item 不匹配 itemize 前缀', () => {
+  const inner = '<itemize>list</itemize>';
+  assert.equal(formatTagValueForInject('item', inner), `<item>${inner}</item>`);
+});
+
+check('{{不在场npc}} 引用保留外层', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const map: RelayTagMap = new Map([['不在场npc', [inner]]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{不在场npc}}', map, new Map(), new Set(['不在场npc']));
+  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+});
+
 check('buildExtractedBlockFromTags 不双重包裹', () => {
   const block = buildExtractedBlockFromTags({
     'item@id=1': '<item id="1">A</item>',

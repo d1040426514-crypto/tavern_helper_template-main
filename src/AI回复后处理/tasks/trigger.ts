@@ -48,6 +48,7 @@ function persistRunStatus(
       promptMessages: _.cloneDeep(r.promptMessages),
       aiOutput: r.rawResponse,
       aiReasoning: r.reasoningContent?.trim() || '',
+      apiPresetUsed: r.apiPresetUsed,
     })),
   };
   saveSettings(settings);

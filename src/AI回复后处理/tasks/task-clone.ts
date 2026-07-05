@@ -1,4 +1,5 @@
 import { PostProcessTaskSchema, type PostProcessTask } from './schema';
+import { clearReplicaFamilyFieldsOnClone } from './replica-family';
 
 export function newTaskId(): string {
   return `task-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
@@ -18,7 +19,7 @@ export function uniqueTaskName(base: string, existingNames: string[]): string {
 }
 
 export function cloneTaskForInsert(source: PostProcessTask, existingTasks: PostProcessTask[]): PostProcessTask {
-  const cloned = _.cloneDeep(source);
+  const cloned = clearReplicaFamilyFieldsOnClone(_.cloneDeep(source));
   cloned.id = newTaskId();
   cloned.name = uniqueTaskName(
     source.name,

@@ -52,6 +52,35 @@ test('formatTagValueForInject wraps inner', () => {
   assert.equal(formatTagValueForInject('result', 'hello'), '<result>hello</result>');
 });
 
+test('formatTagValueForInject bare key wraps nested child tags', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const out = formatTagValueForInject('不在场npc', inner);
+  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+});
+
+test('formatTagValueForInject bare key passthrough own full block', () => {
+  const block = '<不在场npc><npc act="李明">李明</npc></不在场npc>';
+  assert.equal(formatTagValueForInject('不在场npc', block), block);
+});
+
+test('formatTagValueForInject composite npc@act passthrough', () => {
+  const block = '<npc act="李明">李明</npc>';
+  assert.equal(formatTagValueForInject('npc@act=李明', block), block);
+});
+
+test('formatTagValueForInject item key does not match itemize', () => {
+  const inner = '<itemize>list</itemize>';
+  const out = formatTagValueForInject('item', inner);
+  assert.equal(out, `<item>${inner}</item>`);
+});
+
+test('placeholder 不在场npc preserves outer wrapper', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const map: RelayTagMap = new Map([['不在场npc', [inner]]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{不在场npc}}', map, new Map(), new Set(['不在场npc']));
+  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+});
+
 test('placeholder item@id=1 precise', () => {
   const map: RelayTagMap = new Map([['item@id=1', ['<item id="1">A</item>']]]);
   const out = replacePlotTagPlaceholdersWithHistory('x {{item@id=1}} y', map, new Map(), new Set(['item@id']));
@@ -70,6 +99,17 @@ test('placeholder item expands all', () => {
   assert.ok(out.includes('<item id="2">B</item>'));
   assert.ok(out.includes('<item>无id</item>'));
   assert.ok(!out.includes('<item><item'));
+});
+
+test('placeholder item@id dynamic expands attr instances only', () => {
+  const map: RelayTagMap = new Map([
+    ['item@id=2', ['<item id="2">B</item>']],
+    ['item@id=1', ['<item id="1">A</item>']],
+    ['item', ['<item>无id</item>']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{item@id}}', map, new Map(), new Set(['item@id']));
+  assert.ok(out.indexOf('<item id="1">') < out.indexOf('<item id="2">'));
+  assert.ok(!out.includes('<item>无id</item>'));
 });
 
 test('historyFallback all-tags without injectOnly whitelist', () => {

@@ -9,6 +9,13 @@ import {
   type RelayTagMap,
 } from './utils';
 import { parseExtractTagSpec } from './tag-extract';
+import {
+  buildDynamicAttrWritePlan,
+  flattenTagContainerToRelayKeys,
+  isDynamicAttrPlaceholder,
+  mergeNestedGroupIntoRawContainer,
+  type TagContainerRaw,
+} from './tag-variables-nested';
 
 export const TAG_DATA_ROOT_KEY = 'post_process_tags';
 
@@ -18,16 +25,14 @@ function isAccessibleMessageFloor(message_id: number): boolean {
   return message_id >= 0 && getChatMessages(message_id).length > 0;
 }
 
-export function readTagContainer(variables: Record<string, unknown>): Record<string, string> {
+function readTagContainerRaw(variables: Record<string, unknown>): TagContainerRaw {
   const raw = variables[TAG_DATA_ROOT_KEY];
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-  const out: Record<string, string> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (value === undefined || value === null) continue;
-    const text = String(value).trim();
-    if (text) out[key] = text;
-  }
-  return out;
+  return { ...(raw as TagContainerRaw) };
+}
+
+export function readTagContainer(variables: Record<string, unknown>): Record<string, string> {
+  return flattenTagContainerToRelayKeys(readTagContainerRaw(variables));
 }
 
 function readLegacyTagContainer(variables: Record<string, unknown>): Record<string, string> {
@@ -281,14 +286,13 @@ export function writeFloorTagValues(messageId: number, tags: Record<string, stri
   updateVariablesWith(
     variables => {
       migrateLegacyTagsOnFloor(variables);
-      const current = readTagContainer(variables);
-      const next = { ...current };
+      const raw = readTagContainerRaw(variables);
       for (const [tagName, value] of Object.entries(tags)) {
         const text = String(value ?? '').trim();
-        if (text) next[tagName] = text;
-        else delete next[tagName];
+        if (text) raw[tagName] = text;
+        else delete raw[tagName];
       }
-      variables[TAG_DATA_ROOT_KEY] = next;
+      variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
     },
     { type: 'message', message_id: messageId },
@@ -310,25 +314,43 @@ export async function applyTagVariableInjectTemplate(
   const tagNames = getTagNamesFromVariableTemplate(template, successful);
   if (!tagNames.size) return;
 
-  const toWrite: Record<string, string> = {};
+  const flatAggregated: Record<string, string> = {};
+  for (const [key, values] of aggregated.entries()) {
+    const inner = values.filter(Boolean).join('\n\n').trim();
+    if (inner) flatAggregated[key] = inner;
+  }
+
+  const flatToWrite: Record<string, string> = {};
+  const dynamicPlans = [];
+
   for (const placeholderName of tagNames) {
+    if (isDynamicAttrPlaceholder(placeholderName)) {
+      const plan = buildDynamicAttrWritePlan(placeholderName, flatAggregated);
+      if (plan) dynamicPlans.push(plan);
+      continue;
+    }
     for (const key of expandWritableKeysFromPlaceholder(placeholderName, aggregated.keys())) {
       const mapKey = [...aggregated.keys()].find(k => k.toLowerCase() === key.toLowerCase());
       if (!mapKey) continue;
-      const values = aggregated.get(mapKey) ?? [];
-      const inner = values.filter(Boolean).join('\n\n').trim();
+      const inner = (aggregated.get(mapKey) ?? []).filter(Boolean).join('\n\n').trim();
       if (!inner) continue;
-      toWrite[mapKey] = inner;
+      flatToWrite[mapKey] = inner;
     }
   }
 
-  if (!Object.keys(toWrite).length) return;
+  if (!dynamicPlans.length && !Object.keys(flatToWrite).length) return;
 
   updateVariablesWith(
     variables => {
       migrateLegacyTagsOnFloor(variables);
-      const current = readTagContainer(variables);
-      variables[TAG_DATA_ROOT_KEY] = { ...current, ...toWrite };
+      let raw = readTagContainerRaw(variables);
+      for (const plan of dynamicPlans) {
+        raw = mergeNestedGroupIntoRawContainer(raw, plan);
+      }
+      for (const [key, value] of Object.entries(flatToWrite)) {
+        raw[key] = value;
+      }
+      variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
     },
     { type: 'message', message_id: messageId },

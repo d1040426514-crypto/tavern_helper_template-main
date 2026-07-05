@@ -1,4 +1,4 @@
-import { findApiPreset, resolveTaskApiPreset } from '../api/resolve';
+import { findApiPreset, normalizeApiPresetFallbackNames, resolveTaskApiPreset } from '../api/resolve';
 import { loadSettings, saveSettings } from '../settings';
 import {
   buildChatSnapshotFromSettings,
@@ -19,6 +19,13 @@ import {
   type ScriptSettings,
 } from './schema';
 import { newTaskId, cloneTaskForInsert } from './task-clone';
+import {
+  disableReplicaFamilyOnTasks,
+  enableReplicaFamilyOnTask,
+  scanDynamicAttrPlaceholders,
+  syncReplicaFamily,
+  validateReplicaFamilyEligibility,
+} from './replica-family';
 import {
   appendPromptGroup,
   movePromptGroupAt,
@@ -64,6 +71,7 @@ function defaultTaskFields(): PostProcessTask {
     maxRetries: 3,
     minLength: 0,
     apiPresetName: '',
+    apiPresetFallbackNames: [],
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -425,19 +433,51 @@ export async function updateTaskExecutionOptions(
   return updateTask(id, merged, source);
 }
 
+export type TaskApiPresetRoutingPatch = {
+  primary?: string;
+  fallbacks?: string[];
+};
+
 export async function updateTaskApiPreset(
   id: string,
   presetName: string,
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
-  const normalized = String(presetName ?? '').trim();
-  if (normalized) {
-    const settings = loadSettings();
-    if (!findApiPreset(settings, normalized)) {
-      console.warn(`[AI回复后处理] API 预设「${normalized}」不存在，仍将写入任务配置`);
+  return updateTaskApiPresetRouting(id, { primary: presetName }, source);
+}
+
+export async function updateTaskApiPresetRouting(
+  id: string,
+  patch: TaskApiPresetRoutingPatch,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const settings = loadSettings();
+  const nextPrimary = patch.primary !== undefined ? String(patch.primary ?? '').trim() : task.apiPresetName;
+  const resolvedPrimary = resolveTaskApiPreset(settings, id, nextPrimary);
+  const nextFallbacks =
+    patch.fallbacks !== undefined
+      ? normalizeApiPresetFallbackNames(patch.fallbacks, resolvedPrimary)
+      : (task.apiPresetFallbackNames ?? []);
+
+  if (nextPrimary && !findApiPreset(settings, nextPrimary)) {
+    console.warn(`[AI回复后处理] API 预设「${nextPrimary}」不存在，仍将写入任务配置`);
+  }
+  for (const name of nextFallbacks) {
+    if (!findApiPreset(settings, name)) {
+      console.warn(`[AI回复后处理] 备用 API 预设「${name}」不存在，仍将写入任务配置`);
     }
   }
-  return updateTask(id, { apiPresetName: normalized }, source);
+
+  return updateTask(
+    id,
+    {
+      apiPresetName: nextPrimary,
+      apiPresetFallbackNames: nextFallbacks,
+    },
+    source,
+  );
 }
 
 export async function addPromptGroup(
@@ -479,7 +519,31 @@ export async function setTaskEnabled(
   enabled: boolean,
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
-  return updateTask(id, { enabled: !!enabled }, source);
+  const tasks = listTasks();
+  const task = tasks.find(t => t.id === id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+
+  if (enabled) {
+    if (scanDynamicAttrPlaceholders(task).length) {
+      const validation = validateReplicaFamilyEligibility(task);
+      if (!validation.ok) throw new Error(validation.error);
+      const enabledRoot = enableReplicaFamilyOnTask({ ...task, enabled: true });
+      let next = tasks.map(t => (t.id === id ? enabledRoot : t));
+      next = syncReplicaFamily(enabledRoot, [], next);
+      await replaceTasks(next, source);
+      return enabledRoot;
+    }
+    return updateTask(id, { enabled: true }, source);
+  }
+
+  if (task.syncAsReplicaFamily || task.replicaFamilyRootId) {
+    const next = disableReplicaFamilyOnTasks(task, tasks);
+    await replaceTasks(next, source);
+    const rootId = task.replicaFamilyRootId ?? id;
+    return next.find(t => t.id === rootId) ?? task;
+  }
+
+  return updateTask(id, { enabled: false }, source);
 }
 
 export async function renameTask(
