@@ -14,6 +14,7 @@ import {
   flattenTagContainerToRelayKeys,
   isDynamicAttrPlaceholder,
   mergeNestedGroupIntoRawContainer,
+  type DynamicAttrWritePlan,
   type TagContainerRaw,
 } from './tag-variables-nested';
 
@@ -321,7 +322,7 @@ export async function applyTagVariableInjectTemplate(
   }
 
   const flatToWrite: Record<string, string> = {};
-  const dynamicPlans = [];
+  const dynamicPlans: DynamicAttrWritePlan[] = [];
 
   for (const placeholderName of tagNames) {
     if (isDynamicAttrPlaceholder(placeholderName)) {
