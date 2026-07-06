@@ -11,6 +11,26 @@ export const PromptGroupSchema = z.object({
   enabled: z.boolean().default(true),
 });
 
+/** 自动段插入位（按 order 插在手动 promptGroups 之前） */
+export const PromptAutoSlotSchema = z.object({
+  id: z.string(),
+  name: z.string().default('未命名插入位'),
+  order: z.number().int().min(0).default(0),
+});
+
+/** 任务级自动提示词段（风味块） */
+export const PromptAutoSegmentSchema = z.object({
+  id: z.string(),
+  slotId: z.string(),
+  name: z.string().default(''),
+  role: z.preprocess(
+    value => (typeof value === 'string' ? normalizePromptRole(value) : value),
+    z.enum(['system', 'user', 'assistant']).default('user'),
+  ),
+  content: z.string().default(''),
+  inserted: z.boolean().default(false),
+});
+
 export const TimeSourceSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('message_tag'),
@@ -91,6 +111,10 @@ export const PostProcessTaskSchema = z.object({
   enabled: z.boolean().default(true),
   stage: z.number().int().min(1).default(1),
   promptGroups: z.array(PromptGroupSchema).default([]),
+  /** 自动段插入位分类 */
+  promptAutoSlots: z.array(PromptAutoSlotSchema).default([]),
+  /** 任务级自动提示词段（风味块） */
+  promptAutoSegments: z.array(PromptAutoSegmentSchema).default([]),
   extractInjectTags: z.array(z.string()).default(['result']), // 裸标签名或 标签@属性，如 item@id
   mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
   maxRetries: z.number().int().min(1).default(3),

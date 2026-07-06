@@ -26,6 +26,7 @@ import { normalizeContextTagRules } from './context-tags';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import { normalizePromptRole } from './prompt-role';
+import { buildEffectivePromptGroups, iterTaskPromptContents } from './prompt-auto-segments';
 
 export interface SharedContext {
   messageId: number;
@@ -118,8 +119,9 @@ export async function resolveTaskPlaceholders(
   ctx: SharedContext,
   relayTagMap: RelayTagMap,
 ): Promise<Record<string, string>> {
-  const needs$1 = task.promptGroups.some(g => isPromptGroupEnabled(g) && g.content.includes('$1'));
-  const needs$7 = task.promptGroups.some(g => isPromptGroupEnabled(g) && g.content.includes('$7'));
+  const promptContents = iterTaskPromptContents(task);
+  const needs$1 = promptContents.some(c => c.includes('$1'));
+  const needs$7 = promptContents.some(c => c.includes('$7'));
   const taskContextSettings = settingsWithTaskContext(ctx.settings, task);
   const vars = { ...ctx.vars };
 
@@ -131,7 +133,7 @@ export async function resolveTaskPlaceholders(
     if (!ctx.taskWorldbookCache.has(task.id)) {
       const baseScan = buildPlotWorldbookBaseScanText(taskContextSettings, ctx.messageId, ctx.aiText);
       const triggerText = buildTaskWorldbookTriggerText(
-        task.promptGroups,
+        buildEffectivePromptGroups(task),
         relayTagMap,
         ctx.messageVarHistoryMap,
         ctx.injectOnlyTagsUnion,
@@ -161,7 +163,7 @@ export async function renderTaskMessages(
   messageId: number,
 ): Promise<RunLogMessage[]> {
   const messages: RunLogMessage[] = [];
-  for (const g of task.promptGroups) {
+  for (const g of buildEffectivePromptGroups(task)) {
     if (!isPromptGroupEnabled(g)) continue;
     const shield = shieldScriptPlaceholders(g.content);
     let content = await processTemplateText(shield.text, messageId);

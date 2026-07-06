@@ -3,7 +3,6 @@ import {
   buildExtractSpecKey,
   collectAttrValuesFromRelay,
   getPlotPlaceholderTagNames,
-  isPromptGroupEnabled,
   type RelayTagMap,
 } from './utils';
 import {
@@ -11,6 +10,7 @@ import {
   parseExtractTagSpec,
 } from './tag-extract';
 import { newTaskId } from './task-clone';
+import { iterTaskPromptContents } from './prompt-auto-segments';
 import { PostProcessTaskSchema, type PostProcessTask } from './schema';
 
 const REPLICA_NAME_SUFFIX_RE = / \{.+\}$/;
@@ -27,9 +27,8 @@ export function getReplicaFamilyBaseNameFromTask(task: PostProcessTask): string 
 
 export function scanDynamicAttrPlaceholders(task: PostProcessTask): string[] {
   const specs = new Set<string>();
-  for (const group of task.promptGroups ?? []) {
-    if (!isPromptGroupEnabled(group)) continue;
-    for (const name of getPlotPlaceholderTagNames(group.content)) {
+  for (const content of iterTaskPromptContents(task)) {
+    for (const name of getPlotPlaceholderTagNames(content)) {
       const dyn = parseDynamicAttrPlaceholder(name);
       if (dyn) specs.add(buildExtractSpecKey(dyn.tagName, dyn.attrName));
     }
@@ -62,6 +61,17 @@ export function substituteDynamicPlaceholder(text: string, spec: string, attrVal
   return String(text ?? '').split(dynamicToken).join(preciseToken);
 }
 
+function cloneAutoSegmentsFromRoot(
+  root: PostProcessTask,
+  spec: string,
+  attrValue: string,
+): PostProcessTask['promptAutoSegments'] {
+  return (root.promptAutoSegments ?? []).map(s => ({
+    ...s,
+    content: substituteDynamicPlaceholder(s.content, spec, attrValue),
+  }));
+}
+
 function clonePromptGroupsFromRoot(root: PostProcessTask, spec: string, attrValue: string): PostProcessTask['promptGroups'] {
   return (root.promptGroups ?? []).map(g => ({
     ...g,
@@ -86,6 +96,7 @@ export function buildReplicaFromRoot(
     replicaFamilySpec: spec,
     syncAsReplicaFamily: false,
     promptGroups: clonePromptGroupsFromRoot(root, spec, attrValue),
+    promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
   });
 
   const existingIds = new Set(allTasks.map(t => t.id));

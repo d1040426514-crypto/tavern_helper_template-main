@@ -21,6 +21,7 @@ import TaskPlotWorldbookPanel from './TaskPlotWorldbookPanel.vue';
 import Context7Section from './Context7Section.vue';
 import TaskContextPanel from './TaskContextPanel.vue';
 import ApiConfigPanel from './ApiConfigPanel.vue';
+import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
@@ -332,6 +333,8 @@ const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
 const apiRouteConcurrencyHelpOpen = ref(false);
+const apiConfigExpanded = ref(false);
+const executionStrategyExpanded = ref(false);
 
 const PAGE_TABS = [
   { id: 1, label: 'API', shortLabel: 'API' },
@@ -444,6 +447,18 @@ const scheduleMode = computed({
     task.schedule = mergeTaskSchedule(task.schedule, { mode: v });
   },
 });
+
+const apiConfigSummary = computed(() => {
+  const task = selectedTask.value;
+  if (!task) return '';
+  const primary = task.apiPresetName?.trim() || '全局默认';
+  const fallbackCount = task.apiPresetFallbackNames?.length ?? 0;
+  return fallbackCount > 0 ? `主要: ${primary} · ${fallbackCount} 个备用` : `主要: ${primary}`;
+});
+
+const executionStrategySummary = computed(() =>
+  scheduleMode.value === 'time' ? '按游戏时间间隔' : '按回合间隔',
+);
 
 const timeIntervalValue = computed({
   get: () => selectedTask.value?.schedule?.timeInterval?.value ?? 1,
@@ -636,6 +651,8 @@ async function addTask() {
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
+    promptAutoSlots: [],
+    promptAutoSegments: [],
   };
   settings.value.tasks.push(task);
   selectedTaskId.value = task.id;
@@ -1446,8 +1463,22 @@ function saveRunLogTaskTags(taskId: string): void {
                 <label>执行阶段</label>
                 <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
               </div>
-              <div class="acu-subsection acu-api-config-section">
-                <h5>【API配置】</h5>
+              <div class="acu-subsection acu-collapsible-subsection acu-api-config-section">
+                <button
+                  type="button"
+                  class="acu-collapsible-subsection__header"
+                  :aria-expanded="apiConfigExpanded"
+                  @click="apiConfigExpanded = !apiConfigExpanded"
+                >
+                  <span class="acu-collapsible-subsection__title">【API配置】</span>
+                  <span class="acu-collapsible-subsection__summary">{{ apiConfigSummary }}</span>
+                  <i
+                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                    :class="apiConfigExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                    aria-hidden="true"
+                  />
+                </button>
+                <div v-show="apiConfigExpanded" class="acu-collapsible-subsection__body">
                 <p class="acu-api-config__intro">
                   配置本任务的 LLM 路由与并发分流；同阶段并行（含副本族）时按单路由上限自动分担请求。
                 </p>
@@ -1532,9 +1563,24 @@ function saveRunLogTaskTags(taskId: string): void {
                   <li>API 抛错时按顺序 failover 到备用预设。</li>
                   <li>字数不足或摘取失败时仍在主要预设上重试，不切换到备用分流。</li>
                 </ul>
+                </div>
               </div>
-              <div class="acu-subsection">
-                <h5>执行策略</h5>
+              <div class="acu-subsection acu-collapsible-subsection">
+                <button
+                  type="button"
+                  class="acu-collapsible-subsection__header"
+                  :aria-expanded="executionStrategyExpanded"
+                  @click="executionStrategyExpanded = !executionStrategyExpanded"
+                >
+                  <span class="acu-collapsible-subsection__title">执行策略</span>
+                  <span class="acu-collapsible-subsection__summary">{{ executionStrategySummary }}</span>
+                  <i
+                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                    :class="executionStrategyExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                    aria-hidden="true"
+                  />
+                </button>
+                <div v-show="executionStrategyExpanded" class="acu-collapsible-subsection__body">
                 <p class="acu-notes">回合间隔与时间间隔分别配置，选择其中一项逻辑执行（手动重跑忽略调度）。</p>
               <div class="acu-row acu-row--inline">
                 <label><input v-model="scheduleMode" type="radio" value="round" /> 按回合间隔</label>
@@ -1628,7 +1674,13 @@ function saveRunLogTaskTags(taskId: string): void {
                     <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ GAME_TIME_FORMAT_HELP.footnote }}</p>
                   </AcuHelpPanel>
                 </template>
+                </div>
               </div>
+              <TaskPromptAutoSegmentsPanel
+                v-if="selectedTask"
+                :task="isViewingReplicaMember && editorTask ? editorTask : selectedTask"
+                :readonly="isViewingReplicaMember"
+              />
               <div class="acu-row acu-row--extract-tags">
                 <label class="acu-label-with-help" for="extract-inject-tags-input">
                   提取写入标签

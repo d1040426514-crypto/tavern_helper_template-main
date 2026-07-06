@@ -76,6 +76,8 @@ function defaultTaskFields(): PostProcessTask {
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
+    promptAutoSlots: [],
+    promptAutoSegments: [],
   });
 }
 
