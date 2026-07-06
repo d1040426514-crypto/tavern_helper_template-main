@@ -17,6 +17,7 @@ import {
   ChatTaskScopeStateSchema,
   type ChatTaskScopeState,
   type PostProcessTask,
+  type ReplicaFamilyScheduleMode,
   type ScriptSettings,
 } from './schema';
 import { newTaskId, cloneTaskForInsert } from './task-clone';
@@ -24,10 +25,17 @@ import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   getReplicaTasks,
+  listReplicaFamilyScheduleEntries,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
   validateReplicaFamilyEligibility,
 } from './replica-family';
+import {
+  applyTaskWorkflowPresetOnTask,
+  deleteTaskWorkflowPresetOnTask,
+  listTaskWorkflowPresetNames,
+  saveTaskWorkflowPresetOnTask,
+} from './task-workflow-preset';
 import {
   appendPromptGroup,
   movePromptGroupAt,
@@ -757,4 +765,72 @@ export async function resetTaskScheduleState(
   }
   saveSettings(settings);
   await emitTasksChanged('schedule_reset', source, taskId?.trim());
+}
+
+export async function updateReplicaFamilyScheduleMode(
+  rootId: string,
+  mode: ReplicaFamilyScheduleMode,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(rootId);
+  if (!task) throw new Error(`任务不存在: ${rootId}`);
+  if (!task.syncAsReplicaFamily) throw new Error('任务不是副本族根模板');
+  return updateTask(rootId, { replicaFamilyScheduleMode: mode }, source);
+}
+
+export async function updateReplicaMemberSchedule(
+  memberId: string,
+  patch: { selected?: boolean; launched?: boolean },
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const member = getTask(memberId);
+  if (!member) throw new Error(`任务不存在: ${memberId}`);
+  if (!member.replicaFamilyRootId) throw new Error('任务不是副本族成员');
+  const next: Partial<PostProcessTask> = {};
+  if (patch.selected !== undefined) next.replicaFamilySelected = patch.selected;
+  if (patch.launched !== undefined) next.replicaFamilyLaunched = patch.launched;
+  return updateTask(memberId, next, source);
+}
+
+export function listReplicaFamilySchedule(rootId: string) {
+  return listReplicaFamilyScheduleEntries(rootId, listTasks());
+}
+
+export function listTaskWorkflowPresets(taskId: string): string[] {
+  const task = getTask(taskId);
+  if (!task) throw new Error(`任务不存在: ${taskId}`);
+  return listTaskWorkflowPresetNames(task);
+}
+
+export async function saveTaskWorkflowPreset(
+  taskId: string,
+  name: string,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(taskId);
+  if (!task) throw new Error(`任务不存在: ${taskId}`);
+  const next = saveTaskWorkflowPresetOnTask(task, name);
+  return updateTask(taskId, { taskWorkflowPresets: next.taskWorkflowPresets }, source);
+}
+
+export async function applyTaskWorkflowPreset(
+  taskId: string,
+  name: string,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(taskId);
+  if (!task) throw new Error(`任务不存在: ${taskId}`);
+  const next = applyTaskWorkflowPresetOnTask(task, name);
+  return updateTask(taskId, next, source);
+}
+
+export async function deleteTaskWorkflowPreset(
+  taskId: string,
+  name: string,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(taskId);
+  if (!task) throw new Error(`任务不存在: ${taskId}`);
+  const next = deleteTaskWorkflowPresetOnTask(task, name);
+  return updateTask(taskId, { taskWorkflowPresets: next.taskWorkflowPresets }, source);
 }

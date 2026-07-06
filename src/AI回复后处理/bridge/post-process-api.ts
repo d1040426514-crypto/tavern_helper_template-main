@@ -40,6 +40,13 @@ import {
   updateTaskPlotWorldbook,
   updateTaskSchedule,
   updateTaskStage,
+  updateReplicaFamilyScheduleMode,
+  updateReplicaMemberSchedule,
+  listReplicaFamilySchedule,
+  listTaskWorkflowPresets,
+  saveTaskWorkflowPreset,
+  applyTaskWorkflowPreset,
+  deleteTaskWorkflowPreset,
   validateReplicaFamily,
   type PresetFieldsPatch,
   type TaskApiPresetRoutingPatch,
@@ -54,6 +61,7 @@ import type {
   ChatTaskScopeState,
   PlotWorldbookConfig,
   PostProcessTask,
+  ReplicaFamilyScheduleMode,
   ScriptSettings,
   TaskContextConfig,
 } from '../tasks/schema';
@@ -125,6 +133,16 @@ export interface AcuPostProcessTaskAPI {
   buildEffectivePromptGroups(taskId: string): PromptGroup[];
   validateReplicaFamily(taskId: string): ReturnType<typeof validateReplicaFamily>;
   listReplicaFamilyMembers(rootId: string): PostProcessTask[];
+  updateReplicaFamilyScheduleMode(rootId: string, mode: ReplicaFamilyScheduleMode): Promise<PostProcessTask>;
+  updateReplicaMemberSchedule(
+    memberId: string,
+    patch: { selected?: boolean; launched?: boolean },
+  ): Promise<PostProcessTask>;
+  listReplicaFamilySchedule(rootId: string): ReturnType<typeof listReplicaFamilySchedule>;
+  listTaskWorkflowPresets(taskId: string): string[];
+  saveTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
+  applyTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
+  deleteTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
   getLastRunStatus(): ReturnType<typeof getLastRunStatus>;
   listApiPresets(): string[];
   resolveTaskApiPresetName(taskId: string): string;
@@ -208,6 +226,18 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
   },
   validateReplicaFamily: (taskId: string) => validateReplicaFamily(taskId),
   listReplicaFamilyMembers: (rootId: string) => listReplicaFamilyMembers(rootId),
+  updateReplicaFamilyScheduleMode: (rootId, mode) =>
+    apiCall(() => updateReplicaFamilyScheduleMode(rootId, mode, 'api')) as Promise<PostProcessTask>,
+  updateReplicaMemberSchedule: (memberId, patch) =>
+    apiCall(() => updateReplicaMemberSchedule(memberId, patch, 'api')) as Promise<PostProcessTask>,
+  listReplicaFamilySchedule: (rootId: string) => listReplicaFamilySchedule(rootId),
+  listTaskWorkflowPresets: (taskId: string) => listTaskWorkflowPresets(taskId),
+  saveTaskWorkflowPreset: (taskId, name) =>
+    apiCall(() => saveTaskWorkflowPreset(taskId, name, 'api')) as Promise<PostProcessTask>,
+  applyTaskWorkflowPreset: (taskId, name) =>
+    apiCall(() => applyTaskWorkflowPreset(taskId, name, 'api')) as Promise<PostProcessTask>,
+  deleteTaskWorkflowPreset: (taskId, name) =>
+    apiCall(() => deleteTaskWorkflowPreset(taskId, name, 'api')) as Promise<PostProcessTask>,
   getLastRunStatus: () => getLastRunStatus(),
   listApiPresets: () => listApiPresetNames(),
   resolveTaskApiPresetName: (taskId: string) => resolveTaskApiPresetName(taskId),

@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { acuPostProcessTaskApi } from './post-process-api';
 
 const expectedMethods = [
   'listTasks',
@@ -45,24 +44,49 @@ const expectedMethods = [
   'buildEffectivePromptGroups',
   'validateReplicaFamily',
   'listReplicaFamilyMembers',
+  'updateReplicaFamilyScheduleMode',
+  'updateReplicaMemberSchedule',
+  'listReplicaFamilySchedule',
+  'listTaskWorkflowPresets',
+  'saveTaskWorkflowPreset',
+  'applyTaskWorkflowPreset',
+  'deleteTaskWorkflowPreset',
   'getLastRunStatus',
   'listApiPresets',
   'resolveTaskApiPresetName',
   'resetTaskScheduleState',
 ] as const;
 
-function test(name: string, fn: () => void): void {
+async function main(): Promise<void> {
   try {
-    fn();
-    console.log(`ok ${name}`);
+    const g = globalThis as Record<string, unknown>;
+    g.getVariables = () => ({});
+    g.getScriptId = () => 'test-script';
+    g.insertOrAssignVariables = () => {};
+    g.defineStore = () => () => ({});
+    g.ref = (v: unknown) => ({ value: v });
+    g.computed = (fn: () => unknown) => ({ value: fn() });
+    g.watch = () => {};
+    g.eventOn = () => {};
+    g.eventOff = () => {};
+    g.eventEmit = () => {};
+    g.getCurrentMessageId = () => 0;
+    g.getChatMessages = () => [];
+    g.substituteParams = (s: string) => s;
+    g.generateRaw = async () => '';
+    g.TavernHelper = {};
+
+    const { acuPostProcessTaskApi } = await import('./post-process-api.js');
+    const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
+    assert.deepEqual(missing, []);
+    assert.equal(expectedMethods.length, 54);
+    console.log('ok acuPostProcessTaskApi exposes all P0-P2 methods');
   } catch (e) {
-    console.error(`FAIL ${name}`, e);
+    console.error('FAIL acuPostProcessTaskApi exposes all P0-P2 methods', e);
     process.exitCode = 1;
   }
 }
 
-test('acuPostProcessTaskApi exposes all P0-P2 methods', () => {
-  const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
-  assert.deepEqual(missing, []);
-  assert.equal(expectedMethods.length, 45);
+main().then(() => {
+  if (process.exitCode) process.exit(process.exitCode);
 });

@@ -2,7 +2,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
-import type { PostProcessTask } from '../tasks/schema';
+import type { PostProcessTask, ReplicaFamilyScheduleMode } from '../tasks/schema';
 import { PLACEHOLDER_LEGEND } from '../tasks/utils';
 import {
   getPostProcessWritableTagNames,
@@ -22,6 +22,8 @@ import Context7Section from './Context7Section.vue';
 import TaskContextPanel from './TaskContextPanel.vue';
 import ApiConfigPanel from './ApiConfigPanel.vue';
 import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
+import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
+import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
@@ -53,6 +55,11 @@ import {
   removePromptGroup as removePromptGroupInStore,
   replaceTasks,
   setTaskEnabled as setTaskEnabledInStore,
+  saveTaskWorkflowPreset as saveTaskWorkflowPresetInStore,
+  applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
+  deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
+  updateReplicaFamilyScheduleMode as updateReplicaFamilyScheduleModeInStore,
+  updateReplicaMemberSchedule as updateReplicaMemberScheduleInStore,
   updatePresetFields,
   updateTask as updateTaskInStore,
 } from '../tasks/task-store';
@@ -66,6 +73,11 @@ import {
 } from '../tasks/events';
 import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
 import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
+import {
+  applyTaskWorkflowPresetOnTask,
+  deleteTaskWorkflowPresetOnTask,
+  saveTaskWorkflowPresetOnTask,
+} from '../tasks/task-workflow-preset';
 import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
 import { ensureAcuToastStyles } from './toast-styles';
 import { acuToast } from './toast';
@@ -636,6 +648,96 @@ function copySelectedTask(): void {
   if (!task) return;
   copyTaskToClipboard(task, settings.value.activePresetName);
   acuToast('success', `已跨预设复制「${task.name.trim() || '未命名任务'}」`);
+}
+
+function onReplicaScheduleModeChange(mode: ReplicaFamilyScheduleMode): void {
+  const root = selectedTask.value;
+  if (!root) return;
+  if (chatScopeActive.value) {
+    void updateReplicaFamilyScheduleModeInStore(root.id, mode, 'ui')
+      .then(() => refreshTaskView())
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  const idx = settings.value.tasks.findIndex(t => t.id === root.id);
+  if (idx >= 0) settings.value.tasks[idx]!.replicaFamilyScheduleMode = mode;
+}
+
+function onReplicaMemberScheduleChange(
+  memberId: string,
+  patch: { selected?: boolean; launched?: boolean },
+): void {
+  if (chatScopeActive.value) {
+    void updateReplicaMemberScheduleInStore(memberId, patch, 'ui')
+      .then(() => refreshTaskView())
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  const idx = settings.value.tasks.findIndex(t => t.id === memberId);
+  if (idx < 0) return;
+  const member = settings.value.tasks[idx]!;
+  if (patch.selected !== undefined) member.replicaFamilySelected = patch.selected;
+  if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
+}
+
+function onTaskWorkflowPresetSave(name: string): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  if (chatScopeActive.value) {
+    void saveTaskWorkflowPresetInStore(task.id, name, 'ui')
+      .then(() => refreshTaskView())
+      .then(() => acuToast('success', `已保存工作流预设「${name}」`))
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
+  if (idx < 0) return;
+  try {
+    settings.value.tasks[idx] = saveTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
+    acuToast('success', `已保存工作流预设「${name}」`);
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : String(e));
+  }
+}
+
+function onTaskWorkflowPresetApply(name: string): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  if (chatScopeActive.value) {
+    void applyTaskWorkflowPresetInStore(task.id, name, 'ui')
+      .then(() => refreshTaskView())
+      .then(() => acuToast('success', `已应用工作流预设「${name}」`))
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
+  if (idx < 0) return;
+  try {
+    settings.value.tasks[idx] = applyTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
+    acuToast('success', `已应用工作流预设「${name}」`);
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : String(e));
+  }
+}
+
+function onTaskWorkflowPresetDelete(name: string): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  if (chatScopeActive.value) {
+    void deleteTaskWorkflowPresetInStore(task.id, name, 'ui')
+      .then(() => refreshTaskView())
+      .then(() => acuToast('success', `已删除工作流预设「${name}」`))
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    return;
+  }
+  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
+  if (idx < 0) return;
+  try {
+    settings.value.tasks[idx] = deleteTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
+    acuToast('success', `已删除工作流预设「${name}」`);
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : String(e));
+  }
 }
 
 function pasteTask(): void {
@@ -1219,7 +1321,7 @@ function saveRunLogTaskTags(taskId: string): void {
 
         <div v-show="currentPage === 3" class="acu-page">
           <div class="acu-section acu-preset-section">
-            <h4>预设</h4>
+            <h4>全局预设</h4>
             <p class="acu-notes">切换预设会加载对应任务模板；修改后请点击保存图标写回当前预设，或点击另存为图标输入新名称保存。</p>
             <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
               当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API 或本页任务编辑仅影响此聊天，不会修改全局活动预设。
@@ -1488,6 +1590,20 @@ function saveRunLogTaskTags(taskId: string): void {
                 <label>执行阶段</label>
                 <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
               </div>
+              <TaskWorkflowPresetPanel
+                v-if="selectedTask && !selectedReplicaViewId"
+                :task="selectedTask"
+                @save="onTaskWorkflowPresetSave"
+                @apply="onTaskWorkflowPresetApply"
+                @delete="onTaskWorkflowPresetDelete"
+              />
+              <ReplicaFamilySchedulerPanel
+                v-if="selectedTask.syncAsReplicaFamily && !selectedReplicaViewId"
+                :root="selectedTask"
+                :members="replicaFamilyMembers"
+                @update-mode="onReplicaScheduleModeChange"
+                @update-member="onReplicaMemberScheduleChange"
+              />
               <div class="acu-subsection acu-collapsible-subsection acu-api-config-section">
                 <button
                   type="button"
@@ -1495,7 +1611,7 @@ function saveRunLogTaskTags(taskId: string): void {
                   :aria-expanded="apiConfigExpanded"
                   @click="apiConfigExpanded = !apiConfigExpanded"
                 >
-                  <span class="acu-collapsible-subsection__title">【API配置】</span>
+                  <span class="acu-collapsible-subsection__title">API配置</span>
                   <span class="acu-collapsible-subsection__summary">{{ apiConfigSummary }}</span>
                   <i
                     class="fa-fw fa-solid acu-collapsible-subsection__chevron"

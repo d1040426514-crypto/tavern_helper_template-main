@@ -1179,6 +1179,75 @@
   margin: 0 0 8px;
 }
 
+.replica-scheduler__mode {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+
+.replica-scheduler__mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-size: var(--acu-font-size-body);
+}
+
+.replica-scheduler__table {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  overflow: hidden;
+}
+
+.replica-scheduler__head,
+.replica-scheduler__row {
+  display: grid;
+  grid-template-columns: 1fr 72px;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+}
+
+.replica-scheduler__head--manual,
+.replica-scheduler__row--manual {
+  grid-template-columns: 1fr 72px 72px;
+}
+
+.replica-scheduler__head {
+  background: var(--acu-bg-2);
+  font-size: var(--acu-font-size-sm);
+  color: var(--acu-text-2);
+  font-weight: 600;
+}
+
+.replica-scheduler__row + .replica-scheduler__row {
+  border-top: 1px solid var(--acu-border);
+}
+
+.replica-scheduler__col-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.replica-scheduler__col-flag {
+  display: flex;
+  justify-content: center;
+}
+
+.task-workflow-preset__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.task-workflow-preset__select {
+  flex: 1;
+  min-width: 140px;
+}
+
 .task-card {
   display: inline-flex;
   align-items: center;

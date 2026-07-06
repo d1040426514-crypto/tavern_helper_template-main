@@ -8,11 +8,12 @@ import {
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
-import { parseExtractTagSpec } from './tag-extract';
+import { parseExtractTagSpec, buildExtractSpecKey, parseDynamicAttrPlaceholder, sortAttrValues } from './tag-extract';
+import { isDynamicAttrPlaceholder } from './tag-variables-nested';
+import { getReplicaTasks, isReplicaSelected } from './replica-family';
 import {
   buildDynamicAttrWritePlan,
   flattenTagContainerToRelayKeys,
-  isDynamicAttrPlaceholder,
   mergeNestedGroupIntoRawContainer,
   type DynamicAttrWritePlan,
   type TagContainerRaw,
@@ -94,6 +95,45 @@ export function buildInjectOnlyTagsUnion(tasks: ScriptSettings['tasks']): Set<st
     }
   }
   return set;
+}
+
+/** 选定副本族成员的 attr 值，供楼层变量 prune 时保留 */
+export function collectPreservedReplicaAttrValues(
+  settings: ScriptSettings,
+  template: string,
+): Map<string, Set<string>> {
+  const result = new Map<string, Set<string>>();
+  const templateNames = getPlotPlaceholderTagNames(template);
+
+  for (const root of settings.tasks) {
+    if (!root.syncAsReplicaFamily) continue;
+    const spec = root.replicaFamilySpec?.trim();
+    if (!spec) continue;
+
+    const templateUsesSpec = templateNames.some(name => {
+      const dyn = parseDynamicAttrPlaceholder(name);
+      if (!dyn) return false;
+      return buildExtractSpecKey(dyn.tagName, dyn.attrName).toLowerCase() === spec.toLowerCase();
+    });
+    if (!templateUsesSpec) continue;
+
+    for (const member of getReplicaTasks(root.id, settings.tasks)) {
+      if (!isReplicaSelected(member)) continue;
+      const attrValue = member.replicaFamilyAttrValue?.trim();
+      if (!attrValue) continue;
+      if (!result.has(spec)) result.set(spec, new Set());
+      result.get(spec)!.add(attrValue);
+    }
+  }
+  return result;
+}
+
+function withPreservedPruneValues(plan: DynamicAttrWritePlan, extra: string[]): DynamicAttrWritePlan {
+  if (!extra.length) return plan;
+  return {
+    ...plan,
+    pruneToAttrValues: sortAttrValues([...new Set([...plan.pruneToAttrValues, ...extra])]),
+  };
 }
 
 function migrateLegacyTagsOnFloor(variables: Record<string, unknown>): boolean {
@@ -323,11 +363,16 @@ export async function applyTagVariableInjectTemplate(
 
   const flatToWrite: Record<string, string> = {};
   const dynamicPlans: DynamicAttrWritePlan[] = [];
+  const preservedBySpec = collectPreservedReplicaAttrValues(settings, template);
 
   for (const placeholderName of tagNames) {
     if (isDynamicAttrPlaceholder(placeholderName)) {
       const plan = buildDynamicAttrWritePlan(placeholderName, flatAggregated);
-      if (plan) dynamicPlans.push(plan);
+      if (!plan) continue;
+      const dyn = parseDynamicAttrPlaceholder(placeholderName);
+      const specKey = dyn ? buildExtractSpecKey(dyn.tagName, dyn.attrName) : '';
+      const preserved = specKey ? [...(preservedBySpec.get(specKey) ?? [])] : [];
+      dynamicPlans.push(withPreservedPruneValues(plan, preserved));
       continue;
     }
     for (const key of expandWritableKeysFromPlaceholder(placeholderName, aggregated.keys())) {

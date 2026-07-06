@@ -118,8 +118,55 @@ function migratePostProcessTaskRaw(raw: unknown): unknown {
     task.apiFallbackMaxConcurrencies = fbNames.map(() => legacyNum);
   }
   delete task.apiRouteMaxConcurrency;
+  if (task.replicaFamilyScheduleMode === undefined && task.syncAsReplicaFamily) {
+    task.replicaFamilyScheduleMode = 'auto';
+  }
+  if (task.replicaFamilyRootId && task.replicaFamilySelected === undefined) {
+    task.replicaFamilySelected = false;
+  }
+  if (task.replicaFamilyRootId && task.replicaFamilyLaunched === undefined) {
+    task.replicaFamilyLaunched = false;
+  }
+  if (task.taskWorkflowPresets === undefined) {
+    task.taskWorkflowPresets = [];
+  }
   return task;
 }
+
+/** 工作流预设快照：不含 id 与 API 路由字段 */
+export const TaskWorkflowPresetSnapshotSchema = z.object({
+  name: z.string().default('未命名任务'),
+  enabled: z.boolean().default(true),
+  stage: z.number().int().min(1).default(1),
+  promptGroups: z.array(PromptGroupSchema).default([]),
+  promptAutoSlots: z.array(PromptAutoSlotSchema).default([]),
+  promptAutoSegments: z.array(PromptAutoSegmentSchema).default([]),
+  extractInjectTags: z.array(z.string()).default(['result']),
+  mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
+  maxRetries: z.number().int().min(1).default(3),
+  minLength: z.number().int().min(0).default(0),
+  skipIfTagsFound: z.array(z.string()).optional(),
+  schedule: TaskScheduleSchema.optional(),
+  plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
+  plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
+  contextMode: z.enum(['inherit', 'custom']).default('inherit'),
+  contextConfig: TaskContextConfigSchema.optional(),
+  structuredOutputMode: z.enum(['off', 'mvu_json_patch', 'addon_json_patch']).default('off'),
+  structuredOutputRules: z
+    .object({
+      mvu: z.string().optional(),
+      addon: z.string().optional(),
+    })
+    .optional(),
+  replicaFamilySpec: z.string().optional(),
+  replicaFamilyBaseName: z.string().optional(),
+});
+
+export const TaskWorkflowPresetEntrySchema = z.object({
+  name: z.string(),
+  savedAt: z.number().default(() => Date.now()),
+  snapshot: TaskWorkflowPresetSnapshotSchema,
+});
 
 const PostProcessTaskShape = z.object({
   id: z.string(),
@@ -157,6 +204,10 @@ const PostProcessTaskShape = z.object({
   replicaFamilyAttrValue: z.string().optional(),
   replicaFamilySpec: z.string().optional(),
   replicaFamilyBaseName: z.string().optional(),
+  replicaFamilyScheduleMode: z.enum(['auto', 'manual']).optional(),
+  replicaFamilySelected: z.boolean().optional(),
+  replicaFamilyLaunched: z.boolean().optional(),
+  taskWorkflowPresets: z.array(TaskWorkflowPresetEntrySchema).default([]),
 });
 
 export const PostProcessTaskSchema = z.preprocess(migratePostProcessTaskRaw, PostProcessTaskShape);
@@ -297,3 +348,6 @@ export type RunLogTaskResult = z.infer<typeof RunLogTaskResultSchema>;
 export type ScheduleStateEntry = z.infer<typeof ScheduleStateEntrySchema>;
 export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;
 export type ChatTaskScopeState = z.infer<typeof ChatTaskScopeStateSchema>;
+export type TaskWorkflowPresetEntry = z.infer<typeof TaskWorkflowPresetEntrySchema>;
+export type TaskWorkflowPresetSnapshot = z.infer<typeof TaskWorkflowPresetSnapshotSchema>;
+export type ReplicaFamilyScheduleMode = 'auto' | 'manual';

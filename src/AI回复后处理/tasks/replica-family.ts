@@ -3,6 +3,7 @@ import {
   buildExtractSpecKey,
   collectAttrValuesFromRelay,
   getPlotPlaceholderTagNames,
+  sortAttrValues,
   type RelayTagMap,
 } from './utils';
 import {
@@ -11,7 +12,7 @@ import {
 } from './tag-extract';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
-import { PostProcessTaskSchema, type PostProcessTask } from './schema';
+import { PostProcessTaskSchema, type PostProcessTask, type ReplicaFamilyScheduleMode } from './schema';
 
 const REPLICA_NAME_SUFFIX_RE = / \{.+\}$/;
 
@@ -23,6 +24,25 @@ export function stripReplicaNameSuffix(name: string, baseNameHint?: string): str
 export function getReplicaFamilyBaseNameFromTask(task: PostProcessTask): string {
   if (task.replicaFamilyBaseName?.trim()) return task.replicaFamilyBaseName.trim();
   return stripReplicaNameSuffix(task.name);
+}
+
+export function getReplicaFamilyScheduleMode(root: PostProcessTask): ReplicaFamilyScheduleMode {
+  return root.replicaFamilyScheduleMode ?? 'auto';
+}
+
+export function isReplicaSelected(task: PostProcessTask): boolean {
+  return task.replicaFamilySelected === true;
+}
+
+export function isReplicaLaunched(task: PostProcessTask): boolean {
+  return task.replicaFamilyLaunched === true;
+}
+
+export function shouldRunReplicaAtRuntime(replica: PostProcessTask, root: PostProcessTask): boolean {
+  if (!replica.enabled) return false;
+  const mode = getReplicaFamilyScheduleMode(root);
+  if (mode === 'auto') return true;
+  return isReplicaSelected(replica) && isReplicaLaunched(replica);
 }
 
 export function scanDynamicAttrPlaceholders(task: PostProcessTask): string[] {
@@ -79,11 +99,23 @@ function clonePromptGroupsFromRoot(root: PostProcessTask, spec: string, attrValu
   }));
 }
 
+function refreshReplicaPromptsFromRoot(replica: PostProcessTask, root: PostProcessTask, spec: string): PostProcessTask {
+  const attrValue = replica.replicaFamilyAttrValue ?? '';
+  if (!attrValue) return replica;
+  return {
+    ...replica,
+    promptGroups: clonePromptGroupsFromRoot(root, spec, attrValue),
+    promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
+    name: `${getReplicaFamilyBaseNameFromTask(root)} ${attrValue}`,
+  };
+}
+
 export function buildReplicaFromRoot(
   root: PostProcessTask,
   attrValue: string,
   baseName: string,
   allTasks: PostProcessTask[],
+  schedule?: { selected?: boolean; launched?: boolean },
 ): PostProcessTask {
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
   const cloned = PostProcessTaskSchema.parse({
@@ -95,6 +127,10 @@ export function buildReplicaFromRoot(
     replicaFamilyAttrValue: attrValue,
     replicaFamilySpec: spec,
     syncAsReplicaFamily: false,
+    replicaFamilyScheduleMode: undefined,
+    replicaFamilySelected: schedule?.selected ?? false,
+    replicaFamilyLaunched: schedule?.launched ?? false,
+    taskWorkflowPresets: [],
     promptGroups: clonePromptGroupsFromRoot(root, spec, attrValue),
     promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
   });
@@ -114,32 +150,76 @@ export function deleteReplicaFamilyTasks(rootId: string, allTasks: PostProcessTa
   return allTasks.filter(t => t.replicaFamilyRootId !== rootId);
 }
 
-export function syncReplicaFamily(
+/** 合并式同步：保留选定孤儿副本，新副本默认未选定/未启动 */
+export function mergeReplicaFamilyFromRelay(
   root: PostProcessTask,
-  attrValues: string[],
+  relayAttrValues: string[],
   allTasks: PostProcessTask[],
 ): PostProcessTask[] {
   const baseName = getReplicaFamilyBaseNameFromTask(root);
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
-  let tasks = deleteReplicaFamilyTasks(root.id, allTasks);
+  const relaySet = new Set(relayAttrValues);
 
-  const rootIdx = tasks.findIndex(t => t.id === root.id);
+  const withoutReplicas = allTasks.filter(t => t.replicaFamilyRootId !== root.id);
+  const rootIdx = withoutReplicas.findIndex(t => t.id === root.id);
   if (rootIdx === -1) return allTasks;
 
+  const existingReplicas = getReplicaTasks(root.id, allTasks);
+  const byAttr = new Map(existingReplicas.map(r => [r.replicaFamilyAttrValue ?? '', r]));
+
   const updatedRoot: PostProcessTask = {
-    ...tasks[rootIdx]!,
+    ...withoutReplicas[rootIdx]!,
     syncAsReplicaFamily: true,
     enabled: root.enabled,
     replicaFamilySpec: spec,
     replicaFamilyBaseName: baseName,
     name: baseName,
+    replicaFamilyScheduleMode: root.replicaFamilyScheduleMode ?? 'auto',
   };
-  tasks[rootIdx] = updatedRoot;
 
-  const insertAt = rootIdx + 1;
-  const replicas = attrValues.map(v => buildReplicaFromRoot(updatedRoot, v, baseName, tasks));
-  tasks.splice(insertAt, 0, ...replicas);
+  const nextReplicas: PostProcessTask[] = [];
+
+  for (const attrValue of sortAttrValues([...relaySet])) {
+    const existing = byAttr.get(attrValue);
+    if (existing) {
+      nextReplicas.push(refreshReplicaPromptsFromRoot(existing, updatedRoot, spec));
+      byAttr.delete(attrValue);
+    } else {
+      nextReplicas.push(
+        buildReplicaFromRoot(updatedRoot, attrValue, baseName, allTasks, {
+          selected: false,
+          launched: false,
+        }),
+      );
+    }
+  }
+
+  for (const orphan of byAttr.values()) {
+    if (isReplicaSelected(orphan)) {
+      nextReplicas.push(orphan);
+    }
+  }
+
+  nextReplicas.sort((a, b) =>
+    (a.replicaFamilyAttrValue ?? '').localeCompare(b.replicaFamilyAttrValue ?? '', undefined, {
+      numeric: true,
+      sensitivity: 'base',
+    }),
+  );
+
+  const tasks = [...withoutReplicas];
+  tasks[rootIdx] = updatedRoot;
+  tasks.splice(rootIdx + 1, 0, ...nextReplicas);
   return tasks;
+}
+
+/** @deprecated 请使用 mergeReplicaFamilyFromRelay；空 relay 时仅清空未选定副本 */
+export function syncReplicaFamily(
+  root: PostProcessTask,
+  attrValues: string[],
+  allTasks: PostProcessTask[],
+): PostProcessTask[] {
+  return mergeReplicaFamilyFromRelay(root, attrValues, allTasks);
 }
 
 export function isReplicaFamilyRootTemplate(task: PostProcessTask): boolean {
@@ -192,6 +272,25 @@ export function collectAttrValuesForReplicaRoot(
   return collectAttrValuesFromRelay(relayMap, parsed);
 }
 
+export function listReplicaFamilyScheduleEntries(
+  rootId: string,
+  allTasks: PostProcessTask[],
+): Array<{
+  id: string;
+  name: string;
+  attrValue: string;
+  selected: boolean;
+  launched: boolean;
+}> {
+  return getReplicaTasks(rootId, allTasks).map(r => ({
+    id: r.id,
+    name: r.name,
+    attrValue: r.replicaFamilyAttrValue ?? '',
+    selected: isReplicaSelected(r),
+    launched: isReplicaLaunched(r),
+  }));
+}
+
 export function prepareStageTasksWithReplicaSync(
   stageTasks: PostProcessTask[],
   allTasks: PostProcessTask[],
@@ -210,13 +309,16 @@ export function prepareStageTasksWithReplicaSync(
       handledRoots.add(task.id);
       const root = updatedAll.find(t => t.id === task.id) ?? task;
       const attrValues = collectAttrValuesForReplicaRoot(root, relayMap);
-      if (!attrValues.length) {
-        skippedRoots.push(root);
+      updatedAll = mergeReplicaFamilyFromRelay(root, attrValues, updatedAll);
+      const syncedRoot = updatedAll.find(t => t.id === root.id) ?? root;
+      const replicas = getReplicaTasks(syncedRoot.id, updatedAll);
+      const runnable = replicas.filter(r => shouldRunReplicaAtRuntime(r, syncedRoot));
+
+      if (!runnable.length) {
+        skippedRoots.push(syncedRoot);
         continue;
       }
-      updatedAll = syncReplicaFamily(root, attrValues, updatedAll);
-      const replicas = getReplicaTasks(root.id, updatedAll).filter(r => r.enabled);
-      runtimeTasks.push(...replicas);
+      runtimeTasks.push(...runnable);
       continue;
     }
 
@@ -238,6 +340,7 @@ export function enableReplicaFamilyOnTask(task: PostProcessTask): PostProcessTas
     syncAsReplicaFamily: true,
     replicaFamilySpec: validation.spec,
     replicaFamilyBaseName: baseName,
+    replicaFamilyScheduleMode: task.replicaFamilyScheduleMode ?? 'auto',
     name: baseName,
   };
 }
@@ -257,6 +360,7 @@ export function disableReplicaFamilyOnTasks(task: PostProcessTask, allTasks: Pos
       syncAsReplicaFamily: false,
       replicaFamilySpec: undefined,
       replicaFamilyBaseName: undefined,
+      replicaFamilyScheduleMode: undefined,
     };
   });
   return tasks;
@@ -270,5 +374,8 @@ export function clearReplicaFamilyFieldsOnClone(task: PostProcessTask): PostProc
     replicaFamilyAttrValue: undefined,
     replicaFamilySpec: undefined,
     replicaFamilyBaseName: undefined,
+    replicaFamilyScheduleMode: undefined,
+    replicaFamilySelected: undefined,
+    replicaFamilyLaunched: undefined,
   };
 }
