@@ -1193,47 +1193,36 @@
   font-size: var(--acu-font-size-body);
 }
 
-.replica-scheduler__table {
-  border: 1px solid var(--acu-border);
-  border-radius: var(--acu-radius-sm);
-  overflow: hidden;
+.replica-scheduler__chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.replica-scheduler__head,
-.replica-scheduler__row {
-  display: grid;
-  grid-template-columns: 1fr 72px;
+.replica-scheduler__member {
+  display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
 }
 
-.replica-scheduler__head--manual,
-.replica-scheduler__row--manual {
-  grid-template-columns: 1fr 72px 72px;
+.replica-scheduler__member--manual {
+  padding: 6px 10px;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  background: var(--acu-bg-1);
 }
 
-.replica-scheduler__head {
-  background: var(--acu-bg-2);
+.replica-scheduler__launch {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.replica-scheduler__launch-label {
   font-size: var(--acu-font-size-sm);
   color: var(--acu-text-2);
-  font-weight: 600;
-}
-
-.replica-scheduler__row + .replica-scheduler__row {
-  border-top: 1px solid var(--acu-border);
-}
-
-.replica-scheduler__col-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.replica-scheduler__col-flag {
-  display: flex;
-  justify-content: center;
 }
 
 .task-card {
