@@ -72,6 +72,7 @@ function defaultTaskFields(): PostProcessTask {
     minLength: 0,
     apiPresetName: '',
     apiPresetFallbackNames: [],
+    apiRouteMaxConcurrency: 5,
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -436,6 +437,7 @@ export async function updateTaskExecutionOptions(
 export type TaskApiPresetRoutingPatch = {
   primary?: string;
   fallbacks?: string[];
+  routeMaxConcurrency?: number;
 };
 
 export async function updateTaskApiPreset(
@@ -470,11 +472,17 @@ export async function updateTaskApiPresetRouting(
     }
   }
 
+  const nextMaxConcurrency =
+    patch.routeMaxConcurrency !== undefined
+      ? Math.max(0, Math.floor(patch.routeMaxConcurrency))
+      : (task.apiRouteMaxConcurrency ?? 5);
+
   return updateTask(
     id,
     {
       apiPresetName: nextPrimary,
       apiPresetFallbackNames: nextFallbacks,
+      apiRouteMaxConcurrency: nextMaxConcurrency,
     },
     source,
   );

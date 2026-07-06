@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { TaskApiRouteConcurrencyPool } from './route-concurrency-pool';
 import { callTaskApiWithRouteFallback } from './task-api-route';
 import type { ScriptSettings } from '../tasks/schema';
 
@@ -91,4 +92,52 @@ test('callTaskApiWithRouteFallback returns primary when it succeeds', async () =
   );
   assert.equal(result.content, 'ok:p');
   assert.equal(result.usedPresetName, 'primary');
+});
+
+test('callTaskApiWithRouteFallback with pool uses fallback when primary slots are full', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(['primary', 'fallback'], 1);
+  const heldPrimary = await pool.acquire();
+  assert.equal(heldPrimary, 'primary');
+
+  const calls: string[] = [];
+  const result = await callTaskApiWithRouteFallback(
+    [{ role: 'user', content: 'hi', name: '' }],
+    baseSettings(),
+    ['primary', 'fallback'],
+    null,
+    'test-pool',
+    {
+      routePool: pool,
+      callApi: async (_messages, resolved) => {
+        calls.push(resolved.apiConfig.url);
+        return { content: 'ok' };
+      },
+    },
+  );
+
+  pool.release(heldPrimary);
+  assert.equal(result.usedPresetName, 'fallback');
+  assert.deepEqual(calls, ['f']);
+});
+
+test('callTaskApiWithRouteFallback preferPrimaryOnly stays on primary with pool', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(['primary', 'fallback'], 1);
+  const calls: string[] = [];
+  const result = await callTaskApiWithRouteFallback(
+    [{ role: 'user', content: 'hi', name: '' }],
+    baseSettings(),
+    ['primary', 'fallback'],
+    null,
+    'test-primary-only',
+    {
+      routePool: pool,
+      preferPrimaryOnly: true,
+      callApi: async (_messages, resolved) => {
+        calls.push(resolved.apiConfig.url);
+        return { content: 'ok-primary' };
+      },
+    },
+  );
+  assert.equal(result.usedPresetName, 'primary');
+  assert.deepEqual(calls, ['p']);
 });

@@ -1,4 +1,5 @@
 import { resolveTaskApiPresetChain } from '../api/resolve';
+import { buildRoutePoolKey, RouteConcurrencyPoolRegistry } from '../api/route-concurrency-pool';
 import { callTaskApiWithRouteFallback } from '../api/task-api-route';
 import {
   buildSharedContext,
@@ -113,7 +114,7 @@ async function runSingleTask(
   ctx: SharedContext,
   relayTagMap: RelayTagMap,
   scheduleCtx: ScheduleContext,
-  options?: { signal?: AbortSignal },
+  options?: { signal?: AbortSignal; routePoolRegistry?: RouteConcurrencyPoolRegistry },
 ): Promise<TaskRunResult> {
   const start = Date.now();
   checkRunCancelled(options?.signal);
@@ -181,6 +182,13 @@ async function runSingleTask(
   }
 
   const presetChain = resolveTaskApiPresetChain(ctx.settings, task.id, task);
+  const maxRouteConcurrency = task.apiRouteMaxConcurrency ?? 5;
+  const poolScopeId = task.replicaFamilyRootId ?? task.id;
+  const poolKey = buildRoutePoolKey(poolScopeId, presetChain);
+  const routePool =
+    maxRouteConcurrency > 0
+      ? options?.routePoolRegistry?.getOrCreate(poolKey, presetChain, maxRouteConcurrency)
+      : null;
   const structuredMode = getStructuredOutputMode(task);
   const apiMessages = structuredMode ? appendStrictJsonPromptToMessages(messages, structuredMode) : messages;
   const maxRetries = task.maxRetries ?? 3;
@@ -189,6 +197,7 @@ async function runSingleTask(
   let lastError = '';
   let processedResponse = '';
   let apiPresetUsed: string | undefined;
+  let retryOnPrimaryOnly = false;
 
   lastPromptMessages = _.cloneDeep(apiMessages);
 
@@ -202,15 +211,22 @@ async function runSingleTask(
         presetChain,
         structuredMode,
         `post-process-${task.id}-${ctx.messageId}-${attempt}`,
+        {
+          routePool,
+          preferPrimaryOnly: retryOnPrimaryOnly,
+          signal: options?.signal,
+        },
       );
       rawResponse = apiResult.content;
       reasoningContent = apiResult.reasoningContent;
       apiPresetUsed = apiResult.usedPresetName;
+      retryOnPrimaryOnly = false;
     } catch (e) {
       if (e instanceof RunCancelledError || isRunCancelled(options?.signal)) {
         throw new RunCancelledError();
       }
       lastError = e instanceof Error ? e.message : String(e);
+      retryOnPrimaryOnly = false;
       continue;
     } finally {
       silentGenerationDepth = Math.max(0, silentGenerationDepth - 1);
@@ -224,6 +240,7 @@ async function runSingleTask(
         break;
       }
       lastError = resolved.error;
+      retryOnPrimaryOnly = true;
       if (attempt < maxRetries - 1) {
         await abortableDelay(1000, options?.signal);
       }
@@ -233,6 +250,7 @@ async function runSingleTask(
     processedResponse = rawResponse;
     if ((rawResponse?.trim().length ?? 0) >= (task.minLength ?? 0)) break;
     lastError = '响应过短';
+    retryOnPrimaryOnly = true;
     if (attempt < maxRetries - 1) {
       await abortableDelay(1000, options?.signal);
     }
@@ -397,6 +415,7 @@ export async function runPostProcessTasks(
 
   const results: TaskRunResult[] = [];
   const aggregatedRelayTags: RelayTagMap = new Map();
+  const routePoolRegistry = new RouteConcurrencyPoolRegistry();
   let cancelled = false;
 
   try {
@@ -432,7 +451,7 @@ export async function runPostProcessTasks(
       reporter.pushSnapshot();
 
       const stageRelayTagMap = new Map(aggregatedRelayTags);
-      const runOptions = { signal: options?.signal };
+      const runOptions = { signal: options?.signal, routePoolRegistry };
       const stageResults = await Promise.all(
         stageTasks.map(async task => {
           reporter.setRunning(task.id);

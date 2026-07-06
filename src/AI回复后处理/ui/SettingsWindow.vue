@@ -116,14 +116,19 @@ const availableFallbackPresetsForAdd = computed(() => {
   return settings.value.apiPresets.filter(p => !used.has(p.name));
 });
 
-function ensureTaskFallbackNames(task: PostProcessTask) {
+function ensureTaskApiConfig(task: PostProcessTask) {
   if (!task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
+  if (task.apiRouteMaxConcurrency == null || !Number.isFinite(task.apiRouteMaxConcurrency)) {
+    task.apiRouteMaxConcurrency = 5;
+  } else {
+    task.apiRouteMaxConcurrency = Math.max(0, Math.floor(task.apiRouteMaxConcurrency));
+  }
 }
 
 function addTaskApiFallback() {
   const task = selectedTask.value;
   if (!task) return;
-  ensureTaskFallbackNames(task);
+  ensureTaskApiConfig(task);
   const next = availableFallbackPresetsForAdd.value[0];
   if (!next) {
     acuToast('warning', '没有可添加的备用预设');
@@ -141,7 +146,7 @@ function removeTaskApiFallback(index: number) {
 watch(
   selectedTask,
   task => {
-    if (task && !task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
+    if (task) ensureTaskApiConfig(task);
   },
   { immediate: true },
 );
@@ -326,6 +331,7 @@ const extractInjectTagsHelpOpen = ref(false);
 const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
+const apiRouteConcurrencyHelpOpen = ref(false);
 
 const PAGE_TABS = [
   { id: 1, label: 'API', shortLabel: 'API' },
@@ -626,6 +632,7 @@ async function addTask() {
     minLength: 0,
     apiPresetName: '',
     apiPresetFallbackNames: [],
+    apiRouteMaxConcurrency: 5,
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -1057,7 +1064,7 @@ function saveRunLogTaskTags(taskId: string): void {
 </script>
 
 <template>
-  <div class="acu-overlay acu-pp-root" @click.self="closeWindow">
+  <div class="acu-overlay acu-pp-root">
     <div class="acu-window">
       <div class="acu-window-header">
         <div class="acu-window-title">
@@ -1439,45 +1446,92 @@ function saveRunLogTaskTags(taskId: string): void {
                 <label>执行阶段</label>
                 <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
               </div>
-              <div class="acu-subsection acu-api-routing-section">
-                <div class="acu-row">
-                  <label>主要 API 预设</label>
-                  <select v-model="selectedTask.apiPresetName" class="acu-select">
-                    <option value="">全局默认</option>
-                    <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                  </select>
-                </div>
-                <div class="acu-api-routing-fallbacks">
-                  <label class="acu-field-label">备用 API 预设</label>
-                  <p class="acu-notes acu-notes--sm" style="margin: 4px 0 8px">
-                    API 异常时按顺序尝试备用；字数/摘取失败仍在主要预设上重试。
-                  </p>
-                  <div
-                    v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
-                    :key="`fb-${fbIndex}-${fallbackName}`"
-                    class="acu-row acu-api-routing-fallback-row"
+              <div class="acu-subsection acu-api-config-section">
+                <h5>【API配置】</h5>
+                <p class="acu-api-config__intro">
+                  配置本任务的 LLM 路由与并发分流；同阶段并行（含副本族）时按单路由上限自动分担请求。
+                </p>
+
+                <div class="acu-api-config__block">
+                  <div class="acu-row">
+                    <label class="acu-field-label acu-label-with-help">
+                      单路由最大并发数
+                      <AcuHelpIconBtn
+                        v-model:open="apiRouteConcurrencyHelpOpen"
+                        panel-id="api-route-concurrency-help"
+                        label="单路由最大并发数说明"
+                      />
+                    </label>
+                    <input
+                      v-model.number="selectedTask.apiRouteMaxConcurrency"
+                      class="acu-input acu-api-config__concurrency-input"
+                      type="number"
+                      min="0"
+                      step="1"
+                      title="0 表示不限制"
+                    />
+                    <span class="acu-api-config__suffix">次</span>
+                    <span class="acu-notes acu-notes--sm acu-api-config__hint-inline">（0 = 不限制）</span>
+                  </div>
+                  <AcuHelpPanel
+                    v-model:open="apiRouteConcurrencyHelpOpen"
+                    id="api-route-concurrency-help"
+                    label="单路由最大并发数说明"
                   >
-                    <select v-model="selectedTask.apiPresetFallbackNames![fbIndex]" class="acu-select">
+                    <p class="acu-notes acu-notes--sm acu-api-config__example-text">
+                      例：主要 + 2 个备用、上限 5、本轮 17 次并发 → 先各跑 5/5/5，余 2 次排队，随完成自动补入有空闲槽位的路由。
+                    </p>
+                  </AcuHelpPanel>
+                </div>
+
+                <div class="acu-api-config__divider" aria-hidden="true" />
+
+                <div class="acu-api-config__block">
+                  <div class="acu-row">
+                    <label class="acu-field-label">主要 API 预设</label>
+                    <select v-model="selectedTask.apiPresetName" class="acu-select acu-api-config__select">
+                      <option value="">全局默认</option>
                       <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
                     </select>
+                  </div>
+
+                  <div class="acu-api-routing-fallbacks">
+                    <label class="acu-field-label">备用 API 预设</label>
+                    <div
+                      v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
+                      :key="`fb-${fbIndex}-${fallbackName}`"
+                      class="acu-row acu-api-routing-fallback-row"
+                    >
+                      <select v-model="selectedTask.apiPresetFallbackNames![fbIndex]" class="acu-select acu-api-config__select">
+                        <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                      </select>
+                      <button
+                        class="acu-btn acu-btn--sm"
+                        type="button"
+                        title="删除此备用"
+                        @click="removeTaskApiFallback(fbIndex)"
+                      >
+                        删除
+                      </button>
+                    </div>
                     <button
                       class="acu-btn acu-btn--sm"
                       type="button"
-                      title="删除此备用"
-                      @click="removeTaskApiFallback(fbIndex)"
+                      :disabled="!availableFallbackPresetsForAdd.length"
+                      @click="addTaskApiFallback"
                     >
-                      删除
+                      + 添加备用
                     </button>
+                    <p v-if="!settings.apiPresets.length" class="acu-notes acu-notes--sm acu-api-config__empty-hint">
+                      请先在全局「API」页添加至少一个 API 预设。
+                    </p>
                   </div>
-                  <button
-                    class="acu-btn acu-btn--sm"
-                    type="button"
-                    :disabled="!availableFallbackPresetsForAdd.length"
-                    @click="addTaskApiFallback"
-                  >
-                    + 添加备用
-                  </button>
                 </div>
+
+                <ul class="acu-api-config__hints acu-notes acu-notes--sm">
+                  <li>API 抛错时按顺序 failover 到备用预设。</li>
+                  <li>字数不足或摘取失败时仍在主要预设上重试，不切换到备用分流。</li>
+                </ul>
               </div>
               <div class="acu-subsection">
                 <h5>执行策略</h5>

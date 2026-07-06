@@ -401,6 +401,70 @@
   margin-bottom: 8px;
 }
 
+.acu-api-config-section {
+  margin-bottom: 10px;
+}
+
+.acu-api-config__intro {
+  margin: 0 0 10px;
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-caption);
+  line-height: 1.5;
+}
+
+.acu-api-config__block {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.acu-api-config__divider {
+  height: 1px;
+  margin: 10px 0;
+  background: var(--acu-border);
+  opacity: 0.75;
+}
+
+.acu-api-config__concurrency-input {
+  width: 72px;
+  min-width: 72px;
+}
+
+.acu-api-config__suffix {
+  color: var(--acu-text-2);
+  font-size: var(--acu-font-size-body);
+}
+
+.acu-api-config__hint-inline {
+  margin: 0;
+}
+
+.acu-api-config__example-text {
+  margin: 0;
+  line-height: 1.55;
+}
+
+.acu-api-config__select {
+  flex: 1;
+  min-width: 160px;
+}
+
+.acu-api-config__empty-hint {
+  margin: 6px 0 0;
+}
+
+.acu-api-config__hints {
+  margin: 10px 0 0;
+  padding: 8px 0 0 18px;
+  border-top: 1px dashed var(--acu-border);
+  list-style: disc;
+}
+
+.acu-api-config__hints li {
+  margin: 4px 0;
+  line-height: 1.5;
+}
+
 .acu-api-routing-fallbacks {
   margin-top: 4px;
 }

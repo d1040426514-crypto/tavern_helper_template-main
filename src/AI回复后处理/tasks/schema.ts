@@ -99,6 +99,8 @@ export const PostProcessTaskSchema = z.object({
   apiPresetName: z.string().default(''),
   /** 备用 API 预设名（有序）；API 异常时依次尝试 */
   apiPresetFallbackNames: z.array(z.string()).default([]),
+  /** 单条 LLM 路由同时进行的请求上限；超出时由其它路由分担。0 = 不限制 */
+  apiRouteMaxConcurrency: z.number().int().min(0).default(5),
   schedule: TaskScheduleSchema.optional(),
   plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
