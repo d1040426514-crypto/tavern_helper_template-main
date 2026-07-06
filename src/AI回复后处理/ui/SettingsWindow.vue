@@ -2,7 +2,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
-import type { PostProcessTask, ReplicaFamilyScheduleMode } from '../tasks/schema';
+import type { PostProcessTask, ReplicaFamilyScheduleMode, TaskWorkflowPresetEntry } from '../tasks/schema';
 import { PLACEHOLDER_LEGEND } from '../tasks/utils';
 import {
   getPostProcessWritableTagNames,
@@ -73,11 +73,7 @@ import {
 } from '../tasks/events';
 import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
 import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
-import {
-  applyTaskWorkflowPresetOnTask,
-  deleteTaskWorkflowPresetOnTask,
-  saveTaskWorkflowPresetOnTask,
-} from '../tasks/task-workflow-preset';
+import { mergeTaskWorkflowPresetsOnTask } from '../tasks/task-workflow-preset';
 import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
 import { ensureAcuToastStyles } from './toast-styles';
 import { acuToast } from './toast';
@@ -680,64 +676,54 @@ function onReplicaMemberScheduleChange(
   if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
 }
 
+async function afterTaskWorkflowPresetMutation(): Promise<void> {
+  if (chatScopeActive.value) {
+    await refreshTaskView({ skipTasksFlush: true });
+    return;
+  }
+  store.saveActivePreset();
+  store.reload();
+}
+
 function onTaskWorkflowPresetSave(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (chatScopeActive.value) {
-    void saveTaskWorkflowPresetInStore(task.id, name, 'ui')
-      .then(() => refreshTaskView())
-      .then(() => acuToast('success', `已保存工作流预设「${name}」`))
-      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
-    return;
-  }
-  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
-  if (idx < 0) return;
-  try {
-    settings.value.tasks[idx] = saveTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
-    acuToast('success', `已保存工作流预设「${name}」`);
-  } catch (e) {
-    acuToast('warning', e instanceof Error ? e.message : String(e));
-  }
+  if (!chatScopeActive.value) store.persist();
+  void saveTaskWorkflowPresetInStore(task.id, name, 'ui')
+    .then(() => afterTaskWorkflowPresetMutation())
+    .then(() => acuToast('success', `已保存工作流预设「${name}」`))
+    .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
 
 function onTaskWorkflowPresetApply(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (chatScopeActive.value) {
-    void applyTaskWorkflowPresetInStore(task.id, name, 'ui')
-      .then(() => refreshTaskView())
-      .then(() => acuToast('success', `已应用工作流预设「${name}」`))
-      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
-    return;
-  }
-  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
-  if (idx < 0) return;
-  try {
-    settings.value.tasks[idx] = applyTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
-    acuToast('success', `已应用工作流预设「${name}」`);
-  } catch (e) {
-    acuToast('warning', e instanceof Error ? e.message : String(e));
-  }
+  if (!chatScopeActive.value) store.persist();
+  void applyTaskWorkflowPresetInStore(task.id, name, 'ui')
+    .then(() => afterTaskWorkflowPresetMutation())
+    .then(() => acuToast('success', `已应用工作流预设「${name}」`))
+    .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
 
 function onTaskWorkflowPresetDelete(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (chatScopeActive.value) {
-    void deleteTaskWorkflowPresetInStore(task.id, name, 'ui')
-      .then(() => refreshTaskView())
-      .then(() => acuToast('success', `已删除工作流预设「${name}」`))
-      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
-    return;
-  }
-  const idx = settings.value.tasks.findIndex(t => t.id === task.id);
-  if (idx < 0) return;
-  try {
-    settings.value.tasks[idx] = deleteTaskWorkflowPresetOnTask(settings.value.tasks[idx]!, name);
-    acuToast('success', `已删除工作流预设「${name}」`);
-  } catch (e) {
-    acuToast('warning', e instanceof Error ? e.message : String(e));
-  }
+  if (!chatScopeActive.value) store.persist();
+  void deleteTaskWorkflowPresetInStore(task.id, name, 'ui')
+    .then(() => afterTaskWorkflowPresetMutation())
+    .then(() => acuToast('success', `已删除工作流预设「${name}」`))
+    .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+}
+
+function onTaskWorkflowPresetImport(entries: TaskWorkflowPresetEntry[]): void {
+  const task = selectedTask.value;
+  if (!task || entries.length === 0) return;
+  const next = mergeTaskWorkflowPresetsOnTask(task, entries);
+  if (!chatScopeActive.value) store.persist();
+  void updateTaskInStore(task.id, { taskWorkflowPresets: next.taskWorkflowPresets }, 'ui')
+    .then(() => afterTaskWorkflowPresetMutation())
+    .then(() => acuToast('success', `已导入 ${entries.length} 个工作流预设`))
+    .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
 
 function pasteTask(): void {
@@ -1596,6 +1582,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 @save="onTaskWorkflowPresetSave"
                 @apply="onTaskWorkflowPresetApply"
                 @delete="onTaskWorkflowPresetDelete"
+                @import="onTaskWorkflowPresetImport"
               />
               <ReplicaFamilySchedulerPanel
                 v-if="selectedTask.syncAsReplicaFamily && !selectedReplicaViewId"

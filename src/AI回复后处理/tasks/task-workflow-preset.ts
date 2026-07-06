@@ -1,4 +1,6 @@
+import { z } from 'zod';
 import {
+  TaskWorkflowPresetEntrySchema,
   TaskWorkflowPresetSnapshotSchema,
   type PostProcessTask,
   type TaskWorkflowPresetEntry,
@@ -91,6 +93,74 @@ export function deleteTaskWorkflowPresetOnTask(task: PostProcessTask, name: stri
   const presets = (task.taskWorkflowPresets ?? []).filter(p => p.name !== trimmed);
   if (presets.length === (task.taskWorkflowPresets ?? []).length) {
     throw new Error(`工作流预设不存在: ${trimmed}`);
+  }
+  return { ...task, taskWorkflowPresets: presets };
+}
+
+export const TaskWorkflowPresetsExportSchema = z.object({
+  kind: z.literal('task-workflow-presets'),
+  version: z.literal(1),
+  taskName: z.string().optional(),
+  presets: z.array(TaskWorkflowPresetEntrySchema).min(1),
+});
+
+export type TaskWorkflowPresetsExport = z.infer<typeof TaskWorkflowPresetsExportSchema>;
+
+export function exportTaskWorkflowPresetsJson(task: PostProcessTask, name?: string): string {
+  const trimmed = String(name ?? '').trim();
+  const all = task.taskWorkflowPresets ?? [];
+  const presets = trimmed
+    ? all.filter(p => p.name === trimmed).map(p => TaskWorkflowPresetEntrySchema.parse(p))
+    : all.map(p => TaskWorkflowPresetEntrySchema.parse(p));
+  if (!presets.length) {
+    throw new Error(trimmed ? `工作流预设不存在: ${trimmed}` : '当前任务没有可导出的工作流预设');
+  }
+  const payload: TaskWorkflowPresetsExport = {
+    kind: 'task-workflow-presets',
+    version: 1,
+    taskName: task.name,
+    presets,
+  };
+  return JSON.stringify(payload, null, 2);
+}
+
+function parsePresetEntries(raw: unknown): TaskWorkflowPresetEntry[] {
+  const exportParsed = TaskWorkflowPresetsExportSchema.safeParse(raw);
+  if (exportParsed.success) {
+    return exportParsed.data.presets;
+  }
+  const single = TaskWorkflowPresetEntrySchema.safeParse(raw);
+  if (single.success) return [single.data];
+  if (Array.isArray(raw)) {
+    const entries = raw.map(item => TaskWorkflowPresetEntrySchema.parse(item));
+    if (entries.length) return entries;
+  }
+  throw new Error('无法识别的工作流预设 JSON 格式');
+}
+
+export function parseImportedTaskWorkflowPresets(raw: unknown): TaskWorkflowPresetEntry[] {
+  return parsePresetEntries(raw);
+}
+
+export function importTaskWorkflowPresetsFromJson(
+  task: PostProcessTask,
+  raw: unknown,
+  _fileName?: string,
+): PostProcessTask {
+  const entries = parsePresetEntries(raw);
+  return mergeTaskWorkflowPresetsOnTask(task, entries);
+}
+
+export function mergeTaskWorkflowPresetsOnTask(
+  task: PostProcessTask,
+  entries: TaskWorkflowPresetEntry[],
+): PostProcessTask {
+  const presets = [...(task.taskWorkflowPresets ?? [])];
+  for (const entry of entries) {
+    const parsed = TaskWorkflowPresetEntrySchema.parse(entry);
+    const idx = presets.findIndex(p => p.name === parsed.name);
+    if (idx >= 0) presets[idx] = parsed;
+    else presets.push(parsed);
   }
   return { ...task, taskWorkflowPresets: presets };
 }

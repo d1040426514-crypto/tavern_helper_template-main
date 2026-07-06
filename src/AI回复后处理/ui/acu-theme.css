@@ -1236,18 +1236,6 @@
   justify-content: center;
 }
 
-.task-workflow-preset__row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-}
-
-.task-workflow-preset__select {
-  flex: 1;
-  min-width: 140px;
-}
-
 .task-card {
   display: inline-flex;
   align-items: center;
