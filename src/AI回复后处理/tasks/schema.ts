@@ -29,6 +29,8 @@ export const PromptAutoSegmentSchema = z.object({
   ),
   content: z.string().default(''),
   inserted: z.boolean().default(false),
+  /** 同插入位内从左到右的排序（越小越靠前） */
+  sortOrder: z.number().int().min(0).default(0),
 });
 
 export const TimeSourceSchema = z.discriminatedUnion('type', [

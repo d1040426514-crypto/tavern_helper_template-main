@@ -1,11 +1,11 @@
 import './ui/acu-theme.css';
 import { reloadOnChatChange } from '@util/script';
-import { mountAcuPostProcessAPI } from './bridge/post-process-api';
+import { mountAcuPostProcessAPI, acuPostProcessTaskApi } from './bridge/post-process-api';
 import { getCurrentChatKey } from './api/chat-key';
 import { readChatTaskScope } from './tasks/chat-task-scope';
 import { emitChatScopeChanged } from './tasks/events';
 import { applyInjectVariableUpdates } from './tasks/inject-variable-update';
-import { registerTrigger, rerunCurrentFloor } from './tasks/trigger';
+import { registerTrigger } from './tasks/trigger';
 import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import {
@@ -13,7 +13,6 @@ import {
   getLastDeferDispatch,
 } from './tasks/mvu-trigger-defer';
 import { normalizeGameTimeRaw, parseGameTimeToMs } from './tasks/parse-game-time';
-import { getLastPromptMessages, getLastPlaceholderVars } from './tasks/runtime';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import { registerExtensionsMenuEntry } from './ui/extensions-menu';
 import { loadSettings } from './settings';
@@ -51,7 +50,7 @@ $(() => {
       acuToast('warning', '「AI 回复后处理」脚本仍在加载，请稍候几秒后再点击');
       return;
     }
-    void rerunCurrentFloor();
+    void acuPostProcessTaskApi.rerunCurrentFloor();
   });
 
   const offTrigger = registerTrigger();
@@ -68,9 +67,9 @@ $(() => {
 
   const w = window as unknown as Record<string, unknown>;
   w.__acuPpGetLastDeferDispatch = getLastDeferDispatch;
-  w.__acuPpGetLastPromptMessages = getLastPromptMessages;
-  w.__acuPpGetLastPlaceholderVars = getLastPlaceholderVars;
-  w.__acuPpRerunCurrentFloor = rerunCurrentFloor;
+  w.__acuPpGetLastPromptMessages = acuPostProcessTaskApi.getLastPromptMessages.bind(acuPostProcessTaskApi);
+  w.__acuPpGetLastPlaceholderVars = acuPostProcessTaskApi.getLastPlaceholderVars.bind(acuPostProcessTaskApi);
+  w.__acuPpRerunCurrentFloor = acuPostProcessTaskApi.rerunCurrentFloor.bind(acuPostProcessTaskApi);
   w.__acuPpApplyInjectVariableUpdates = applyInjectVariableUpdates;
   w.__acuPpDebugStopMvuEnded = debugStopMvuEndedListener;
   w.__acuPpParseGameTime = parseGameTimeToMs;

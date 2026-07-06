@@ -21,7 +21,37 @@ export function defaultPromptAutoSlot(order = 0): PromptAutoSlot {
   });
 }
 
-export function defaultPromptAutoSegment(slotId: string): PromptAutoSegment {
+export function nextSortOrderInSlot(segments: PromptAutoSegment[], slotId: string): number {
+  let max = -1;
+  for (const seg of segments) {
+    if (seg.slotId !== slotId) continue;
+    const order = seg.sortOrder ?? 0;
+    if (order > max) max = order;
+  }
+  return max + 1;
+}
+
+export function sortSegmentsInSlot(segments: PromptAutoSegment[], slotId: string): PromptAutoSegment[] {
+  return segments
+    .map((seg, index) => ({ seg, index }))
+    .filter(({ seg }) => seg.slotId === slotId)
+    .sort((a, b) => {
+      const orderDiff = (a.seg.sortOrder ?? 0) - (b.seg.sortOrder ?? 0);
+      return orderDiff !== 0 ? orderDiff : a.index - b.index;
+    })
+    .map(({ seg }) => seg);
+}
+
+function renumberSortOrderInSlot(segments: PromptAutoSegment[], slotId: string): PromptAutoSegment[] {
+  const orderedIds = sortSegmentsInSlot(segments, slotId).map(s => s.id);
+  const orderById = new Map(orderedIds.map((id, i) => [id, i]));
+  return segments.map(seg => {
+    if (seg.slotId !== slotId) return seg;
+    return { ...seg, sortOrder: orderById.get(seg.id) ?? seg.sortOrder ?? 0 };
+  });
+}
+
+export function defaultPromptAutoSegment(slotId: string, sortOrder = 0): PromptAutoSegment {
   return PromptAutoSegmentSchema.parse({
     id: newPromptAutoSegmentId(),
     slotId,
@@ -29,6 +59,7 @@ export function defaultPromptAutoSegment(slotId: string): PromptAutoSegment {
     role: 'system',
     content: '',
     inserted: false,
+    sortOrder,
   });
 }
 
@@ -59,7 +90,15 @@ export function appendPromptAutoSegment(
   partial?: Partial<PromptAutoSegment>,
 ): PromptAutoSegment[] {
   const next = _.cloneDeep(segments);
-  next.push(PromptAutoSegmentSchema.parse({ ...defaultPromptAutoSegment(slotId), ...partial }));
+  const sortOrder = partial?.sortOrder ?? nextSortOrderInSlot(next, slotId);
+  next.push(
+    PromptAutoSegmentSchema.parse({
+      ...defaultPromptAutoSegment(slotId, sortOrder),
+      ...partial,
+      slotId,
+      sortOrder,
+    }),
+  );
   return next;
 }
 
@@ -67,7 +106,35 @@ export function removePromptAutoSegmentAt(segments: PromptAutoSegment[], index: 
   if (index < 0 || index >= segments.length) {
     throw new Error(`自动段索引无效: ${index}`);
   }
-  return segments.filter((_, i) => i !== index);
+  const removed = segments[index]!;
+  const next = segments.filter((_, i) => i !== index);
+  return renumberSortOrderInSlot(next, removed.slotId);
+}
+
+export function movePromptAutoSegmentInSlot(
+  segments: PromptAutoSegment[],
+  slotId: string,
+  segId: string,
+  delta: -1 | 1,
+): PromptAutoSegment[] {
+  const inSlot = sortSegmentsInSlot(segments, slotId);
+  const index = inSlot.findIndex(s => s.id === segId);
+  if (index < 0) {
+    throw new Error(`自动段不存在: ${segId}`);
+  }
+  const target = index + delta;
+  if (target < 0 || target >= inSlot.length) {
+    throw new Error(`自动段无法移动: 索引 ${index} 方向 ${delta}`);
+  }
+  const next = _.cloneDeep(segments);
+  const ordered = sortSegmentsInSlot(next, slotId);
+  const [item] = ordered.splice(index, 1);
+  ordered.splice(target, 0, item);
+  const orderById = new Map(ordered.map((seg, i) => [seg.id, i]));
+  return next.map(seg => {
+    if (seg.slotId !== slotId) return seg;
+    return { ...seg, sortOrder: orderById.get(seg.id) ?? seg.sortOrder ?? 0 };
+  });
 }
 
 export function countInsertedPromptAutoSegments(segments: PromptAutoSegment[]): number {

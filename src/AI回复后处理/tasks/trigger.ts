@@ -57,7 +57,7 @@ function persistRunStatus(
 export async function handleMessageReceived(
   messageId: number,
   type: string,
-  options?: { bypassSchedule?: boolean; force?: boolean; isRerun?: boolean },
+  options?: { bypassSchedule?: boolean; force?: boolean; isRerun?: boolean; taskIdFilter?: string },
 ): Promise<void> {
   const baseSettings = loadSettings();
   const settings = resolveEffectiveSettings(baseSettings);
@@ -90,6 +90,7 @@ export async function handleMessageReceived(
       isRerun: options?.isRerun ?? false,
       signal,
       onProgress,
+      taskIdFilter: options?.taskIdFilter,
     });
 
     persistRunStatus(baseSettings, messageId, results);
@@ -138,6 +139,11 @@ export function registerTrigger(): EventOnReturn {
   };
 }
 
+export type TriggerTaskOptions = {
+  bypassSchedule?: boolean;
+  isRerun?: boolean;
+};
+
 export async function rerunCurrentFloor(): Promise<void> {
   const lastId = getLastMessageId();
   const msg = getChatMessages(lastId)[0];
@@ -146,4 +152,21 @@ export async function rerunCurrentFloor(): Promise<void> {
     return;
   }
   await handleMessageReceived(lastId, 'normal', { bypassSchedule: true, force: true, isRerun: true });
+}
+
+export async function triggerTask(taskId: string, options?: TriggerTaskOptions): Promise<void> {
+  const trimmed = taskId?.trim();
+  if (!trimmed) throw new Error('任务 ID 不能为空');
+  const lastId = getLastMessageId();
+  const msg = getChatMessages(lastId)[0];
+  if (!msg || msg.role !== 'assistant') {
+    acuToast('warning', '当前最后一楼不是 AI 回复');
+    return;
+  }
+  await handleMessageReceived(lastId, 'normal', {
+    bypassSchedule: options?.bypassSchedule ?? true,
+    force: true,
+    isRerun: options?.isRerun ?? true,
+    taskIdFilter: trimmed,
+  });
 }

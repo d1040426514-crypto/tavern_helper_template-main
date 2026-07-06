@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PostProcessTask } from './schema';
-import { buildEffectivePromptGroups } from './prompt-auto-segments';
+import { buildEffectivePromptGroups, buildPromptPreviewRows } from './prompt-auto-segments';
 
 function baseTask(overrides: Partial<PostProcessTask> = {}): PostProcessTask {
   return {
@@ -85,4 +85,44 @@ test('same order multiple slots merge by slot id', () => {
     ],
   });
   assert.deepEqual(buildEffectivePromptGroups(task).map(g => g.content), ['A', 'B', 'm']);
+});
+
+test('same slot segments merge by sortOrder', () => {
+  const task = baseTask({
+    promptGroups: [{ name: 'm', role: 'user', content: 'm', enabled: true }],
+    promptAutoSlots: [{ id: 's0', name: 'head', order: 0 }],
+    promptAutoSegments: [
+      { id: 'a2', slotId: 's0', name: 'second', role: 'system', content: 'B', inserted: true, sortOrder: 1 },
+      { id: 'a1', slotId: 's0', name: 'first', role: 'system', content: 'A', inserted: true, sortOrder: 0 },
+    ],
+  });
+  assert.deepEqual(buildEffectivePromptGroups(task).map(g => g.content), ['A', 'B', 'm']);
+});
+
+test('buildPromptPreviewRows interleaves auto and manual rows', () => {
+  const task = baseTask({
+    promptGroups: [
+      { name: 'm0', role: 'user', content: 'manual-0', enabled: true },
+      { name: 'm1', role: 'user', content: 'manual-1', enabled: true },
+    ],
+    promptAutoSlots: [
+      { id: 's0', name: 'head', order: 0 },
+      { id: 's1', name: 'mid', order: 1 },
+    ],
+    promptAutoSegments: [
+      { id: 'a1', slotId: 's0', name: 'auto-head', role: 'system', content: 'A0', inserted: true, sortOrder: 0 },
+      { id: 'a2', slotId: 's1', name: 'auto-mid', role: 'system', content: 'A1', inserted: true, sortOrder: 0 },
+      { id: 'a3', slotId: 's0', name: 'off', role: 'system', content: 'off', inserted: false, sortOrder: 1 },
+    ],
+  });
+  const rows = buildPromptPreviewRows(task);
+  assert.deepEqual(
+    rows.map(row => (row.kind === 'auto' ? `auto:${row.group.content}` : `manual:${row.manualIndex}`)),
+    ['auto:A0', 'manual:0', 'auto:A1', 'manual:1'],
+  );
+  const autoRow = rows.find(r => r.kind === 'auto' && r.segmentId === 'a1');
+  assert.ok(autoRow && autoRow.kind === 'auto');
+  if (autoRow.kind === 'auto') {
+    assert.equal(autoRow.slotName, 'head');
+  }
 });

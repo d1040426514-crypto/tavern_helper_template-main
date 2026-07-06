@@ -29,6 +29,7 @@ import AcuConfirmDialog from './AcuConfirmDialog.vue';
 import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
 import { useTaskClipboard } from './composables/useTaskClipboard';
 import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
+import { movePromptGroupAt } from '../tasks/prompt-group-ops';
 import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
@@ -43,7 +44,6 @@ import {
   duplicateTask as duplicateTaskInStore,
   getChatScopeState,
   listTasks,
-  movePromptGroup as movePromptGroupInStore,
   moveTask as moveTaskInStore,
   removePromptGroup as removePromptGroupInStore,
   replaceTasks,
@@ -60,6 +60,7 @@ import {
   type TasksChangedPayload,
 } from '../tasks/events';
 import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
+import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
 import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
 import { ensureAcuToastStyles } from './toast-styles';
 import { acuToast } from './toast';
@@ -99,6 +100,18 @@ const editorTask = computed(() => {
 const isViewingReplicaMember = computed(
   () => !!selectedReplicaViewId.value && selectedReplicaViewId.value !== selectedTask.value?.id,
 );
+
+const promptPreviewTask = computed(() =>
+  isViewingReplicaMember.value && editorTask.value ? editorTask.value : selectedTask.value,
+);
+
+const promptPreviewRows = computed(() => {
+  const task = promptPreviewTask.value;
+  if (!task) return [];
+  return buildPromptPreviewRows(task);
+});
+
+const manualPromptGroupCount = computed(() => promptPreviewTask.value?.promptGroups?.length ?? 0);
 
 function collectUsedApiPresetNames(task: PostProcessTask | null | undefined): Set<string> {
   const used = new Set<string>();
@@ -249,9 +262,6 @@ async function persistPlotWorldbookConfigNow(): Promise<void> {
 
 function onPlotWorldbookConfigUpdate(v: PlotWorldbookConfig): void {
   if (syncingPresetView) return;
-  // #region agent log
-  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'SettingsWindow.vue:onPlotWorldbookConfigUpdate',message:'plotWorldbook config update',data:{manualSelection:v.manualSelection,source:v.source,chatScopeActive:chatScopeActive.value},timestamp:Date.now(),hypothesisId:'H3'})}).catch(()=>{});
-  // #endregion
   settings.value.plotWorldbookConfig = v;
   persistPlotWorldbookChain = persistPlotWorldbookChain
     .then(() => persistPlotWorldbookConfigNow())
@@ -707,13 +717,17 @@ async function removePromptGroup(index: number): Promise<void> {
 }
 
 async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
-  const task = selectedTask.value;
+  const task = promptPreviewTask.value ?? selectedTask.value;
   if (!task) return;
   try {
-    if (!chatScopeActive.value) store.persist();
-    await movePromptGroupInStore(task.id, index, delta, 'ui');
-    if (chatScopeActive.value) void refreshTaskView();
-    else store.reload();
+    task.promptGroups = movePromptGroupAt(task.promptGroups ?? [], index, delta);
+    if (chatScopeActive.value) {
+      if (persistViewTasksTimer) {
+        clearTimeout(persistViewTasksTimer);
+        persistViewTasksTimer = null;
+      }
+      await replaceTasks(viewTasks.value, 'ui');
+    }
   } catch {
     // 边界不可移动时静默忽略
   }
@@ -1794,68 +1808,99 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes" style="margin: 0 0 8px">
                 最小回复字数填 0 表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
               </p>
-              <div
-                v-for="(pg, idx) in (isViewingReplicaMember && editorTask ? editorTask.promptGroups : selectedTask.promptGroups)"
-                :key="isViewingReplicaMember ? `rep-${idx}` : idx"
-                class="acu-prompt-group"
-                :class="{ 'acu-prompt-group--disabled': pg.enabled === false }"
-              >
-                <div class="acu-row acu-prompt-group__toolbar">
-                  <input
-                    v-model="pg.name"
-                    class="acu-input acu-prompt-group__name"
-                    type="text"
-                    placeholder="未命名段"
+              <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
+                灰色自动段为合并预览，请在上方「任务级提示词自动段」中编辑。
+              </p>
+              <template v-for="row in promptPreviewRows" :key="row.kind === 'manual' ? `m-${row.manualIndex}` : `a-${row.segmentId}`">
+                <div
+                  v-if="row.kind === 'auto'"
+                  class="acu-prompt-group acu-prompt-group--auto-preview"
+                >
+                  <div class="acu-row acu-prompt-group__toolbar">
+                    <span class="acu-prompt-group__auto-badge">自动段 · {{ row.slotName }}</span>
+                    <input
+                      class="acu-input acu-prompt-group__name"
+                      type="text"
+                      :value="row.group.name"
+                      placeholder="未命名段"
+                      readonly
+                      disabled
+                    />
+                    <select class="acu-select" :value="row.group.role" disabled>
+                      <option value="system">system</option>
+                      <option value="user">user</option>
+                      <option value="assistant">assistant</option>
+                    </select>
+                  </div>
+                  <textarea
+                    class="acu-textarea"
+                    :value="row.group.content"
+                    readonly
+                    disabled
+                  />
+                </div>
+                <div
+                  v-else
+                  class="acu-prompt-group"
+                  :class="{ 'acu-prompt-group--disabled': row.group.enabled === false }"
+                >
+                  <div class="acu-row acu-prompt-group__toolbar">
+                    <input
+                      v-model="row.group.name"
+                      class="acu-input acu-prompt-group__name"
+                      type="text"
+                      placeholder="未命名段"
+                      :readonly="isViewingReplicaMember"
+                      :disabled="isViewingReplicaMember"
+                    />
+                    <select v-model="row.group.role" class="acu-select" :disabled="isViewingReplicaMember">
+                      <option value="system">system</option>
+                      <option value="user">user</option>
+                      <option value="assistant">assistant</option>
+                    </select>
+                    <button
+                      class="acu-btn acu-btn--sm"
+                      type="button"
+                      title="上移"
+                      :disabled="row.manualIndex === 0 || isViewingReplicaMember"
+                      @click="movePromptGroup(row.manualIndex, -1)"
+                    >
+                      上移
+                    </button>
+                    <button
+                      class="acu-btn acu-btn--sm"
+                      type="button"
+                      title="下移"
+                      :disabled="row.manualIndex >= manualPromptGroupCount - 1 || isViewingReplicaMember"
+                      @click="movePromptGroup(row.manualIndex, 1)"
+                    >
+                      下移
+                    </button>
+                    <div class="acu-prompt-group__enable">
+                      <AcuToggle
+                        :model-value="row.group.enabled !== false"
+                        aria-label="启用本段"
+                        :disabled="isViewingReplicaMember"
+                        @update:model-value="row.group.enabled = $event"
+                      />
+                    </div>
+                    <button
+                      class="acu-btn danger acu-btn--sm acu-prompt-group__delete"
+                      type="button"
+                      :disabled="isViewingReplicaMember"
+                      @click="removePromptGroup(row.manualIndex)"
+                    >
+                      删段
+                    </button>
+                  </div>
+                  <textarea
+                    v-model="row.group.content"
+                    class="acu-textarea"
                     :readonly="isViewingReplicaMember"
                     :disabled="isViewingReplicaMember"
                   />
-                  <select v-model="pg.role" class="acu-select" :disabled="isViewingReplicaMember">
-                    <option value="system">system</option>
-                    <option value="user">user</option>
-                    <option value="assistant">assistant</option>
-                  </select>
-                  <button
-                    class="acu-btn acu-btn--sm"
-                    type="button"
-                    title="上移"
-                    :disabled="idx === 0 || isViewingReplicaMember"
-                    @click="movePromptGroup(idx, -1)"
-                  >
-                    上移
-                  </button>
-                  <button
-                    class="acu-btn acu-btn--sm"
-                    type="button"
-                    title="下移"
-                    :disabled="idx === selectedTask.promptGroups.length - 1 || isViewingReplicaMember"
-                    @click="movePromptGroup(idx, 1)"
-                  >
-                    下移
-                  </button>
-                  <div class="acu-prompt-group__enable">
-                    <AcuToggle
-                      :model-value="pg.enabled !== false"
-                      aria-label="启用本段"
-                      :disabled="isViewingReplicaMember"
-                      @update:model-value="pg.enabled = $event"
-                    />
-                  </div>
-                  <button
-                    class="acu-btn danger acu-btn--sm acu-prompt-group__delete"
-                    type="button"
-                    :disabled="isViewingReplicaMember"
-                    @click="removePromptGroup(idx)"
-                  >
-                    删段
-                  </button>
                 </div>
-                <textarea
-                  v-model="pg.content"
-                  class="acu-textarea"
-                  :readonly="isViewingReplicaMember"
-                  :disabled="isViewingReplicaMember"
-                />
-              </div>
+              </template>
               <button
                 v-if="!isViewingReplicaMember"
                 class="acu-btn"

@@ -389,6 +389,8 @@ export interface RunPostProcessOptions {
   isRerun?: boolean;
   signal?: AbortSignal;
   onProgress?: (update: TaskProgressUpdate) => void;
+  /** 设置时仅运行该 id 的已启用任务，不展开副本族 */
+  taskIdFilter?: string;
 }
 
 export async function runPostProcessTasks(
@@ -399,7 +401,13 @@ export async function runPostProcessTasks(
 ): Promise<{ results: TaskRunResult[]; ctx: SharedContext; cancelled?: boolean }> {
   const ctx = await buildSharedContext(messageId, settings, snapshot, { isRerun: options?.isRerun });
   checkRunCancelled(options?.signal);
-  const enabledTasks = settings.tasks.filter(t => t.enabled);
+  let enabledTasks = settings.tasks.filter(t => t.enabled);
+  if (options?.taskIdFilter) {
+    enabledTasks = enabledTasks.filter(t => t.id === options.taskIdFilter);
+    if (!enabledTasks.length) {
+      throw new Error(`任务不存在或未启用: ${options.taskIdFilter}`);
+    }
+  }
   if (!enabledTasks.length) {
     return { results: [], ctx };
   }
@@ -412,6 +420,20 @@ export async function runPostProcessTasks(
     settings,
     bypassSchedule: options?.bypassSchedule ?? false,
   };
+
+  if (options?.taskIdFilter) {
+    const task = enabledTasks[0]!;
+    const routePoolRegistry = new RouteConcurrencyPoolRegistry();
+    const reporter = createStageProgressReporter([task], task.stage, settings.tasks, options?.onProgress);
+    reporter.pushSnapshot();
+    reporter.setRunning(task.id);
+    const result = await runSingleTask(task, ctx, new Map(), scheduleCtx, {
+      signal: options?.signal,
+      routePoolRegistry,
+    });
+    reporter.setFinished(task.id, result);
+    return { results: [result], ctx };
+  }
 
   const results: TaskRunResult[] = [];
   const aggregatedRelayTags: RelayTagMap = new Map();

@@ -68,7 +68,20 @@ function test(name: string, fn: () => void | Promise<void>): void {
 void (async () => {
   const { loadSettings } = await import('../settings');
   const { readChatTaskScope } = await import('./chat-task-scope');
-  const { createTask, listTasks, clearChatScope, updateTaskStage, updateTaskSchedule } = await import('./task-store');
+  const {
+    createTask,
+    listTasks,
+    clearChatScope,
+    updateTaskStage,
+    updateTaskSchedule,
+    addPromptAutoSlot,
+    addPromptAutoSegment,
+    getEffectiveSettings,
+    getActivePresetName,
+    validateReplicaFamily,
+    listReplicaFamilyMembers,
+  } = await import('./task-store');
+  const { buildEffectivePromptGroups } = await import('./prompt-auto-segments');
 
   test('createTask via API does not mutate global tasks', async () => {
     const before = loadSettings();
@@ -93,6 +106,47 @@ void (async () => {
     const scheduled = await updateTaskSchedule(task.id, { mode: 'round', roundInterval: 2 }, 'api');
     assert.equal(scheduled.schedule?.mode, 'round');
     assert.equal(scheduled.schedule?.roundInterval, 2);
+    await clearChatScope('api');
+  });
+
+  test('prompt auto slot/segment CRUD via API', async () => {
+    await clearChatScope('api');
+    const task = await createTask({ name: 'Auto Segment Test' }, 'api');
+    const withSlot = await addPromptAutoSlot(task.id, 0, 'api');
+    const slotId = withSlot.promptAutoSlots?.[0]?.id;
+    assert.ok(slotId);
+    const withSeg = await addPromptAutoSegment(
+      task.id,
+      slotId!,
+      { name: '风味', content: 'hello-auto', inserted: true },
+      'api',
+    );
+    assert.equal(withSeg.promptAutoSegments?.length, 1);
+    const merged = buildEffectivePromptGroups(withSeg);
+    assert.ok(merged.some(g => g.content === 'hello-auto'));
+    await clearChatScope('api');
+  });
+
+  test('getEffectiveSettings and getActivePresetName', () => {
+    const effective = getEffectiveSettings();
+    assert.ok(Array.isArray(effective.tasks));
+    assert.equal(getActivePresetName(), String(effective.activePresetName ?? '').trim());
+  });
+
+  test('validateReplicaFamily rejects task without dynamic placeholder', async () => {
+    await clearChatScope('api');
+    const task = await createTask({ name: 'No Replica' }, 'api');
+    const result = validateReplicaFamily(task.id);
+    assert.equal(result.ok, false);
+    await clearChatScope('api');
+  });
+
+  test('listReplicaFamilyMembers returns root only when no replicas', async () => {
+    await clearChatScope('api');
+    const task = await createTask({ name: 'Solo Root' }, 'api');
+    const family = listReplicaFamilyMembers(task.id);
+    assert.equal(family.length, 1);
+    assert.equal(family[0]?.id, task.id);
     await clearChatScope('api');
   });
 })();

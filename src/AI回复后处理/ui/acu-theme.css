@@ -696,6 +696,31 @@
   opacity: 0.72;
 }
 
+.acu-prompt-group--auto-preview {
+  border: 1px dashed var(--acu-border-muted, rgba(255, 255, 255, 0.22));
+  border-radius: 6px;
+  padding: 8px;
+  background: color-mix(in srgb, var(--acu-surface-2, #2a2a2a) 88%, transparent);
+  opacity: 0.88;
+}
+
+.acu-prompt-group__auto-badge {
+  flex-shrink: 0;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--acu-text-muted, #aaa);
+  background: color-mix(in srgb, var(--acu-surface-3, #333) 70%, transparent);
+  border: 1px solid var(--acu-border-muted, rgba(255, 255, 255, 0.14));
+}
+
+.acu-prompt-group--auto-preview .acu-textarea,
+.acu-prompt-group--auto-preview .acu-input,
+.acu-prompt-group--auto-preview .acu-select {
+  pointer-events: none;
+}
+
 .acu-prompt-group__toolbar {
   display: flex;
   align-items: center;

@@ -1,18 +1,26 @@
 import {
+  addPromptAutoSegment,
+  addPromptAutoSlot,
   addPromptGroup,
   clearChatScope,
   createTask,
   deleteTask,
   duplicateTask,
+  getActivePresetName,
   getChatScopeState,
+  getEffectiveSettings,
   getLastRunStatus,
   getTask,
   listApiPresetNames,
+  listReplicaFamilyMembers,
   listTasks,
   movePromptGroup,
+  movePromptAutoSegment,
   moveTask,
   moveTaskToIndex,
   promoteChatScopeToPreset,
+  removePromptAutoSegment,
+  removePromptAutoSlot,
   removePromptGroup,
   renameTask,
   replaceTasks,
@@ -20,6 +28,8 @@ import {
   resolveTaskApiPresetName,
   setTaskEnabled,
   updatePresetFields,
+  updatePromptAutoSegment,
+  updatePromptAutoSlot,
   updatePromptGroup,
   updateTask,
   updateTaskApiPreset,
@@ -30,19 +40,31 @@ import {
   updateTaskPlotWorldbook,
   updateTaskSchedule,
   updateTaskStage,
+  validateReplicaFamily,
   type PresetFieldsPatch,
   type TaskApiPresetRoutingPatch,
   type TaskExecutionOptionsPatch,
   type TaskSchedulePatch,
   type TaskWriteSource,
 } from '../tasks/task-store';
-import type { ChatTaskScopeState, PlotWorldbookConfig, PostProcessTask, TaskContextConfig } from '../tasks/schema';
+import { buildEffectivePromptGroups } from '../tasks/prompt-auto-segments';
+import { rerunCurrentFloor, triggerTask, type TriggerTaskOptions } from '../tasks/trigger';
+import { getLastPlaceholderVars, getLastPromptMessages } from '../tasks/runtime';
+import type {
+  ChatTaskScopeState,
+  PlotWorldbookConfig,
+  PostProcessTask,
+  ScriptSettings,
+  TaskContextConfig,
+} from '../tasks/schema';
+import { PromptAutoSegmentSchema, PromptAutoSlotSchema, PromptGroupSchema } from '../tasks/schema';
 import type { z } from 'zod';
-import { PromptGroupSchema } from '../tasks/schema';
 
 type PromptGroup = z.infer<typeof PromptGroupSchema>;
+export type PromptAutoSlotPatch = Partial<z.infer<typeof PromptAutoSlotSchema>>;
+export type PromptAutoSegmentPatch = Partial<z.infer<typeof PromptAutoSegmentSchema>>;
 
-export type { TaskExecutionOptionsPatch, TaskSchedulePatch, TaskApiPresetRoutingPatch } from '../tasks/task-store';
+export type { TaskExecutionOptionsPatch, TaskSchedulePatch, TaskApiPresetRoutingPatch, TriggerTaskOptions };
 
 export interface AcuPostProcessTaskAPI {
   listTasks(): PostProcessTask[];
@@ -73,18 +95,39 @@ export interface AcuPostProcessTaskAPI {
   addPromptGroup(taskId: string, group?: Partial<PromptGroup>): Promise<PostProcessTask>;
   removePromptGroup(taskId: string, index: number): Promise<PostProcessTask>;
   movePromptGroup(taskId: string, index: number, delta: -1 | 1): Promise<PostProcessTask>;
+  addPromptAutoSlot(taskId: string, order?: number): Promise<PostProcessTask>;
+  removePromptAutoSlot(taskId: string, slotIndex: number): Promise<PostProcessTask>;
+  updatePromptAutoSlot(taskId: string, slotIndex: number, patch: PromptAutoSlotPatch): Promise<PostProcessTask>;
+  addPromptAutoSegment(taskId: string, slotId: string, partial?: PromptAutoSegmentPatch): Promise<PostProcessTask>;
+  removePromptAutoSegment(taskId: string, segmentId: string): Promise<PostProcessTask>;
+  updatePromptAutoSegment(
+    taskId: string,
+    segmentId: string,
+    patch: PromptAutoSegmentPatch,
+  ): Promise<PostProcessTask>;
+  movePromptAutoSegment(
+    taskId: string,
+    slotId: string,
+    segmentId: string,
+    delta: -1 | 1,
+  ): Promise<PostProcessTask>;
   setTaskEnabled(taskId: string, enabled: boolean): Promise<PostProcessTask>;
   renameTask(taskId: string, name: string): Promise<PostProcessTask>;
   duplicateTask(taskId: string, options?: { afterTaskId?: string }): Promise<PostProcessTask>;
   moveTask(taskId: string, delta: -1 | 1): Promise<void>;
   moveTaskToIndex(taskId: string, toIndex: number): Promise<void>;
-  /** 只读：最近一次运行状态（全局，不经聊天快照） */
+  rerunCurrentFloor(): Promise<void>;
+  triggerTask(taskId: string, options?: TriggerTaskOptions): Promise<void>;
+  getEffectiveSettings(): ScriptSettings;
+  getActivePresetName(): string;
+  getLastPromptMessages(): ReturnType<typeof getLastPromptMessages>;
+  getLastPlaceholderVars(): ReturnType<typeof getLastPlaceholderVars>;
+  buildEffectivePromptGroups(taskId: string): PromptGroup[];
+  validateReplicaFamily(taskId: string): ReturnType<typeof validateReplicaFamily>;
+  listReplicaFamilyMembers(rootId: string): PostProcessTask[];
   getLastRunStatus(): ReturnType<typeof getLastRunStatus>;
-  /** 只读：可用 API 预设名称列表 */
   listApiPresets(): string[];
-  /** 只读：解析任务最终使用的 API 预设名 */
   resolveTaskApiPresetName(taskId: string): string;
-  /** 清除调度运行时状态（全局 scheduleState，非任务定义） */
   resetTaskScheduleState(taskId?: string): Promise<void>;
 }
 
@@ -130,6 +173,20 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => removePromptGroup(taskId, index, 'api')) as Promise<PostProcessTask>,
   movePromptGroup: (taskId, index, delta) =>
     apiCall(() => movePromptGroup(taskId, index, delta, 'api')) as Promise<PostProcessTask>,
+  addPromptAutoSlot: (taskId, order) =>
+    apiCall(() => addPromptAutoSlot(taskId, order, 'api')) as Promise<PostProcessTask>,
+  removePromptAutoSlot: (taskId, slotIndex) =>
+    apiCall(() => removePromptAutoSlot(taskId, slotIndex, 'api')) as Promise<PostProcessTask>,
+  updatePromptAutoSlot: (taskId, slotIndex, patch) =>
+    apiCall(() => updatePromptAutoSlot(taskId, slotIndex, patch, 'api')) as Promise<PostProcessTask>,
+  addPromptAutoSegment: (taskId, slotId, partial) =>
+    apiCall(() => addPromptAutoSegment(taskId, slotId, partial, 'api')) as Promise<PostProcessTask>,
+  removePromptAutoSegment: (taskId, segmentId) =>
+    apiCall(() => removePromptAutoSegment(taskId, segmentId, 'api')) as Promise<PostProcessTask>,
+  updatePromptAutoSegment: (taskId, segmentId, patch) =>
+    apiCall(() => updatePromptAutoSegment(taskId, segmentId, patch, 'api')) as Promise<PostProcessTask>,
+  movePromptAutoSegment: (taskId, slotId, segmentId, delta) =>
+    apiCall(() => movePromptAutoSegment(taskId, slotId, segmentId, delta, 'api')) as Promise<PostProcessTask>,
   setTaskEnabled: (taskId, enabled) =>
     apiCall(() => setTaskEnabled(taskId, enabled, 'api')) as Promise<PostProcessTask>,
   renameTask: (taskId, name) => apiCall(() => renameTask(taskId, name, 'api')) as Promise<PostProcessTask>,
@@ -138,6 +195,19 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
   moveTask: (taskId, delta) => apiCall(() => moveTask(taskId, delta, 'api')) as Promise<void>,
   moveTaskToIndex: (taskId, toIndex) =>
     apiCall(() => moveTaskToIndex(taskId, toIndex, 'api')) as Promise<void>,
+  rerunCurrentFloor: () => rerunCurrentFloor(),
+  triggerTask: (taskId, options) => triggerTask(taskId, options),
+  getEffectiveSettings: () => getEffectiveSettings(),
+  getActivePresetName: () => getActivePresetName(),
+  getLastPromptMessages: () => getLastPromptMessages(),
+  getLastPlaceholderVars: () => getLastPlaceholderVars(),
+  buildEffectivePromptGroups: (taskId: string) => {
+    const task = getTask(taskId);
+    if (!task) throw new Error(`任务不存在: ${taskId}`);
+    return buildEffectivePromptGroups(task);
+  },
+  validateReplicaFamily: (taskId: string) => validateReplicaFamily(taskId),
+  listReplicaFamilyMembers: (rootId: string) => listReplicaFamilyMembers(rootId),
   getLastRunStatus: () => getLastRunStatus(),
   listApiPresets: () => listApiPresetNames(),
   resolveTaskApiPresetName: (taskId: string) => resolveTaskApiPresetName(taskId),

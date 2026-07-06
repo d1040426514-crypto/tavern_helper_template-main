@@ -22,6 +22,7 @@ import { newTaskId, cloneTaskForInsert } from './task-clone';
 import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
+  getReplicaTasks,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
   validateReplicaFamilyEligibility,
@@ -31,6 +32,13 @@ import {
   movePromptGroupAt,
   removePromptGroupAt,
 } from './prompt-group-ops';
+import {
+  appendPromptAutoSegment,
+  appendPromptAutoSlot,
+  movePromptAutoSegmentInSlot,
+  removePromptAutoSegmentAt,
+  removePromptAutoSlotAt,
+} from './prompt-auto-segment-ops';
 import { mergeTaskSchedule, parseTaskSchedule, type TaskSchedulePatch } from './task-schedule-merge';
 import {
   mergeTaskExecutionOptions,
@@ -39,7 +47,11 @@ import {
 } from './task-extract-tags-merge';
 import type { PlotWorldbookConfig, TaskContextConfig } from './schema';
 import type { z } from 'zod';
-import { PromptGroupSchema } from './schema';
+import { PromptGroupSchema, PromptAutoSegmentSchema, PromptAutoSlotSchema } from './schema';
+
+type PromptGroup = z.infer<typeof PromptGroupSchema>;
+type PromptAutoSlot = z.infer<typeof PromptAutoSlotSchema>;
+type PromptAutoSegment = z.infer<typeof PromptAutoSegmentSchema>;
 
 export type TaskWriteSource = 'api' | 'ui';
 
@@ -57,8 +69,6 @@ export type PresetFieldsPatch = Partial<{
   tagVariableInjectTemplate: string;
   chatExtractTags: ScriptSettings['chatExtractTags'];
 }>;
-
-type PromptGroup = z.infer<typeof PromptGroupSchema>;
 
 function defaultTaskFields(): PostProcessTask {
   return PostProcessTaskSchema.parse({
@@ -522,6 +532,144 @@ export async function movePromptGroup(
   if (!task) throw new Error(`任务不存在: ${id}`);
   const groups = movePromptGroupAt(task.promptGroups, index, delta);
   return updateTask(id, { promptGroups: groups }, source);
+}
+
+export async function addPromptAutoSlot(
+  id: string,
+  order?: number,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const slots = appendPromptAutoSlot(task.promptAutoSlots ?? [], order);
+  return updateTask(id, { promptAutoSlots: slots }, source);
+}
+
+export async function removePromptAutoSlot(
+  id: string,
+  slotIndex: number,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const result = removePromptAutoSlotAt(task.promptAutoSlots ?? [], task.promptAutoSegments ?? [], slotIndex);
+  return updateTask(
+    id,
+    { promptAutoSlots: result.slots, promptAutoSegments: result.segments },
+    source,
+  );
+}
+
+export async function updatePromptAutoSlot(
+  id: string,
+  slotIndex: number,
+  patch: Partial<PromptAutoSlot>,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const slots = _.cloneDeep(task.promptAutoSlots ?? []);
+  if (slotIndex < 0 || slotIndex >= slots.length) {
+    throw new Error(`插入位索引无效: ${slotIndex}`);
+  }
+  const current = slots[slotIndex]!;
+  slots[slotIndex] = PromptAutoSlotSchema.parse({
+    ...current,
+    ...patch,
+    id: current.id,
+  });
+  return updateTask(id, { promptAutoSlots: slots }, source);
+}
+
+export async function addPromptAutoSegment(
+  id: string,
+  slotId: string,
+  partial?: Partial<PromptAutoSegment>,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  if (!(task.promptAutoSlots ?? []).some(s => s.id === slotId)) {
+    throw new Error(`插入位不存在: ${slotId}`);
+  }
+  const segments = appendPromptAutoSegment(task.promptAutoSegments ?? [], slotId, partial);
+  return updateTask(id, { promptAutoSegments: segments }, source);
+}
+
+export async function removePromptAutoSegment(
+  id: string,
+  segmentId: string,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const segments = task.promptAutoSegments ?? [];
+  const index = segments.findIndex(s => s.id === segmentId);
+  if (index < 0) throw new Error(`自动段不存在: ${segmentId}`);
+  const next = removePromptAutoSegmentAt(segments, index);
+  return updateTask(id, { promptAutoSegments: next }, source);
+}
+
+export async function updatePromptAutoSegment(
+  id: string,
+  segmentId: string,
+  patch: Partial<PromptAutoSegment>,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const segments = _.cloneDeep(task.promptAutoSegments ?? []);
+  const index = segments.findIndex(s => s.id === segmentId);
+  if (index < 0) throw new Error(`自动段不存在: ${segmentId}`);
+  const current = segments[index]!;
+  if (patch.slotId !== undefined && patch.slotId !== current.slotId) {
+    throw new Error('不允许修改自动段所属插入位');
+  }
+  segments[index] = PromptAutoSegmentSchema.parse({
+    ...current,
+    ...patch,
+    id: current.id,
+    slotId: current.slotId,
+  });
+  return updateTask(id, { promptAutoSegments: segments }, source);
+}
+
+export async function movePromptAutoSegment(
+  id: string,
+  slotId: string,
+  segmentId: string,
+  delta: -1 | 1,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  const segments = task.promptAutoSegments ?? [];
+  if (!segments.some(s => s.id === segmentId)) {
+    throw new Error(`自动段不存在: ${segmentId}`);
+  }
+  const next = movePromptAutoSegmentInSlot(segments, slotId, segmentId, delta);
+  return updateTask(id, { promptAutoSegments: next }, source);
+}
+
+export function getEffectiveSettings(): ScriptSettings {
+  return _.cloneDeep(resolveEffectiveSettings(loadSettings()));
+}
+
+export function getActivePresetName(): string {
+  return String(getEffectiveSettings().activePresetName ?? '').trim();
+}
+
+export function validateReplicaFamily(taskId: string) {
+  const task = getTask(taskId);
+  if (!task) throw new Error(`任务不存在: ${taskId}`);
+  return validateReplicaFamilyEligibility(task);
+}
+
+export function listReplicaFamilyMembers(rootId: string): PostProcessTask[] {
+  const root = getTask(rootId);
+  if (!root) throw new Error(`任务不存在: ${rootId}`);
+  const members = getReplicaTasks(rootId, listTasks());
+  return [root, ...members];
 }
 
 export async function setTaskEnabled(
