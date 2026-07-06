@@ -31,6 +31,11 @@ import { useTaskClipboard } from './composables/useTaskClipboard';
 import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
 import { movePromptGroupAt } from '../tasks/prompt-group-ops';
 import {
+  alignFallbackMaxConcurrencies,
+  DEFAULT_ROUTE_MAX_CONCURRENCY,
+  normalizeRouteMaxConcurrency,
+} from '../api/route-concurrency-limits';
+import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   scanDynamicAttrPlaceholders,
@@ -132,11 +137,13 @@ const availableFallbackPresetsForAdd = computed(() => {
 
 function ensureTaskApiConfig(task: PostProcessTask) {
   if (!task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
-  if (task.apiRouteMaxConcurrency == null || !Number.isFinite(task.apiRouteMaxConcurrency)) {
-    task.apiRouteMaxConcurrency = 5;
-  } else {
-    task.apiRouteMaxConcurrency = Math.max(0, Math.floor(task.apiRouteMaxConcurrency));
-  }
+  task.apiPrimaryMaxConcurrency = normalizeRouteMaxConcurrency(task.apiPrimaryMaxConcurrency);
+  if (!task.apiFallbackMaxConcurrencies) task.apiFallbackMaxConcurrencies = [];
+  task.apiFallbackMaxConcurrencies = alignFallbackMaxConcurrencies(
+    task.apiPresetFallbackNames,
+    task.apiFallbackMaxConcurrencies,
+    task.apiPrimaryMaxConcurrency ?? DEFAULT_ROUTE_MAX_CONCURRENCY,
+  );
 }
 
 function addTaskApiFallback() {
@@ -149,12 +156,15 @@ function addTaskApiFallback() {
     return;
   }
   task.apiPresetFallbackNames.push(next.name);
+  if (!task.apiFallbackMaxConcurrencies) task.apiFallbackMaxConcurrencies = [];
+  task.apiFallbackMaxConcurrencies.push(task.apiPrimaryMaxConcurrency ?? DEFAULT_ROUTE_MAX_CONCURRENCY);
 }
 
 function removeTaskApiFallback(index: number) {
   const task = selectedTask.value;
   if (!task?.apiPresetFallbackNames) return;
   task.apiPresetFallbackNames.splice(index, 1);
+  task.apiFallbackMaxConcurrencies?.splice(index, 1);
 }
 
 watch(
@@ -657,7 +667,8 @@ async function addTask() {
     minLength: 0,
     apiPresetName: '',
     apiPresetFallbackNames: [],
-    apiRouteMaxConcurrency: 5,
+    apiPrimaryMaxConcurrency: 5,
+    apiFallbackMaxConcurrencies: [],
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -1494,21 +1505,32 @@ function saveRunLogTaskTags(taskId: string): void {
                 </button>
                 <div v-show="apiConfigExpanded" class="acu-collapsible-subsection__body">
                 <p class="acu-api-config__intro">
-                  配置本任务的 LLM 路由与并发分流；同阶段并行（含副本族）时按单路由上限自动分担请求。
+                  配置本任务的 LLM 路由与并发分流；每个 API 预设可单独设置最大并发，同阶段并行时各路由按各自上限分担请求。
                 </p>
 
+                <AcuHelpPanel
+                  v-model:open="apiRouteConcurrencyHelpOpen"
+                  id="api-route-concurrency-help"
+                  label="路由最大并发说明"
+                >
+                  <p class="acu-notes acu-notes--sm acu-api-config__example-text">
+                    例：主要上限 5、备用 A 上限 2、备用 B 上限 10；本轮 17 次并发时先按各路线上限分配，余量排队后补入有空闲槽位的路由。填 0 表示该路由不限制。
+                  </p>
+                </AcuHelpPanel>
+
                 <div class="acu-api-config__block">
-                  <div class="acu-row">
-                    <label class="acu-field-label acu-label-with-help">
-                      单路由最大并发数
-                      <AcuHelpIconBtn
-                        v-model:open="apiRouteConcurrencyHelpOpen"
-                        panel-id="api-route-concurrency-help"
-                        label="单路由最大并发数说明"
-                      />
-                    </label>
+                  <label class="acu-field-label">主要 API 预设</label>
+                  <div class="acu-api-routing-row">
+                    <select
+                      v-model="selectedTask.apiPresetName"
+                      class="acu-select acu-api-config__preset-select"
+                    >
+                      <option value="">全局默认</option>
+                      <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                    </select>
+                    <span class="acu-api-routing-row__concurrency-label">最大并发</span>
                     <input
-                      v-model.number="selectedTask.apiRouteMaxConcurrency"
+                      v-model.number="selectedTask.apiPrimaryMaxConcurrency"
                       class="acu-input acu-api-config__concurrency-input"
                       type="number"
                       min="0"
@@ -1516,28 +1538,11 @@ function saveRunLogTaskTags(taskId: string): void {
                       title="0 表示不限制"
                     />
                     <span class="acu-api-config__suffix">次</span>
-                    <span class="acu-notes acu-notes--sm acu-api-config__hint-inline">（0 = 不限制）</span>
-                  </div>
-                  <AcuHelpPanel
-                    v-model:open="apiRouteConcurrencyHelpOpen"
-                    id="api-route-concurrency-help"
-                    label="单路由最大并发数说明"
-                  >
-                    <p class="acu-notes acu-notes--sm acu-api-config__example-text">
-                      例：主要 + 2 个备用、上限 5、本轮 17 次并发 → 先各跑 5/5/5，余 2 次排队，随完成自动补入有空闲槽位的路由。
-                    </p>
-                  </AcuHelpPanel>
-                </div>
-
-                <div class="acu-api-config__divider" aria-hidden="true" />
-
-                <div class="acu-api-config__block">
-                  <div class="acu-row">
-                    <label class="acu-field-label">主要 API 预设</label>
-                    <select v-model="selectedTask.apiPresetName" class="acu-select acu-api-config__select">
-                      <option value="">全局默认</option>
-                      <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                    </select>
+                    <AcuHelpIconBtn
+                      v-model:open="apiRouteConcurrencyHelpOpen"
+                      panel-id="api-route-concurrency-help"
+                      label="路由最大并发说明"
+                    />
                   </div>
 
                   <div class="acu-api-routing-fallbacks">
@@ -1545,11 +1550,24 @@ function saveRunLogTaskTags(taskId: string): void {
                     <div
                       v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
                       :key="`fb-${fbIndex}-${fallbackName}`"
-                      class="acu-row acu-api-routing-fallback-row"
+                      class="acu-api-routing-row acu-api-routing-fallback-row"
                     >
-                      <select v-model="selectedTask.apiPresetFallbackNames![fbIndex]" class="acu-select acu-api-config__select">
+                      <select
+                        v-model="selectedTask.apiPresetFallbackNames![fbIndex]"
+                        class="acu-select acu-api-config__preset-select"
+                      >
                         <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
                       </select>
+                      <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                      <input
+                        v-model.number="selectedTask.apiFallbackMaxConcurrencies![fbIndex]"
+                        class="acu-input acu-api-config__concurrency-input"
+                        type="number"
+                        min="0"
+                        step="1"
+                        title="0 表示不限制"
+                      />
+                      <span class="acu-api-config__suffix">次</span>
                       <button
                         class="acu-btn acu-btn--sm"
                         type="button"

@@ -418,6 +418,32 @@
   gap: 8px;
 }
 
+.acu-api-routing-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  width: 100%;
+}
+
+.acu-api-routing-row .acu-api-config__preset-select {
+  flex: 0 1 auto;
+  width: 132px;
+  max-width: 40%;
+  min-width: 96px;
+}
+
+.acu-api-routing-row__concurrency-label {
+  flex-shrink: 0;
+  color: var(--acu-text-2);
+  font-size: var(--acu-font-size-caption);
+  white-space: nowrap;
+}
+
+.acu-api-routing-fallback-row {
+  margin-bottom: 4px;
+}
+
 .acu-api-config__divider {
   height: 1px;
   margin: 10px 0;

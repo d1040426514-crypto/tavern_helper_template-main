@@ -1,4 +1,5 @@
 import { findApiPreset, normalizeApiPresetFallbackNames, resolveTaskApiPreset } from '../api/resolve';
+import { alignFallbackMaxConcurrencies, normalizeRouteMaxConcurrency } from '../api/route-concurrency-limits';
 import { loadSettings, saveSettings } from '../settings';
 import {
   buildChatSnapshotFromSettings,
@@ -82,7 +83,8 @@ function defaultTaskFields(): PostProcessTask {
     minLength: 0,
     apiPresetName: '',
     apiPresetFallbackNames: [],
-    apiRouteMaxConcurrency: 5,
+    apiPrimaryMaxConcurrency: 5,
+    apiFallbackMaxConcurrencies: [],
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
     promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
@@ -449,7 +451,8 @@ export async function updateTaskExecutionOptions(
 export type TaskApiPresetRoutingPatch = {
   primary?: string;
   fallbacks?: string[];
-  routeMaxConcurrency?: number;
+  primaryMaxConcurrency?: number;
+  fallbackMaxConcurrencies?: number[];
 };
 
 export async function updateTaskApiPreset(
@@ -484,17 +487,25 @@ export async function updateTaskApiPresetRouting(
     }
   }
 
-  const nextMaxConcurrency =
-    patch.routeMaxConcurrency !== undefined
-      ? Math.max(0, Math.floor(patch.routeMaxConcurrency))
-      : (task.apiRouteMaxConcurrency ?? 5);
+  const nextPrimaryMaxConcurrency =
+    patch.primaryMaxConcurrency !== undefined
+      ? normalizeRouteMaxConcurrency(patch.primaryMaxConcurrency)
+      : normalizeRouteMaxConcurrency(task.apiPrimaryMaxConcurrency);
+  const nextFallbackMaxConcurrencies = alignFallbackMaxConcurrencies(
+    nextFallbacks,
+    patch.fallbackMaxConcurrencies !== undefined
+      ? patch.fallbackMaxConcurrencies
+      : task.apiFallbackMaxConcurrencies,
+    nextPrimaryMaxConcurrency,
+  );
 
   return updateTask(
     id,
     {
       apiPresetName: nextPrimary,
       apiPresetFallbackNames: nextFallbacks,
-      apiRouteMaxConcurrency: nextMaxConcurrency,
+      apiPrimaryMaxConcurrency: nextPrimaryMaxConcurrency,
+      apiFallbackMaxConcurrencies: nextFallbackMaxConcurrencies,
     },
     source,
   );

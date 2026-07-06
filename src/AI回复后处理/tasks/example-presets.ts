@@ -46,7 +46,8 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         minLength: 0,
         apiPresetName: '',
         apiPresetFallbackNames: [],
-        apiRouteMaxConcurrency: 5,
+        apiPrimaryMaxConcurrency: 5,
+        apiFallbackMaxConcurrencies: [],
         promptGroups: [
           {
             name: '',
@@ -77,7 +78,8 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         minLength: 0,
         apiPresetName: '',
         apiPresetFallbackNames: [],
-        apiRouteMaxConcurrency: 5,
+        apiPrimaryMaxConcurrency: 5,
+        apiFallbackMaxConcurrencies: [],
         promptGroups: [
           {
             name: '',

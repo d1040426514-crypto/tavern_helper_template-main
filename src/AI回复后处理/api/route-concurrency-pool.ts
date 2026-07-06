@@ -17,7 +17,7 @@ export class TaskApiRouteConcurrencyPool {
 
   constructor(
     private readonly routes: readonly string[],
-    private readonly maxPerRoute: number,
+    private readonly maxPerRouteByRoute: ReadonlyMap<string, number>,
   ) {
     for (const route of routes) {
       this.activeCounts.set(route, 0);
@@ -28,22 +28,27 @@ export class TaskApiRouteConcurrencyPool {
     return this.routes;
   }
 
-  getMaxPerRoute(): number {
-    return this.maxPerRoute;
+  getMaxPerRoute(route: string): number {
+    return this.maxPerRouteByRoute.get(route) ?? 0;
   }
 
   getActiveCount(route: string): number {
     return this.activeCounts.get(route) ?? 0;
   }
 
+  private getCap(route: string): number {
+    const configured = this.maxPerRouteByRoute.get(route) ?? 0;
+    return configured <= 0 ? Number.POSITIVE_INFINITY : configured;
+  }
+
   private findAvailableRoute(preferredRoute?: string): string | null {
     if (preferredRoute && this.routes.includes(preferredRoute)) {
       const preferredActive = this.activeCounts.get(preferredRoute) ?? 0;
-      if (preferredActive < this.maxPerRoute) return preferredRoute;
+      if (preferredActive < this.getCap(preferredRoute)) return preferredRoute;
     }
     for (const route of this.routes) {
       const active = this.activeCounts.get(route) ?? 0;
-      if (active < this.maxPerRoute) return route;
+      if (active < this.getCap(route)) return route;
     }
     return null;
   }
@@ -122,17 +127,22 @@ export class RouteConcurrencyPoolRegistry {
   getOrCreate(
     key: string,
     routes: readonly string[],
-    maxPerRoute: number,
+    maxPerRouteByRoute: ReadonlyMap<string, number>,
   ): TaskApiRouteConcurrencyPool | null {
-    if (maxPerRoute <= 0 || routes.length === 0) return null;
+    if (routes.length === 0) return null;
     const existing = this.pools.get(key);
     if (existing) return existing;
-    const pool = new TaskApiRouteConcurrencyPool(routes, maxPerRoute);
+    const pool = new TaskApiRouteConcurrencyPool(routes, maxPerRouteByRoute);
     this.pools.set(key, pool);
     return pool;
   }
 }
 
-export function buildRoutePoolKey(taskScopeId: string, presetChain: readonly string[]): string {
-  return `${taskScopeId}::${presetChain.join('>')}`;
+export function buildRoutePoolKey(
+  taskScopeId: string,
+  presetChain: readonly string[],
+  limits: ReadonlyMap<string, number>,
+): string {
+  const limitPart = presetChain.map(route => `${route}:${limits.get(route) ?? 0}`).join('>');
+  return `${taskScopeId}::${limitPart}`;
 }

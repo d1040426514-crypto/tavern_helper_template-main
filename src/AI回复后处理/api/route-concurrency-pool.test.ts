@@ -2,49 +2,56 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TaskApiRouteConcurrencyPool } from './route-concurrency-pool';
 
-test('distributes 17 concurrent calls across 3 routes with max 5 per route', async () => {
-  const pool = new TaskApiRouteConcurrencyPool(['primary', 'fb1', 'fb2'], 5);
+function limitsOf(entries: Array<[string, number]>): ReadonlyMap<string, number> {
+  return new Map(entries);
+}
+
+test('distributes concurrent calls with heterogeneous per-route caps', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(
+    ['primary', 'fb1', 'fb2'],
+    limitsOf([
+      ['primary', 5],
+      ['fb1', 2],
+      ['fb2', 10],
+    ]),
+  );
   const peakByRoute = new Map<string, number>();
-  const completedByRoute = new Map<string, number>();
 
-  const track = (route: string, delta: number) => {
-    const peak = peakByRoute.get(route) ?? 0;
-    const active = pool.getActiveCount(route);
-    peakByRoute.set(route, Math.max(peak, active));
-    if (delta > 0) {
-      completedByRoute.set(route, (completedByRoute.get(route) ?? 0) + 1);
-    }
-  };
-
-  let completed = 0;
-  const jobs = Array.from({ length: 17 }, (_, i) =>
+  const jobs = Array.from({ length: 12 }, () =>
     pool.run(async route => {
-      track(route, 0);
-      assert.ok(pool.getActiveCount(route) <= 5, `route ${route} exceeded cap at job ${i}`);
+      const active = pool.getActiveCount(route);
+      peakByRoute.set(route, Math.max(peakByRoute.get(route) ?? 0, active));
+      assert.ok(active <= (route === 'fb1' ? 2 : route === 'fb2' ? 10 : 5));
       await new Promise(r => setTimeout(r, 5));
-      track(route, 1);
-      completed++;
       return route;
     }),
   );
 
-  const results = await Promise.all(jobs);
-  assert.equal(completed, 17);
-  assert.equal(results.length, 17);
-
-  for (const route of ['primary', 'fb1', 'fb2']) {
-    assert.ok((peakByRoute.get(route) ?? 0) <= 5, `peak on ${route} should be <= 5`);
-  }
-  assert.equal(
-    (completedByRoute.get('primary') ?? 0) +
-      (completedByRoute.get('fb1') ?? 0) +
-      (completedByRoute.get('fb2') ?? 0),
-    17,
-  );
+  await Promise.all(jobs);
+  assert.ok((peakByRoute.get('fb1') ?? 0) <= 2);
+  assert.ok((peakByRoute.get('primary') ?? 0) <= 5);
 });
 
-test('single route queues beyond max concurrency', async () => {
-  const pool = new TaskApiRouteConcurrencyPool(['only'], 5);
+test('unlimited route accepts unbounded concurrency', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(['only'], limitsOf([['only', 0]]));
+  let maxInFlight = 0;
+  let inFlight = 0;
+
+  const jobs = Array.from({ length: 8 }, () =>
+    pool.run(async () => {
+      inFlight++;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await new Promise(r => setTimeout(r, 10));
+      inFlight--;
+    }),
+  );
+
+  await Promise.all(jobs);
+  assert.equal(maxInFlight, 8);
+});
+
+test('single capped route queues beyond max concurrency', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(['only'], limitsOf([['only', 5]]));
   let inFlight = 0;
   let maxInFlight = 0;
 
@@ -62,7 +69,13 @@ test('single route queues beyond max concurrency', async () => {
 });
 
 test('release wakes queued acquirers preferring freed route', async () => {
-  const pool = new TaskApiRouteConcurrencyPool(['a', 'b'], 1);
+  const pool = new TaskApiRouteConcurrencyPool(
+    ['a', 'b'],
+    limitsOf([
+      ['a', 1],
+      ['b', 1],
+    ]),
+  );
 
   const holdA = await pool.acquire();
   const holdB = await pool.acquire();

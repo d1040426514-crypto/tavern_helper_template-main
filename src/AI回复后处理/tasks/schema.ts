@@ -107,7 +107,21 @@ export const TaskContextConfigSchema = z.object({
   contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
 });
 
-export const PostProcessTaskSchema = z.object({
+function migratePostProcessTaskRaw(raw: unknown): unknown {
+  if (!raw || typeof raw !== 'object') return raw;
+  const task = { ...(raw as Record<string, unknown>) };
+  const legacy = task.apiRouteMaxConcurrency;
+  if (task.apiPrimaryMaxConcurrency === undefined && legacy !== undefined) {
+    const legacyNum = Math.max(0, Math.floor(Number(legacy) || 5));
+    task.apiPrimaryMaxConcurrency = legacyNum;
+    const fbNames = Array.isArray(task.apiPresetFallbackNames) ? task.apiPresetFallbackNames : [];
+    task.apiFallbackMaxConcurrencies = fbNames.map(() => legacyNum);
+  }
+  delete task.apiRouteMaxConcurrency;
+  return task;
+}
+
+const PostProcessTaskShape = z.object({
   id: z.string(),
   name: z.string().default('未命名任务'),
   enabled: z.boolean().default(true),
@@ -117,41 +131,35 @@ export const PostProcessTaskSchema = z.object({
   promptAutoSlots: z.array(PromptAutoSlotSchema).default([]),
   /** 任务级自动提示词段（风味块） */
   promptAutoSegments: z.array(PromptAutoSegmentSchema).default([]),
-  extractInjectTags: z.array(z.string()).default(['result']), // 裸标签名或 标签@属性，如 item@id
+  extractInjectTags: z.array(z.string()).default(['result']),
   mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
   maxRetries: z.number().int().min(1).default(3),
   minLength: z.number().int().min(0).default(0),
   skipIfTagsFound: z.array(z.string()).optional(),
   apiPresetName: z.string().default(''),
-  /** 备用 API 预设名（有序）；API 异常时依次尝试 */
   apiPresetFallbackNames: z.array(z.string()).default([]),
-  /** 单条 LLM 路由同时进行的请求上限；超出时由其它路由分担。0 = 不限制 */
-  apiRouteMaxConcurrency: z.number().int().min(0).default(5),
+  apiPrimaryMaxConcurrency: z.number().int().min(0).default(5),
+  apiFallbackMaxConcurrencies: z.array(z.number().int().min(0)).default([]),
   schedule: TaskScheduleSchema.optional(),
   plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
   contextMode: z.enum(['inherit', 'custom']).default('inherit'),
   contextConfig: TaskContextConfigSchema.optional(),
-  /** 严格 JSON 变量更新：将 AI 纯 JSON 归一化为 UpdateVariable 包裹块 */
   structuredOutputMode: z.enum(['off', 'mvu_json_patch', 'addon_json_patch']).default('off'),
-  /** 任务级保存的结构化变量输出规则（切换模式时恢复） */
   structuredOutputRules: z
     .object({
       mvu: z.string().optional(),
       addon: z.string().optional(),
     })
     .optional(),
-  /** 同步为副本族：原本模板，运行时按 relay 自动同步副本 */
   syncAsReplicaFamily: z.boolean().optional(),
-  /** 副本指向原本任务 id */
   replicaFamilyRootId: z.string().optional(),
-  /** 副本绑定的属性值 */
   replicaFamilyAttrValue: z.string().optional(),
-  /** 原本记录的动态 spec，如 item@id */
   replicaFamilySpec: z.string().optional(),
-  /** 副本族基名（不含属性值后缀） */
   replicaFamilyBaseName: z.string().optional(),
 });
+
+export const PostProcessTaskSchema = z.preprocess(migratePostProcessTaskRaw, PostProcessTaskShape);
 
 /** @deprecated 旧版规则，加载时自动迁移为 ContextTagRule */
 export const ContextExcludeRuleSchema = z.object({

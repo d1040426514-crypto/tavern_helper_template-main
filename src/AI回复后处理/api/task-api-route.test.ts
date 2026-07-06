@@ -4,6 +4,10 @@ import { TaskApiRouteConcurrencyPool } from './route-concurrency-pool';
 import { callTaskApiWithRouteFallback } from './task-api-route';
 import type { ScriptSettings } from '../tasks/schema';
 
+function poolLimits(entries: Array<[string, number]>) {
+  return new Map(entries);
+}
+
 function baseSettings(): ScriptSettings {
   return {
     enabled: true,
@@ -95,7 +99,13 @@ test('callTaskApiWithRouteFallback returns primary when it succeeds', async () =
 });
 
 test('callTaskApiWithRouteFallback with pool uses fallback when primary slots are full', async () => {
-  const pool = new TaskApiRouteConcurrencyPool(['primary', 'fallback'], 1);
+  const pool = new TaskApiRouteConcurrencyPool(
+    ['primary', 'fallback'],
+    poolLimits([
+      ['primary', 1],
+      ['fallback', 1],
+    ]),
+  );
   const heldPrimary = await pool.acquire();
   assert.equal(heldPrimary, 'primary');
 
@@ -121,7 +131,13 @@ test('callTaskApiWithRouteFallback with pool uses fallback when primary slots ar
 });
 
 test('callTaskApiWithRouteFallback preferPrimaryOnly stays on primary with pool', async () => {
-  const pool = new TaskApiRouteConcurrencyPool(['primary', 'fallback'], 1);
+  const pool = new TaskApiRouteConcurrencyPool(
+    ['primary', 'fallback'],
+    poolLimits([
+      ['primary', 1],
+      ['fallback', 1],
+    ]),
+  );
   const calls: string[] = [];
   const result = await callTaskApiWithRouteFallback(
     [{ role: 'user', content: 'hi', name: '' }],

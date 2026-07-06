@@ -130,7 +130,7 @@ export async function callTaskApiWithRouteFallback(
   const callApi = options?.callApi ?? callWithResolvedApi;
   const pool = options?.routePool;
 
-  if (pool && pool.getMaxPerRoute() > 0) {
+  if (pool) {
     return callWithPoolAndFailover(
       messages,
       settings,

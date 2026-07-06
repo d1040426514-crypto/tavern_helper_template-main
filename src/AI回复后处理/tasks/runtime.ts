@@ -1,5 +1,9 @@
 import { resolveTaskApiPresetChain } from '../api/resolve';
 import { buildRoutePoolKey, RouteConcurrencyPoolRegistry } from '../api/route-concurrency-pool';
+import {
+  buildRouteConcurrencyLimits,
+  hasAnyRouteConcurrencyCap,
+} from '../api/route-concurrency-limits';
 import { callTaskApiWithRouteFallback } from '../api/task-api-route';
 import {
   buildSharedContext,
@@ -182,13 +186,12 @@ async function runSingleTask(
   }
 
   const presetChain = resolveTaskApiPresetChain(ctx.settings, task.id, task);
-  const maxRouteConcurrency = task.apiRouteMaxConcurrency ?? 5;
+  const routeLimits = buildRouteConcurrencyLimits(ctx.settings, task.id, task);
   const poolScopeId = task.replicaFamilyRootId ?? task.id;
-  const poolKey = buildRoutePoolKey(poolScopeId, presetChain);
-  const routePool =
-    maxRouteConcurrency > 0
-      ? options?.routePoolRegistry?.getOrCreate(poolKey, presetChain, maxRouteConcurrency)
-      : null;
+  const poolKey = buildRoutePoolKey(poolScopeId, presetChain, routeLimits);
+  const routePool = hasAnyRouteConcurrencyCap(routeLimits)
+    ? options?.routePoolRegistry?.getOrCreate(poolKey, presetChain, routeLimits)
+    : null;
   const structuredMode = getStructuredOutputMode(task);
   const apiMessages = structuredMode ? appendStrictJsonPromptToMessages(messages, structuredMode) : messages;
   const maxRetries = task.maxRetries ?? 3;
