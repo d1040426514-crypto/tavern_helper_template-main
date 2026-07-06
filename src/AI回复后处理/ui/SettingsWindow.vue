@@ -211,6 +211,7 @@ type FlushPendingWritesOptions = {
 
 type RefreshTaskViewOptions = FlushPendingWritesOptions & {
   skipTaskReload?: boolean;
+  skipPresetSync?: boolean;
 };
 
 async function flushPendingWrites(options?: FlushPendingWritesOptions): Promise<void> {
@@ -243,7 +244,9 @@ async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> 
   } else if (!scope) {
     viewTasks.value = [];
   }
-  syncPresetFieldsFromEffective();
+  if (!options?.skipPresetSync) {
+    syncPresetFieldsFromEffective();
+  }
 }
 
 function syncPresetFieldsFromEffective() {
@@ -676,13 +679,28 @@ function onReplicaMemberScheduleChange(
   if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
 }
 
-async function afterTaskWorkflowPresetMutation(): Promise<void> {
+function syncWorkflowPresetsToViews(updated: PostProcessTask): void {
+  const presets = _.cloneDeep(updated.taskWorkflowPresets ?? []);
   if (chatScopeActive.value) {
-    await refreshTaskView({ skipTasksFlush: true });
+    const idx = viewTasks.value.findIndex(t => t.id === updated.id);
+    if (idx >= 0) {
+      viewTasks.value[idx] = { ...viewTasks.value[idx]!, taskWorkflowPresets: presets };
+    }
     return;
   }
-  store.saveActivePreset();
-  store.reload();
+  const idx = settings.value.tasks.findIndex(t => t.id === updated.id);
+  if (idx >= 0) {
+    settings.value.tasks[idx] = { ...settings.value.tasks[idx]!, taskWorkflowPresets: presets };
+  }
+}
+
+async function afterTaskWorkflowPresetMutation(updated: PostProcessTask): Promise<void> {
+  syncWorkflowPresetsToViews(updated);
+  if (chatScopeActive.value) {
+    await refreshTaskView({ skipTasksFlush: true, skipPresetSync: true });
+  } else {
+    store.saveActivePreset();
+  }
 }
 
 function onTaskWorkflowPresetSave(name: string): void {
@@ -690,7 +708,7 @@ function onTaskWorkflowPresetSave(name: string): void {
   if (!task) return;
   if (!chatScopeActive.value) store.persist();
   void saveTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(() => afterTaskWorkflowPresetMutation())
+    .then(updated => afterTaskWorkflowPresetMutation(updated))
     .then(() => acuToast('success', `已保存工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -700,7 +718,7 @@ function onTaskWorkflowPresetApply(name: string): void {
   if (!task) return;
   if (!chatScopeActive.value) store.persist();
   void applyTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(() => afterTaskWorkflowPresetMutation())
+    .then(updated => afterTaskWorkflowPresetMutation(updated))
     .then(() => acuToast('success', `已应用工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -710,7 +728,7 @@ function onTaskWorkflowPresetDelete(name: string): void {
   if (!task) return;
   if (!chatScopeActive.value) store.persist();
   void deleteTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(() => afterTaskWorkflowPresetMutation())
+    .then(updated => afterTaskWorkflowPresetMutation(updated))
     .then(() => acuToast('success', `已删除工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -721,7 +739,7 @@ function onTaskWorkflowPresetImport(entries: TaskWorkflowPresetEntry[]): void {
   const next = mergeTaskWorkflowPresetsOnTask(task, entries);
   if (!chatScopeActive.value) store.persist();
   void updateTaskInStore(task.id, { taskWorkflowPresets: next.taskWorkflowPresets }, 'ui')
-    .then(() => afterTaskWorkflowPresetMutation())
+    .then(updated => afterTaskWorkflowPresetMutation(updated))
     .then(() => acuToast('success', `已导入 ${entries.length} 个工作流预设`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -878,7 +896,7 @@ onMounted(() => {
   void refreshTaskView();
   offTasksChanged = eventOn(ACU_PP_TASKS_CHANGED, (payload?: TasksChangedPayload) => {
     if (payload?.source === 'ui') {
-      void refreshTaskView({ skipTaskReload: true });
+      void refreshTaskView({ skipTaskReload: true, skipTasksFlush: true, skipPresetSync: true });
       return;
     }
     if (persistPresetFieldsTimer) {
