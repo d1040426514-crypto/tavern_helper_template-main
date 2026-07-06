@@ -160,6 +160,14 @@ check('mergeRelayTagMap 不同 item@id 不聚合', () => {
   assert.equal(map.get('item@id=1')?.[0], '<item id="1">A</item>');
 });
 
+check('mergeRelayTagMap 同 key 覆盖', () => {
+  const map: RelayTagMap = new Map();
+  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
+  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
+  assert.equal(map.get('item@id=1')?.length, 1);
+  assert.equal(map.get('item@id=1')?.[0], '<item id="1">S2</item>');
+});
+
 check('expandWritableKeys {{item}} 含复合 key', () => {
   const keys = expandWritableKeysFromPlaceholder('item', ['item', 'item@id=1', 'item@id=2', 'result']);
   assert.deepEqual(keys, ['item', 'item@id=1', 'item@id=2']);

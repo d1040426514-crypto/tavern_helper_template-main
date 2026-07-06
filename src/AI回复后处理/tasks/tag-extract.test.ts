@@ -3,6 +3,8 @@ import { extractInjectTagsFromResponse } from './tag-extract';
 import {
   extractPlotTagsFromResponse,
   formatTagValueForInject,
+  mergeRelayTagMap,
+  refreshNestedExtractTagsInContent,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
@@ -134,6 +136,59 @@ test('all-tags fallback empty when neither relay nor history', () => {
     historyFallback: 'all-tags',
   });
   assert.equal(out, 'xy');
+});
+
+test('mergeRelayTagMap overwrites same key', () => {
+  const map: RelayTagMap = new Map();
+  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
+  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
+  assert.equal(map.get('item@id=1')?.length, 1);
+  assert.equal(map.get('item@id=1')?.[0], '<item id="1">S2</item>');
+});
+
+test('replica composite placeholder prefers floor over relay', () => {
+  const relay: RelayTagMap = new Map([['item@id=1', ['<item id="1">enum</item>']]]);
+  const history: RelayTagMap = new Map([['item@id=1', ['<item id="1">floor</item>']]]);
+  const out = replacePlotTagPlaceholdersWithHistory('x {{item@id=1}} y', relay, history, new Set(['item@id']), {
+    historyFallback: 'all-tags',
+    replicaAttrSpec: { tagName: 'item', attrName: 'id' },
+  });
+  assert.equal(out, 'x <item id="1">floor</item> y');
+});
+
+test('replica composite placeholder empty floor yields empty attr block', () => {
+  const relay: RelayTagMap = new Map([['item@id=2', ['<item id="2">enum</item>']]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{item@id=2}}', relay, new Map(), new Set(['item@id']), {
+    historyFallback: 'all-tags',
+    replicaAttrSpec: { tagName: 'item', attrName: 'id' },
+  });
+  assert.equal(out, '<item id="2"></item>');
+});
+
+test('outer tag refreshes nested inner from relay', () => {
+  const relay: RelayTagMap = new Map([
+    ['story', ['<npc>old</npc>']],
+    ['npc', ['new']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{story}}', relay, new Map(), new Set(['story', 'npc']), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, '<story><npc>new</npc></story>');
+});
+
+test('refreshNestedExtractTagsInContent ignores unconfigured tags', () => {
+  const relay: RelayTagMap = new Map([
+    ['story', ['<other>old</other>']],
+    ['other', ['new']],
+  ]);
+  const out = refreshNestedExtractTagsInContent(
+    '<story><other>old</other></story>',
+    relay,
+    new Map(),
+    new Set(['story']),
+    { historyFallback: 'all-tags' },
+  );
+  assert.equal(out, '<story><other>old</other></story>');
 });
 
 if (process.exitCode) {

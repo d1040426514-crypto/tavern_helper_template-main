@@ -172,6 +172,15 @@ export function getReplicaDisplaySuffix(task: PostProcessTask): string | null {
   return null;
 }
 
+export function getReplicaAttrSpecForTask(
+  task: PostProcessTask,
+): { tagName: string; attrName: string } | undefined {
+  if (!task.replicaFamilyRootId || !task.replicaFamilySpec) return undefined;
+  const parsed = parseExtractTagSpec(task.replicaFamilySpec);
+  if (!parsed?.attrName) return undefined;
+  return { tagName: parsed.tagName, attrName: parsed.attrName };
+}
+
 export function collectAttrValuesForReplicaRoot(
   root: PostProcessTask,
   relayMap: RelayTagMap,

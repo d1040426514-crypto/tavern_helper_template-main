@@ -240,6 +240,24 @@ export function compositePlaceholderToKey(name: string): string | null {
   return buildCompositeKey(p.tagName, p.attrName, p.attrValue);
 }
 
+/** 属性标签在楼层变量无数据时，输出带属性空内文的完整标签块 */
+export function formatEmptyAttrTagBlock(tagName: string, attrName: string, attrValue: string): string {
+  const safeValue = String(attrValue ?? '').replace(/"/g, '&quot;');
+  return `<${tagName} ${attrName}="${safeValue}"></${tagName}>`;
+}
+
+export function isCompositeUnderAttrSpec(
+  placeholderName: string,
+  spec: { tagName: string; attrName: string },
+): boolean {
+  const parsed = parseCompositePlaceholder(placeholderName);
+  if (!parsed) return false;
+  return (
+    parsed.tagName.toLowerCase() === spec.tagName.toLowerCase() &&
+    parsed.attrName.toLowerCase() === spec.attrName.toLowerCase()
+  );
+}
+
 export const EXTRACT_INJECT_TAGS_HELP = {
   intro: '逗号分隔多个标签名。从本任务 AI 输出中摘取，写入同轮 relay 与楼层 post_process_tags。',
   modes: [
@@ -297,7 +315,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         title: '4. 运行时同步',
-        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表，按数量生成副本「基名 属性值」（如「副本族处理 1」「副本族处理 2」），各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式后并行调用 API。',
+        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表决定副本数量；各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式。内容仅从当前楼 post_process_tags 读取（不读枚举 relay）；楼层无对应路径时输出空内文属性标签块。',
       },
     ],
     notes: [
@@ -309,5 +327,5 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       'S1「枚举 item」（提取写入标签 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
   },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族在进入该阶段前同步读取上一阶段 relay 中的 标签@属性=* 列表。重跑后处理任务读上一楼。供「消息楼层标签变量注入」与「聊天注入设置」中显式占位符使用。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族仅借 relay 决定副本数量，占位符内容读楼层变量。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑后处理任务读上一楼。',
 } as const;

@@ -3,12 +3,15 @@ import {
   buildExtractSpecKey,
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
+  formatEmptyAttrTagBlock,
+  isCompositeUnderAttrSpec,
   parseCompositeKey,
   parseCompositePlaceholder,
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
   sortAttrValues,
   type ExtractTagSpec,
+  findAllTagInstances,
 } from './tag-extract';
 
 export type RelayTagMap = Map<string, string[]>;
@@ -236,7 +239,7 @@ export function resolvePlaceholderBlocks(tagMap: RelayTagMap, placeholderName: s
   return blocks;
 }
 
-export function resolvePlaceholderInjectText(tagMap: RelayTagMap, placeholderName: string): string {
+export function resolvePlaceholderInjectTextFromMap(tagMap: RelayTagMap, placeholderName: string): string {
   const dynOut = resolveDynamicAttrInjectText(tagMap, placeholderName);
   if (dynOut) return dynOut;
   if (parseDynamicAttrPlaceholder(placeholderName)) return '';
@@ -256,6 +259,77 @@ export function resolvePlaceholderInjectText(tagMap: RelayTagMap, placeholderNam
     if (formatted) parts.push(formatted);
   }
   return parts.join('\n\n');
+}
+
+/** @deprecated 单 map 解析，不含嵌套刷新；请优先使用 resolvePlaceholderForInject */
+export function resolvePlaceholderInjectText(tagMap: RelayTagMap, placeholderName: string): string {
+  return resolvePlaceholderInjectTextFromMap(tagMap, placeholderName);
+}
+
+export type PlotPlaceholderResolveOptions = {
+  restrictToInjectOnly?: boolean;
+  historyFallback?: 'inject-only' | 'all-tags';
+  replicaAttrSpec?: { tagName: string; attrName: string };
+};
+
+function applyNestedRefresh(
+  text: string,
+  relayTagMap: RelayTagMap,
+  messageVarHistoryMap: RelayTagMap,
+  injectOnlyTags: Set<string>,
+  historyFallback: 'inject-only' | 'all-tags',
+  skipKeys?: Set<string>,
+): string {
+  if (!text) return text;
+  return refreshNestedExtractTagsInContent(text, relayTagMap, messageVarHistoryMap, injectOnlyTags, {
+    historyFallback,
+    skipKeys,
+  });
+}
+
+export function resolvePlaceholderForInject(
+  placeholderName: string,
+  relayTagMap: RelayTagMap,
+  messageVarHistoryMap: RelayTagMap,
+  injectOnlyTags: Set<string>,
+  options?: PlotPlaceholderResolveOptions,
+): string {
+  const historyFallback = options?.historyFallback ?? 'inject-only';
+  const replicaSpec = options?.replicaAttrSpec;
+
+  if (replicaSpec && isCompositeUnderAttrSpec(placeholderName, replicaSpec)) {
+    const parsed = parseCompositePlaceholder(placeholderName);
+    const compositeKey = compositePlaceholderToKey(placeholderName);
+    const skipKeys = compositeKey ? new Set([compositeKey]) : undefined;
+    const histOut = resolvePlaceholderInjectTextFromMap(messageVarHistoryMap, placeholderName);
+    if (histOut) {
+      return applyNestedRefresh(
+        histOut,
+        relayTagMap,
+        messageVarHistoryMap,
+        injectOnlyTags,
+        historyFallback,
+        skipKeys,
+      );
+    }
+    if (parsed) {
+      return formatEmptyAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue);
+    }
+    return '';
+  }
+
+  const relayOut = resolvePlaceholderInjectTextFromMap(relayTagMap, placeholderName);
+  if (relayOut) {
+    return applyNestedRefresh(relayOut, relayTagMap, messageVarHistoryMap, injectOnlyTags, historyFallback);
+  }
+
+  if (shouldUseHistoryFallback(placeholderName, injectOnlyTags, historyFallback)) {
+    const histOut = resolvePlaceholderInjectTextFromMap(messageVarHistoryMap, placeholderName);
+    if (histOut) {
+      return applyNestedRefresh(histOut, relayTagMap, messageVarHistoryMap, injectOnlyTags, historyFallback);
+    }
+  }
+  return '';
 }
 
 export function isPlaceholderInjectAllowed(placeholderName: string, injectOnlyTags: Set<string>): boolean {
@@ -312,9 +386,124 @@ export function buildPlotTagMapFromText(text: string, requestedTagNames?: string
 export function mergeRelayTagMap(target: RelayTagMap, extracted: Record<string, string>): void {
   for (const [tag, content] of Object.entries(extracted)) {
     if (!content) continue;
-    if (!target.has(tag)) target.set(tag, []);
-    target.get(tag)!.push(content);
+    target.set(tag, [content]);
   }
+}
+
+function collectRefreshKeys(
+  injectOnlyTags: Set<string>,
+  relayMap: RelayTagMap,
+  historyMap: RelayTagMap,
+): string[] {
+  const keys = new Set<string>();
+  for (const spec of injectOnlyTags) {
+    const parsed = parseExtractTagSpec(spec);
+    if (!parsed) continue;
+    if (parsed.attrName) {
+      const prefix = `${parsed.tagName}@${parsed.attrName}=`.toLowerCase();
+      for (const map of [relayMap, historyMap]) {
+        for (const k of map.keys()) {
+          if (k.toLowerCase().startsWith(prefix)) keys.add(k);
+        }
+      }
+    } else {
+      keys.add(parsed.tagName);
+    }
+  }
+  return [...keys].sort((a, b) => {
+    const aComp = a.includes('@') && a.includes('=');
+    const bComp = b.includes('@') && b.includes('=');
+    if (aComp !== bComp) return aComp ? -1 : 1;
+    return b.length - a.length;
+  });
+}
+
+function isSkippedRefreshKey(key: string, skipKeys?: Set<string>): boolean {
+  if (!skipKeys?.size) return false;
+  const lower = key.toLowerCase();
+  for (const sk of skipKeys) {
+    if (sk.toLowerCase() === lower) return true;
+  }
+  return false;
+}
+
+function resolveCurrentFormattedBlockForKey(
+  key: string,
+  relayMap: RelayTagMap,
+  historyMap: RelayTagMap,
+  injectOnlyTags: Set<string>,
+  historyFallback: 'inject-only' | 'all-tags',
+): string {
+  const parsed = parseCompositeKey(key);
+  const placeholderName = parsed
+    ? `${parsed.tagName}@${parsed.attrName}=${parsed.attrValue}`
+    : key;
+
+  const relayKey = findMapKeyIgnoreCase(relayMap, key);
+  if (relayKey) {
+    const out = formatTagValuesForInject(relayKey, relayMap.get(relayKey) ?? []);
+    if (out) return out;
+  }
+
+  if (shouldUseHistoryFallback(placeholderName, injectOnlyTags, historyFallback)) {
+    const histKey = findMapKeyIgnoreCase(historyMap, key);
+    if (histKey) {
+      const out = formatTagValuesForInject(histKey, historyMap.get(histKey) ?? []);
+      if (out) return out;
+    }
+  }
+  return '';
+}
+
+/** 将 content 内已配置的提取标签实例替换为 relay/history 中的最新内容（多轮直至稳定） */
+export function refreshNestedExtractTagsInContent(
+  content: string,
+  relayMap: RelayTagMap,
+  historyMap: RelayTagMap,
+  injectOnlyTags: Set<string>,
+  options?: { historyFallback?: 'inject-only' | 'all-tags'; skipKeys?: Set<string> },
+): string {
+  const source = String(content ?? '');
+  if (!source.trim() || !injectOnlyTags.size) return source;
+
+  const historyFallback = options?.historyFallback ?? 'inject-only';
+  const skipKeys = options?.skipKeys;
+  let result = source;
+
+  for (let pass = 0; pass < 8; pass++) {
+    let changed = false;
+    const keys = collectRefreshKeys(injectOnlyTags, relayMap, historyMap);
+
+    for (const key of keys) {
+      if (isSkippedRefreshKey(key, skipKeys)) continue;
+      const parsed = parseCompositeKey(key);
+      const tagName = parsed ? parsed.tagName : key;
+      const replacement = resolveCurrentFormattedBlockForKey(
+        key,
+        relayMap,
+        historyMap,
+        injectOnlyTags,
+        historyFallback,
+      );
+      if (!replacement) continue;
+
+      const instances = findAllTagInstances(result, tagName);
+      for (const inst of instances) {
+        if (parsed) {
+          const attrVal = inst.attrs[parsed.attrName.toLowerCase()];
+          if (attrVal !== parsed.attrValue) continue;
+        }
+        if (inst.fullBlock === replacement) continue;
+        while (result.includes(inst.fullBlock)) {
+          result = result.replace(inst.fullBlock, replacement);
+          changed = true;
+        }
+      }
+    }
+    if (!changed) break;
+  }
+
+  return result;
 }
 
 export function getPlotTagMapValue(tagMap: RelayTagMap, tagName: string): { found: boolean; value: string[] } {
@@ -359,7 +548,7 @@ export function replacePlotTagPlaceholdersWithHistory(
   relayTagMap: RelayTagMap,
   messageVarHistoryMap: RelayTagMap,
   injectOnlyTags: Set<string>,
-  options?: { restrictToInjectOnly?: boolean; historyFallback?: 'inject-only' | 'all-tags' },
+  options?: PlotPlaceholderResolveOptions,
 ): string {
   const re = new RegExp(PLOT_TAG_PLACEHOLDER_RE.source, 'g');
   const historyFallback = options?.historyFallback ?? 'inject-only';
@@ -368,25 +557,18 @@ export function replacePlotTagPlaceholdersWithHistory(
     const tagName = rawName.trim();
     if (!tagName || !isPlotTagPlaceholderName(tagName)) return placeholder;
 
-    if (options?.restrictToInjectOnly) {
-      if (!isPlaceholderInjectAllowed(tagName, injectOnlyTags)) return '';
-      const relayOut = resolvePlaceholderInjectText(relayTagMap, tagName);
-      if (relayOut) return relayOut;
-      if (shouldUseHistoryFallback(tagName, injectOnlyTags, historyFallback)) {
-        const histOut = resolvePlaceholderInjectText(messageVarHistoryMap, tagName);
-        if (histOut) return histOut;
-      }
+    if (options?.restrictToInjectOnly && !isPlaceholderInjectAllowed(tagName, injectOnlyTags)) {
       return '';
     }
 
-    const relayOut = resolvePlaceholderInjectText(relayTagMap, tagName);
-    if (relayOut) return relayOut;
-
-    if (shouldUseHistoryFallback(tagName, injectOnlyTags, historyFallback)) {
-      const histOut = resolvePlaceholderInjectText(messageVarHistoryMap, tagName);
-      if (histOut) return histOut;
-    }
-    return '';
+    const out = resolvePlaceholderForInject(
+      tagName,
+      relayTagMap,
+      messageVarHistoryMap,
+      injectOnlyTags,
+      options,
+    );
+    return out;
   });
 }
 
@@ -399,7 +581,7 @@ export function buildTaskWorldbookTriggerText(
   relayTagMap: RelayTagMap,
   messageVarHistoryMap: RelayTagMap,
   injectOnlyTags: Set<string>,
-  options?: { historyFallback?: 'inject-only' | 'all-tags' },
+  options?: PlotPlaceholderResolveOptions,
 ): string {
   const tagNames: string[] = [];
   const seen = new Set<string>();
@@ -414,17 +596,15 @@ export function buildTaskWorldbookTriggerText(
   }
   if (!tagNames.length) return '';
 
-  const historyFallback = options?.historyFallback ?? 'inject-only';
   const blocks: string[] = [];
   for (const tagName of tagNames) {
-    let out = resolvePlaceholderInjectText(relayTagMap, tagName);
-    if (!out) {
-      const useHistory =
-        historyFallback === 'all-tags' || isPlaceholderInjectAllowed(tagName, injectOnlyTags);
-      if (useHistory) {
-        out = resolvePlaceholderInjectText(messageVarHistoryMap, tagName);
-      }
-    }
+    const out = resolvePlaceholderForInject(
+      tagName,
+      relayTagMap,
+      messageVarHistoryMap,
+      injectOnlyTags,
+      options,
+    );
     if (!out) continue;
     blocks.push(out);
   }
@@ -477,7 +657,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退（只要楼层变量有值即可引用，不限于提取写入标签白名单）。支持 item@id 配置：{{item}} 展开全部实例（含 item@id=* 与裸 item）；{{item@id}} 展开全部 item@id=*（按属性值排序）；{{item@id=1}} 精确引用。引用输出带原始属性的完整标签块，避免双重包裹',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 relay 决定副本数量，占位符内容读楼层变量（无数据时输出空属性标签块）。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
   },
   { code: '{{task:任务名}}', desc: '聊天注入模板中的任务结果占位' },
   {

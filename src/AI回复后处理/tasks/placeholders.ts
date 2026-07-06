@@ -11,11 +11,13 @@ import {
   inheritTagVariables,
 } from './tag-variables';
 import { processTemplateText } from './template-process';
+import { getReplicaAttrSpecForTask } from './replica-family';
 import {
   buildTaskWorldbookTriggerText,
   isPromptGroupEnabled,
   replacePlaceholdersInText,
   replacePlotTagPlaceholdersWithHistory,
+  type PlotPlaceholderResolveOptions,
   type RelayTagMap,
 } from './utils';
 import { resolveTaskPlotWorldbookConfig } from './plot-worldbook-config';
@@ -114,6 +116,14 @@ export async function buildSharedContext(
   };
 }
 
+function buildPlotPlaceholderOptions(task: PostProcessTask): PlotPlaceholderResolveOptions {
+  const replicaAttrSpec = getReplicaAttrSpecForTask(task);
+  return {
+    historyFallback: 'all-tags',
+    ...(replicaAttrSpec ? { replicaAttrSpec } : {}),
+  };
+}
+
 export async function resolveTaskPlaceholders(
   task: PostProcessTask,
   ctx: SharedContext,
@@ -137,7 +147,7 @@ export async function resolveTaskPlaceholders(
         relayTagMap,
         ctx.messageVarHistoryMap,
         ctx.injectOnlyTagsUnion,
-        { historyFallback: 'all-tags' },
+        buildPlotPlaceholderOptions(task),
       );
       const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
       const wb = await getWorldbookContentForPostProcess(
@@ -174,7 +184,7 @@ export async function renderTaskMessages(
       relayTagMap,
       messageVarHistoryMap,
       injectOnlyTagsUnion,
-      { historyFallback: 'all-tags' },
+      buildPlotPlaceholderOptions(task),
     );
     if (!content.trim()) continue;
     messages.push({
