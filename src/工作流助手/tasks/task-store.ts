@@ -821,7 +821,9 @@ export async function applyReplicaFamilyCleanupInStore(
   source: TaskWriteSource = 'api',
 ): Promise<void> {
   const settings = loadSettings();
-  const next = applyReplicaFamilyCleanup(settings, keepByRoot, messageId);
+  const next = applyReplicaFamilyCleanup(settings, keepByRoot, messageId, {
+    persistManualKeepByRoot: keepByRoot,
+  });
   settings.tasks = next.tasks;
   settings.replicaFamilyCleanup = next.replicaFamilyCleanup;
   saveSettings(settings);

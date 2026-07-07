@@ -3,9 +3,12 @@ import type { PostProcessTask, ScriptSettings } from './schema';
 import {
   applyReplicaFamilyCleanup,
   computeAutoKeepSet,
+  computeManualDialogDefaultSelection,
   createDefaultReplicaFamilyCleanup,
   ensureReplicaFamilyCleanupDefaults,
   incrementReplicaRunCounts,
+  listReplicaFamilyCleanupCandidates,
+  pruneFloorTagKeysForReplica,
   shouldTriggerCleanup,
   tickCleanupRound,
 } from './replica-family-cleanup';
@@ -87,6 +90,40 @@ test('computeAutoKeepSet keeps launched manual and active replicas', () => {
   assert.deepEqual(keep.root, ['1']);
 });
 
+test('computeAutoKeepSet ignores lastManualKeepByRoot when not launched or active', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      lastManualKeepByRoot: { root: ['2'] },
+    },
+  });
+  const keep = computeAutoKeepSet(settings);
+  assert.deepEqual(keep.root, ['1']);
+});
+
+test('computeManualDialogDefaultSelection includes last manual keep', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      lastManualKeepByRoot: { root: ['2'] },
+    },
+  });
+  const keep = computeManualDialogDefaultSelection(settings);
+  assert.deepEqual(keep.root.sort(), ['1', '2']);
+});
+
+test('listReplicaFamilyCleanupCandidates marks last manual keep as defaultSelected', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      lastManualKeepByRoot: { root: ['2'] },
+    },
+  });
+  const groups = listReplicaFamilyCleanupCandidates(settings);
+  const rep2 = groups[0]!.members.find(m => m.attrValue === '2');
+  assert.equal(rep2?.defaultSelected, true);
+});
+
 test('tickCleanupRound and shouldTriggerCleanup', () => {
   const settings = baseSettings();
   for (let i = 0; i < 3; i++) tickCleanupRound(settings);
@@ -103,6 +140,57 @@ test('applyReplicaFamilyCleanup removes unkept replica tasks', () => {
   assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'root').length, 1);
   assert.equal(next.tasks.find(t => t.replicaFamilyAttrValue === '2'), undefined);
   assert.equal(next.replicaFamilyCleanup.roundsSinceCleanup, 0);
+});
+
+test('applyReplicaFamilyCleanup without persist leaves lastManualKeepByRoot unchanged', () => {
+  const g = globalThis as Record<string, unknown>;
+  g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      lastManualKeepByRoot: { root: ['9'] },
+    },
+  });
+  applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0);
+  assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['9'] });
+});
+
+test('applyReplicaFamilyCleanup with persist writes only user selection', () => {
+  const g = globalThis as Record<string, unknown>;
+  g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      lastManualKeepByRoot: { root: ['9'] },
+    },
+  });
+  applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0, {
+    persistManualKeepByRoot: { root: ['1'] },
+  });
+  assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['1'] });
+});
+
+test('pruneFloorTagKeysForReplica removes nested and flat keys for unkept attrs', () => {
+  const g = globalThis as Record<string, unknown>;
+  let vars: Record<string, unknown> = {
+    post_process_tags: {
+      item_id: { '1': 'keep-me', '2': 'drop-me' },
+      'item@id=1': 'flat-keep',
+      'item@id=2': 'flat-drop',
+    },
+  };
+  g.updateVariablesWith = (
+    fn: (v: Record<string, unknown>) => Record<string, unknown>,
+    _opts: unknown,
+  ) => {
+    vars = fn(vars);
+    return vars;
+  };
+  pruneFloorTagKeysForReplica('item@id', ['2'], 0);
+  const tags = vars.post_process_tags as Record<string, unknown>;
+  assert.deepEqual(tags.item_id, { '1': 'keep-me' });
+  assert.equal(tags['item@id=1'], 'flat-keep');
+  assert.equal(tags['item@id=2'], undefined);
 });
 
 test('incrementReplicaRunCounts accumulates per member', () => {

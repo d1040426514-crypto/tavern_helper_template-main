@@ -118,9 +118,14 @@ async function runReplicaFamilyCleanupIfDue(
     });
   });
 
-  const keepSet = await showReplicaFamilyCleanupDialog(effectiveSettings);
-  if (!keepSet) return;
-  const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId);
+  const result = await showReplicaFamilyCleanupDialog(effectiveSettings);
+  if (!result) return;
+  const next = applyReplicaFamilyCleanup(
+    effectiveSettings,
+    result.keepByRoot,
+    messageId,
+    result.persistManualKeep ? { persistManualKeepByRoot: result.keepByRoot } : undefined,
+  );
   Object.assign(effectiveSettings, next);
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
 }

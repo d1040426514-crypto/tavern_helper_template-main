@@ -3,11 +3,16 @@ import { createScriptIdDiv, teleportStyle } from '@util/script';
 import { loadSettings } from '../settings';
 import { applyThemeTokens, updateGlobalTheme } from './theme';
 import ReplicaFamilyCleanupDialog from './ReplicaFamilyCleanupDialog.vue';
-import { computeDefaultSelection, listReplicaFamilyCleanupCandidates } from '../tasks/replica-family-cleanup';
+import { listReplicaFamilyCleanupCandidates } from '../tasks/replica-family-cleanup';
 import type { ScriptSettings } from '../tasks/schema';
 import './acu-theme.css';
 
-let pendingResolve: ((value: Record<string, string[]> | null) => void) | null = null;
+export type ReplicaFamilyCleanupDialogResult = {
+  keepByRoot: Record<string, string[]>;
+  persistManualKeep: boolean;
+};
+
+let pendingResolve: ((value: ReplicaFamilyCleanupDialogResult | null) => void) | null = null;
 let styleDestroy: (() => void) | null = null;
 
 function syncTeleportedStyles(mountEl: HTMLElement): void {
@@ -18,14 +23,14 @@ function syncTeleportedStyles(mountEl: HTMLElement): void {
 
 export function showReplicaFamilyCleanupDialog(
   settings: ScriptSettings,
-): Promise<Record<string, string[]> | null> {
+): Promise<ReplicaFamilyCleanupDialogResult | null> {
   if (pendingResolve) {
     return Promise.resolve(null);
   }
 
   const groups = listReplicaFamilyCleanupCandidates(settings);
   if (!groups.length || !groups.some(g => g.members.length)) {
-    return Promise.resolve(computeDefaultSelection(settings));
+    return Promise.resolve(null);
   }
 
   return new Promise(resolve => {
@@ -50,14 +55,14 @@ export function showReplicaFamilyCleanupDialog(
     const app = createApp(ReplicaFamilyCleanupDialog, {
       groups,
       onConfirm: (keepByRoot: Record<string, string[]>) => {
-        cleanup(keepByRoot);
+        cleanup({ keepByRoot, persistManualKeep: true });
       },
       onCancel: () => {
-        cleanup(computeDefaultSelection(settings));
+        cleanup(null);
       },
     });
 
-    function cleanup(result: Record<string, string[]> | null): void {
+    function cleanup(result: ReplicaFamilyCleanupDialogResult | null): void {
       styleDestroy?.();
       styleDestroy = null;
       try {

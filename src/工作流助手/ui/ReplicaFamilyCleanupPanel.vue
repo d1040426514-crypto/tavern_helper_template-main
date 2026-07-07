@@ -28,8 +28,8 @@ const cleanup = computed(() => ensureReplicaFamilyCleanupDefaults(settings.value
         每隔 N 轮对话触发一次清理。活跃性判断：当前周期内副本执行次数 ÷ N ≥ R 视为活跃。
       </p>
       <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-        自动清理：静默移除未达保留条件的副本及对应楼层变量 key。手动清理：在工作流全部完成且酒馆渲染后弹出选择窗。
-        默认保留：手动调度中已启动的副本、活跃副本、上次清理时选择保留的副本。
+        自动清理：仅按「已启动 + 活跃」静默保留副本任务及对应楼层变量 key，不沿用上次手动勾选。手动清理：在工作流全部完成且酒馆渲染后弹出选择窗。
+        默认勾选：手动调度中已启动的副本、活跃副本、上次手动确认保留的副本；确认后同时保留所选副本及其 post_process_tags 数据；跳过本次不执行清理。
       </p>
     </AcuHelpPanel>
     <div class="replica-cleanup-panel__controls acu-row acu-row--inline">

@@ -1,4 +1,4 @@
-import { buildAttrGroupKey, parseExtractTagSpec } from './tag-extract';
+import { buildAttrGroupKey, buildCompositeKey, parseExtractTagSpec } from './tag-extract';
 import {
   getReplicaFamilyScheduleMode,
   getReplicaTasks,
@@ -116,18 +116,49 @@ function computeMemberActivityScore(runCount: number, cycleRounds: number): numb
   return runCount / cycleRounds;
 }
 
-function isMemberActive(
+function isMemberKeepByScheduleAndActivity(
   member: PostProcessTask,
   root: PostProcessTask,
   runCount: number,
   cycleRounds: number,
   activityRatio: number,
-  lastKeep: string[],
 ): boolean {
-  const attrValue = member.replicaFamilyAttrValue ?? '';
-  if (lastKeep.includes(attrValue)) return true;
   if (getReplicaFamilyScheduleMode(root) === 'manual' && isReplicaLaunched(member)) return true;
   return computeMemberActivityScore(runCount, cycleRounds) >= activityRatio;
+}
+
+function isMemberManualDialogDefault(
+  member: PostProcessTask,
+  root: PostProcessTask,
+  runCount: number,
+  cycleRounds: number,
+  activityRatio: number,
+  lastManualKeep: string[],
+): boolean {
+  const attrValue = member.replicaFamilyAttrValue ?? '';
+  if (lastManualKeep.includes(attrValue)) return true;
+  return isMemberKeepByScheduleAndActivity(member, root, runCount, cycleRounds, activityRatio);
+}
+
+function collectKeepAttrsForRoot(
+  root: PostProcessTask,
+  tasks: PostProcessTask[],
+  state: ReplicaFamilyCleanupConfig,
+  shouldKeep: (
+    member: PostProcessTask,
+    root: PostProcessTask,
+    runCount: number,
+  ) => boolean,
+): string[] {
+  const keep: string[] = [];
+  for (const member of getReplicaTasks(root.id, tasks)) {
+    const runCount = state.cycleRunCounts[member.id] ?? 0;
+    if (shouldKeep(member, root, runCount)) {
+      const attr = member.replicaFamilyAttrValue?.trim();
+      if (attr) keep.push(attr);
+    }
+  }
+  return keep;
 }
 
 export function computeAutoKeepSet(settings: ScriptSettings): Record<string, string[]> {
@@ -135,22 +166,36 @@ export function computeAutoKeepSet(settings: ScriptSettings): Record<string, str
   const result: Record<string, string[]> = {};
   for (const root of settings.tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
-    const lastKeep = state.lastManualKeepByRoot[root.id] ?? [];
-    const keep: string[] = [];
-    for (const member of getReplicaTasks(root.id, settings.tasks)) {
-      const runCount = state.cycleRunCounts[member.id] ?? 0;
-      if (isMemberActive(member, root, runCount, state.cycleRounds, state.activityRatio, lastKeep)) {
-        const attr = member.replicaFamilyAttrValue?.trim();
-        if (attr) keep.push(attr);
-      }
-    }
-    result[root.id] = keep;
+    result[root.id] = collectKeepAttrsForRoot(root, settings.tasks, state, (member, root, runCount) =>
+      isMemberKeepByScheduleAndActivity(member, root, runCount, state.cycleRounds, state.activityRatio),
+    );
   }
   return result;
 }
 
+export function computeManualDialogDefaultSelection(settings: ScriptSettings): Record<string, string[]> {
+  const state = ensureCleanupState(settings);
+  const result: Record<string, string[]> = {};
+  for (const root of settings.tasks) {
+    if (!isReplicaFamilyRootTemplate(root)) continue;
+    const lastManualKeep = state.lastManualKeepByRoot[root.id] ?? [];
+    result[root.id] = collectKeepAttrsForRoot(root, settings.tasks, state, (member, root, runCount) =>
+      isMemberManualDialogDefault(
+        member,
+        root,
+        runCount,
+        state.cycleRounds,
+        state.activityRatio,
+        lastManualKeep,
+      ),
+    );
+  }
+  return result;
+}
+
+/** @deprecated 使用 computeManualDialogDefaultSelection */
 export function computeDefaultSelection(settings: ScriptSettings): Record<string, string[]> {
-  return computeAutoKeepSet(settings);
+  return computeManualDialogDefaultSelection(settings);
 }
 
 export function listReplicaFamilyCleanupCandidates(settings: ScriptSettings): ReplicaCleanupCandidateGroup[] {
@@ -159,17 +204,17 @@ export function listReplicaFamilyCleanupCandidates(settings: ScriptSettings): Re
   for (const root of settings.tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
     const spec = root.replicaFamilySpec ?? '';
-    const lastKeep = state.lastManualKeepByRoot[root.id] ?? [];
+    const lastManualKeep = state.lastManualKeepByRoot[root.id] ?? [];
     const members: ReplicaCleanupCandidate[] = getReplicaTasks(root.id, settings.tasks).map(member => {
       const runCount = state.cycleRunCounts[member.id] ?? 0;
       const activityScore = computeMemberActivityScore(runCount, state.cycleRounds);
-      const defaultSelected = isMemberActive(
+      const defaultSelected = isMemberManualDialogDefault(
         member,
         root,
         runCount,
         state.cycleRounds,
         state.activityRatio,
-        lastKeep,
+        lastManualKeep,
       );
       return {
         memberId: member.id,
@@ -212,15 +257,19 @@ export function pruneFloorTagKeysForReplica(
     variables => {
       const raw = readTagContainerRaw(variables);
       const existing = raw[groupKey];
-      if (!existing || typeof existing !== 'object' || Array.isArray(existing)) return variables;
-      const merged = { ...(existing as Record<string, string>) };
-      for (const k of Object.keys(merged)) {
-        if (removeSet.has(k)) delete merged[k];
+      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+        const merged = { ...(existing as Record<string, string>) };
+        for (const k of Object.keys(merged)) {
+          if (removeSet.has(k)) delete merged[k];
+        }
+        if (Object.keys(merged).length) {
+          raw[groupKey] = merged;
+        } else {
+          delete raw[groupKey];
+        }
       }
-      if (Object.keys(merged).length) {
-        raw[groupKey] = merged;
-      } else {
-        delete raw[groupKey];
+      for (const attrValue of attrValuesToRemove) {
+        delete raw[buildCompositeKey(parsed.tagName, parsed.attrName!, attrValue)];
       }
       variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
@@ -229,14 +278,18 @@ export function pruneFloorTagKeysForReplica(
   );
 }
 
+export type ApplyReplicaFamilyCleanupOptions = {
+  persistManualKeepByRoot?: Record<string, string[]>;
+};
+
 export function applyReplicaFamilyCleanup(
   settings: ScriptSettings,
   keepAttrValuesByRoot: Record<string, string[]>,
   messageId: number,
+  options?: ApplyReplicaFamilyCleanupOptions,
 ): ScriptSettings {
   const state = ensureCleanupState(settings);
   let tasks = [...settings.tasks];
-  const nextLastKeep: Record<string, string[]> = { ...state.lastManualKeepByRoot };
 
   for (const root of settings.tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
@@ -262,10 +315,16 @@ export function applyReplicaFamilyCleanup(
       }
     }
 
-    nextLastKeep[root.id] = [...keepSet];
   }
 
-  state.lastManualKeepByRoot = nextLastKeep;
+  if (options?.persistManualKeepByRoot) {
+    const nextLastKeep = { ...state.lastManualKeepByRoot };
+    for (const [rootId, attrs] of Object.entries(options.persistManualKeepByRoot)) {
+      nextLastKeep[rootId] = [...attrs];
+    }
+    state.lastManualKeepByRoot = nextLastKeep;
+  }
+
   state.roundsSinceCleanup = 0;
   state.cycleRunCounts = {};
   state.lastCleanupRound = countAssistantRounds();
