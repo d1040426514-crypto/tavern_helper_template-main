@@ -8,24 +8,22 @@ import {
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
-import { parseExtractTagSpec, buildExtractSpecKey, parseDynamicAttrPlaceholder, sortAttrValues } from './tag-extract';
+import { parseExtractTagSpec } from './tag-extract';
 import { isDynamicAttrPlaceholder } from './tag-variables-nested';
-import { getReplicaTasks, isReplicaSelected } from './replica-family';
 import {
+  applyTagsToRawContainer,
   buildDynamicAttrWritePlan,
   flattenTagContainerToRelayKeys,
   mergeNestedGroupIntoRawContainer,
-  type DynamicAttrWritePlan,
+  mergeRawTagContainers,
+  normalizeTagContainerRaw,
   type TagContainerRaw,
 } from './tag-variables-nested';
+import { isAccessibleMessageFloor, normalizeMessageFloorId } from './message-floor';
 
 export const TAG_DATA_ROOT_KEY = 'post_process_tags';
 
 const LEGACY_TAG_VAR_PREFIX = 'pp_tag__';
-
-function isAccessibleMessageFloor(message_id: number): boolean {
-  return message_id >= 0 && getChatMessages(message_id).length > 0;
-}
 
 function readTagContainerRaw(variables: Record<string, unknown>): TagContainerRaw {
   const raw = variables[TAG_DATA_ROOT_KEY];
@@ -80,6 +78,49 @@ export function buildPreviousFloorTagMap(messageId: number): RelayTagMap {
   return buildFloorTagMap(messageId - 1);
 }
 
+function cloneTagContainerRaw(raw: TagContainerRaw): TagContainerRaw {
+  const next: TagContainerRaw = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      next[key] = { ...(value as Record<string, string>) };
+    } else {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+/** 重跑前将当前楼 post_process_tags 整包替换为上一楼快照 */
+export function restorePostProcessTagsFromPreviousFloor(messageId: number): void {
+  if (!isAccessibleMessageFloor(messageId) || messageId <= 0) return;
+
+  let previous: Record<string, unknown>;
+  try {
+    previous = getVariables({ type: 'message', message_id: messageId - 1 }) ?? {};
+  } catch {
+    return;
+  }
+
+  const prevRaw = readTagContainerRaw(previous);
+  for (const [tag, text] of Object.entries(readLegacyTagContainer(previous))) {
+    if (tag && text) prevRaw[tag] = text;
+  }
+
+  const snapshot = cloneTagContainerRaw(prevRaw);
+
+  updateVariablesWith(
+    variables => {
+      if (Object.keys(snapshot).length) {
+        variables[TAG_DATA_ROOT_KEY] = cloneTagContainerRaw(snapshot);
+      } else {
+        delete variables[TAG_DATA_ROOT_KEY];
+      }
+      return variables;
+    },
+    { type: 'message', message_id: messageId },
+  );
+}
+
 export function buildInjectOnlyTagsUnion(tasks: ScriptSettings['tasks']): Set<string> {
   const set = new Set<string>();
   for (const task of tasks) {
@@ -97,52 +138,13 @@ export function buildInjectOnlyTagsUnion(tasks: ScriptSettings['tasks']): Set<st
   return set;
 }
 
-/** 选定副本族成员的 attr 值，供楼层变量 prune 时保留 */
-export function collectPreservedReplicaAttrValues(
-  settings: ScriptSettings,
-  template: string,
-): Map<string, Set<string>> {
-  const result = new Map<string, Set<string>>();
-  const templateNames = getPlotPlaceholderTagNames(template);
-
-  for (const root of settings.tasks) {
-    if (!root.syncAsReplicaFamily) continue;
-    const spec = root.replicaFamilySpec?.trim();
-    if (!spec) continue;
-
-    const templateUsesSpec = templateNames.some(name => {
-      const dyn = parseDynamicAttrPlaceholder(name);
-      if (!dyn) return false;
-      return buildExtractSpecKey(dyn.tagName, dyn.attrName).toLowerCase() === spec.toLowerCase();
-    });
-    if (!templateUsesSpec) continue;
-
-    for (const member of getReplicaTasks(root.id, settings.tasks)) {
-      if (!isReplicaSelected(member)) continue;
-      const attrValue = member.replicaFamilyAttrValue?.trim();
-      if (!attrValue) continue;
-      if (!result.has(spec)) result.set(spec, new Set());
-      result.get(spec)!.add(attrValue);
-    }
-  }
-  return result;
-}
-
-function withPreservedPruneValues(plan: DynamicAttrWritePlan, extra: string[]): DynamicAttrWritePlan {
-  if (!extra.length) return plan;
-  return {
-    ...plan,
-    pruneToAttrValues: sortAttrValues([...new Set([...plan.pruneToAttrValues, ...extra])]),
-  };
-}
-
 function migrateLegacyTagsOnFloor(variables: Record<string, unknown>): boolean {
   const legacy = readLegacyTagContainer(variables);
   if (!Object.keys(legacy).length) return false;
 
-  const current = readTagContainer(variables);
-  const merged = { ...legacy, ...current };
-  variables[TAG_DATA_ROOT_KEY] = merged;
+  let raw = readTagContainerRaw(variables);
+  raw = applyTagsToRawContainer(raw, legacy);
+  variables[TAG_DATA_ROOT_KEY] = raw;
   for (const key of Object.keys(variables)) {
     if (key.startsWith(LEGACY_TAG_VAR_PREFIX)) delete variables[key];
   }
@@ -159,18 +161,19 @@ export function inheritTagVariables(message_id: number): void {
     return;
   }
 
-  const prevContainer = {
-    ...readLegacyTagContainer(previous),
-    ...readTagContainer(previous),
-  };
-  if (!Object.keys(prevContainer).length) return;
+  const prevRaw = readTagContainerRaw(previous);
+  for (const [tag, text] of Object.entries(readLegacyTagContainer(previous))) {
+    if (tag && text) prevRaw[tag] = text;
+  }
+  if (!Object.keys(prevRaw).length) return;
 
   updateVariablesWith(
     variables => {
       migrateLegacyTagsOnFloor(variables);
-      const current = readTagContainer(variables);
-      const merged = { ...prevContainer, ...current };
-      variables[TAG_DATA_ROOT_KEY] = merged;
+      let raw = readTagContainerRaw(variables);
+      raw = mergeRawTagContainers(prevRaw, raw);
+      raw = normalizeTagContainerRaw(raw);
+      variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
     },
     { type: 'message', message_id },
@@ -180,7 +183,7 @@ export function inheritTagVariables(message_id: number): void {
 export function backfillChatTagVariables(): void {
   if (getChatMessages(-1).length === 0) return;
   const last = getLastMessageId();
-  for (let message_id = 0; message_id <= last; message_id++) {
+  for (let message_id = 0; message_id < last; message_id++) {
     if (!isAccessibleMessageFloor(message_id)) continue;
     let variables: Record<string, unknown>;
     try {
@@ -299,7 +302,9 @@ export function pickTagsForPostProcessWrite(
 
 export function registerTagVariableInheritance(): EventOnReturn {
   const onMessage = (message_id: number) => {
-    errorCatched(() => inheritTagVariables(message_id))();
+    const normalized = normalizeMessageFloorId(message_id);
+    if (normalized == null) return;
+    errorCatched(() => inheritTagVariables(normalized))();
   };
 
   const offReceived = eventOn(tavern_events.MESSAGE_RECEIVED, onMessage);
@@ -327,12 +332,8 @@ export function writeFloorTagValues(messageId: number, tags: Record<string, stri
   updateVariablesWith(
     variables => {
       migrateLegacyTagsOnFloor(variables);
-      const raw = readTagContainerRaw(variables);
-      for (const [tagName, value] of Object.entries(tags)) {
-        const text = String(value ?? '').trim();
-        if (text) raw[tagName] = text;
-        else delete raw[tagName];
-      }
+      let raw = readTagContainerRaw(variables);
+      raw = applyTagsToRawContainer(raw, tags);
       variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
     },
@@ -362,17 +363,13 @@ export async function applyTagVariableInjectTemplate(
   }
 
   const flatToWrite: Record<string, string> = {};
-  const dynamicPlans: DynamicAttrWritePlan[] = [];
-  const preservedBySpec = collectPreservedReplicaAttrValues(settings, template);
+  const dynamicPlans: ReturnType<typeof buildDynamicAttrWritePlan>[] = [];
 
   for (const placeholderName of tagNames) {
     if (isDynamicAttrPlaceholder(placeholderName)) {
       const plan = buildDynamicAttrWritePlan(placeholderName, flatAggregated);
       if (!plan) continue;
-      const dyn = parseDynamicAttrPlaceholder(placeholderName);
-      const specKey = dyn ? buildExtractSpecKey(dyn.tagName, dyn.attrName) : '';
-      const preserved = specKey ? [...(preservedBySpec.get(specKey) ?? [])] : [];
-      dynamicPlans.push(withPreservedPruneValues(plan, preserved));
+      dynamicPlans.push(plan);
       continue;
     }
     for (const key of expandWritableKeysFromPlaceholder(placeholderName, aggregated.keys())) {
@@ -396,6 +393,7 @@ export async function applyTagVariableInjectTemplate(
       for (const [key, value] of Object.entries(flatToWrite)) {
         raw[key] = value;
       }
+      raw = normalizeTagContainerRaw(raw);
       variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
     },

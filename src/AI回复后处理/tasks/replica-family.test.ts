@@ -3,6 +3,7 @@ import type { PostProcessTask } from './schema';
 import {
   expandEnabledTasksForRuntime,
   isReplicaFamilyRootTemplate,
+  mergeReplicaFamilyFromRelay,
   scanDynamicAttrPlaceholders,
   substituteDynamicPlaceholder,
   syncReplicaFamily,
@@ -60,23 +61,20 @@ test('substitute dynamic to precise', () => {
   assert.equal(out, 'x {{item@id=2}} y');
 });
 
-test('syncReplicaFamily creates replicas with default schedule flags', () => {
+test('syncReplicaFamily creates replicas with default launched false in auto mode', () => {
   const root = baseTask();
   const all = syncReplicaFamily(root, ['1', '2'], [root]);
   assert.equal(all.filter(t => t.replicaFamilyRootId === 'root-1').length, 2);
   const rep = all.find(t => t.replicaFamilyAttrValue === '2');
   assert.ok(rep?.promptGroups[0]?.content.includes('{{item@id=2}}'));
-  assert.equal(rep?.replicaFamilySelected, false);
   assert.equal(rep?.replicaFamilyLaunched, false);
 });
 
-test('merge sync preserves selected replica when relay shrinks', () => {
+test('merge preserves all replicas when relay shrinks', () => {
   const root = baseTask();
-  let all = syncReplicaFamily(root, ['1', '2'], [root]);
-  const rep2 = all.find(t => t.replicaFamilyAttrValue === '2')!;
-  all = all.map(t => (t.id === rep2.id ? { ...t, replicaFamilySelected: true } : t));
-  all = syncReplicaFamily(root, ['1'], all);
-  assert.ok(all.some(t => t.replicaFamilyAttrValue === '2'));
+  let merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  merged = mergeReplicaFamilyFromRelay(root, ['1'], merged.tasks);
+  assert.ok(merged.tasks.some(t => t.replicaFamilyAttrValue === '2'));
 });
 
 test('expandEnabledTasksForRuntime skips root template', () => {

@@ -7,7 +7,7 @@ import {
 } from './api-preset-utils';
 import type { ResolvedApi } from './resolve';
 import type { ApiConfig } from '../tasks/schema';
-import { registerGenerationId, unregisterGenerationId } from '../tasks/run-control';
+import { checkRunCancelled, registerGenerationId, RunCancelledError, unregisterGenerationId } from '../tasks/run-control';
 
 type RolePrompt = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -20,6 +20,13 @@ export interface ApiCallOptions {
   payloadOverrides?: ApiPayloadOverrides;
   /** 结构化 API 参数需 CC 路径；为 true 时禁止 generateRaw 回退 */
   disallowGenerateRawFallback?: boolean;
+  signal?: AbortSignal;
+}
+
+function isAbortLikeError(e: unknown): boolean {
+  if (e instanceof RunCancelledError) return true;
+  if (e instanceof DOMException && e.name === 'AbortError') return true;
+  return false;
 }
 
 type ChoiceMessage = {
@@ -106,7 +113,10 @@ async function callViaChatCompletionService(
     throw new Error('酒馆 ChatCompletionService 不可用');
   }
   const body = buildChatCompletionPayload(messages, apiConfig, options?.payloadOverrides);
-  const result = await service.processRequest(body, {}, true, null);
+  const signal = options?.signal ?? null;
+  checkRunCancelled(signal ?? undefined);
+  const result = await service.processRequest(body, {}, true, signal);
+  checkRunCancelled(signal ?? undefined);
   return extractApiCallResult(result);
 }
 
@@ -114,7 +124,9 @@ async function callViaGenerateRaw(
   messages: RolePrompt[],
   generationId: string,
   apiConfig: ApiConfig,
+  signal?: AbortSignal,
 ): Promise<ApiCallResult> {
+  checkRunCancelled(signal);
   const result = await generateRaw({
     ordered_prompts: messages,
     should_silence: true,
@@ -135,6 +147,7 @@ async function callViaGenerateRaw(
       },
     },
   });
+  checkRunCancelled(signal);
   return { content: typeof result === 'string' ? result : '' };
 }
 
@@ -151,12 +164,16 @@ export async function callWithResolvedApi(
   const apiMessages = omitPromptLogNames(messages);
   const genId = generationId || `post-process-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { apiConfig } = resolved;
+  const signal = options?.signal;
   assertCustomApiConfig(apiConfig);
   registerGenerationId(genId);
   try {
     try {
       return await callViaChatCompletionService(apiMessages, apiConfig, options);
     } catch (err) {
+      if (isAbortLikeError(err) || signal?.aborted) {
+        throw new RunCancelledError();
+      }
       if (shouldDisallowGenerateRawFallback(apiConfig, options)) {
         const detail = err instanceof Error ? err.message : String(err);
         throw new Error(
@@ -164,7 +181,7 @@ export async function callWithResolvedApi(
         );
       }
       console.warn('[AI回复后处理] ChatCompletionService 失败，回退 generateRaw:', err);
-      return await callViaGenerateRaw(apiMessages, genId, apiConfig);
+      return await callViaGenerateRaw(apiMessages, genId, apiConfig, signal);
     }
   } finally {
     unregisterGenerationId(genId);

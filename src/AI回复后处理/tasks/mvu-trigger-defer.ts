@@ -1,4 +1,5 @@
 import { loadSettings } from '../settings';
+import { shouldSuppressAutoTriggerAfterAbort } from './trigger-guard';
 import { resolveEffectiveSettings } from './effective-settings';
 import { isProcessing } from './runtime';
 import { needsMvuDeferredRun } from './schedule';
@@ -18,13 +19,6 @@ interface PendingItem {
   via?: DeferDispatchVia;
 }
 
-let lastDeferDispatch: { messageId: number; via: DeferDispatchVia; at: number } | null = null;
-
-/** 供调试/MCP 验证延后触发来源 */
-export function getLastDeferDispatch(): typeof lastDeferDispatch {
-  return lastDeferDispatch;
-}
-
 let mvuAvailable = false;
 let offMvuEnded: EventOnReturn | null = null;
 const pendingQueue: PendingItem[] = [];
@@ -39,14 +33,13 @@ function tryDispatchHead(handler: MessageHandler, via: DeferDispatchVia): void {
   pruneDispatchedHead();
   const head = pendingQueue[0];
   if (!head || head.dispatched) return;
-  if (isProcessing(head.messageId)) {
-    head.dispatched = true;
-    pruneDispatchedHead();
+  if (shouldSuppressAutoTriggerAfterAbort()) {
+    pendingQueue.shift();
     return;
   }
+  if (isProcessing(head.messageId)) return;
   head.dispatched = true;
   head.via = via;
-  lastDeferDispatch = { messageId: head.messageId, via, at: Date.now() };
   void handler(head.messageId, head.type);
   pruneDispatchedHead();
 }
@@ -116,7 +109,6 @@ export function registerMvuDeferredTrigger(handler: MessageHandler): EventOnRetu
       offMvuEnded?.stop();
       offMvuEnded = null;
       pendingQueue.length = 0;
-      lastDeferDispatch = null;
       mvuAvailable = false;
     },
   };
@@ -125,10 +117,4 @@ export function registerMvuDeferredTrigger(handler: MessageHandler): EventOnRetu
 /** 当前是否应由延后模块接管 MESSAGE_RECEIVED（即时路径应跳过） */
 export function isMvuDeferActive(): boolean {
   return shouldEnqueueDefer();
-}
-
-/** 调试：停止 ENDED 监听，下一楼将仅由 eventMakeLast 兜底触发（用于 MCP 自测） */
-export function debugStopMvuEndedListener(): void {
-  offMvuEnded?.stop();
-  offMvuEnded = null;
 }

@@ -6,7 +6,14 @@ import {
   enrichApiConfigForStructuredTask,
   type ActiveStructuredOutputMode,
 } from '../tasks/strict-variable-response';
+import { RunCancelledError } from '../tasks/run-control';
 import type { RunLogMessage, ScriptSettings } from '../tasks/schema';
+
+function isAbortLikeError(e: unknown): boolean {
+  if (e instanceof RunCancelledError) return true;
+  if (e instanceof DOMException && e.name === 'AbortError') return true;
+  return false;
+}
 
 export interface TaskApiRouteCallResult {
   content: string;
@@ -21,7 +28,7 @@ async function callSinglePresetRoute(
   structuredMode: ActiveStructuredOutputMode | null,
   generationId: string,
   callApi: typeof callWithResolvedApi,
-  disallowGenerateRawFallback?: boolean,
+  options?: { disallowGenerateRawFallback?: boolean; signal?: AbortSignal },
 ): Promise<TaskApiRouteCallResult> {
   const { apiConfig } = resolveApiPresetFull(settings, presetName);
   const enriched = structuredMode ? enrichApiConfigForStructuredTask(apiConfig, structuredMode) : apiConfig;
@@ -31,9 +38,10 @@ async function callSinglePresetRoute(
     generationId,
     {
       disallowGenerateRawFallback:
-        disallowGenerateRawFallback ??
+        options?.disallowGenerateRawFallback ??
         (structuredMode != null || apiConfigRequiresChatCompletionPath(enriched)),
       payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
+      signal: options?.signal,
     },
   );
   return {
@@ -91,9 +99,15 @@ async function callWithPoolAndFailover(
         structuredMode,
         `${generationIdBase}-route-${presetName}-${i}`,
         callApi,
-        options?.disallowGenerateRawFallback,
+        {
+          disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
+          signal: options?.signal,
+        },
       );
     } catch (e) {
+      if (isAbortLikeError(e) || options?.signal?.aborted) {
+        throw new RunCancelledError();
+      }
       lastError = e instanceof Error ? e.message : String(e);
       if (i < tryOrder.length - 1) continue;
     } finally {
@@ -159,9 +173,15 @@ export async function callTaskApiWithRouteFallback(
         structuredMode,
         `${generationIdBase}-route-${i}`,
         callApi,
-        options?.disallowGenerateRawFallback,
+        {
+          disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
+          signal: options?.signal,
+        },
       );
     } catch (e) {
+      if (isAbortLikeError(e) || options?.signal?.aborted) {
+        throw new RunCancelledError();
+      }
       lastError = e instanceof Error ? e.message : String(e);
       if (i < chain.length - 1) continue;
     }

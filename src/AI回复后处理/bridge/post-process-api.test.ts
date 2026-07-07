@@ -47,6 +47,11 @@ const expectedMethods = [
   'updateReplicaFamilyScheduleMode',
   'updateReplicaMemberSchedule',
   'listReplicaFamilySchedule',
+  'getReplicaFamilyCleanupConfig',
+  'updateReplicaFamilyCleanupConfig',
+  'listReplicaFamilyCleanupCandidates',
+  'applyReplicaFamilyCleanup',
+  'resetReplicaFamilyCleanupCycle',
   'listTaskWorkflowPresets',
   'saveTaskWorkflowPreset',
   'applyTaskWorkflowPreset',
@@ -79,7 +84,7 @@ async function main(): Promise<void> {
     const { acuPostProcessTaskApi } = await import('./post-process-api.js');
     const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
     assert.deepEqual(missing, []);
-    assert.equal(expectedMethods.length, 54);
+    assert.equal(expectedMethods.length, 59);
     console.log('ok acuPostProcessTaskApi exposes all P0-P2 methods');
   } catch (e) {
     console.error('FAIL acuPostProcessTaskApi exposes all P0-P2 methods', e);

@@ -91,7 +91,9 @@ export function shouldRunTask(
 
   const { raw, fail } = resolveTimeRaw(task, ctx);
   if (fail) {
-    if (ti.onParseFail === 'skip') return { run: false, reason: '游戏时间解析失败' };
+    if (ti.onParseFail === 'skip') {
+      return { run: false, reason: '游戏时间解析失败' };
+    }
     if (ti.onParseFail === 'wall_clock') {
       const now = Date.now();
       const last = state?.lastRunAt ?? 0;

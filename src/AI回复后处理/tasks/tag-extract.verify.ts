@@ -33,32 +33,32 @@ check('item@id 多实例不聚合', () => {
   const text = '<item id="1">A</item><item id="2">B</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
   assert.equal(Object.keys(extractedTags).length, 2);
-  assert.equal(extractedTags['item@id=1'], '<item id="1">A</item>');
-  assert.equal(extractedTags['item@id=2'], '<item id="2">B</item>');
+  assert.equal(extractedTags['item@id=1'], 'A');
+  assert.equal(extractedTags['item@id=2'], 'B');
 });
 
 check('item@id 缺 id 回退裸 key item', () => {
   const text = '<item id="1">A</item><item>无id</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags['item@id=1'], '<item id="1">A</item>');
-  assert.equal(extractedTags.item, '<item>无id</item>');
+  assert.equal(extractedTags['item@id=1'], 'A');
+  assert.equal(extractedTags.item, '无id');
 });
 
 check('item@id 仅无 id 实例', () => {
   const { extractedTags } = extractInjectTagsFromResponse('<item>仅无id</item>', ['item@id']);
-  assert.equal(extractedTags.item, '<item>仅无id</item>');
+  assert.equal(extractedTags.item, '仅无id');
   assert.equal(extractedTags['item@id=1'], undefined);
 });
 
 check('item@id 多个无 id 后者覆盖', () => {
   const { extractedTags } = extractInjectTagsFromResponse('<item>first</item><item>second</item>', ['item@id']);
-  assert.equal(extractedTags.item, '<item>second</item>');
+  assert.equal(extractedTags.item, 'second');
 });
 
 check('item@id 同 key 后者覆盖', () => {
   const text = '<item id="1">A</item><item id="1">B</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags['item@id=1'], '<item id="1">B</item>');
+  assert.equal(extractedTags['item@id=1'], 'B');
 });
 
 check('裸 result 向后兼容取最后内文', () => {
@@ -142,7 +142,7 @@ check('{{不在场npc}} 引用保留外层', () => {
 
 check('buildExtractedBlockFromTags 不双重包裹', () => {
   const block = buildExtractedBlockFromTags({
-    'item@id=1': '<item id="1">A</item>',
+    'item@id=1': 'A',
     result: 'hello',
   });
   assert.ok(block.includes('<item id="1">A</item>'));

@@ -72,9 +72,9 @@ function bindStopButton(stopBtnId: string): void {
       e.stopPropagation();
       if (runAborting) return;
       runAborting = true;
-      $btn.prop('disabled', true);
+      $btn.prop('disabled', true).text('停止中…');
       stopHandler?.();
-      hideTaskProgressToast();
+      setTimeout(() => hideTaskProgressToast(), 300);
     });
   }, 50);
 }

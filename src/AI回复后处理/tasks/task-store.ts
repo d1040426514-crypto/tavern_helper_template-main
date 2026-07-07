@@ -31,6 +31,14 @@ import {
   validateReplicaFamilyEligibility,
 } from './replica-family';
 import {
+  applyReplicaFamilyCleanup,
+  getReplicaFamilyCleanupConfig,
+  listReplicaFamilyCleanupCandidates,
+  resetReplicaFamilyCleanupCycle,
+  updateReplicaFamilyCleanupConfig,
+  type ReplicaCleanupCandidateGroup,
+} from './replica-family-cleanup';
+import {
   applyTaskWorkflowPresetOnTask,
   deleteTaskWorkflowPresetOnTask,
   listTaskWorkflowPresetNames,
@@ -777,16 +785,56 @@ export async function updateReplicaFamilyScheduleMode(
 
 export async function updateReplicaMemberSchedule(
   memberId: string,
-  patch: { selected?: boolean; launched?: boolean },
+  patch: { launched?: boolean },
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
   const member = getTask(memberId);
   if (!member) throw new Error(`任务不存在: ${memberId}`);
   if (!member.replicaFamilyRootId) throw new Error('任务不是副本族成员');
   const next: Partial<PostProcessTask> = {};
-  if (patch.selected !== undefined) next.replicaFamilySelected = patch.selected;
   if (patch.launched !== undefined) next.replicaFamilyLaunched = patch.launched;
   return updateTask(memberId, next, source);
+}
+
+export function getReplicaFamilyCleanupConfigFromStore() {
+  return getReplicaFamilyCleanupConfig(loadSettings());
+}
+
+export async function updateReplicaFamilyCleanupConfigInStore(
+  patch: Parameters<typeof updateReplicaFamilyCleanupConfig>[1],
+  source: TaskWriteSource = 'api',
+): Promise<ReturnType<typeof getReplicaFamilyCleanupConfig>> {
+  const settings = loadSettings();
+  const next = updateReplicaFamilyCleanupConfig(settings, patch);
+  saveSettings(settings);
+  await emitTasksChanged('update', source);
+  return next;
+}
+
+export function listReplicaFamilyCleanupCandidatesFromStore(): ReplicaCleanupCandidateGroup[] {
+  return listReplicaFamilyCleanupCandidates(loadSettings());
+}
+
+export async function applyReplicaFamilyCleanupInStore(
+  keepByRoot: Record<string, string[]>,
+  messageId: number,
+  source: TaskWriteSource = 'api',
+): Promise<void> {
+  const settings = loadSettings();
+  const next = applyReplicaFamilyCleanup(settings, keepByRoot, messageId);
+  settings.tasks = next.tasks;
+  settings.replicaFamilyCleanup = next.replicaFamilyCleanup;
+  saveSettings(settings);
+  await emitTasksChanged('update', source);
+}
+
+export async function resetReplicaFamilyCleanupCycleInStore(
+  source: TaskWriteSource = 'api',
+): Promise<void> {
+  const settings = loadSettings();
+  resetReplicaFamilyCleanupCycle(settings);
+  saveSettings(settings);
+  await emitTasksChanged('update', source);
 }
 
 export function listReplicaFamilySchedule(rootId: string) {

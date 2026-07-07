@@ -23,6 +23,7 @@ import TaskContextPanel from './TaskContextPanel.vue';
 import ApiConfigPanel from './ApiConfigPanel.vue';
 import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
 import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
+import ReplicaFamilyCleanupPanel from './ReplicaFamilyCleanupPanel.vue';
 import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
@@ -245,7 +246,12 @@ async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> 
     viewTasks.value = [];
   }
   if (!options?.skipPresetSync) {
-    syncPresetFieldsFromEffective();
+    suppressGlobalSettingsPersist = true;
+    try {
+      syncPresetFieldsFromEffective();
+    } finally {
+      suppressGlobalSettingsPersist = false;
+    }
   }
 }
 
@@ -354,9 +360,34 @@ function schedulePersistViewTasks() {
 }
 
 watch(viewTasks, schedulePersistViewTasks, { deep: true });
+
+let persistGlobalSettingsTimer: ReturnType<typeof setTimeout> | null = null;
+let suppressGlobalSettingsPersist = false;
+
+function schedulePersistGlobalSettings() {
+  if (chatScopeActive.value || suppressGlobalSettingsPersist) return;
+  if (persistGlobalSettingsTimer) clearTimeout(persistGlobalSettingsTimer);
+  persistGlobalSettingsTimer = setTimeout(() => {
+    persistGlobalSettingsTimer = null;
+    store.persist();
+  }, 300);
+}
+
+watch(
+  () => ({
+    enabled: settings.value.enabled,
+    tasks: settings.value.tasks,
+    messageVarRetention: settings.value.messageVarRetention,
+    activePresetName: settings.value.activePresetName,
+  }),
+  schedulePersistGlobalSettings,
+  { deep: true },
+);
+
 const importFileInput = ref<HTMLInputElement | null>(null);
 const currentPage = ref(1);
 const messageVarRetentionHelpOpen = ref(false);
+const replicaCleanupHelpOpen = ref(false);
 const gameTimeFormatHelpOpen = ref(false);
 const chatExtractTagsHelpOpen = ref(false);
 const extractInjectTagsHelpOpen = ref(false);
@@ -664,7 +695,7 @@ function onReplicaScheduleModeChange(mode: ReplicaFamilyScheduleMode): void {
 
 function onReplicaMemberScheduleChange(
   memberId: string,
-  patch: { selected?: boolean; launched?: boolean },
+  patch: { launched?: boolean },
 ): void {
   if (chatScopeActive.value) {
     void updateReplicaMemberScheduleInStore(memberId, patch, 'ui')
@@ -675,7 +706,6 @@ function onReplicaMemberScheduleChange(
   const idx = settings.value.tasks.findIndex(t => t.id === memberId);
   if (idx < 0) return;
   const member = settings.value.tasks[idx]!;
-  if (patch.selected !== undefined) member.replicaFamilySelected = patch.selected;
   if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
 }
 
@@ -923,6 +953,11 @@ onUnmounted(() => {
   offChatScopeChanged?.stop();
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
   if (persistPresetFieldsTimer) clearTimeout(persistPresetFieldsTimer);
+  if (persistGlobalSettingsTimer) {
+    clearTimeout(persistGlobalSettingsTimer);
+    persistGlobalSettingsTimer = null;
+  }
+  if (!chatScopeActive.value) store.persist();
 });
 
 async function handleRerun() {
@@ -2050,6 +2085,8 @@ function saveRunLogTaskTags(taskId: string): void {
               </button>
             </div>
           </div>
+
+          <ReplicaFamilyCleanupPanel v-model:help-open="replicaCleanupHelpOpen" v-model:settings="settings" />
 
           <div class="acu-section">
             <div class="acu-heading-with-help">

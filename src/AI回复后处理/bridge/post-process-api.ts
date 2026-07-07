@@ -43,6 +43,11 @@ import {
   updateReplicaFamilyScheduleMode,
   updateReplicaMemberSchedule,
   listReplicaFamilySchedule,
+  getReplicaFamilyCleanupConfigFromStore,
+  updateReplicaFamilyCleanupConfigInStore,
+  listReplicaFamilyCleanupCandidatesFromStore,
+  applyReplicaFamilyCleanupInStore,
+  resetReplicaFamilyCleanupCycleInStore,
   listTaskWorkflowPresets,
   saveTaskWorkflowPreset,
   applyTaskWorkflowPreset,
@@ -65,6 +70,7 @@ import type {
   ScriptSettings,
   TaskContextConfig,
 } from '../tasks/schema';
+import type { ReplicaCleanupCandidateGroup } from '../tasks/replica-family-cleanup';
 import { PromptAutoSegmentSchema, PromptAutoSlotSchema, PromptGroupSchema } from '../tasks/schema';
 import type { z } from 'zod';
 
@@ -136,9 +142,16 @@ export interface AcuPostProcessTaskAPI {
   updateReplicaFamilyScheduleMode(rootId: string, mode: ReplicaFamilyScheduleMode): Promise<PostProcessTask>;
   updateReplicaMemberSchedule(
     memberId: string,
-    patch: { selected?: boolean; launched?: boolean },
+    patch: { launched?: boolean },
   ): Promise<PostProcessTask>;
   listReplicaFamilySchedule(rootId: string): ReturnType<typeof listReplicaFamilySchedule>;
+  getReplicaFamilyCleanupConfig(): ReturnType<typeof getReplicaFamilyCleanupConfigFromStore>;
+  updateReplicaFamilyCleanupConfig(
+    patch: Partial<ScriptSettings['replicaFamilyCleanup']>,
+  ): ReturnType<typeof updateReplicaFamilyCleanupConfigInStore>;
+  listReplicaFamilyCleanupCandidates(): ReplicaCleanupCandidateGroup[];
+  applyReplicaFamilyCleanup(keepByRoot: Record<string, string[]>, messageId?: number): Promise<void>;
+  resetReplicaFamilyCleanupCycle(): Promise<void>;
   listTaskWorkflowPresets(taskId: string): string[];
   saveTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
   applyTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
@@ -231,6 +244,18 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
   updateReplicaMemberSchedule: (memberId, patch) =>
     apiCall(() => updateReplicaMemberSchedule(memberId, patch, 'api')) as Promise<PostProcessTask>,
   listReplicaFamilySchedule: (rootId: string) => listReplicaFamilySchedule(rootId),
+  getReplicaFamilyCleanupConfig: () => getReplicaFamilyCleanupConfigFromStore(),
+  updateReplicaFamilyCleanupConfig: patch =>
+    apiCall(() => updateReplicaFamilyCleanupConfigInStore(patch, 'api')) as ReturnType<
+      typeof updateReplicaFamilyCleanupConfigInStore
+    >,
+  listReplicaFamilyCleanupCandidates: () => listReplicaFamilyCleanupCandidatesFromStore(),
+  applyReplicaFamilyCleanup: (keepByRoot, messageId) =>
+    apiCall(() =>
+      applyReplicaFamilyCleanupInStore(keepByRoot, messageId ?? getLastMessageId(), 'api'),
+    ) as Promise<void>,
+  resetReplicaFamilyCleanupCycle: () =>
+    apiCall(() => resetReplicaFamilyCleanupCycleInStore('api')) as Promise<void>,
   listTaskWorkflowPresets: (taskId: string) => listTaskWorkflowPresets(taskId),
   saveTaskWorkflowPreset: (taskId, name) =>
     apiCall(() => saveTaskWorkflowPreset(taskId, name, 'api')) as Promise<PostProcessTask>,

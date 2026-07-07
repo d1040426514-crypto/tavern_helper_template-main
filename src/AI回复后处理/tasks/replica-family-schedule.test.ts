@@ -4,6 +4,7 @@ import {
   buildReplicaFromRoot,
   mergeReplicaFamilyFromRelay,
   prepareStageTasksWithReplicaSync,
+  resetNewlyCreatedReplicaLaunched,
   shouldRunReplicaAtRuntime,
 } from './replica-family';
 
@@ -40,42 +41,52 @@ function test(name: string, fn: () => void): void {
   }
 }
 
-test('auto mode runs all replicas regardless of selected', () => {
+test('auto mode shouldRunReplicaAtRuntime returns true for any replica', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
-  const rep = buildReplicaFromRoot(root, '1', '处理 item', [root], { selected: false, launched: false });
+  const rep = buildReplicaFromRoot(root, '1', '处理 item', [root]);
   assert.equal(shouldRunReplicaAtRuntime(rep, root), true);
 });
 
-test('manual mode requires selected and launched', () => {
+test('manual mode requires launched', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
-  const rep = buildReplicaFromRoot(root, '1', '处理 item', [root], { selected: true, launched: false });
+  const rep = buildReplicaFromRoot(root, '1', '处理 item', [root], { launched: false });
   assert.equal(shouldRunReplicaAtRuntime(rep, root), false);
   const launched = { ...rep, replicaFamilyLaunched: true };
   assert.equal(shouldRunReplicaAtRuntime(launched, root), true);
 });
 
-test('merge preserves selected orphan when attr disappears from relay', () => {
+test('merge preserves all orphans when relay shrinks', () => {
   const root = baseTask();
-  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
-  const rep2 = tasks.find(t => t.replicaFamilyAttrValue === '2')!;
-  tasks = tasks.map(t => (t.id === rep2.id ? { ...t, replicaFamilySelected: true } : t));
-  tasks = mergeReplicaFamilyFromRelay(root, ['1'], tasks);
+  let merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  let tasks = merged.tasks;
+  merged = mergeReplicaFamilyFromRelay(root, ['1'], tasks);
+  tasks = merged.tasks;
   assert.ok(tasks.some(t => t.replicaFamilyAttrValue === '2'));
-  assert.ok(!tasks.some(t => t.replicaFamilyAttrValue === '3'));
+  assert.equal(tasks.filter(t => t.replicaFamilyRootId === root.id).length, 2);
 });
 
-test('merge removes unselected orphan when attr disappears', () => {
+test('merge only adds missing attr without duplicating existing', () => {
   const root = baseTask();
-  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
-  tasks = mergeReplicaFamilyFromRelay(root, ['1'], tasks);
-  assert.equal(tasks.filter(t => t.replicaFamilyRootId === root.id).length, 1);
+  let merged = mergeReplicaFamilyFromRelay(root, ['1'], [root]);
+  const firstId = merged.tasks.find(t => t.replicaFamilyAttrValue === '1')!.id;
+  merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], merged.tasks);
+  const same = merged.tasks.find(t => t.replicaFamilyAttrValue === '1')!;
+  assert.equal(same.id, firstId);
+  assert.ok(merged.tasks.some(t => t.replicaFamilyAttrValue === '2'));
+  assert.equal(merged.newlyCreatedIds.length, 1);
 });
 
-test('new synced replicas default unselected and unlaunched', () => {
-  const root = baseTask();
-  const tasks = mergeReplicaFamilyFromRelay(root, ['9'], [root]);
-  const rep = tasks.find(t => t.replicaFamilyAttrValue === '9')!;
-  assert.equal(rep.replicaFamilySelected, false);
+test('manual new synced replicas default launched true', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['9'], [root]);
+  const rep = merged.tasks.find(t => t.replicaFamilyAttrValue === '9')!;
+  assert.equal(rep.replicaFamilyLaunched, true);
+});
+
+test('auto new synced replicas default launched false', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['9'], [root]);
+  const rep = merged.tasks.find(t => t.replicaFamilyAttrValue === '9')!;
   assert.equal(rep.replicaFamilyLaunched, false);
 });
 
@@ -83,13 +94,14 @@ function relayMap(entries: Record<string, string>) {
   return new Map(Object.entries(entries).map(([k, v]) => [k, [v]]));
 }
 
-test('prepareStageTasksWithReplicaSync filters manual replicas', () => {
+test('prepareStageTasksWithReplicaSync manual filters by launched only', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
-  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  let merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  let tasks = merged.tasks;
   const rep1 = tasks.find(t => t.replicaFamilyAttrValue === '1')!;
   tasks = tasks.map(t => {
-    if (t.id === rep1.id) return { ...t, replicaFamilySelected: true, replicaFamilyLaunched: true };
-    return t;
+    if (t.id === rep1.id) return { ...t, replicaFamilyLaunched: true };
+    return { ...t, replicaFamilyLaunched: false };
   });
   const relay = relayMap({
     'item@id=1': '<item id="1">A</item>',
@@ -100,15 +112,26 @@ test('prepareStageTasksWithReplicaSync filters manual replicas', () => {
   assert.equal(runtime[0]!.replicaFamilyAttrValue, '1');
 });
 
-test('prepareStageTasksWithReplicaSync auto runs all replicas', () => {
+test('prepareStageTasksWithReplicaSync auto runs only relay replicas', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
-  const tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  let merged = mergeReplicaFamilyFromRelay(root, ['1', '2', '3'], [root]);
   const relay = relayMap({
     'item@id=1': '<item id="1">A</item>',
     'item@id=2': '<item id="2">B</item>',
   });
-  const { tasks: runtime } = prepareStageTasksWithReplicaSync([root], tasks, relay);
+  const { tasks: runtime } = prepareStageTasksWithReplicaSync([root], merged.tasks, relay);
   assert.equal(runtime.length, 2);
+  assert.ok(runtime.every(r => ['1', '2'].includes(r.replicaFamilyAttrValue ?? '')));
+});
+
+test('resetNewlyCreatedReplicaLaunched sets launched false', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['1'], [root]);
+  const rep = merged.tasks.find(t => t.replicaFamilyAttrValue === '1')!;
+  assert.equal(rep.replicaFamilyLaunched, true);
+  const next = resetNewlyCreatedReplicaLaunched(merged.tasks, merged.newlyCreatedIds);
+  const updated = next.find(t => t.id === rep.id)!;
+  assert.equal(updated.replicaFamilyLaunched, false);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

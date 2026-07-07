@@ -225,7 +225,11 @@ async function runSingleTask(
       apiPresetUsed = apiResult.usedPresetName;
       retryOnPrimaryOnly = false;
     } catch (e) {
-      if (e instanceof RunCancelledError || isRunCancelled(options?.signal)) {
+      if (
+        e instanceof RunCancelledError ||
+        isRunCancelled(options?.signal) ||
+        (e instanceof DOMException && e.name === 'AbortError')
+      ) {
         throw new RunCancelledError();
       }
       lastError = e instanceof Error ? e.message : String(e);
@@ -396,15 +400,25 @@ export interface RunPostProcessOptions {
   taskIdFilter?: string;
 }
 
+export type RunPostProcessResult = {
+  results: TaskRunResult[];
+  ctx: SharedContext;
+  cancelled?: boolean;
+  newlyCreatedReplicaIds: string[];
+  executedMemberIds: string[];
+};
+
 export async function runPostProcessTasks(
   settings: ScriptSettings,
   snapshot: DataSnapshot,
   messageId: number,
   options?: RunPostProcessOptions,
-): Promise<{ results: TaskRunResult[]; ctx: SharedContext; cancelled?: boolean }> {
+): Promise<RunPostProcessResult> {
   const ctx = await buildSharedContext(messageId, settings, snapshot, { isRerun: options?.isRerun });
   checkRunCancelled(options?.signal);
   let enabledTasks = settings.tasks.filter(t => t.enabled);
+  const allNewlyCreatedReplicaIds: string[] = [];
+  const allExecutedMemberIds: string[] = [];
   if (options?.taskIdFilter) {
     enabledTasks = enabledTasks.filter(t => t.id === options.taskIdFilter);
     if (!enabledTasks.length) {
@@ -412,7 +426,7 @@ export async function runPostProcessTasks(
     }
   }
   if (!enabledTasks.length) {
-    return { results: [], ctx };
+    return { results: [], ctx, newlyCreatedReplicaIds: [], executedMemberIds: [] };
   }
 
   options?.onProgress?.('正在准备后处理任务...');
@@ -435,7 +449,12 @@ export async function runPostProcessTasks(
       routePoolRegistry,
     });
     reporter.setFinished(task.id, result);
-    return { results: [result], ctx };
+    return {
+      results: [result],
+      ctx,
+      newlyCreatedReplicaIds: [],
+      executedMemberIds: result.success && !result.skipped && task.replicaFamilyRootId ? [task.id] : [],
+    };
   }
 
   const results: TaskRunResult[] = [];
@@ -450,6 +469,7 @@ export async function runPostProcessTasks(
 
       const prepared = prepareStageTasksWithReplicaSync(stageTasksRaw, settings.tasks, aggregatedRelayTags);
       settings.tasks = prepared.allTasks;
+      allNewlyCreatedReplicaIds.push(...prepared.newlyCreatedReplicaIds);
 
       const stageTasks = prepared.tasks;
       const skippedRootResults: TaskRunResult[] = prepared.skippedRoots.map(root => ({
@@ -489,6 +509,10 @@ export async function runPostProcessTasks(
       results.push(...skippedRootResults, ...stageResults);
 
       for (const r of stageResults) {
+        if (r.success && !r.skipped) {
+          const task = settings.tasks.find(t => t.id === r.taskId);
+          if (task?.replicaFamilyRootId) allExecutedMemberIds.push(r.taskId);
+        }
         if (r.success && Object.keys(r.extractedTags).length) {
           mergeRelayTagMap(aggregatedRelayTags, r.extractedTags);
         }
@@ -502,5 +526,11 @@ export async function runPostProcessTasks(
     }
   }
 
-  return { results, ctx, cancelled };
+  return {
+    results,
+    ctx,
+    cancelled,
+    newlyCreatedReplicaIds: allNewlyCreatedReplicaIds,
+    executedMemberIds: allExecutedMemberIds,
+  };
 }

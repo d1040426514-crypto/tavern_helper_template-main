@@ -3,6 +3,7 @@ import {
   buildExtractSpecKey,
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
+  formatAttrTagBlock,
   formatEmptyAttrTagBlock,
   isCompositeUnderAttrSpec,
   parseCompositeKey,
@@ -94,6 +95,8 @@ export function formatTagValueForInject(key: string, value: string): string {
   const v = String(value ?? '').trim();
   if (!v) return '';
   if (isStoredFullBlockForKey(key, v)) return v;
+  const parsed = parseCompositeKey(key);
+  if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, v);
   const bare = bareTagNameFromKey(key);
   return `<${bare}>${v}</${bare}>`;
 }

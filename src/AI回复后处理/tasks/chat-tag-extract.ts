@@ -1,12 +1,9 @@
 import { loadSettings } from '../settings';
 import { resolveEffectiveSettings } from './effective-settings';
 import { extractInjectTagsFromResponse, getChatExtractTagSpecs } from './tag-extract';
+import { isChatMessageFloorAccessible } from './message-floor';
 import { inheritTagVariables, writeFloorTagValues } from './tag-variables';
 import type { ScriptSettings } from './schema';
-
-function isAccessibleMessageFloor(message_id: number): boolean {
-  return message_id >= 0 && getChatMessages(message_id).length > 0;
-}
 
 export function getChatExtractTagSpecsFromSettings(
   settings: ScriptSettings,
@@ -20,7 +17,7 @@ export function extractAndWriteChatTags(
   text: string,
   tagSpecs: string[],
 ): Record<string, string> {
-  if (!tagSpecs.length || !isAccessibleMessageFloor(messageId)) return {};
+  if (!tagSpecs.length || !isChatMessageFloorAccessible(messageId)) return {};
 
   const { extractedTags } = extractInjectTagsFromResponse(text, tagSpecs);
   if (!Object.keys(extractedTags).length) return {};

@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { PostProcessTask, ReplicaFamilyScheduleMode } from '../tasks/schema';
-import AcuToggle from './AcuToggle.vue';
 
 const props = defineProps<{
   root: PostProcessTask;
@@ -10,7 +9,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   updateMode: [mode: ReplicaFamilyScheduleMode];
-  updateMember: [memberId: string, patch: { selected?: boolean; launched?: boolean }];
+  updateMember: [memberId: string, patch: { launched?: boolean }];
 }>();
 
 const scheduleMode = computed({
@@ -24,16 +23,13 @@ function memberLabel(member: PostProcessTask): string {
   return member.replicaFamilyAttrValue?.trim() || member.name;
 }
 
-function isMemberSelected(member: PostProcessTask): boolean {
-  return member.replicaFamilySelected === true;
+function isMemberLaunched(member: PostProcessTask): boolean {
+  return member.replicaFamilyLaunched === true;
 }
 
-function toggleMemberSelected(member: PostProcessTask): void {
-  emit('updateMember', member.id, { selected: !isMemberSelected(member) });
-}
-
-function setMemberLaunched(member: PostProcessTask, launched: boolean): void {
-  emit('updateMember', member.id, { launched });
+function toggleMemberLaunched(member: PostProcessTask): void {
+  if (!isManual.value) return;
+  emit('updateMember', member.id, { launched: !isMemberLaunched(member) });
 }
 </script>
 
@@ -41,7 +37,7 @@ function setMemberLaunched(member: PostProcessTask, launched: boolean): void {
   <div class="acu-subsection replica-scheduler">
     <h5>副本调度</h5>
     <p class="acu-notes acu-notes--sm">
-      自动模式：relay 枚举决定副本数量，全部副本参与执行；点选副本按钮表示「选定」，用于保留楼层变量与孤儿副本。手动模式：仅「选定且启动」的副本执行 API。
+      自动模式：每轮仅执行上一阶段 relay 枚举列表中的副本。手动模式：点选副本表示「已启动」；新建副本首轮自动启动并执行，轮末自动变为未启动。
     </p>
     <div class="replica-scheduler__mode">
       <label class="replica-scheduler__mode-option">
@@ -64,25 +60,25 @@ function setMemberLaunched(member: PostProcessTask, launched: boolean): void {
           type="button"
           class="acu-auto-segment-chip"
           :class="{
-            'acu-auto-segment-chip--on': isMemberSelected(member),
-            'acu-auto-segment-chip--off': !isMemberSelected(member),
+            'acu-auto-segment-chip--on': isManual && isMemberLaunched(member),
+            'acu-auto-segment-chip--off': isManual && !isMemberLaunched(member),
+            'replica-scheduler__chip--readonly': !isManual,
           }"
-          :title="isMemberSelected(member) ? '点击取消选定' : '点击选定'"
-          :aria-pressed="isMemberSelected(member)"
-          @click="toggleMemberSelected(member)"
+          :disabled="!isManual"
+          :title="
+            isManual
+              ? isMemberLaunched(member)
+                ? '点击关闭'
+                : '点击启动'
+              : '自动模式仅执行 relay 列表中的副本'
+          "
+          :aria-pressed="isManual ? isMemberLaunched(member) : undefined"
+          @click="toggleMemberLaunched(member)"
         >
           {{ memberLabel(member) }}
         </button>
-        <div v-if="isManual" class="replica-scheduler__launch">
-          <span class="replica-scheduler__launch-label">启动</span>
-          <AcuToggle
-            :model-value="member.replicaFamilyLaunched === true"
-            aria-label="启动"
-            @update:model-value="setMemberLaunched(member, $event)"
-          />
-        </div>
       </div>
     </div>
-    <p v-else class="acu-notes acu-notes--sm">暂无副本；启用任务后将在运行时按 relay 同步。</p>
+    <p v-else class="acu-notes acu-notes--sm">暂无副本；启用任务后将在运行时按 relay 增量同步。</p>
   </div>
 </template>

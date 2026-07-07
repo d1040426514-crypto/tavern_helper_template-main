@@ -1,18 +1,11 @@
 import './ui/acu-theme.css';
 import { reloadOnChatChange } from '@util/script';
 import { mountAcuPostProcessAPI, acuPostProcessTaskApi } from './bridge/post-process-api';
-import { getCurrentChatKey } from './api/chat-key';
 import { readChatTaskScope } from './tasks/chat-task-scope';
 import { emitChatScopeChanged } from './tasks/events';
-import { applyInjectVariableUpdates } from './tasks/inject-variable-update';
 import { registerTrigger } from './tasks/trigger';
 import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
-import {
-  debugStopMvuEndedListener,
-  getLastDeferDispatch,
-} from './tasks/mvu-trigger-defer';
-import { normalizeGameTimeRaw, parseGameTimeToMs } from './tasks/parse-game-time';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import { registerExtensionsMenuEntry } from './ui/extensions-menu';
 import { loadSettings } from './settings';
@@ -64,16 +57,6 @@ $(() => {
     const scope = readChatTaskScope();
     void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
   });
-
-  const w = window as unknown as Record<string, unknown>;
-  w.__acuPpGetLastDeferDispatch = getLastDeferDispatch;
-  w.__acuPpGetLastPromptMessages = acuPostProcessTaskApi.getLastPromptMessages.bind(acuPostProcessTaskApi);
-  w.__acuPpGetLastPlaceholderVars = acuPostProcessTaskApi.getLastPlaceholderVars.bind(acuPostProcessTaskApi);
-  w.__acuPpRerunCurrentFloor = acuPostProcessTaskApi.rerunCurrentFloor.bind(acuPostProcessTaskApi);
-  w.__acuPpApplyInjectVariableUpdates = applyInjectVariableUpdates;
-  w.__acuPpDebugStopMvuEnded = debugStopMvuEndedListener;
-  w.__acuPpParseGameTime = parseGameTimeToMs;
-  w.__acuPpNormalizeGameTime = normalizeGameTimeRaw;
 
   $(window).on('pagehide', () => {
     menuEntry.destroy();

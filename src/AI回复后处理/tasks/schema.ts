@@ -121,9 +121,6 @@ function migratePostProcessTaskRaw(raw: unknown): unknown {
   if (task.replicaFamilyScheduleMode === undefined && task.syncAsReplicaFamily) {
     task.replicaFamilyScheduleMode = 'auto';
   }
-  if (task.replicaFamilyRootId && task.replicaFamilySelected === undefined) {
-    task.replicaFamilySelected = false;
-  }
   if (task.replicaFamilyRootId && task.replicaFamilyLaunched === undefined) {
     task.replicaFamilyLaunched = false;
   }
@@ -205,7 +202,6 @@ const PostProcessTaskShape = z.object({
   replicaFamilySpec: z.string().optional(),
   replicaFamilyBaseName: z.string().optional(),
   replicaFamilyScheduleMode: z.enum(['auto', 'manual']).optional(),
-  replicaFamilySelected: z.boolean().optional(),
   replicaFamilyLaunched: z.boolean().optional(),
   taskWorkflowPresets: z.array(TaskWorkflowPresetEntrySchema).default([]),
 });
@@ -329,6 +325,27 @@ export const ScriptSettingsSchema = z
         keepFloors: z.number().int().min(1).default(20),
       })
       .default({ enabled: true, keepFloors: 20 }),
+    replicaFamilyCleanup: z
+      .object({
+        enabled: z.boolean().default(false),
+        cycleRounds: z.number().int().min(1).default(10),
+        activityRatio: z.number().min(0).max(1).default(0.5),
+        mode: z.enum(['auto', 'manual']).default('manual'),
+        roundsSinceCleanup: z.number().int().min(0).default(0),
+        cycleRunCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+        lastManualKeepByRoot: z.record(z.string(), z.array(z.string())).default({}),
+        lastCleanupRound: z.number().int().min(0).default(0),
+      })
+      .default({
+        enabled: false,
+        cycleRounds: 10,
+        activityRatio: 0.5,
+        mode: 'manual',
+        roundsSinceCleanup: 0,
+        cycleRunCounts: {},
+        lastManualKeepByRoot: {},
+        lastCleanupRound: 0,
+      }),
     uiThemeId: z.string().default('creamy-minimal'),
   })
   .prefault({});

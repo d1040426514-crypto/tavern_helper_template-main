@@ -164,9 +164,40 @@ function extractByAttrSpec(text: string, spec: ExtractTagSpec): Record<string, s
       attrValue !== undefined && attrValue !== ''
         ? buildCompositeKey(spec.tagName, spec.attrName!, attrValue)
         : spec.tagName;
-    result[key] = inst.fullBlock.trim();
+    result[key] = inst.inner.trim();
   }
   return result;
+}
+
+/** 带属性标签块（引用时重建完整开闭标签） */
+export function formatAttrTagBlock(
+  tagName: string,
+  attrName: string,
+  attrValue: string,
+  inner = '',
+): string {
+  const safeValue = String(attrValue ?? '').replace(/"/g, '&quot;');
+  return `<${tagName} ${attrName}="${safeValue}">${inner}</${tagName}>`;
+}
+
+/** 将已存储值剥为内文（兼容旧完整块存档） */
+export function storedTagValueToInner(key: string, value: string): string {
+  const v = String(value ?? '').trim();
+  if (!v.startsWith('<') || !v.includes('>')) return v;
+  const parsed = parseCompositeKey(key);
+  const tagName = parsed?.tagName ?? key.split('@')[0] ?? key;
+  const instances = findAllTagInstances(v, tagName);
+  if (!instances.length) return v;
+  return instances[0].inner.trim();
+}
+
+function formatExtractedFragmentForKey(key: string, value: string): string {
+  const v = String(value ?? '').trim();
+  if (!v) return '';
+  const parsed = parseCompositeKey(key);
+  if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, v);
+  const bare = key.indexOf('@') === -1 ? key : key.slice(0, key.indexOf('@'));
+  return `<${bare}>${v}</${bare}>`;
 }
 
 export interface InjectTagExtractionResult {
@@ -210,7 +241,7 @@ export function extractInjectTagsFromResponse(
     if (!keys.length) continue;
     for (const key of keys) {
       extractedTags[key] = byKey[key];
-      injectedFragments.push(byKey[key]);
+      injectedFragments.push(formatExtractedFragmentForKey(key, byKey[key]));
       resolvedKeys.push(key);
     }
     if (!resolvedKeys.includes(configKey)) {
@@ -242,8 +273,7 @@ export function compositePlaceholderToKey(name: string): string | null {
 
 /** 属性标签在楼层变量无数据时，输出带属性空内文的完整标签块 */
 export function formatEmptyAttrTagBlock(tagName: string, attrName: string, attrValue: string): string {
-  const safeValue = String(attrValue ?? '').replace(/"/g, '&quot;');
-  return `<${tagName} ${attrName}="${safeValue}"></${tagName}>`;
+  return formatAttrTagBlock(tagName, attrName, attrValue, '');
 }
 
 export function isCompositeUnderAttrSpec(
@@ -270,14 +300,14 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     {
       title: '按属性',
       config: 'item@id',
-      rule: '扫描所有 <item …>，按 id 属性分成 item@id=值，存完整标签块；缺 id 时回退裸 key item；同 key 后者覆盖。',
-      example: '<item id="1">A</item><item id="2">B</item> → item@id=1、item@id=2',
+      rule: '扫描所有 <item …>，按 id 属性分成 item@id=值，存内文；缺 id 时回退裸 key item；同 key 后者覆盖。引用时包回带属性的完整标签块。',
+      example: '<item id="1">A</item><item id="2">B</item> → item_id.1="A"、item_id.2="B"',
     },
   ],
   dynamicPlaceholders: {
     title: '动态属性占位符',
     intro:
-      '配置「标签@属性」（如 item@id）后，AI 须输出带该属性的开标签（如 <item id="1">…</item>）。摘取结果写入 relay key item@id=1、item@id=2…，并同步到楼层变量 post_process_tags.item_id.1 等嵌套结构。',
+      '配置「标签@属性」（如 item@id）后，AI 须输出带该属性的开标签（如 <item id="1">…</item>）。摘取结果存内文并写入 post_process_tags.item_id.1 等嵌套结构；引用时自动包回完整标签块。',
     tips: [
       {
         code: '{{item@id}}',
@@ -315,21 +345,21 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         title: '4. 运行时同步',
-        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表决定副本数量；各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式。内容仅从当前楼 post_process_tags 读取（不读枚举 relay）；楼层无对应路径时输出空内文属性标签块。',
+        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表增量新增缺失副本（保留全部既有副本）；各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式。内容仅从当前楼 post_process_tags 读取（不读枚举 relay）；楼层无对应路径时输出空内文属性标签块。',
       },
       {
         title: '5. 调度模式',
-        desc: '自动调度（默认）：relay 决定副本数量，全部副本参与 API 执行；「选定」仅用于保留楼层变量 key 与 relay 消失后的孤儿副本。手动调度：仅「选定且启动」的副本执行 API；新同步副本默认未选定、未启动。',
+        desc: '自动调度（默认）：每轮仅执行上一阶段 relay 枚举列表中的副本。手动调度：点选副本表示已启动；新建副本首轮自动启动并执行，轮末自动变为未启动。',
       },
     ],
     notes: [
-      '上一阶段 relay 无可用属性实例时，自动模式跳过整组；手动模式若仍有「选定+启动」的存量副本可继续执行。',
+      '上一阶段 relay 无可用属性实例时，自动模式跳过整组；手动模式若仍有已启动的存量副本可继续执行。',
       '关闭「启用」会删除已生成的副本并取消副本族标记。',
-      '选中副本族原本后，可通过任务 tab 下方的副本族切换条预览各副本提示词；「副本调度」面板可切换模式并管理选定/启动。',
+      '选中副本族原本后，可通过任务 tab 下方的副本族切换条预览各副本提示词；「副本调度」面板可切换模式并管理启动状态。',
     ],
     example:
       'S1「枚举 item」（提取写入标签 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
   },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族仅借 relay 决定副本数量，占位符内容读楼层变量。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑后处理任务读上一楼。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 relay 增量新增副本，占位符内容读楼层变量（旧 key 保留）。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑后处理任务读上一楼。',
 } as const;

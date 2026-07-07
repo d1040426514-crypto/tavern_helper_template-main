@@ -3,7 +3,7 @@ import {
   buildCompositeKey,
   parseCompositeKey,
   parseDynamicAttrPlaceholder,
-  sortAttrValues,
+  storedTagValueToInner,
 } from './tag-extract';
 
 export type TagContainerRaw = Record<string, unknown>;
@@ -45,7 +45,6 @@ export type DynamicAttrWritePlan = {
   groupKey: string;
   spec: { tagName: string; attrName: string };
   entries: Record<string, string>;
-  pruneToAttrValues: string[];
 };
 
 export function buildDynamicAttrWritePlan(
@@ -58,7 +57,6 @@ export function buildDynamicAttrWritePlan(
   const groupKey = buildAttrGroupKey(dyn.tagName, dyn.attrName);
   const prefix = `${dyn.tagName}@${dyn.attrName}=`.toLowerCase();
   const entries: Record<string, string> = {};
-  const attrValues: string[] = [];
 
   for (const [key, value] of Object.entries(aggregatedFlat)) {
     if (!key.toLowerCase().startsWith(prefix)) continue;
@@ -67,7 +65,6 @@ export function buildDynamicAttrWritePlan(
     const text = String(value ?? '').trim();
     if (!text) continue;
     entries[parsed.attrValue] = text;
-    attrValues.push(parsed.attrValue);
   }
 
   if (!Object.keys(entries).length) return null;
@@ -76,11 +73,10 @@ export function buildDynamicAttrWritePlan(
     groupKey,
     spec: dyn,
     entries,
-    pruneToAttrValues: sortAttrValues([...new Set(attrValues)]),
   };
 }
 
-/** 将 nested group 合并进 raw post_process_tags 对象，并裁剪多余 attr key */
+/** 将 nested group 合并进 raw post_process_tags 对象（旧 key 保留，同 key 覆盖，新 key 新增） */
 export function mergeNestedGroupIntoRawContainer(
   raw: TagContainerRaw,
   plan: DynamicAttrWritePlan,
@@ -93,16 +89,113 @@ export function mergeNestedGroupIntoRawContainer(
       : {};
 
   for (const [attrValue, block] of Object.entries(plan.entries)) {
-    merged[attrValue] = block;
-  }
-
-  const keep = new Set(plan.pruneToAttrValues);
-  for (const k of Object.keys(merged)) {
-    if (!keep.has(k)) delete merged[k];
+    const compositeKey = buildCompositeKey(plan.spec.tagName, plan.spec.attrName, attrValue);
+    merged[attrValue] = storedTagValueToInner(compositeKey, block);
   }
 
   next[plan.groupKey] = merged;
+  return stripFlatCompositeKeysForPlan(next, plan);
+}
+
+/** 移除与 nested group 重复的扁平 composite keys（如 item@id=1） */
+export function stripFlatCompositeKeysForPlan(
+  raw: TagContainerRaw,
+  plan: DynamicAttrWritePlan,
+): TagContainerRaw {
+  const next = { ...raw };
+  const prefix = `${plan.spec.tagName}@${plan.spec.attrName}=`.toLowerCase();
+  for (const key of Object.keys(next)) {
+    if (key.toLowerCase().startsWith(prefix)) delete next[key];
+  }
   return next;
+}
+
+/** 将 raw 中所有 nested group 对应的扁平 composite keys 一并移除，并将完整块规范为内文 */
+export function normalizeTagContainerRaw(raw: TagContainerRaw): TagContainerRaw {
+  let next: TagContainerRaw = { ...raw };
+  for (const [key, value] of Object.entries({ ...next })) {
+    if (typeof value === 'string') {
+      const inner = storedTagValueToInner(key, value);
+      if (inner !== value) next[key] = inner;
+      continue;
+    }
+    if (!value || typeof value !== 'object' || Array.isArray(value)) continue;
+    const parts = key.split('_');
+    if (parts.length < 2) continue;
+    const attrName = parts.pop()!;
+    const tagName = parts.join('_');
+    const normalized: Record<string, string> = {};
+    for (const [attrValue, block] of Object.entries(value as Record<string, string>)) {
+      const compositeKey = buildCompositeKey(tagName, attrName, attrValue);
+      normalized[attrValue] = storedTagValueToInner(compositeKey, String(block ?? ''));
+    }
+    next[key] = normalized;
+    next = stripFlatCompositeKeysForPlan(next, {
+      groupKey: key,
+      spec: { tagName, attrName },
+      entries: normalized,
+    });
+  }
+  return next;
+}
+
+export function groupCompositeTagsForNestedWrite(tags: Record<string, string>): {
+  nestedPlans: DynamicAttrWritePlan[];
+  bare: Record<string, string>;
+} {
+  const flatBySpec: Record<string, Record<string, string>> = {};
+  const bare: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries(tags)) {
+    const parsed = parseCompositeKey(key);
+    if (!parsed) {
+      bare[key] = value;
+      continue;
+    }
+    const spec = `${parsed.tagName}@${parsed.attrName}`;
+    if (!flatBySpec[spec]) flatBySpec[spec] = {};
+    flatBySpec[spec][key] = value;
+  }
+
+  const nestedPlans: DynamicAttrWritePlan[] = [];
+  for (const [spec, flat] of Object.entries(flatBySpec)) {
+    const plan = buildDynamicAttrWritePlan(spec, flat);
+    if (plan) nestedPlans.push(plan);
+    else Object.assign(bare, flat);
+  }
+
+  return { nestedPlans, bare };
+}
+
+export function mergeRawTagContainers(base: TagContainerRaw, override: TagContainerRaw): TagContainerRaw {
+  const next: TagContainerRaw = { ...base };
+  for (const [key, value] of Object.entries(override)) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) {
+      const existing = next[key];
+      const merged =
+        existing && typeof existing === 'object' && !Array.isArray(existing)
+          ? { ...(existing as Record<string, string>), ...(value as Record<string, string>) }
+          : { ...(value as Record<string, string>) };
+      next[key] = merged;
+    } else {
+      next[key] = value;
+    }
+  }
+  return next;
+}
+
+export function applyTagsToRawContainer(raw: TagContainerRaw, tags: Record<string, string>): TagContainerRaw {
+  const { nestedPlans, bare } = groupCompositeTagsForNestedWrite(tags);
+  let next = { ...raw };
+  for (const plan of nestedPlans) {
+    next = mergeNestedGroupIntoRawContainer(next, plan);
+  }
+  for (const [key, value] of Object.entries(bare)) {
+    const text = String(value ?? '').trim();
+    if (text) next[key] = text;
+    else delete next[key];
+  }
+  return normalizeTagContainerRaw(next);
 }
 
 export function isDynamicAttrPlaceholder(placeholderName: string): boolean {

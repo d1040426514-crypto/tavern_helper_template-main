@@ -21,28 +21,34 @@ function test(name: string, fn: () => void): void {
 
 test('item@id splits by attribute', () => {
   const text = '<item id="1">A</item><item id="2">B</item>';
-  const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags['item@id=1'], '<item id="1">A</item>');
-  assert.equal(extractedTags['item@id=2'], '<item id="2">B</item>');
+  const { extractedTags, injectedFragments } = extractInjectTagsFromResponse(text, ['item@id']);
+  assert.equal(extractedTags['item@id=1'], 'A');
+  assert.equal(extractedTags['item@id=2'], 'B');
+  assert.equal(injectedFragments[0], '<item id="1">A</item>');
+  assert.equal(injectedFragments[1], '<item id="2">B</item>');
 });
 
 test('item@id falls back bare key when no id', () => {
   const text = '<item id="1">A</item><item>无id</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags['item@id=1'], '<item id="1">A</item>');
-  assert.equal(extractedTags.item, '<item>无id</item>');
+  assert.equal(extractedTags['item@id=1'], 'A');
+  assert.equal(extractedTags.item, '无id');
 });
 
 test('two bare items last wins on item@id config', () => {
   const text = '<item>first</item><item>second</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags.item, '<item>second</item>');
+  assert.equal(extractedTags.item, 'second');
 });
 
 test('bare result keeps inner last', () => {
   const text = '<result>x</result><result type="a">y</result>';
   const { extractedTags } = extractPlotTagsFromResponse(text, ['result']);
   assert.equal(extractedTags.result, 'y');
+});
+
+test('formatTagValueForInject composite inner rebuilds attr block', () => {
+  assert.equal(formatTagValueForInject('item@id=1', 'A'), '<item id="1">A</item>');
 });
 
 test('formatTagValueForInject full block passthrough', () => {
@@ -147,8 +153,8 @@ test('mergeRelayTagMap overwrites same key', () => {
 });
 
 test('replica composite placeholder prefers floor over relay', () => {
-  const relay: RelayTagMap = new Map([['item@id=1', ['<item id="1">enum</item>']]]);
-  const history: RelayTagMap = new Map([['item@id=1', ['<item id="1">floor</item>']]]);
+  const relay: RelayTagMap = new Map([['item@id=1', ['enum']]]);
+  const history: RelayTagMap = new Map([['item@id=1', ['floor']]]);
   const out = replacePlotTagPlaceholdersWithHistory('x {{item@id=1}} y', relay, history, new Set(['item@id']), {
     historyFallback: 'all-tags',
     replicaAttrSpec: { tagName: 'item', attrName: 'id' },

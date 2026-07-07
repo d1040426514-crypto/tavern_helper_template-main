@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import {
+  applyTagsToRawContainer,
   buildDynamicAttrWritePlan,
   flattenTagContainerToRelayKeys,
   mergeNestedGroupIntoRawContainer,
+  normalizeTagContainerRaw,
 } from './tag-variables-nested';
 
 function test(name: string, fn: () => void): void {
@@ -19,12 +21,12 @@ test('flatten nested item_id to flat keys', () => {
   const flat = flattenTagContainerToRelayKeys({
     result: 'hello',
     item_id: {
-      '1': '<item id="1">A</item>',
-      '2': '<item id="2">B</item>',
+      '1': 'A',
+      '2': 'B',
     },
   });
-  assert.equal(flat['item@id=1'], '<item id="1">A</item>');
-  assert.equal(flat['item@id=2'], '<item id="2">B</item>');
+  assert.equal(flat['item@id=1'], 'A');
+  assert.equal(flat['item@id=2'], 'B');
   assert.equal(flat.result, 'hello');
 });
 
@@ -37,26 +39,69 @@ test('flatten legacy flat keys', () => {
 
 test('dynamic write plan builds nested group', () => {
   const plan = buildDynamicAttrWritePlan('item@id', {
-    'item@id=2': '<item id="2">B</item>',
-    'item@id=1': '<item id="1">A</item>',
+    'item@id=2': 'B',
+    'item@id=1': 'A',
   });
   assert.ok(plan);
   assert.equal(plan!.groupKey, 'item_id');
-  assert.equal(plan!.entries['1'], '<item id="1">A</item>');
-  assert.deepEqual(plan!.pruneToAttrValues, ['1', '2']);
+  assert.equal(plan!.entries['1'], 'A');
 });
 
-test('merge nested prunes stale attr keys', () => {
+test('merge nested keeps stale attr keys', () => {
   const plan = buildDynamicAttrWritePlan('item@id', {
-    'item@id=1': '<item id="1">A</item>',
+    'item@id=1': 'A',
   })!;
   const raw = mergeNestedGroupIntoRawContainer(
-    { item_id: { '1': 'old', '9': 'stale' } },
+    { item_id: { '1': 'old', '9': 'stale' }, 'item@id=1': 'flat-stale' },
     plan,
   );
   const group = raw.item_id as Record<string, string>;
-  assert.equal(group['1'], '<item id="1">A</item>');
-  assert.equal(group['9'], undefined);
+  assert.equal(group['1'], 'A');
+  assert.equal(group['9'], 'stale');
+  assert.equal(raw['item@id=1'], undefined);
+});
+
+test('applyTagsToRawContainer routes composite keys to nested group', () => {
+  const raw = applyTagsToRawContainer(
+    {},
+    {
+      'item@id=1': 'A',
+      'item@id=2': 'B',
+      result: 'hello',
+    },
+  );
+  assert.equal(raw['item@id=1'], undefined);
+  assert.equal(raw['item@id=2'], undefined);
+  assert.equal((raw.item_id as Record<string, string>)['1'], 'A');
+  assert.equal((raw.item_id as Record<string, string>)['2'], 'B');
+  assert.equal(raw.result, 'hello');
+});
+
+test('applyTagsToRawContainer normalizes legacy full blocks to inner', () => {
+  const raw = applyTagsToRawContainer(
+    {},
+    {
+      'item@id=1': '<item id="1">A</item>',
+    },
+  );
+  assert.equal((raw.item_id as Record<string, string>)['1'], 'A');
+});
+
+test('normalizeTagContainerRaw strips flat keys when nested exists', () => {
+  const raw = normalizeTagContainerRaw({
+    item_id: { '1': 'A', '2': 'B' },
+    'item@id=1': 'stale-flat',
+    result: 'ok',
+  });
+  assert.equal(raw['item@id=1'], undefined);
+  assert.equal(raw.result, 'ok');
+});
+
+test('normalizeTagContainerRaw strips legacy full block in nested to inner', () => {
+  const raw = normalizeTagContainerRaw({
+    item_id: { '1': '<item id="1">A</item>' },
+  });
+  assert.equal((raw.item_id as Record<string, string>)['1'], 'A');
 });
 
 if (process.exitCode) process.exit(process.exitCode);

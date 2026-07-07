@@ -1,7 +1,4 @@
-/** 楼层是否真实存在（防御空聊天或 getLastMessageId 与 chat 数组不同步） */
-function isAccessibleMessageFloor(message_id: number): boolean {
-  return message_id >= 0 && getChatMessages(message_id).length > 0;
-}
+import { isAccessibleMessageFloor } from './message-floor';
 
 /**
  * 保留最近 `keepFloors` 楼，清空更早楼层的全部消息楼层变量（含 stat_data、addon_data、post_process_tags 等）。

@@ -23,7 +23,6 @@ const IDENTITY_FIELDS = [
 
 const REPLICA_SCHEDULE_FIELDS = [
   'replicaFamilyScheduleMode',
-  'replicaFamilySelected',
   'replicaFamilyLaunched',
 ] as const;
 
@@ -45,7 +44,6 @@ export function applyTaskWorkflowSnapshot(task: PostProcessTask, snapshot: TaskW
   };
   const schedulePreserve = {
     replicaFamilyScheduleMode: task.replicaFamilyScheduleMode,
-    replicaFamilySelected: task.replicaFamilySelected,
     replicaFamilyLaunched: task.replicaFamilyLaunched,
   };
   return {
