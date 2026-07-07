@@ -297,6 +297,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex-shrink: 0;
+  min-width: min-content;
+  white-space: normal;
+  flex-wrap: wrap;
 }
 
 .acu-help-icon-btn {
@@ -855,6 +859,10 @@
   cursor: pointer;
   user-select: none;
   color: var(--acu-text-1);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: min-content;
 }
 
 .acu-pp-root .acu-toggle__input[type='checkbox'] {
@@ -923,6 +931,10 @@
   font-size: var(--acu-font-size-body-lg);
   line-height: 1.35;
   color: var(--acu-text-1);
+  flex-shrink: 0;
+  min-width: min-content;
+  white-space: normal;
+  word-break: keep-all;
 }
 
 /* ── 按钮 ── */
@@ -2248,6 +2260,17 @@
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
+  }
+
+  .acu-row.acu-row--inline.acu-heading-with-help {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .acu-row.acu-row--inline.acu-heading-with-help .acu-toggle {
+    width: 100%;
+    max-width: 100%;
   }
 
   .acu-pp-root .acu-row:not(.acu-row--inline) .acu-input,

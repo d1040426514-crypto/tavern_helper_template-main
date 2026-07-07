@@ -68,9 +68,6 @@ function toggleBook(name: string) {
   if (idx >= 0) list.splice(idx, 1);
   else list.push(name);
   const next = { ...config.value, manualSelection: list };
-  // #region agent log
-  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:toggleBook',message:'toggleBook',data:{name,manualSelection:list,source:next.source},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-  // #endregion
   config.value = next;
   void refreshEntries({ manualSelection: list, source: 'manual' });
 }
@@ -104,9 +101,6 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
       bookNames.push(...charBooks.additional);
     }
     bookNames = [...new Set(bookNames.filter(Boolean))];
-    // #region agent log
-    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:refreshEntries',message:'refresh bookNames',data:{bookNames,activeManualSelection,cfgManualSelection:cfg.value.manualSelection,snapshotProvided:!!snapshot},timestamp:Date.now(),hypothesisId:'H5'})}).catch(()=>{});
-    // #endregion
 
     const groups: typeof entryGroups.value = [];
     const enabledEntries = { ...cfg.value.enabledEntries };
@@ -116,9 +110,6 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
       const selectableUids = selectablePlotWorldbookEntryUids(entries);
       if (enabledEntries[bookName] === undefined) {
         enabledEntries[bookName] = selectableUids;
-        // #region agent log
-        fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:refreshEntries',message:'default init selectable uids',data:{bookName,selectableCount:selectableUids.length,visibleCount:entries.filter(e=>shouldShowEntryInUi({name:e.name})).length,stEnabledCount:entries.filter(e=>e.enabled&&shouldShowEntryInUi({name:e.name})).length},timestamp:Date.now(),hypothesisId:'H1'})}).catch(()=>{});
-        // #endregion
       } else {
         const prev = enabledEntries[bookName] ?? [];
         const sanitized = sanitizePlotWorldbookEnabledUids(entries, prev);
@@ -176,9 +167,6 @@ function selectAllEntries(select: boolean) {
     next[g.bookName] = select
       ? g.entries.filter(e => !e.disabled).map(e => e.uid)
       : [];
-    // #region agent log
-    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'7f6ccd'},body:JSON.stringify({sessionId:'7f6ccd',location:'PlotWorldbookSection.vue:selectAllEntries',message:'bulk select',data:{bookName:g.bookName,select,selectedCount:next[g.bookName].length,totalVisible:g.entries.length},timestamp:Date.now(),hypothesisId:'H2'})}).catch(()=>{});
-    // #endregion
     for (const e of g.entries) e.checked = select && !e.disabled;
   }
   config.value = { ...config.value, enabledEntries: next };
