@@ -315,12 +315,26 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   flex-shrink: 0;
   min-width: max-content;
   white-space: normal;
   flex-wrap: wrap;
   overflow-wrap: anywhere;
+}
+
+.acu-row--extract-tags {
+  flex-wrap: nowrap;
+  align-items: center;
+}
+
+.acu-row--extract-tags .acu-label-with-help {
+  flex: 0 0 auto;
+}
+
+.acu-row--extract-tags .acu-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .acu-help-icon-btn {
