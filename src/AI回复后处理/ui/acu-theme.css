@@ -466,9 +466,9 @@
 
 .acu-api-routing-row .acu-api-config__preset-select {
   flex: 0 1 auto;
-  width: 132px;
-  max-width: 40%;
-  min-width: 96px;
+  width: 192px;
+  max-width: 48%;
+  min-width: 128px;
 }
 
 .acu-api-routing-row__concurrency-label {
@@ -490,8 +490,12 @@
 }
 
 .acu-api-config__concurrency-input {
-  width: 72px;
-  min-width: 72px;
+  width: 3.25rem;
+  min-width: 3.25rem;
+  max-width: 3.25rem;
+  padding-left: 6px;
+  padding-right: 6px;
+  text-align: center;
 }
 
 .acu-api-config__suffix {
@@ -1411,6 +1415,10 @@
   gap: 4px;
 }
 
+.acu-task-output-settings__select {
+  min-width: 140px;
+}
+
 /* ── 占位符说明 ── */
 .acu-placeholder-legend {
   font-size: var(--acu-font-size-caption);
@@ -2315,6 +2323,20 @@
   .acu-row.acu-row--inline.acu-heading-with-help .acu-toggle {
     width: 100%;
     max-width: 100%;
+  }
+
+  .acu-row--task-output-settings {
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    gap: 8px 10px;
+    align-items: center;
+  }
+
+  .acu-row--task-output-settings > .acu-input,
+  .acu-row--task-output-settings > .acu-select {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .acu-pp-root .acu-row:not(.acu-row--inline) .acu-input,

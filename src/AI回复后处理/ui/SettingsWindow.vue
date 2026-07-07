@@ -1911,7 +1911,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 </p>
                 <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">{{ EXTRACT_INJECT_TAGS_HELP.relay }}</p>
               </AcuHelpPanel>
-              <div class="acu-row acu-row--inline">
+              <div class="acu-row acu-row--inline acu-row--task-output-settings">
                 <label>最大重试次数</label>
                 <input v-model.number="selectedTask.maxRetries" class="acu-input" type="number" min="1" step="1" style="width: 96px" />
                 <label>最小回复字数</label>
@@ -1924,7 +1924,7 @@ function saveRunLogTaskTags(taskId: string): void {
                     label="结构化 JSON 输出说明"
                   />
                 </label>
-                <select v-model="selectedTask.structuredOutputMode" class="acu-select" style="min-width: 140px">
+                <select v-model="selectedTask.structuredOutputMode" class="acu-select acu-task-output-settings__select">
                   <option value="off">关闭（XML 标签）</option>
                   <option value="mvu_json_patch">MVU JSON Patch</option>
                   <option value="addon_json_patch">Addon JSON Patch</option>
