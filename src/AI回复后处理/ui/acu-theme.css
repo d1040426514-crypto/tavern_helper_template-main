@@ -217,6 +217,8 @@
 
 .acu-page {
   min-height: 200px;
+  width: 100%;
+  align-self: stretch;
 }
 
 /* ── 面板区块 ── */
@@ -226,6 +228,10 @@
   border-radius: var(--acu-radius-md);
   padding: 16px;
   margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  width: 100%;
 }
 
 .acu-section h4 {
@@ -263,6 +269,18 @@
   align-items: center;
   gap: 6px;
   margin-bottom: 8px;
+  width: 100%;
+  flex-wrap: wrap;
+}
+
+.acu-row.acu-row--inline.acu-heading-with-help {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.acu-row.acu-row--inline.acu-heading-with-help .acu-toggle {
+  flex: 1 1 auto;
+  min-width: min(100%, 240px);
 }
 
 .acu-heading-with-help h4,
@@ -297,10 +315,12 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  flex: 1 1 auto;
   flex-shrink: 0;
-  min-width: min-content;
+  min-width: max-content;
   white-space: normal;
   flex-wrap: wrap;
+  overflow-wrap: anywhere;
 }
 
 .acu-help-icon-btn {
@@ -688,6 +708,14 @@
   align-items: center;
   margin-bottom: 8px;
   flex-wrap: wrap;
+  width: 100%;
+  align-self: stretch;
+  min-width: 0;
+}
+
+.acu-pp-root .acu-section > .acu-row--inline > .acu-toggle {
+  width: 100%;
+  max-width: 100%;
 }
 
 .acu-row label {
@@ -851,7 +879,7 @@
 }
 
 /* ── Toggle 开关（启用类 boolean） ── */
-.acu-toggle {
+.acu-pp-root .acu-toggle {
   position: relative;
   display: inline-flex;
   align-items: center;
@@ -862,7 +890,7 @@
   flex-shrink: 0;
   flex-wrap: wrap;
   max-width: 100%;
-  min-width: min-content;
+  min-width: 0;
 }
 
 .acu-pp-root .acu-toggle__input[type='checkbox'] {
@@ -927,14 +955,16 @@
   outline: none;
 }
 
-.acu-toggle__label {
+.acu-pp-root .acu-toggle__label {
   font-size: var(--acu-font-size-body-lg);
   line-height: 1.35;
   color: var(--acu-text-1);
+  flex: 1 1 auto;
   flex-shrink: 0;
-  min-width: min-content;
+  min-width: max-content;
   white-space: normal;
   word-break: keep-all;
+  overflow-wrap: anywhere;
 }
 
 /* ── 按钮 ── */
