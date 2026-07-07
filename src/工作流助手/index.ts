@@ -2,13 +2,13 @@ import './ui/acu-theme.css';
 import { reloadOnChatChange } from '@util/script';
 import { mountAcuPostProcessAPI, acuPostProcessTaskApi } from './bridge/post-process-api';
 import { readChatTaskScope } from './tasks/chat-task-scope';
-import { emitChatScopeChanged } from './tasks/events';
+import { emitChatScopeChanged, ACU_PP_TASKS_CHANGED } from './tasks/events';
 import { registerTrigger } from './tasks/trigger';
 import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import { registerExtensionsMenuEntry } from './ui/extensions-menu';
-import { loadSettings } from './settings';
+import { loadSettings, useSettingsStore } from './settings';
 import { updateGlobalTheme } from './ui/theme';
 import { ensureAcuToastStyles } from './ui/toast-styles';
 import { acuToast } from './ui/toast';
@@ -54,6 +54,12 @@ $(() => {
 
   mountAcuPostProcessAPI();
 
+  const offTasksReload = eventOn(ACU_PP_TASKS_CHANGED, (payload?: { source?: string }) => {
+    if (payload?.source === 'api') {
+      useSettingsStore().reload();
+    }
+  });
+
   const offChatScopeNotify = eventOn(tavern_events.CHAT_CHANGED, () => {
     const scope = readChatTaskScope();
     void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
@@ -65,6 +71,7 @@ $(() => {
     offChatTagExtract.stop();
     offTagInherit.stop();
     offChat.stop();
+    offTasksReload.stop();
     offChatScopeNotify.stop();
     closeSettingsWindow();
   });

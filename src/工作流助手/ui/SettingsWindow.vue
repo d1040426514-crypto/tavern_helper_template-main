@@ -946,11 +946,8 @@ onMounted(() => {
       clearTimeout(persistViewTasksTimer);
       persistViewTasksTimer = null;
     }
-    void refreshTaskView({
-      skipTaskReload: true,
-      skipPresetFlush: true,
-      skipTasksFlush: true,
-    });
+    store.reload();
+    void refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });
   });
   offChatScopeChanged = eventOn(ACU_PP_CHAT_SCOPE_CHANGED, () => {
     void refreshTaskView();

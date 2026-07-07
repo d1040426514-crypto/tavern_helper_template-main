@@ -11,6 +11,7 @@ import {
 } from './chat-task-scope';
 import { resolveEffectiveSettings } from './effective-settings';
 import { emitChatScopeChanged, emitTasksChanged } from './events';
+import { syncActivePresetTasksFromRuntime } from './persist-runtime-tasks';
 import {
   PostProcessPresetSchema,
   PostProcessTaskSchema,
@@ -826,6 +827,7 @@ export async function applyReplicaFamilyCleanupInStore(
   });
   settings.tasks = next.tasks;
   settings.replicaFamilyCleanup = next.replicaFamilyCleanup;
+  syncActivePresetTasksFromRuntime(settings);
   saveSettings(settings);
   await emitTasksChanged('update', source);
 }
