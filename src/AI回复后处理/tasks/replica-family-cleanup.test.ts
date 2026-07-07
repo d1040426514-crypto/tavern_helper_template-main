@@ -3,6 +3,8 @@ import type { PostProcessTask, ScriptSettings } from './schema';
 import {
   applyReplicaFamilyCleanup,
   computeAutoKeepSet,
+  createDefaultReplicaFamilyCleanup,
+  ensureReplicaFamilyCleanupDefaults,
   incrementReplicaRunCounts,
   shouldTriggerCleanup,
   tickCleanupRound,
@@ -107,6 +109,27 @@ test('incrementReplicaRunCounts accumulates per member', () => {
   const settings = baseSettings();
   incrementReplicaRunCounts(settings, ['rep-1', 'rep-1']);
   assert.equal(settings.replicaFamilyCleanup!.cycleRunCounts['rep-1'], 4);
+});
+
+test('createDefaultReplicaFamilyCleanup enables auto mode when replica family exists', () => {
+  const defaults = createDefaultReplicaFamilyCleanup(true);
+  assert.equal(defaults.enabled, true);
+  assert.equal(defaults.mode, 'auto');
+});
+
+test('createDefaultReplicaFamilyCleanup stays disabled when no replica family', () => {
+  const defaults = createDefaultReplicaFamilyCleanup(false);
+  assert.equal(defaults.enabled, false);
+  assert.equal(defaults.mode, 'manual');
+});
+
+test('ensureReplicaFamilyCleanupDefaults upgrades untouched factory defaults', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: createDefaultReplicaFamilyCleanup(false),
+  });
+  ensureReplicaFamilyCleanupDefaults(settings);
+  assert.equal(settings.replicaFamilyCleanup!.enabled, true);
+  assert.equal(settings.replicaFamilyCleanup!.mode, 'auto');
 });
 
 if (process.exitCode) process.exit(process.exitCode);

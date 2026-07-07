@@ -1312,6 +1312,20 @@
   opacity: 0.85;
 }
 
+.replica-cleanup-panel__controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 8px;
+}
+
+.replica-cleanup-panel__cycle-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .replica-cleanup-panel__mode {
   display: flex;
   gap: 16px;
@@ -2400,6 +2414,22 @@
   .acu-row.acu-row--inline.acu-heading-with-help .acu-toggle {
     width: 100%;
     max-width: 100%;
+  }
+
+  .replica-cleanup-panel__controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .replica-cleanup-panel__cycle-field {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .replica-cleanup-panel__cycle-field .acu-input {
+    width: 100% !important;
   }
 
   .acu-row--task-output-settings {

@@ -31,20 +31,48 @@ export type ReplicaCleanupCandidateGroup = {
   members: ReplicaCleanupCandidate[];
 };
 
-function ensureCleanupState(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
+export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): ReplicaFamilyCleanupConfig {
+  return {
+    enabled: hasReplicaFamily,
+    cycleRounds: 10,
+    activityRatio: 0.5,
+    mode: hasReplicaFamily ? 'auto' : 'manual',
+    roundsSinceCleanup: 0,
+    cycleRunCounts: {},
+    lastManualKeepByRoot: {},
+    lastCleanupRound: 0,
+  };
+}
+
+export function isReplicaFamilyCleanupAtFactoryDefaults(state: ReplicaFamilyCleanupConfig): boolean {
+  return (
+    !state.enabled &&
+    state.mode === 'manual' &&
+    state.cycleRounds === 10 &&
+    state.activityRatio === 0.5 &&
+    (state.roundsSinceCleanup ?? 0) === 0 &&
+    (state.lastCleanupRound ?? 0) === 0 &&
+    Object.keys(state.cycleRunCounts ?? {}).length === 0 &&
+    Object.keys(state.lastManualKeepByRoot ?? {}).length === 0
+  );
+}
+
+/** 有副本族任务时默认启用清理周期 + 自动清理；无副本族时保持关闭 + 手动。 */
+export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
+  const hasReplica = hasReplicaFamilyTasks(settings.tasks);
   if (!settings.replicaFamilyCleanup) {
-    settings.replicaFamilyCleanup = {
-      enabled: false,
-      cycleRounds: 10,
-      activityRatio: 0.5,
-      mode: 'manual',
-      roundsSinceCleanup: 0,
-      cycleRunCounts: {},
-      lastManualKeepByRoot: {},
-      lastCleanupRound: 0,
-    };
+    settings.replicaFamilyCleanup = createDefaultReplicaFamilyCleanup(hasReplica);
+    return settings.replicaFamilyCleanup;
+  }
+  if (hasReplica && isReplicaFamilyCleanupAtFactoryDefaults(settings.replicaFamilyCleanup)) {
+    settings.replicaFamilyCleanup.enabled = true;
+    settings.replicaFamilyCleanup.mode = 'auto';
   }
   return settings.replicaFamilyCleanup;
+}
+
+function ensureCleanupState(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
+  return ensureReplicaFamilyCleanupDefaults(settings);
 }
 
 export { hasReplicaFamilyTasks };

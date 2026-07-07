@@ -1,6 +1,7 @@
 import { getDefaultSettingsPartial } from './tasks/example-presets';
 import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
+import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
 import {
   PostProcessPresetSchema,
   ScriptSettingsSchema,
@@ -98,7 +99,9 @@ export function loadSettings(): ScriptSettings {
     const raw = loadRawSettings();
     const merged = migrateSettingsRaw({ ...defaults, ...raw });
     const migrated = migrateImportedPreset(merged) as Record<string, unknown>;
-    return ScriptSettingsSchema.parse(migrated);
+    const settings = ScriptSettingsSchema.parse(migrated);
+    ensureReplicaFamilyCleanupDefaults(settings);
+    return settings;
   } catch (error) {
     console.error('[AI回复后处理] 设置解析失败，已回退默认配置:', error);
     return ScriptSettingsSchema.parse(defaults);
@@ -169,6 +172,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     settings.value.plotWorldbookConfig = _.cloneDeep(preset.plotWorldbookConfig);
     settings.value.taskPlotWorldbookOverridesEnabled = preset.taskPlotWorldbookOverridesEnabled ?? false;
     settings.value.taskContextOverridesEnabled = preset.taskContextOverridesEnabled ?? false;
+    ensureReplicaFamilyCleanupDefaults(settings.value);
     persist();
   }
 

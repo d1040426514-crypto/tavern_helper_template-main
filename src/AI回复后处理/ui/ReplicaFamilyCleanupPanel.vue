@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { ScriptSettings } from '../tasks/schema';
+import { ensureReplicaFamilyCleanupDefaults } from '../tasks/replica-family-cleanup';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
@@ -9,21 +10,7 @@ const settings = defineModel<ScriptSettings>('settings', { required: true });
 
 const helpOpen = defineModel<boolean>('helpOpen', { default: false });
 
-const cleanup = computed(() => {
-  if (!settings.value.replicaFamilyCleanup) {
-    settings.value.replicaFamilyCleanup = {
-      enabled: false,
-      cycleRounds: 10,
-      activityRatio: 0.5,
-      mode: 'manual',
-      roundsSinceCleanup: 0,
-      cycleRunCounts: {},
-      lastManualKeepByRoot: {},
-      lastCleanupRound: 0,
-    };
-  }
-  return settings.value.replicaFamilyCleanup;
-});
+const cleanup = computed(() => ensureReplicaFamilyCleanupDefaults(settings.value));
 </script>
 
 <template>
@@ -45,29 +32,33 @@ const cleanup = computed(() => {
         默认保留：手动调度中已启动的副本、活跃副本、上次清理时选择保留的副本。
       </p>
     </AcuHelpPanel>
-    <div class="acu-row acu-row--inline" style="margin-top: 8px">
+    <div class="replica-cleanup-panel__controls acu-row acu-row--inline">
       <AcuToggle v-model="cleanup.enabled" label="启用清理周期" />
-      <label class="acu-field-label" style="margin-left: 12px">清理周期 N</label>
-      <input
-        v-model.number="cleanup.cycleRounds"
-        class="acu-input"
-        type="number"
-        min="1"
-        step="1"
-        style="width: 72px"
-        :disabled="!cleanup.enabled"
-      />
-      <label class="acu-field-label" style="margin-left: 12px">活跃比例 R</label>
-      <input
-        v-model.number="cleanup.activityRatio"
-        class="acu-input"
-        type="number"
-        min="0"
-        max="1"
-        step="0.05"
-        style="width: 72px"
-        :disabled="!cleanup.enabled"
-      />
+      <div class="replica-cleanup-panel__cycle-field">
+        <label class="acu-field-label">清理周期 N</label>
+        <input
+          v-model.number="cleanup.cycleRounds"
+          class="acu-input"
+          type="number"
+          min="1"
+          step="1"
+          style="width: 72px"
+          :disabled="!cleanup.enabled"
+        />
+      </div>
+      <div class="replica-cleanup-panel__cycle-field">
+        <label class="acu-field-label">活跃比例 R</label>
+        <input
+          v-model.number="cleanup.activityRatio"
+          class="acu-input"
+          type="number"
+          min="0"
+          max="1"
+          step="0.05"
+          style="width: 72px"
+          :disabled="!cleanup.enabled"
+        />
+      </div>
     </div>
     <div v-if="cleanup.enabled" class="replica-cleanup-panel__mode">
       <label class="replica-scheduler__mode-option">

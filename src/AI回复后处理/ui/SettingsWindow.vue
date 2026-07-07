@@ -41,9 +41,11 @@ import {
 import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
+  hasReplicaFamilyTasks,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
 } from '../tasks/replica-family';
+import { ensureReplicaFamilyCleanupDefaults } from '../tasks/replica-family-cleanup';
 import {
   addPromptGroup as addPromptGroupInStore,
   clearChatScope,
@@ -91,6 +93,8 @@ const chatScopeInfo = ref(getChatScopeState());
 const chatScopeActive = ref(!!getChatScopeState());
 
 const displayTasks = computed(() => (chatScopeActive.value ? viewTasks.value : settings.value.tasks));
+
+const showReplicaFamilyCleanupPanel = computed(() => hasReplicaFamilyTasks(settings.value.tasks));
 
 /** 任务 tab 列表：隐藏副本族副本（仅显示原本与普通任务） */
 const taskTabTasks = computed(() => displayTasks.value.filter(t => !t.replicaFamilyRootId));
@@ -379,6 +383,7 @@ watch(
     tasks: settings.value.tasks,
     messageVarRetention: settings.value.messageVarRetention,
     activePresetName: settings.value.activePresetName,
+    replicaFamilyCleanup: settings.value.replicaFamilyCleanup,
   }),
   schedulePersistGlobalSettings,
   { deep: true },
@@ -480,6 +485,9 @@ const selectedTaskEnabledModel = computed({
       }
       settings.value.tasks = tasks;
       selectedReplicaViewId.value = null;
+      if (hasReplicaFamilyTasks(settings.value.tasks)) {
+        ensureReplicaFamilyCleanupDefaults(settings.value);
+      }
     } catch (e) {
       acuToast('warning', e instanceof Error ? e.message : String(e));
     }
@@ -2086,7 +2094,11 @@ function saveRunLogTaskTags(taskId: string): void {
             </div>
           </div>
 
-          <ReplicaFamilyCleanupPanel v-model:help-open="replicaCleanupHelpOpen" v-model:settings="settings" />
+          <ReplicaFamilyCleanupPanel
+            v-if="showReplicaFamilyCleanupPanel"
+            v-model:help-open="replicaCleanupHelpOpen"
+            v-model:settings="settings"
+          />
 
           <div class="acu-section">
             <div class="acu-heading-with-help">
