@@ -67,12 +67,16 @@ function renderStopButton(): string {
   return '<button type="button" class="acu-pp-progress-hud__stop">停止</button>';
 }
 
+function renderHeadActions(innerHtml: string): string {
+  return `<div class="acu-pp-progress-hud__actions">${innerHtml}</div>`;
+}
+
 function renderMessageHtml(message: string): string {
   const title = escapeHtml(message);
   return `<div class="acu-pp-progress-hud" role="status" aria-live="polite">
     <div class="acu-pp-progress-hud__head">
       <span class="acu-pp-progress-hud__title" title="${title}">${title}</span>
-      ${renderStopButton()}
+      ${renderHeadActions(renderStopButton())}
     </div>
   </div>`;
 }
@@ -104,11 +108,10 @@ function renderSnapshotHtml(snapshot: TaskProgressSnapshot): string {
   const countHtml =
     total > 0 ? `<span class="acu-pp-progress-hud__count">${finished}/${total}</span>` : '';
 
-  return `<div class="acu-pp-progress-hud" role="status" aria-live="polite">
+  return `<div class="acu-pp-progress-hud acu-pp-progress-hud--snapshot" role="status" aria-live="polite">
     <div class="acu-pp-progress-hud__head">
       <span class="acu-pp-progress-hud__title" title="${headline}">${headline}</span>
-      ${countHtml}
-      ${renderStopButton()}
+      ${renderHeadActions(`${countHtml}${renderStopButton()}`)}
     </div>
     ${bodyHtml}
   </div>`;

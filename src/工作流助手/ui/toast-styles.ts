@@ -93,8 +93,11 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       top: calc(env(safe-area-inset-top, 0px) + 12px);
       right: calc(env(safe-area-inset-right, 0px) + 12px);
       z-index: 10030;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      width: max-content;
       max-width: 280px;
-      width: min(280px, calc(100vw - 24px));
       pointer-events: none;
     }
     #acu-pp-progress-hud.acu-pp-progress-hud-root[aria-hidden="true"],
@@ -110,37 +113,52 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       border: 1px solid ${t.border};
       border-radius: ${t.radiusSm};
       box-shadow: ${t.shadow};
-      padding: 10px 12px;
+      padding: 6px 8px;
       pointer-events: auto;
-      border-left: 3px solid ${t.accent};
+      text-align: right;
+      width: max-content;
+      max-width: 280px;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__head {
       display: flex;
       align-items: center;
-      gap: 8px;
+      justify-content: flex-end;
+      flex-wrap: nowrap;
+      gap: 0;
       min-width: 0;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__title {
-      flex: 1;
+      flex: 0 1 auto;
+      max-width: 12em;
       min-width: 0;
       font-weight: 600;
       font-size: 13px;
-      line-height: 1.35;
+      line-height: 1.25;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       color: ${t.text1};
     }
-    #acu-pp-progress-hud .acu-pp-progress-hud__count {
+    #acu-pp-progress-hud .acu-pp-progress-hud__actions {
+      display: inline-flex;
+      align-items: center;
       flex-shrink: 0;
+      gap: 0;
+      margin-left: 4px;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__count {
       font-size: 12px;
       font-weight: 600;
       color: ${t.text2};
       font-variant-numeric: tabular-nums;
+      line-height: 1.25;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__count + .acu-pp-progress-hud__stop {
+      margin-left: 4px;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__stop {
       flex-shrink: 0;
-      padding: 3px 10px;
+      padding: 2px 8px;
       border-radius: ${t.radiusSm};
       border: 1px solid ${t.accent};
       background: transparent;
@@ -149,7 +167,7 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       font-family: ${t.fontUi};
       font-size: 12px;
       cursor: pointer;
-      line-height: 1.3;
+      line-height: 1.25;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__stop:hover:not(:disabled) {
       background: ${t.accent};
@@ -160,8 +178,8 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       cursor: not-allowed;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__bar {
-      margin-top: 8px;
-      height: 3px;
+      margin-top: 4px;
+      height: 2px;
       border-radius: 999px;
       background: ${t.border};
       overflow: hidden;
@@ -174,19 +192,21 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       transition: width 0.2s ease;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__list {
-      margin: 8px 0 0;
+      margin: 4px 0 0;
       padding: 0;
       list-style: none;
       max-height: 96px;
       overflow-y: auto;
+      text-align: right;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item {
       font-size: 12px;
-      line-height: 1.45;
+      line-height: 1.25;
       color: ${t.text2};
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+      text-align: right;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--running,
     #acu-pp-progress-hud .acu-pp-progress-hud__active.acu-pp-progress-hud__item--running {
@@ -204,34 +224,61 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       color: ${t.text3};
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__active {
-      margin-top: 6px;
+      margin-top: 4px;
       font-size: 12px;
-      line-height: 1.45;
+      line-height: 1.25;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       color: ${t.text1};
+      text-align: right;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__active + .acu-pp-progress-hud__active {
-      margin-top: 4px;
+      margin-top: 2px;
     }
     @media (max-width: 640px) {
       #acu-pp-progress-hud.acu-pp-progress-hud-root {
         top: calc(env(safe-area-inset-top, 0px) + 8px);
         right: calc(env(safe-area-inset-right, 0px) + 8px);
         max-width: min(240px, calc(100vw - 16px));
-        width: min(240px, calc(100vw - 16px));
       }
       #acu-pp-progress-hud .acu-pp-progress-hud {
-        padding: 8px 10px;
+        background: transparent;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        border-radius: 0;
         font-size: 12px;
+        text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__title {
         font-size: 12px;
+        max-width: 10em;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__bar {
+        display: none;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__stop {
-        min-height: 32px;
-        padding: 4px 10px;
+        min-height: auto;
+        padding: 0;
+        border: none;
+        background: transparent;
+        color: ${t.accent};
+        text-decoration: underline;
+        text-underline-offset: 2px;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__stop:hover:not(:disabled) {
+        background: transparent;
+        color: ${t.accent};
+        opacity: 0.85;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__item,
+      #acu-pp-progress-hud .acu-pp-progress-hud__active {
+        font-size: 11px;
+        line-height: 1.2;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__list {
+        margin-top: 2px;
       }
     }
   `;
