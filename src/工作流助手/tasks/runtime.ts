@@ -327,20 +327,6 @@ function createStageProgressReporter(
   allTasks: PostProcessTask[],
   onProgress?: (update: TaskProgressUpdate) => void,
 ): StageProgressReporter {
-  const familyGroups = new Map<string, PostProcessTask[]>();
-  for (const t of stageTasks) {
-    const gid = getReplicaFamilyGroupId(t);
-    if (!gid) continue;
-    const list = familyGroups.get(gid) ?? [];
-    list.push(t);
-    familyGroups.set(gid, list);
-  }
-
-  const sharedFamilyHeadline =
-    familyGroups.size === 1 && stageTasks.length >= 2 && stageTasks.every(t => getReplicaFamilyGroupId(t))
-      ? `正在执行任务：${getReplicaFamilyBaseName(stageTasks[0]!, allTasks)}（阶段 ${stageNo}）`
-      : null;
-
   const tasks: TaskProgressItem[] = stageTasks.map(t => {
     const suffix = getReplicaDisplaySuffix(t);
     const base = getReplicaFamilyGroupId(t) ? getReplicaFamilyBaseName(t, allTasks) : t.name;
@@ -355,11 +341,7 @@ function createStageProgressReporter(
 
   const pushSnapshot = () => {
     const snapshot: TaskProgressSnapshot = {
-      headline:
-        sharedFamilyHeadline ??
-        (stageTasks.length === 1
-          ? `正在执行任务：${stageTasks[0]!.name}（阶段 ${stageNo}）`
-          : `正在执行阶段 ${stageNo}`),
+      headline: `正在执行阶段${stageNo}`,
       stageNo,
       tasks: tasks.map(t => ({ ...t })),
     };

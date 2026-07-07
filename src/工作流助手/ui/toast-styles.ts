@@ -3,6 +3,7 @@ import { loadSettings } from '../settings';
 import { setPermanentStyle } from './permanent-style';
 
 const TOAST_STYLE_ID = 'acu-pp-toast-style';
+const PROGRESS_HUD_STYLE_ID = 'acu-pp-progress-hud-style';
 
 function buildToastCss(tokens: ThemeTokens): string {
   const t = tokens;
@@ -68,71 +69,6 @@ function buildToastCss(tokens: ThemeTokens): string {
     #toast-container .acu-pp-toast.acu-pp-toast--warning::before { content: "警" !important; background: ${t.warning}; }
     #toast-container .acu-pp-toast.acu-pp-toast--error { border-left-color: ${t.danger} !important; }
     #toast-container .acu-pp-toast.acu-pp-toast--error::before { content: "误" !important; background: ${t.danger}; }
-    #toast-container .acu-pp-toast .acu-pp-stop-btn {
-      padding: 4px 12px !important;
-      border-radius: ${t.radiusSm} !important;
-      border: 1px solid ${t.accent} !important;
-      background: transparent !important;
-      color: ${t.text1} !important;
-      font-weight: 600 !important;
-      font-family: ${t.fontUi} !important;
-      cursor: pointer !important;
-      font-size: 0.85em;
-      box-shadow: none !important;
-      flex-shrink: 0;
-    }
-    #toast-container .acu-pp-toast .acu-pp-stop-btn:hover:not(:disabled) {
-      background: ${t.accent} !important;
-      color: ${t.onAccent} !important;
-    }
-    #toast-container .acu-pp-toast .acu-pp-stop-btn:disabled {
-      opacity: 0.55;
-      cursor: not-allowed !important;
-    }
-    #toast-container .acu-pp-toast .acu-pp-toast-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-    }
-    #toast-container .acu-pp-toast .acu-pp-toast-row .acu-pp-toast-progress-message {
-      flex: 1;
-      min-width: 0;
-      line-height: 1.45;
-      color: ${t.text1};
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-headline {
-      font-weight: 600;
-      margin-bottom: 6px;
-      color: ${t.text1};
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-list {
-      margin: 0;
-      padding: 0;
-      list-style: none;
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-item {
-      font-size: 12px;
-      line-height: 1.5;
-      color: ${t.text2};
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-item--running {
-      color: ${t.text1};
-      font-weight: 600;
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-item--done {
-      color: ${t.success};
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-item--failed {
-      color: ${t.danger};
-    }
-    #toast-container .acu-pp-toast .acu-pp-progress-task-detail {
-      font-weight: 400;
-      color: ${t.text3};
-    }
     @media (max-width: 520px) {
       #toast-container .acu-pp-toast.toast {
         width: calc(100vw - 16px) !important;
@@ -145,13 +81,157 @@ function buildToastCss(tokens: ThemeTokens): string {
         height: 22px;
         font-size: 11px;
       }
-      #toast-container .acu-pp-toast .acu-pp-toast-row {
-        flex-wrap: wrap;
-        gap: 8px;
+    }
+  `;
+}
+
+function buildProgressHudCss(tokens: ThemeTokens): string {
+  const t = tokens;
+  return `
+    #acu-pp-progress-hud.acu-pp-progress-hud-root {
+      position: fixed;
+      top: calc(env(safe-area-inset-top, 0px) + 12px);
+      right: calc(env(safe-area-inset-right, 0px) + 12px);
+      z-index: 10030;
+      max-width: 280px;
+      width: min(280px, calc(100vw - 24px));
+      pointer-events: none;
+    }
+    #acu-pp-progress-hud.acu-pp-progress-hud-root[aria-hidden="true"],
+    #acu-pp-progress-hud.acu-pp-progress-hud-root:empty {
+      display: none;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud {
+      font-family: ${t.fontUi};
+      font-size: 13px;
+      font-weight: 500;
+      color: ${t.text1};
+      background: ${t.bg1};
+      border: 1px solid ${t.border};
+      border-radius: ${t.radiusSm};
+      box-shadow: ${t.shadow};
+      padding: 10px 12px;
+      pointer-events: auto;
+      border-left: 3px solid ${t.accent};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__head {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__title {
+      flex: 1;
+      min-width: 0;
+      font-weight: 600;
+      font-size: 13px;
+      line-height: 1.35;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: ${t.text1};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__count {
+      flex-shrink: 0;
+      font-size: 12px;
+      font-weight: 600;
+      color: ${t.text2};
+      font-variant-numeric: tabular-nums;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__stop {
+      flex-shrink: 0;
+      padding: 3px 10px;
+      border-radius: ${t.radiusSm};
+      border: 1px solid ${t.accent};
+      background: transparent;
+      color: ${t.text1};
+      font-weight: 600;
+      font-family: ${t.fontUi};
+      font-size: 12px;
+      cursor: pointer;
+      line-height: 1.3;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__stop:hover:not(:disabled) {
+      background: ${t.accent};
+      color: ${t.onAccent};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__stop:disabled {
+      opacity: 0.55;
+      cursor: not-allowed;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__bar {
+      margin-top: 8px;
+      height: 3px;
+      border-radius: 999px;
+      background: ${t.border};
+      overflow: hidden;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__bar > i {
+      display: block;
+      height: 100%;
+      border-radius: inherit;
+      background: ${t.accent};
+      transition: width 0.2s ease;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__list {
+      margin: 8px 0 0;
+      padding: 0;
+      list-style: none;
+      max-height: 96px;
+      overflow-y: auto;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__item {
+      font-size: 12px;
+      line-height: 1.45;
+      color: ${t.text2};
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__item--running,
+    #acu-pp-progress-hud .acu-pp-progress-hud__active.acu-pp-progress-hud__item--running {
+      color: ${t.text1};
+      font-weight: 600;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__item--done {
+      color: ${t.success};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__item--failed {
+      color: ${t.danger};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__detail {
+      font-weight: 400;
+      color: ${t.text3};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__active {
+      margin-top: 6px;
+      font-size: 12px;
+      line-height: 1.45;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      color: ${t.text1};
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__active + .acu-pp-progress-hud__active {
+      margin-top: 4px;
+    }
+    @media (max-width: 640px) {
+      #acu-pp-progress-hud.acu-pp-progress-hud-root {
+        top: calc(env(safe-area-inset-top, 0px) + 8px);
+        right: calc(env(safe-area-inset-right, 0px) + 8px);
+        max-width: min(240px, calc(100vw - 16px));
+        width: min(240px, calc(100vw - 16px));
       }
-      #toast-container .acu-pp-toast .acu-pp-stop-btn {
-        min-height: 36px;
-        flex: 1 1 auto;
+      #acu-pp-progress-hud .acu-pp-progress-hud {
+        padding: 8px 10px;
+        font-size: 12px;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__title {
+        font-size: 12px;
+      }
+      #acu-pp-progress-hud .acu-pp-progress-hud__stop {
+        min-height: 32px;
+        padding: 4px 10px;
       }
     }
   `;
@@ -162,6 +242,7 @@ export function ensureAcuToastStyles(themeId?: string): void {
   document.getElementById('acu-pp-permanent-style-host')?.remove();
   const theme = getThemeById(themeId ?? loadSettings().uiThemeId);
   setPermanentStyle(TOAST_STYLE_ID, buildToastCss(theme.tokens));
+  setPermanentStyle(PROGRESS_HUD_STYLE_ID, buildProgressHudCss(theme.tokens));
 }
 
 export function refreshVisibleAcuToasts(themeId?: string): void {
