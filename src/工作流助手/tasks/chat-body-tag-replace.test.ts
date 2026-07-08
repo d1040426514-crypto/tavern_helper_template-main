@@ -61,4 +61,22 @@ test('collectStageTagsForRule skips failed tasks', () => {
   assert.deepEqual(tags, {});
 });
 
+test('collectStageTagsForRule same key overwrites across tasks', () => {
+  const first = stageResult({ content: 'first' });
+  first.taskId = 't1';
+  const second = stageResult({ content: 'second' });
+  second.taskId = 't2';
+  const tags = collectStageTagsForRule([first, second], 'content');
+  assert.equal(tags.content, 'second');
+});
+
+test('collectStageTagsForRule item@id=same value overwrites', () => {
+  const first = stageResult({ 'item@id=1': 'A' });
+  first.taskId = 't1';
+  const second = stageResult({ 'item@id=1': 'B' });
+  second.taskId = 't2';
+  const tags = collectStageTagsForRule([first, second], 'item@id');
+  assert.equal(tags['item@id=1'], 'B');
+});
+
 console.log('chat-body-tag-replace.test.ts: all passed');

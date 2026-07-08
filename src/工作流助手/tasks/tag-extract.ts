@@ -390,5 +390,5 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       'S1「枚举 item」（提取写入标签 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
   },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 relay 增量新增副本，占位符内容读楼层变量（旧 key 保留）。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 relay 增量新增副本，占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
 } as const;

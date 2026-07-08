@@ -1426,7 +1426,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <code>{{ item.code }}</code> — {{ item.desc }}
               </div>
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
-                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例），供后续阶段的
+                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（单任务输出内裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例）；多任务/多阶段同名标签内文以换行合并为单段，供后续阶段的
                 <code v-pre>{{标签名}}</code> 占位符使用。多实例分别调用 API 的场景（副本族）见任务页「提取写入标签」说明。
               </p>
             </div>

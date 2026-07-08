@@ -12,7 +12,7 @@ import {
   buildExtractedBlockFromTags,
   writeFloorTagValues,
 } from './tag-variables';
-import { mergeRelayTagMap, replacePlotTagPlaceholdersWithHistory, type RelayTagMap } from './utils';
+import { overwriteRelayTagMap, replacePlotTagPlaceholdersWithHistory, type RelayTagMap } from './utils';
 import type { SharedContext } from './placeholders';
 import type { ChatBodyTagReplaceRule, ScriptSettings } from './schema';
 import type { TaskRunResult } from './runtime';
@@ -124,7 +124,7 @@ function aggregateTaskResults(results: TaskRunResult[]): RelayTagMap {
   const aggregated: RelayTagMap = new Map();
   for (const r of results) {
     if (!r.success || r.skipped) continue;
-    mergeRelayTagMap(aggregated, r.extractedTags ?? {});
+    overwriteRelayTagMap(aggregated, r.extractedTags ?? {});
   }
   return aggregated;
 }

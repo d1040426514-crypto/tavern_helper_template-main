@@ -8,7 +8,9 @@ import {
   expandWritableKeysFromPlaceholder,
   extractPlotTagsFromResponse,
   formatTagValueForInject,
+  formatTagValuesForInject,
   mergeRelayTagMap,
+  overwriteRelayTagMap,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
@@ -160,12 +162,25 @@ check('mergeRelayTagMap 不同 item@id 不聚合', () => {
   assert.equal(map.get('item@id=1')?.[0], '<item id="1">A</item>');
 });
 
-check('mergeRelayTagMap 同 key 覆盖', () => {
+check('mergeRelayTagMap 同 key 追加', () => {
   const map: RelayTagMap = new Map();
-  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
-  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
+  mergeRelayTagMap(map, { 'item@id=1': 'S1' });
+  mergeRelayTagMap(map, { 'item@id=1': 'S2' });
+  assert.equal(map.get('item@id=1')?.length, 2);
+  assert.deepEqual(map.get('item@id=1'), ['S1', 'S2']);
+});
+
+check('overwriteRelayTagMap 同 key 覆盖', () => {
+  const map: RelayTagMap = new Map();
+  overwriteRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
+  overwriteRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
   assert.equal(map.get('item@id=1')?.length, 1);
   assert.equal(map.get('item@id=1')?.[0], '<item id="1">S2</item>');
+});
+
+check('formatTagValuesForInject 多段合并单外层', () => {
+  const out = formatTagValuesForInject('result', ['hello', 'world']);
+  assert.equal(out, '<result>hello\n\nworld</result>');
 });
 
 check('expandWritableKeys {{item}} 含复合 key', () => {

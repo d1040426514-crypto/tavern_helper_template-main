@@ -11,6 +11,7 @@ import {
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
   sortAttrValues,
+  storedTagValueToInner,
   type ExtractTagSpec,
   findAllTagInstances,
 } from './tag-extract';
@@ -102,8 +103,9 @@ export function formatTagValueForInject(key: string, value: string): string {
 }
 
 export function formatTagValuesForInject(key: string, values: string[]): string {
-  const parts = values.map(v => formatTagValueForInject(key, v)).filter(Boolean);
-  return parts.join('\n\n');
+  const inners = values.map(v => storedTagValueToInner(key, v)).filter(Boolean);
+  if (!inners.length) return '';
+  return formatTagValueForInject(key, inners.join('\n\n'));
 }
 
 function extractTagsList(tags: string[]): string[] {
@@ -389,6 +391,15 @@ export function buildPlotTagMapFromText(text: string, requestedTagNames?: string
 export function mergeRelayTagMap(target: RelayTagMap, extracted: Record<string, string>): void {
   for (const [tag, content] of Object.entries(extracted)) {
     if (!content) continue;
+    const prev = target.get(tag);
+    target.set(tag, prev?.length ? [...prev, content] : [content]);
+  }
+}
+
+/** 同 key 覆盖（供正文标签替换等需保留后者优先的场景） */
+export function overwriteRelayTagMap(target: RelayTagMap, extracted: Record<string, string>): void {
+  for (const [tag, content] of Object.entries(extracted)) {
+    if (!content) continue;
     target.set(tag, [content]);
   }
 }
@@ -660,7 +671,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 relay 决定副本数量，占位符内容读楼层变量（无数据时输出空属性标签块）。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 relay 决定副本数量，占位符内容读楼层变量（无数据时输出空属性标签块）。同 key 跨任务/跨阶段内文以换行合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {

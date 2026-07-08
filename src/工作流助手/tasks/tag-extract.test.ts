@@ -3,7 +3,9 @@ import { extractInjectTagsFromResponse } from './tag-extract';
 import {
   extractPlotTagsFromResponse,
   formatTagValueForInject,
+  formatTagValuesForInject,
   mergeRelayTagMap,
+  overwriteRelayTagMap,
   refreshNestedExtractTagsInContent,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
@@ -163,12 +165,25 @@ test('all-tags fallback empty when neither relay nor history', () => {
   assert.equal(out, 'xy');
 });
 
-test('mergeRelayTagMap overwrites same key', () => {
+test('mergeRelayTagMap appends same key', () => {
   const map: RelayTagMap = new Map();
-  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
-  mergeRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
+  mergeRelayTagMap(map, { 'item@id=1': 'S1' });
+  mergeRelayTagMap(map, { 'item@id=1': 'S2' });
+  assert.equal(map.get('item@id=1')?.length, 2);
+  assert.deepEqual(map.get('item@id=1'), ['S1', 'S2']);
+});
+
+test('overwriteRelayTagMap overwrites same key', () => {
+  const map: RelayTagMap = new Map();
+  overwriteRelayTagMap(map, { 'item@id=1': '<item id="1">S1</item>' });
+  overwriteRelayTagMap(map, { 'item@id=1': '<item id="1">S2</item>' });
   assert.equal(map.get('item@id=1')?.length, 1);
   assert.equal(map.get('item@id=1')?.[0], '<item id="1">S2</item>');
+});
+
+test('formatTagValuesForInject merges inners under one outer tag', () => {
+  const out = formatTagValuesForInject('result', ['A', 'B']);
+  assert.equal(out, '<result>A\n\nB</result>');
 });
 
 test('replica composite placeholder prefers floor over relay', () => {
