@@ -47,6 +47,25 @@ test('bare result keeps inner last', () => {
   assert.equal(extractedTags.result, 'y');
 });
 
+test('bare content last when first open tag is unclosed', () => {
+  const text = '<content>...|<content>....</content>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['content']);
+  assert.equal(extractedTags.content, '....');
+});
+
+test('bare content last among two closed pairs', () => {
+  const text = '<content>first</content>mid<content>last</content>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['content']);
+  assert.equal(extractedTags.content, 'last');
+});
+
+test('item@id still enumerates all attr instances', () => {
+  const text = '<item id="1">A</item><item id="2">B</item>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
+  assert.equal(extractedTags['item@id=1'], 'A');
+  assert.equal(extractedTags['item@id=2'], 'B');
+});
+
 test('formatTagValueForInject composite inner rebuilds attr block', () => {
   assert.equal(formatTagValueForInject('item@id=1', 'A'), '<item id="1">A</item>');
 });

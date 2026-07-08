@@ -135,6 +135,37 @@ export function findAllTagInstances(text: string, tagName: string): TagInstance[
   return instances;
 }
 
+/** 取正文中最后一次出现的开标签，并配对其后第一个闭标签 */
+export function findLastTagInstance(text: string, tagName: string): TagInstance | null {
+  const source = String(text ?? '');
+  if (!source || !tagName) return null;
+
+  let lastOpenStart = -1;
+  let searchFrom = 0;
+  while (searchFrom < source.length) {
+    const openStart = findOpenTagAt(source, tagName, searchFrom);
+    if (openStart === -1) break;
+    lastOpenStart = openStart;
+    searchFrom = openStart + 1;
+  }
+  if (lastOpenStart === -1) return null;
+
+  const openEnd = findOpenTagEnd(source, lastOpenStart);
+  if (openEnd === -1) return null;
+  const closeStart = findCloseTag(source, tagName, openEnd + 1);
+  if (closeStart === -1) return null;
+
+  const closeTagLen = `</${tagName}>`.length;
+  const closeEnd = closeStart + closeTagLen;
+  const openTag = source.slice(lastOpenStart, openEnd + 1);
+  const inner = source.slice(openEnd + 1, closeStart);
+  return {
+    fullBlock: source.slice(lastOpenStart, closeEnd),
+    inner,
+    attrs: parseOpenTagAttributes(openTag),
+  };
+}
+
 function extractLastTagContentLiteral(text: string, tagName: string): string | null {
   if (!text || !tagName) return null;
   const lower = text.toLowerCase();
@@ -148,11 +179,9 @@ function extractLastTagContentLiteral(text: string, tagName: string): string | n
 }
 
 function extractBareTagLastInner(text: string, tagName: string): string | null {
-  const instances = findAllTagInstances(text, tagName);
-  if (!instances.length) {
-    return extractLastTagContentLiteral(text, tagName);
-  }
-  return instances[instances.length - 1].inner.trim();
+  const last = findLastTagInstance(text, tagName);
+  if (last) return last.inner.trim();
+  return extractLastTagContentLiteral(text, tagName);
 }
 
 function extractByAttrSpec(text: string, spec: ExtractTagSpec): Record<string, string> {

@@ -1461,7 +1461,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <strong>用户输入</strong>：在 <code>MESSAGE_SENT</code> 最后阶段（<code>eventMakeLast</code>）从最终用户消息摘取，写入用户楼变量，供下一 AI 楼继承。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-                <strong>AI 输出</strong>：在工作流任务开始前从当前 AI 楼正文摘取并写入，供当轮任务 <code v-pre>{{标签名}}</code> 与聊天注入引用。语法同任务级：裸名或 <code>item@id</code>。
+                <strong>AI 输出</strong>：在工作流任务开始前从当前 AI 楼正文摘取并写入，供当轮任务 <code v-pre>{{标签名}}</code> 与聊天注入引用。语法同任务级：裸名或 <code>item@id</code>。裸名取正文中<strong>最后一次出现的该开标签</strong>至其闭标签之间的内文；<code>标签@属性</code> 仍按属性分实例枚举。
               </p>
             </AcuHelpPanel>
             <div class="acu-row acu-row--extract-tags">
