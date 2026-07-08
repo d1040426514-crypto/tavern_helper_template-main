@@ -192,6 +192,11 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       transition: width 0.2s ease;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__list {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 4px 8px;
       margin: 4px 0 0;
       padding: 0;
       list-style: none;
@@ -202,15 +207,26 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       scrollbar-width: thin;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item {
+      display: inline-flex;
+      align-items: center;
+      gap: 2px;
+      flex: 0 1 auto;
+      max-width: 100%;
+      min-width: 0;
       font-size: 12px;
       line-height: 1.35;
       color: ${t.text2};
       white-space: nowrap;
       overflow: hidden;
+      transition: opacity 0.25s ease, max-width 0.25s ease, margin 0.25s ease, padding 0.25s ease;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__sym {
+      flex-shrink: 0;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__name {
+      min-width: 0;
+      overflow: hidden;
       text-overflow: ellipsis;
-      text-align: right;
-      max-height: 2em;
-      transition: opacity 0.25s ease, max-height 0.25s ease, margin 0.25s ease;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--running,
     #acu-pp-progress-hud .acu-pp-progress-hud__active.acu-pp-progress-hud__item--running {
@@ -227,13 +243,16 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--leaving {
       opacity: 0;
-      max-height: 0;
+      max-width: 0;
       margin: 0;
+      padding: 0;
       overflow: hidden;
+      pointer-events: none;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__detail {
       font-weight: 400;
       color: ${t.text3};
+      flex-shrink: 0;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__active {
       margin-top: 4px;

@@ -86,4 +86,20 @@ test('failed task uses cross symbol while completing', () => {
   assert.equal(displayStatusSymbol(item!), '✗');
 });
 
+test('dismissed terminal is not recreated by later done snapshots', () => {
+  let state = createProgressDisplayState();
+  const snap = snapshot([{ taskId: 't1', taskName: 'A', status: 'done' }]);
+  state = applyProgressSnapshot(state, snap);
+  assert.equal(state.items.get('t1')?.displayPhase, 'completing');
+  state = markDisplayItemLeaving(state, 't1');
+  state = removeDisplayItem(state, 't1');
+  assert.equal(state.items.has('t1'), false);
+  assert.equal(state.dismissed.has('t1'), true);
+
+  const prev = state;
+  state = applyProgressSnapshot(state, snap);
+  assert.equal(state.items.has('t1'), false);
+  assert.deepEqual(collectCompletingTaskIds(prev, state), []);
+});
+
 console.log('task-progress-display.test.ts: all passed');

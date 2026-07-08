@@ -98,10 +98,10 @@ function renderTaskListItem(item: ProgressDisplayItem): string {
   const sym = displayStatusSymbol(item);
   const name = escapeHtml(item.taskName);
   const detail = item.detail
-    ? ` <span class="acu-pp-progress-hud__detail">(${escapeHtml(item.detail)})</span>`
+    ? `<span class="acu-pp-progress-hud__detail">(${escapeHtml(item.detail)})</span>`
     : '';
   const className = displayItemClassName(item);
-  return `<li class="${className}">${sym} ${name}${detail}</li>`;
+  return `<li class="${className}"><span class="acu-pp-progress-hud__sym">${sym}</span><span class="acu-pp-progress-hud__name">${name}</span>${detail}</li>`;
 }
 
 function renderStopButton(): string {

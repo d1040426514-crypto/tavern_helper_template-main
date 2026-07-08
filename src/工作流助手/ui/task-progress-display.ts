@@ -25,10 +25,12 @@ export interface ProgressDisplayItem extends TaskProgressItem {
 export type ProgressDisplayState = {
   stageNo?: number;
   items: Map<string, ProgressDisplayItem>;
+  /** 已完成离开动画并移除的任务；同阶段后续快照仍为终态时不再重建为 completing */
+  dismissed: Set<string>;
 };
 
 export function createProgressDisplayState(): ProgressDisplayState {
-  return { stageNo: undefined, items: new Map() };
+  return { stageNo: undefined, items: new Map(), dismissed: new Set() };
 }
 
 function isTerminalStatus(status: TaskProgressStatus): boolean {
@@ -51,10 +53,12 @@ export function applyProgressSnapshot(
   const next: ProgressDisplayState = {
     stageNo: snapshot.stageNo,
     items: new Map(state.items),
+    dismissed: new Set(state.dismissed),
   };
 
   if (state.stageNo !== undefined && snapshot.stageNo !== undefined && state.stageNo !== snapshot.stageNo) {
     next.items = new Map();
+    next.dismissed = new Set();
   }
 
   const snapshotIds = new Set(snapshot.tasks.map(t => t.taskId));
@@ -65,8 +69,10 @@ export function applyProgressSnapshot(
 
     if (!existing) {
       if (terminal) {
+        if (next.dismissed.has(task.taskId)) continue;
         next.items.set(task.taskId, toDisplayItem(task, 'completing'));
       } else {
+        next.dismissed.delete(task.taskId);
         next.items.set(task.taskId, toDisplayItem(task, phaseFromStatus(task.status)));
       }
       continue;
@@ -95,6 +101,7 @@ export function applyProgressSnapshot(
         displayPhase: 'completing',
       });
     } else {
+      next.dismissed.delete(task.taskId);
       next.items.set(task.taskId, {
         ...existing,
         status: task.status,
@@ -123,10 +130,12 @@ export function markDisplayItemLeaving(state: ProgressDisplayState, taskId: stri
 }
 
 export function removeDisplayItem(state: ProgressDisplayState, taskId: string): ProgressDisplayState {
-  if (!state.items.has(taskId)) return state;
+  if (!state.items.has(taskId) && state.dismissed.has(taskId)) return state;
   const next = new Map(state.items);
   next.delete(taskId);
-  return { ...state, items: next };
+  const dismissed = new Set(state.dismissed);
+  dismissed.add(taskId);
+  return { ...state, items: next, dismissed };
 }
 
 export function orderedDisplayItems(
