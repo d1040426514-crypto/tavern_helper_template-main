@@ -111,6 +111,62 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
   },
+  {
+    name: '正文润色示例',
+    tasks: [
+      {
+        id: 'example-body-polish',
+        name: '正文润色',
+        enabled: true,
+        stage: 1,
+        extractInjectTags: ['content'],
+        mergeStrategy: 'concat',
+        maxRetries: 3,
+        minLength: 0,
+        apiPresetName: '',
+        apiPresetFallbackNames: [],
+        apiPrimaryMaxConcurrency: 5,
+        apiFallbackMaxConcurrencies: [],
+        promptGroups: [
+          {
+            name: '',
+            role: 'system',
+            content:
+              '你是文学润色助手。根据待润色正文进行文学化润色，保持剧情与人设一致，不增删关键情节。只输出一个 <content>…</content> 块，不要其他说明文字。',
+            enabled: true,
+          },
+          {
+            name: '',
+            role: 'user',
+            content: '上一用户输入：\n$8\n\n待润色正文（$7）：\n$7',
+            enabled: true,
+          },
+        ],
+        plotWorldbookMode: 'inherit',
+        contextMode: 'inherit',
+        structuredOutputMode: 'off',
+      },
+    ],
+    tagVariableInjectTemplate: '',
+    finalInjectTemplate: '',
+    chatExtractTags: { user: [], assistant: ['content'] },
+    chatBodyTagReplaceRules: [
+      {
+        id: 'example-content-replace',
+        targetTag: 'content',
+        template: '{{content}}',
+      },
+    ],
+    contextTurnCount: 1,
+    contextExtractRules: [
+      { start: '<tp', end: '</tp>' },
+      { start: '<content', end: '</content>' },
+    ],
+    contextExcludeRules: [],
+    plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
+    taskPlotWorldbookOverridesEnabled: false,
+    taskContextOverridesEnabled: false,
+  },
 ];
 
 export function getDefaultSettingsPartial() {
