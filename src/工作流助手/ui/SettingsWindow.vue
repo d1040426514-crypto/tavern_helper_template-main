@@ -22,6 +22,7 @@ import Context7Section from './Context7Section.vue';
 import TaskContextPanel from './TaskContextPanel.vue';
 import ApiConfigPanel from './ApiConfigPanel.vue';
 import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
+import PromptSegmentCard from './PromptSegmentCard.vue';
 import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
 import ReplicaFamilyCleanupPanel from './ReplicaFamilyCleanupPanel.vue';
 import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
@@ -131,6 +132,27 @@ const promptPreviewRows = computed(() => {
 });
 
 const manualPromptGroupCount = computed(() => promptPreviewTask.value?.promptGroups?.length ?? 0);
+
+const expandedPromptRowKeys = ref<Set<string>>(new Set());
+
+function promptRowKey(row: (typeof promptPreviewRows.value)[number]): string {
+  return row.kind === 'manual' ? `m-${row.manualIndex}` : `a-${row.segmentId}`;
+}
+
+function isPromptRowExpanded(key: string): boolean {
+  return expandedPromptRowKeys.value.has(key);
+}
+
+function togglePromptRow(key: string) {
+  const next = new Set(expandedPromptRowKeys.value);
+  if (next.has(key)) next.delete(key);
+  else next.add(key);
+  expandedPromptRowKeys.value = next;
+}
+
+watch(selectedTaskId, () => {
+  expandedPromptRowKeys.value = new Set();
+});
 
 function collectUsedApiPresetNames(task: PostProcessTask | null | undefined): Set<string> {
   const used = new Set<string>();
@@ -937,10 +959,12 @@ async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
 async function addPromptGroup(): Promise<void> {
   const task = selectedTask.value;
   if (!task) return;
+  const newIndex = task.promptGroups?.length ?? 0;
   if (!chatScopeActive.value) store.persist();
   await addPromptGroupInStore(task.id, undefined, 'ui');
   if (chatScopeActive.value) void refreshTaskView();
   else store.reload();
+  expandedPromptRowKeys.value = new Set([`m-${newIndex}`]);
 }
 
 async function applyBuiltinPreset(name: string) {
@@ -1920,6 +1944,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 :task="isViewingReplicaMember && editorTask ? editorTask : selectedTask"
                 :readonly="isViewingReplicaMember"
               />
+              <div class="acu-subsection acu-task-prompt-zone">
               <div class="acu-row acu-row--extract-tags">
                 <label class="acu-label-with-help" for="extract-inject-tags-input">
                   提取写入标签
@@ -2036,95 +2061,20 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
                 灰色自动段为合并预览，请在上方「任务级提示词自动段」中编辑。
               </p>
-              <template v-for="row in promptPreviewRows" :key="row.kind === 'manual' ? `m-${row.manualIndex}` : `a-${row.segmentId}`">
-                <div
-                  v-if="row.kind === 'auto'"
-                  class="acu-prompt-group acu-prompt-group--auto-preview"
-                >
-                  <div class="acu-row acu-prompt-group__toolbar">
-                    <span class="acu-prompt-group__auto-badge">自动段 · {{ row.slotName }}</span>
-                    <input
-                      class="acu-input acu-prompt-group__name"
-                      type="text"
-                      :value="row.group.name"
-                      placeholder="未命名段"
-                      readonly
-                      disabled
-                    />
-                    <select class="acu-select" :value="row.group.role" disabled>
-                      <option value="system">system</option>
-                      <option value="user">user</option>
-                      <option value="assistant">assistant</option>
-                    </select>
-                  </div>
-                  <textarea
-                    class="acu-textarea"
-                    :value="row.group.content"
-                    readonly
-                    disabled
-                  />
-                </div>
-                <div
-                  v-else
-                  class="acu-prompt-group"
-                  :class="{ 'acu-prompt-group--disabled': row.group.enabled === false }"
-                >
-                  <div class="acu-row acu-prompt-group__toolbar">
-                    <input
-                      v-model="row.group.name"
-                      class="acu-input acu-prompt-group__name"
-                      type="text"
-                      placeholder="未命名段"
-                      :readonly="isViewingReplicaMember"
-                      :disabled="isViewingReplicaMember"
-                    />
-                    <select v-model="row.group.role" class="acu-select" :disabled="isViewingReplicaMember">
-                      <option value="system">system</option>
-                      <option value="user">user</option>
-                      <option value="assistant">assistant</option>
-                    </select>
-                    <button
-                      class="acu-btn acu-btn--sm"
-                      type="button"
-                      title="上移"
-                      :disabled="row.manualIndex === 0 || isViewingReplicaMember"
-                      @click="movePromptGroup(row.manualIndex, -1)"
-                    >
-                      上移
-                    </button>
-                    <button
-                      class="acu-btn acu-btn--sm"
-                      type="button"
-                      title="下移"
-                      :disabled="row.manualIndex >= manualPromptGroupCount - 1 || isViewingReplicaMember"
-                      @click="movePromptGroup(row.manualIndex, 1)"
-                    >
-                      下移
-                    </button>
-                    <div class="acu-prompt-group__enable">
-                      <AcuToggle
-                        :model-value="row.group.enabled !== false"
-                        aria-label="启用本段"
-                        :disabled="isViewingReplicaMember"
-                        @update:model-value="row.group.enabled = $event"
-                      />
-                    </div>
-                    <button
-                      class="acu-btn danger acu-btn--sm acu-prompt-group__delete"
-                      type="button"
-                      :disabled="isViewingReplicaMember"
-                      @click="removePromptGroup(row.manualIndex)"
-                    >
-                      删段
-                    </button>
-                  </div>
-                  <textarea
-                    v-model="row.group.content"
-                    class="acu-textarea"
-                    :readonly="isViewingReplicaMember"
-                    :disabled="isViewingReplicaMember"
-                  />
-                </div>
+              <template v-for="row in promptPreviewRows" :key="promptRowKey(row)">
+                <PromptSegmentCard
+                  :row-key="promptRowKey(row)"
+                  :group="row.group"
+                  :expanded="isPromptRowExpanded(promptRowKey(row))"
+                  :readonly="row.kind === 'auto'"
+                  :auto-badge="row.kind === 'auto' ? `自动段 · ${row.slotName}` : ''"
+                  :manual-index="row.kind === 'manual' ? row.manualIndex : -1"
+                  :manual-count="manualPromptGroupCount"
+                  :disabled="isViewingReplicaMember"
+                  @toggle="togglePromptRow(promptRowKey(row))"
+                  @move="delta => row.kind === 'manual' && movePromptGroup(row.manualIndex, delta)"
+                  @remove="row.kind === 'manual' && removePromptGroup(row.manualIndex)"
+                />
               </template>
               <button
                 v-if="!isViewingReplicaMember"
@@ -2134,6 +2084,7 @@ function saveRunLogTaskTags(taskId: string): void {
               >
                 + 提示词段
               </button>
+              </div>
             </div>
           </div>
 

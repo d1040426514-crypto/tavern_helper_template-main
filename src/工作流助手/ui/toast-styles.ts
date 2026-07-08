@@ -97,7 +97,7 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       flex-direction: column;
       align-items: flex-end;
       width: max-content;
-      max-width: 280px;
+      max-width: min(280px, calc(100vw - 16px));
       pointer-events: none;
     }
     #acu-pp-progress-hud.acu-pp-progress-hud-root[aria-hidden="true"],
@@ -117,7 +117,7 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       pointer-events: auto;
       text-align: right;
       width: max-content;
-      max-width: 280px;
+      max-width: min(280px, calc(100vw - 16px));
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__head {
       display: flex;
@@ -195,18 +195,22 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       margin: 4px 0 0;
       padding: 0;
       list-style: none;
-      max-height: 96px;
+      max-height: min(40vh, 220px);
       overflow-y: auto;
+      overflow-x: hidden;
       text-align: right;
+      scrollbar-width: thin;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item {
       font-size: 12px;
-      line-height: 1.25;
+      line-height: 1.35;
       color: ${t.text2};
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
       text-align: right;
+      max-height: 2em;
+      transition: opacity 0.25s ease, max-height 0.25s ease, margin 0.25s ease;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--running,
     #acu-pp-progress-hud .acu-pp-progress-hud__active.acu-pp-progress-hud__item--running {
@@ -215,9 +219,17 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--done {
       color: ${t.success};
+      font-weight: 600;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__item--failed {
       color: ${t.danger};
+      font-weight: 600;
+    }
+    #acu-pp-progress-hud .acu-pp-progress-hud__item--leaving {
+      opacity: 0;
+      max-height: 0;
+      margin: 0;
+      overflow: hidden;
     }
     #acu-pp-progress-hud .acu-pp-progress-hud__detail {
       font-weight: 400;
@@ -240,45 +252,48 @@ function buildProgressHudCss(tokens: ThemeTokens): string {
       #acu-pp-progress-hud.acu-pp-progress-hud-root {
         top: calc(env(safe-area-inset-top, 0px) + 8px);
         right: calc(env(safe-area-inset-right, 0px) + 8px);
-        max-width: min(240px, calc(100vw - 16px));
+        max-width: min(280px, calc(100vw - 16px));
       }
       #acu-pp-progress-hud .acu-pp-progress-hud {
-        background: transparent;
-        border: none;
-        box-shadow: none;
-        padding: 0;
-        border-radius: 0;
+        background: color-mix(in srgb, ${t.bg1} 88%, transparent);
+        border: 1px solid color-mix(in srgb, ${t.border} 70%, transparent);
+        box-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+        padding: 6px 8px;
+        border-radius: ${t.radiusSm};
         font-size: 12px;
-        text-shadow: 0 0 1px rgba(0, 0, 0, 0.35);
+        text-shadow: none;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__title {
         font-size: 12px;
         max-width: 10em;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__bar {
-        display: none;
+        display: block;
+        height: 2px;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__stop {
         min-height: auto;
-        padding: 0;
-        border: none;
+        padding: 2px 6px;
+        border: 1px solid color-mix(in srgb, ${t.accent} 55%, transparent);
         background: transparent;
         color: ${t.accent};
-        text-decoration: underline;
-        text-underline-offset: 2px;
+        text-decoration: none;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__stop:hover:not(:disabled) {
-        background: transparent;
+        background: color-mix(in srgb, ${t.accent} 18%, transparent);
         color: ${t.accent};
-        opacity: 0.85;
+        opacity: 1;
       }
-      #acu-pp-progress-hud .acu-pp-progress-hud__item,
-      #acu-pp-progress-hud .acu-pp-progress-hud__active {
+      #acu-pp-progress-hud .acu-pp-progress-hud__item {
         font-size: 11px;
-        line-height: 1.2;
+        line-height: 1.3;
       }
       #acu-pp-progress-hud .acu-pp-progress-hud__list {
-        margin-top: 2px;
+        margin-top: 4px;
+        max-height: min(36vh, 200px);
+        padding: 4px 0 2px;
+        background: color-mix(in srgb, ${t.bg0} 55%, transparent);
+        border-radius: 4px;
       }
     }
   `;

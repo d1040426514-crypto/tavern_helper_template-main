@@ -138,7 +138,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
           {
             name: '',
             role: 'user',
-            content: '上一用户输入：\n$8\n\n待润色正文（$7）：\n$7',
+            content: '上一用户输入：\n$8\n\n待润色正文：\n$7',
             enabled: true,
           },
         ],
