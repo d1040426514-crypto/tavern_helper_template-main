@@ -34,14 +34,6 @@ const emit = defineEmits<{
 
 const displayName = computed(() => props.group.name?.trim() || '未命名段');
 
-const contentPreview = computed(() => {
-  const text = String(props.group.content ?? '')
-    .replace(/\s+/g, ' ')
-    .trim();
-  if (!text) return '（空）';
-  return text.length > 60 ? `${text.slice(0, 60)}…` : text;
-});
-
 const roleLabel = computed(() => props.group.role || 'user');
 
 function onHeaderClick() {
@@ -69,9 +61,10 @@ function stopPropagation(e: Event) {
       @click="onHeaderClick"
     >
       <span v-if="autoBadge" class="acu-prompt-group__auto-badge">{{ autoBadge }}</span>
-      <span class="acu-prompt-group__header-name">{{ displayName }}</span>
-      <span class="acu-prompt-group__role-tag">{{ roleLabel }}</span>
-      <span v-if="!expanded" class="acu-prompt-group__preview">{{ contentPreview }}</span>
+      <span class="acu-prompt-group__header-main">
+        <span class="acu-prompt-group__header-name" :title="displayName">{{ displayName }}</span>
+        <span class="acu-prompt-group__role-tag">{{ roleLabel }}</span>
+      </span>
       <i
         class="fa-fw fa-solid acu-prompt-group__chevron"
         :class="expanded ? 'fa-chevron-up' : 'fa-chevron-down'"
