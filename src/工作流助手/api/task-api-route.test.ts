@@ -30,6 +30,7 @@ function baseSettings(): ScriptSettings {
     finalInjectTemplate: '',
     tagVariableInjectTemplate: '',
     chatExtractTags: { user: [], assistant: [] },
+    chatBodyTagReplaceRules: [],
     presets: [],
     activePresetName: '',
     scheduleState: {},

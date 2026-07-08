@@ -44,6 +44,7 @@ const snapshotPreset: PostProcessPreset = {
   finalInjectTemplate: 'snap-final',
   tagVariableInjectTemplate: 'snap-tags',
   chatExtractTags: { user: ['user_tag'], assistant: ['ai_tag'] },
+  chatBodyTagReplaceRules: [{ id: 'r1', targetTag: 'ai_tag', template: '{{ai_tag}}' }],
   contextTurnCount: 5,
   contextExtractRules: [],
   contextExcludeRules: [],
@@ -81,6 +82,7 @@ test('resolveEffectiveSettings prefers chat snapshot tasks', () => {
   assert.equal(resolved.contextTurnCount, 5);
   assert.equal(resolved.plotWorldbookConfig.manualSelection[0], 'SnapBook');
   assert.deepEqual(resolved.chatExtractTags, { user: ['user_tag'], assistant: ['ai_tag'] });
+  assert.equal(resolved.chatBodyTagReplaceRules?.[0]?.targetTag, 'ai_tag');
 });
 
 test('resolveEffectiveSettings keeps global tasks when no snapshot', () => {

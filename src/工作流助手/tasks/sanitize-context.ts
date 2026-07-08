@@ -1,16 +1,9 @@
 import { findAllTagInstances } from './tag-extract';
-import { extractLastTagContent } from './utils';
 
 const BOILERPLATE_LINE_RE =
   /^\s*以上是(?:(?:用户|Participant)的本轮输入|<用户本轮输入>|<本轮用户输入>)\s*$/m;
 
 const PRESET_WARNING_NOTICE_RE = /\(\s*⚠️\s*:[^)]*\)/g;
-
-function sanitizeSingleAiMessage(text: string): string {
-  const gametxt = extractLastTagContent(text, 'gametxt');
-  if (gametxt?.trim()) return gametxt.trim();
-  return text.trim();
-}
 
 function collapseBlankLines(text: string): string {
   return text.replace(/\n{3,}/g, '\n\n').trim();
@@ -81,21 +74,4 @@ export function sanitizeUserInputForPostProcess(text: string): string {
       : stripUserInputBoilerplatePrefix(text).trim();
 
   return stripPresetWarningNotices(body);
-}
-
-/** 从 AI 楼层中提取 gametxt 正文；多轮时逐段提取 */
-export function sanitizeAiContextForPostProcess(text: string): string {
-  if (!text?.trim()) return text ?? '';
-  const gametxt = extractLastTagContent(text, 'gametxt');
-  if (gametxt?.trim()) return gametxt.trim();
-
-  const parts = text
-    .split(/\n\n+/)
-    .map(part => part.trim())
-    .filter(Boolean);
-  if (parts.length > 1) {
-    const joined = parts.map(part => sanitizeSingleAiMessage(part)).filter(Boolean).join('\n\n');
-    if (joined.trim()) return joined;
-  }
-  return sanitizeSingleAiMessage(text);
 }

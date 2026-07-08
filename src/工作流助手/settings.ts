@@ -131,6 +131,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
       finalInjectTemplate: s.finalInjectTemplate,
       tagVariableInjectTemplate: s.tagVariableInjectTemplate,
       chatExtractTags: _.cloneDeep(s.chatExtractTags ?? { user: [], assistant: [] }),
+      chatBodyTagReplaceRules: _.cloneDeep(s.chatBodyTagReplaceRules ?? []),
       contextTurnCount: s.contextTurnCount,
       contextExtractRules: _.cloneDeep(s.contextExtractRules),
       contextExcludeRules: _.cloneDeep(s.contextExcludeRules),
@@ -166,6 +167,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     settings.value.finalInjectTemplate = preset.finalInjectTemplate;
     settings.value.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
     settings.value.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
+    settings.value.chatBodyTagReplaceRules = _.cloneDeep(preset.chatBodyTagReplaceRules ?? []);
     settings.value.contextTurnCount = preset.contextTurnCount;
     settings.value.contextExtractRules = _.cloneDeep(preset.contextExtractRules);
     settings.value.contextExcludeRules = _.cloneDeep(preset.contextExcludeRules);
@@ -219,6 +221,8 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
         tasks: s.tasks,
         finalInjectTemplate: s.finalInjectTemplate,
         tagVariableInjectTemplate: s.tagVariableInjectTemplate,
+        chatExtractTags: _.cloneDeep(s.chatExtractTags ?? { user: [], assistant: [] }),
+        chatBodyTagReplaceRules: _.cloneDeep(s.chatBodyTagReplaceRules ?? []),
         contextTurnCount: s.contextTurnCount,
         contextExtractRules: s.contextExtractRules,
         contextExcludeRules: s.contextExcludeRules,

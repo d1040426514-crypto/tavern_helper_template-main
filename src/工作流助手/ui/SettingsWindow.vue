@@ -400,6 +400,7 @@ const extractInjectTagsHelpOpen = ref(false);
 const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
+const chatBodyTagReplaceHelpOpen = ref(false);
 const apiRouteConcurrencyHelpOpen = ref(false);
 const apiConfigExpanded = ref(false);
 const executionStrategyExpanded = ref(false);
@@ -432,6 +433,50 @@ function goToPage(page: number) {
   if (currentPage.value === 2 || currentPage.value === 3) {
     void refreshTaskView();
   }
+}
+
+const assistantChatExtractTags = computed(() =>
+  (settings.value.chatExtractTags?.assistant ?? []).map(t => t.trim()).filter(Boolean),
+);
+
+const availableChatBodyReplaceTags = computed(() => {
+  const used = new Set((settings.value.chatBodyTagReplaceRules ?? []).map(r => r.targetTag.trim()));
+  return assistantChatExtractTags.value.filter(t => !used.has(t));
+});
+
+function ensureChatBodyTagReplaceRules(): void {
+  if (!settings.value.chatBodyTagReplaceRules) {
+    settings.value.chatBodyTagReplaceRules = [];
+  }
+}
+
+function isChatBodyReplaceTagUsedByOther(tag: string, ruleId: string): boolean {
+  const normalized = tag.trim();
+  return (settings.value.chatBodyTagReplaceRules ?? []).some(
+    r => r.id !== ruleId && r.targetTag.trim() === normalized,
+  );
+}
+
+function isChatBodyReplaceTagStale(targetTag: string): boolean {
+  const t = targetTag.trim();
+  if (!t) return false;
+  return !assistantChatExtractTags.value.includes(t);
+}
+
+function addChatBodyTagReplaceRule(): void {
+  ensureChatBodyTagReplaceRules();
+  const nextTag = availableChatBodyReplaceTags.value[0];
+  if (!nextTag) return;
+  settings.value.chatBodyTagReplaceRules.push({
+    id: `replace-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    targetTag: nextTag,
+    template: '',
+  });
+}
+
+function removeChatBodyTagReplaceRule(id: string): void {
+  ensureChatBodyTagReplaceRules();
+  settings.value.chatBodyTagReplaceRules = settings.value.chatBodyTagReplaceRules.filter(r => r.id !== id);
 }
 
 watch(
@@ -2133,17 +2178,17 @@ function saveRunLogTaskTags(taskId: string): void {
 
           <div class="acu-section">
             <div class="acu-heading-with-help">
-              <h4>聊天注入设置</h4>
+              <h4>AI楼层文末注入</h4>
               <AcuHelpIconBtn
                 v-model:open="finalInjectHelpOpen"
                 panel-id="final-inject-help"
-                label="聊天注入设置说明"
+                label="AI楼层文末注入说明"
               />
             </div>
             <AcuHelpPanel
               v-model:open="finalInjectHelpOpen"
               id="final-inject-help"
-              label="聊天注入设置说明"
+              label="AI楼层文末注入说明"
             >
               <p class="acu-notes acu-notes--sm" style="margin: 0">
                 渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{标签名}}</code>。不写入消息楼层变量。
@@ -2151,6 +2196,86 @@ function saveRunLogTaskTags(taskId: string): void {
               </p>
             </AcuHelpPanel>
             <textarea v-model="settings.finalInjectTemplate" class="acu-textarea" placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}" />
+          </div>
+
+          <div class="acu-section">
+            <div class="acu-heading-with-help">
+              <h4>聊天正文标签替换</h4>
+              <AcuHelpIconBtn
+                v-model:open="chatBodyTagReplaceHelpOpen"
+                panel-id="chat-body-tag-replace-help"
+                label="聊天正文标签替换说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="chatBodyTagReplaceHelpOpen"
+              id="chat-body-tag-replace-help"
+              label="聊天正文标签替换说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin-top: 0">
+                仅对 <strong>assistant</strong> 楼生效。可添加多条规则，每条绑定一个「AI 输出摘取」标签与写入模板；同一标签最多一条规则。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                工作流按阶段执行：当本阶段任务产出匹配该标签时，先同步 <code>post_process_tags</code>，再在正文中<strong>原位置</strong>替换该标签内文（裸名取最后一次开标签；<code>标签@属性</code> 按属性实例）。
+              </p>
+              <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                模板占位符同文末注入；模板内 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code> 不会触发变量解析。
+              </p>
+            </AcuHelpPanel>
+            <p v-if="!assistantChatExtractTags.length" class="acu-notes acu-notes--sm">
+              请先在上方「聊天摘取标签」中配置 AI 输出摘取项。
+            </p>
+            <template v-else>
+              <div
+                v-for="rule in settings.chatBodyTagReplaceRules ?? []"
+                :key="rule.id"
+                class="acu-row"
+                style="align-items: flex-start; gap: 8px; margin-bottom: 10px"
+              >
+                <div style="flex: 0 0 140px">
+                  <label class="acu-label-with-help">目标标签</label>
+                  <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
+                    <option
+                      v-for="tag in assistantChatExtractTags"
+                      :key="tag"
+                      :value="tag"
+                      :disabled="isChatBodyReplaceTagUsedByOther(tag, rule.id)"
+                    >
+                      {{ tag }}
+                    </option>
+                  </select>
+                  <span v-if="isChatBodyReplaceTagStale(rule.targetTag)" class="acu-notes acu-log-warn" style="display: block; margin-top: 4px">
+                    未在 AI 输出摘取列表中
+                  </span>
+                </div>
+                <div style="flex: 1">
+                  <label class="acu-label-with-help">写入模板</label>
+                  <textarea
+                    v-model="rule.template"
+                    class="acu-textarea"
+                    rows="3"
+                    placeholder="替换为该模板渲染后的内文，可用 {{task:任务名}} 与 {{标签名}}"
+                  />
+                </div>
+                <button
+                  type="button"
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  title="删除规则"
+                  style="margin-top: 22px"
+                  @click="removeChatBodyTagReplaceRule(rule.id)"
+                >
+                  <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+              <button
+                type="button"
+                class="acu-btn acu-btn--sm"
+                :disabled="!availableChatBodyReplaceTags.length"
+                @click="addChatBodyTagReplaceRule"
+              >
+                添加规则
+              </button>
+            </template>
           </div>
         </div>
 
@@ -2205,7 +2330,7 @@ function saveRunLogTaskTags(taskId: string): void {
                       </div>
                     </div>
                     <p class="acu-notes acu-run-log-tags__hint">
-                      保存后仅更新本层 <code>post_process_tags</code> 中「消息楼层标签变量注入」模板声明的标签，不修改 AI 楼文末注入块。
+                      保存后仅更新本层 <code>post_process_tags</code> 中「消息楼层标签变量注入」模板声明的标签，不修改 AI 楼文末注入块与正文标签替换区域。
                     </p>
                     <div class="acu-run-log-tags">
                       <details

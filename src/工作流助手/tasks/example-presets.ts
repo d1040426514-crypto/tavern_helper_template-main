@@ -31,6 +31,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
     chatExtractTags: { user: [], assistant: [] },
+    chatBodyTagReplaceRules: [],
   },
   {
     name: '副本族与动态占位符示例',
@@ -102,6 +103,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     tagVariableInjectTemplate: '{{item@id}}',
     finalInjectTemplate: 'FLOOR_INJECT:{{item@id}}',
     chatExtractTags: { user: [], assistant: [] },
+    chatBodyTagReplaceRules: [],
     contextTurnCount: 3,
     contextExtractRules: [],
     contextExcludeRules: [],

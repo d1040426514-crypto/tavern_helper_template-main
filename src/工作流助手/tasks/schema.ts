@@ -241,12 +241,19 @@ export const ChatExtractTagsConfigSchema = z.object({
   assistant: z.array(z.string()).default([]),
 });
 
+export const ChatBodyTagReplaceRuleSchema = z.object({
+  id: z.string().default(''),
+  targetTag: z.string().default(''),
+  template: z.string().default(''),
+});
+
 export const PostProcessPresetSchema = z.object({
   name: z.string(),
   tasks: z.array(PostProcessTaskSchema).default([]),
   finalInjectTemplate: z.string().default(''),
   tagVariableInjectTemplate: z.string().default(''),
   chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
+  chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),
   contextTurnCount: z.number().int().min(0).default(3),
   contextExtractRules: z.array(ContextTagRuleSchema).default([]),
   contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
@@ -309,6 +316,7 @@ export const ScriptSettingsSchema = z
     finalInjectTemplate: z.string().default(''),
     tagVariableInjectTemplate: z.string().default(''),
     chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
+    chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),
     presets: z.array(PostProcessPresetSchema).default([]),
     activePresetName: z.string().default(''),
     scheduleState: z.record(z.string(), ScheduleStateEntrySchema).default({}),

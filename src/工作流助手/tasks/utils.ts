@@ -662,7 +662,11 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
     code: '{{标签名}}',
     desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 relay 决定副本数量，占位符内容读楼层变量（无数据时输出空属性标签块）。同 key 后阶段覆盖先阶段。引用外层标签时内层已配置提取标签会随 relay 刷新。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
   },
-  { code: '{{task:任务名}}', desc: '聊天注入模板中的任务结果占位' },
+  { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
+  {
+    code: 'chatBodyTagReplaceRules',
+    desc: '【非占位符】聊天正文标签替换：可为多个 AI 输出摘取标签各配一条模板；阶段任务产出匹配时原位替换 assistant 楼正文内文',
+  },
   {
     code: 'structuredOutputMode',
     desc: '任务级严格 JSON 变量更新（mvu_json_patch / addon_json_patch）：需配合 API 预设 DeepSeek 结构化模板；解析失败会重试，成功则归一化为 <UpdateVariable> 包裹块',

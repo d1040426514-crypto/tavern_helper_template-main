@@ -16,6 +16,7 @@ import {
   unmarkProcessing,
 } from './runtime';
 import { applyAssistantChatTagExtract } from './chat-tag-extract';
+import { ensureBodyReplaceOriginCaptured, restoreBodyReplaceOrigin } from './chat-body-tag-replace';
 import {
   applyTagVariableInjectTemplate,
   mergeAiFloorInjectBlock,
@@ -225,7 +226,9 @@ export async function handleMessageReceived(
   try {
     if (isRerun) {
       restorePostProcessTagsFromPreviousFloor(targetId);
+      await restoreBodyReplaceOrigin(targetId);
     }
+    await ensureBodyReplaceOriginCaptured(targetId);
     applyAssistantChatTagExtract(targetId, settings, { isRerun });
 
     const snapshot = captureDataSnapshot();
