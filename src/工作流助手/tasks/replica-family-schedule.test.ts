@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import type { PostProcessTask } from './schema';
+import { ENUM_REGISTRY_MARKER } from './replica-enum-parse';
 import {
   buildReplicaFromRoot,
   mergeReplicaFamilyFromRelay,
@@ -26,6 +27,7 @@ function baseTask(overrides: Partial<PostProcessTask> = {}): PostProcessTask {
     structuredOutputMode: 'off',
     syncAsReplicaFamily: true,
     replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
     replicaFamilyScheduleMode: 'auto',
     ...overrides,
   };
@@ -104,8 +106,8 @@ test('prepareStageTasksWithReplicaSync manual filters by launched only', () => {
     return { ...t, replicaFamilyLaunched: false };
   });
   const relay = relayMap({
-    'item@id=1': '<item id="1">A</item>',
-    'item@id=2': '<item id="2">B</item>',
+    'item@id=1': ENUM_REGISTRY_MARKER,
+    'item@id=2': ENUM_REGISTRY_MARKER,
   });
   const { tasks: runtime } = prepareStageTasksWithReplicaSync([root], tasks, relay);
   assert.equal(runtime.length, 1);
@@ -116,8 +118,8 @@ test('prepareStageTasksWithReplicaSync auto runs only relay replicas', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
   let merged = mergeReplicaFamilyFromRelay(root, ['1', '2', '3'], [root]);
   const relay = relayMap({
-    'item@id=1': '<item id="1">A</item>',
-    'item@id=2': '<item id="2">B</item>',
+    'item@id=1': ENUM_REGISTRY_MARKER,
+    'item@id=2': ENUM_REGISTRY_MARKER,
   });
   const { tasks: runtime } = prepareStageTasksWithReplicaSync([root], merged.tasks, relay);
   assert.equal(runtime.length, 2);

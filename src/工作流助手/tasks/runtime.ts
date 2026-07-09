@@ -24,6 +24,10 @@ import {
   type RelayTagMap,
 } from './utils';
 import {
+  parseReplicaEnumFromResponse,
+  replicaEnumResultToRegistryTags,
+} from './replica-enum-parse';
+import {
   appendStrictJsonPromptToMessages,
   extractStrictVariableResponse,
   hasCompleteVariableXml,
@@ -269,14 +273,18 @@ async function runSingleTask(
   }
 
   const plotExtraction = extractPlotTagsFromResponse(processedResponse || rawResponse, task.extractInjectTags ?? []);
-  const hasTags = Object.keys(plotExtraction.extractedTags).length > 0;
+  const enumParsed = parseReplicaEnumFromResponse(processedResponse || rawResponse);
+  const enumRegistryTags = replicaEnumResultToRegistryTags(enumParsed);
+  const hasEnumRegistry = Object.keys(enumRegistryTags).length > 0;
+  const extractedTags = { ...plotExtraction.extractedTags, ...enumRegistryTags };
+  const hasTags = Object.keys(extractedTags).length > 0;
   const responseForBlock = processedResponse || rawResponse;
   const extractedBlock = hasTags
     ? plotExtraction.injectedFragments.join('\n\n')
     : responseForBlock.trim();
 
   const structuredSuccess = structuredMode != null && processedResponse.trim().length > 0;
-  const success = structuredSuccess || hasTags || extractedBlock.length >= (task.minLength ?? 0);
+  const success = structuredSuccess || hasTags || hasEnumRegistry || extractedBlock.length >= (task.minLength ?? 0);
   if (success) {
     updateScheduleStateAfterRun(ctx.settings, task, scheduleCtx);
   }
@@ -287,7 +295,7 @@ async function runSingleTask(
     success,
     skipReason: success ? undefined : lastError || '提取失败',
     extractedBlock,
-    extractedTags: plotExtraction.extractedTags,
+    extractedTags,
     injectOnlyTagNames: plotExtraction.injectOnlyTagNames,
     rawResponse,
     reasoningContent,

@@ -1,7 +1,6 @@
 import {
   buildCompositeKey,
   buildExtractSpecKey,
-  collectAttrValuesFromRelay,
   getPlotPlaceholderTagNames,
   sortAttrValues,
   type RelayTagMap,
@@ -10,6 +9,7 @@ import {
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
 } from './tag-extract';
+import { collectEnumRegistryAttrValues } from './replica-enum-parse';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
 import { PostProcessTaskSchema, type PostProcessTask, type ReplicaFamilyScheduleMode } from './schema';
@@ -263,11 +263,14 @@ export function collectAttrValuesForReplicaRoot(
   root: PostProcessTask,
   relayMap: RelayTagMap,
 ): string[] {
-  const specStr = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0];
-  if (!specStr) return [];
-  const parsed = parseExtractTagSpec(specStr);
+  const enumSpecStr =
+    root.replicaFamilyEnumSpec?.trim() ||
+    root.replicaFamilySpec ||
+    scanDynamicAttrPlaceholders(root)[0];
+  if (!enumSpecStr) return [];
+  const parsed = parseExtractTagSpec(enumSpecStr);
   if (!parsed?.attrName) return [];
-  return collectAttrValuesFromRelay(relayMap, parsed);
+  return collectEnumRegistryAttrValues(relayMap, parsed);
 }
 
 export function listReplicaFamilyScheduleEntries(
@@ -368,6 +371,7 @@ export function enableReplicaFamilyOnTask(task: PostProcessTask): PostProcessTas
     enabled: true,
     syncAsReplicaFamily: true,
     replicaFamilySpec: validation.spec,
+    replicaFamilyEnumSpec: validation.spec,
     replicaFamilyBaseName: baseName,
     replicaFamilyScheduleMode: task.replicaFamilyScheduleMode ?? 'auto',
     name: baseName,
@@ -388,6 +392,7 @@ export function disableReplicaFamilyOnTasks(task: PostProcessTask, allTasks: Pos
       enabled: false,
       syncAsReplicaFamily: false,
       replicaFamilySpec: undefined,
+      replicaFamilyEnumSpec: undefined,
       replicaFamilyBaseName: undefined,
       replicaFamilyScheduleMode: undefined,
     };
@@ -402,6 +407,7 @@ export function clearReplicaFamilyFieldsOnClone(task: PostProcessTask): PostProc
     replicaFamilyRootId: undefined,
     replicaFamilyAttrValue: undefined,
     replicaFamilySpec: undefined,
+    replicaFamilyEnumSpec: undefined,
     replicaFamilyBaseName: undefined,
     replicaFamilyScheduleMode: undefined,
     replicaFamilyLaunched: undefined,

@@ -15,6 +15,7 @@ import {
   type ExtractTagSpec,
   findAllTagInstances,
 } from './tag-extract';
+import { isEnumRegistryMarker } from './replica-enum-parse';
 
 export type RelayTagMap = Map<string, string[]>;
 
@@ -94,7 +95,7 @@ export function isStoredFullBlockForKey(key: string, value: string): boolean {
 
 export function formatTagValueForInject(key: string, value: string): string {
   const v = String(value ?? '').trim();
-  if (!v) return '';
+  if (!v || isEnumRegistryMarker(v)) return '';
   if (isStoredFullBlockForKey(key, v)) return v;
   const parsed = parseCompositeKey(key);
   if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, v);
@@ -103,7 +104,10 @@ export function formatTagValueForInject(key: string, value: string): string {
 }
 
 export function formatTagValuesForInject(key: string, values: string[]): string {
-  const inners = values.map(v => storedTagValueToInner(key, v)).filter(Boolean);
+  const inners = values
+    .filter(v => !isEnumRegistryMarker(v))
+    .map(v => storedTagValueToInner(key, v))
+    .filter(Boolean);
   if (!inners.length) return '';
   return formatTagValueForInject(key, inners.join('\n\n'));
 }
@@ -671,7 +675,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 relay 决定副本数量，占位符内容读楼层变量（无数据时输出空属性标签块）。同 key 跨任务/跨阶段内文以换行合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 <ReplicaEnum> 注册的 relay key 决定副本数量（无内文），占位符内容读楼层变量。同 key 跨任务/跨阶段内文以换行合并为单段。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {

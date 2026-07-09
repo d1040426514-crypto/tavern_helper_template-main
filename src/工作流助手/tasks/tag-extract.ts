@@ -362,7 +362,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     steps: [
       {
         title: '1. 上一阶段枚举',
-        desc: '在较早阶段的任务「提取写入标签」中配置 item@id（或其它 标签@属性），让 AI 输出多个带属性值的标签块，写入 relay。',
+        desc: '在较早阶段任务输出 <ReplicaEnum> 包裹的 JSON。单 spec：{"spec":"item@id","values":["1","2"]}；批量 {"enums":[{"spec":"npc@id","values":[...]}, ...]}。正文可含其它叙述；副本族仅读取 ReplicaEnum 注册的 key 列表，不再从 XML item@id 摘取枚举。',
       },
       {
         title: '2. 配置副本族任务',
@@ -374,7 +374,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         title: '4. 运行时同步',
-        desc: '进入该执行阶段前，读取上一阶段 relay 中的 item@id=* 列表增量新增缺失副本（保留全部既有副本）；各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式。内容仅从当前楼 post_process_tags 读取（不读枚举 relay）；楼层无对应路径时输出空内文属性标签块。',
+        desc: '进入该执行阶段前，读取上一阶段 relay 中由 <ReplicaEnum> 注册的 spec 列表（如 item@id=*）增量新增缺失副本（保留全部既有副本）；各副本提示词中的 {{item@id}} 会替换为 {{item@id=1}} 等精确形式。registry key 无注入内文；占位符内容仅从当前楼 post_process_tags 读取；楼层无对应路径时输出空内文属性标签块。',
       },
       {
         title: '5. 调度模式',
@@ -387,8 +387,8 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '选中副本族原本后，可通过任务 tab 下方的副本族切换条预览各副本提示词；「副本调度」面板可切换模式并管理启动状态。',
     ],
     example:
-      'S1「枚举 item」（提取写入标签 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
+      'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
   },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 relay 增量新增副本，占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 ReplicaEnum 注册的 relay key 增量新增副本（无内文），占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
 } as const;

@@ -156,6 +156,7 @@ export const TaskWorkflowPresetSnapshotSchema = z.object({
     })
     .optional(),
   replicaFamilySpec: z.string().optional(),
+  replicaFamilyEnumSpec: z.string().optional(),
   replicaFamilyBaseName: z.string().optional(),
 });
 
@@ -200,6 +201,7 @@ const PostProcessTaskShape = z.object({
   replicaFamilyRootId: z.string().optional(),
   replicaFamilyAttrValue: z.string().optional(),
   replicaFamilySpec: z.string().optional(),
+  replicaFamilyEnumSpec: z.string().optional(),
   replicaFamilyBaseName: z.string().optional(),
   replicaFamilyScheduleMode: z.enum(['auto', 'manual']).optional(),
   replicaFamilyLaunched: z.boolean().optional(),

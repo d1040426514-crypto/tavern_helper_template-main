@@ -41,7 +41,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         name: '枚举 item',
         enabled: true,
         stage: 1,
-        extractInjectTags: ['item@id'],
+        extractInjectTags: ['result'],
         mergeStrategy: 'concat',
         maxRetries: 3,
         minLength: 0,
@@ -54,13 +54,14 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
             name: '',
             role: 'system',
             content:
-              '你是工作流助手。根据当前 AI 回复，识别其中出现的物品，为每个物品输出一个 <item id="数字">简短描述</item> 块。至少输出 2 个不同 id 的 item（如 id="1" 和 id="2"）。只输出标签块，不要其他文字。',
+              '你是工作流助手。根据当前 AI 回复识别物品，可先输出简短分析，再输出 <ReplicaEnum> 包裹的 JSON 枚举块。单 spec：{"spec":"item@id","values":["1","2"]}；批量：{"enums":[{"spec":"item@id","values":["1","2"]},{"spec":"npc@id","values":["a","b"]}]}。可选另输出 <result> 摘要。',
             enabled: true,
           },
           {
             name: '',
             role: 'user',
-            content: '当前 AI 回复：\n$7\n\n请输出多个 <item id="...">...</item>',
+            content:
+              '当前 AI 回复：\n$7\n\n请输出分析（可选）与 <ReplicaEnum>…</ReplicaEnum> 枚举 JSON。不要再用 <item id="..."> 标签枚举。',
             enabled: true,
           },
         ],
