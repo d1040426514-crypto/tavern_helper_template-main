@@ -9,7 +9,9 @@ import {
   saveTaskWorkflowPresetOnTask,
 } from './task-workflow-preset';
 import {
+  assertReplicaMemberPatchAllowed,
   expandEnabledTasksForRuntime,
+  isReplicaFamilyMember,
   isReplicaFamilyRootTemplate,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
@@ -236,6 +238,42 @@ test('apply workflow preset on root then mirror updates replicas', () => {
   assert.equal(replica?.stage, 2);
   assert.equal(replica?.apiPresetName, 'api-v2');
   assert.equal(replica?.promptGroups[0]?.content, 'do {{item@id=1}}');
+});
+
+test('isReplicaFamilyMember identifies replica tasks', () => {
+  assert.equal(isReplicaFamilyMember(baseTask()), false);
+  assert.equal(
+    isReplicaFamilyMember({
+      ...baseTask({ syncAsReplicaFamily: false }),
+      replicaFamilyRootId: 'root-1',
+      replicaFamilyAttrValue: '1',
+    }),
+    true,
+  );
+});
+
+test('assertReplicaMemberPatchAllowed blocks workflow fields', () => {
+  const member = {
+    ...baseTask({ syncAsReplicaFamily: false }),
+    id: 'rep-1',
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+  };
+  assert.throws(
+    () => assertReplicaMemberPatchAllowed(member, { stage: 9 }),
+    /副本为原本镜像/,
+  );
+  assert.throws(
+    () =>
+      assertReplicaMemberPatchAllowed(member, {
+        promptGroups: [{ name: '', role: 'user', content: 'x', enabled: true }],
+      }),
+    /副本为原本镜像/,
+  );
+  assert.doesNotThrow(() =>
+    assertReplicaMemberPatchAllowed(member, { replicaFamilyLaunched: true }),
+  );
+  assert.doesNotThrow(() => assertReplicaMemberPatchAllowed(member, { enabled: false }));
 });
 
 if (process.exitCode) process.exit(process.exitCode);

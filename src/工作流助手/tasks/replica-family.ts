@@ -264,6 +264,30 @@ export function isReplicaFamilyRootTemplate(task: PostProcessTask): boolean {
   return !!task.syncAsReplicaFamily && !task.replicaFamilyRootId;
 }
 
+export function isReplicaFamilyMember(task: PostProcessTask): boolean {
+  return !!task.replicaFamilyRootId;
+}
+
+export const REPLICA_MEMBER_WRITABLE_KEYS = new Set<keyof PostProcessTask>([
+  'replicaFamilyLaunched',
+  'enabled',
+]);
+
+const REPLICA_MEMBER_PATCH_DENIED_MSG = '副本为原本镜像，请编辑「原本」';
+
+export function assertReplicaMemberPatchAllowed(
+  task: PostProcessTask,
+  patch: Partial<PostProcessTask>,
+): void {
+  if (!isReplicaFamilyMember(task)) return;
+  for (const key of Object.keys(patch) as (keyof PostProcessTask)[]) {
+    if (key === 'id') continue;
+    if (!REPLICA_MEMBER_WRITABLE_KEYS.has(key)) {
+      throw new Error(REPLICA_MEMBER_PATCH_DENIED_MSG);
+    }
+  }
+}
+
 export function expandEnabledTasksForRuntime(tasks: PostProcessTask[]): PostProcessTask[] {
   return tasks.filter(t => {
     if (!t.enabled) return false;

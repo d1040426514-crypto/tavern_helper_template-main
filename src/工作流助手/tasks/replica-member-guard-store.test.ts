@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import lodash from 'lodash';
+
+(globalThis as typeof globalThis & { _: typeof lodash })._ = lodash;
+
+const savedVars: Record<string, unknown> = {};
+const chatMetadata: Record<string, unknown> = {};
+
+const g = globalThis as typeof globalThis & {
+  getVariables?: (opt: unknown) => Record<string, unknown>;
+  insertOrAssignVariables?: (data: unknown, opt: unknown) => void;
+  getScriptId?: () => string;
+  defineStore?: (...args: unknown[]) => unknown;
+  ref?: <T>(v: T) => { value: T };
+  watchEffect?: (fn: () => void) => void;
+  window?: {
+    parent?: {
+      SillyTavern?: {
+        getContext?: () => {
+          chatMetadata: Record<string, unknown>;
+          updateChatMetadata: (v: Record<string, unknown>, reset: boolean) => void;
+          saveChat: () => Promise<void>;
+        };
+      };
+    };
+  };
+  eventEmit?: () => Promise<void>;
+};
+
+g.getScriptId = () => '工作流助手';
+g.getVariables = () => ({ ...savedVars });
+g.insertOrAssignVariables = (data: unknown) => {
+  Object.assign(savedVars, data as Record<string, unknown>);
+};
+g.defineStore = () => () => ({});
+g.ref = <T>(v: T) => ({ value: v });
+g.watchEffect = () => {};
+g.eventEmit = async () => {};
+g.window = {
+  parent: {
+    SillyTavern: {
+      getContext: () => ({
+        chatMetadata,
+        updateChatMetadata: (v, reset) => {
+          if (reset) {
+            for (const key of Object.keys(chatMetadata)) delete chatMetadata[key];
+          }
+          Object.assign(chatMetadata, v);
+        },
+        saveChat: async () => {},
+      }),
+    },
+  },
+};
+
+void (async () => {
+  const { clearChatScope, createTask, deleteTask, listTasks, replaceTasks, updateTask } = await import(
+    './task-store'
+  );
+  const { updateReplicaMemberSchedule } = await import('./task-store');
+  const { syncReplicaFamily } = await import('./replica-family');
+
+  try {
+    await clearChatScope('api');
+
+    const root = await createTask(
+      {
+        name: '处理 item',
+        stage: 2,
+        promptGroups: [{ name: '', role: 'user', content: 'do {{item@id}}', enabled: true }],
+        extractInjectTags: ['item@id'],
+        syncAsReplicaFamily: true,
+        replicaFamilySpec: 'item@id',
+      },
+      'api',
+    );
+    const withReplicas = syncReplicaFamily(root, ['1'], listTasks());
+    await replaceTasks(withReplicas, 'api');
+
+    const replica = listTasks().find(t => t.replicaFamilyRootId === root.id);
+    assert.ok(replica);
+
+    await assert.rejects(() => updateTask(replica!.id, { stage: 9 }, 'api'), /副本为原本镜像/);
+
+    const scheduled = await updateReplicaMemberSchedule(replica!.id, { launched: true }, 'api');
+    assert.equal(scheduled.replicaFamilyLaunched, true);
+
+    const deleted = await deleteTask(replica!.id, 'api');
+    assert.equal(deleted, true);
+    assert.ok(!listTasks().some(t => t.id === replica!.id));
+
+    console.log('ok replica member guard store integration');
+  } catch (e) {
+    console.error('FAIL replica member guard store integration', e);
+    process.exitCode = 1;
+  } finally {
+    await clearChatScope('api');
+  }
+
+  if (process.exitCode) process.exit(process.exitCode);
+})();

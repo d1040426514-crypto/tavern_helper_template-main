@@ -23,9 +23,11 @@ import {
 } from './schema';
 import { newTaskId, cloneTaskForInsert } from './task-clone';
 import {
+  assertReplicaMemberPatchAllowed,
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   getReplicaTasks,
+  isReplicaFamilyMember,
   listReplicaFamilyScheduleEntries,
   mirrorAllReplicaFamilies,
   scanDynamicAttrPlaceholders,
@@ -196,6 +198,7 @@ export async function updateTask(
   if (index < 0) {
     throw new Error(`任务不存在: ${id}`);
   }
+  assertReplicaMemberPatchAllowed(tasks[index]!, patch);
   const updated = PostProcessTaskSchema.parse({
     ...tasks[index],
     ...patch,
@@ -398,6 +401,9 @@ export async function duplicateTask(
   const tasks = listTasks();
   const sourceTask = tasks.find(t => t.id === id);
   if (!sourceTask) throw new Error(`任务不存在: ${id}`);
+  if (isReplicaFamilyMember(sourceTask)) {
+    throw new Error('副本为原本镜像，请编辑「原本」');
+  }
   const cloned = cloneTaskForInsert(sourceTask, tasks);
   const next = [...tasks];
   const afterId = options?.afterTaskId ?? id;
@@ -418,6 +424,9 @@ export async function moveTask(
   const tasks = listTasks();
   const index = tasks.findIndex(t => t.id === id);
   if (index < 0) throw new Error(`任务不存在: ${id}`);
+  if (isReplicaFamilyMember(tasks[index]!)) {
+    throw new Error('副本为原本镜像，请编辑「原本」');
+  }
   const target = index + delta;
   if (target < 0 || target >= tasks.length) return;
   const next = [...tasks];
@@ -436,6 +445,9 @@ export async function moveTaskToIndex(
   const tasks = listTasks();
   const index = tasks.findIndex(t => t.id === id);
   if (index < 0) throw new Error(`任务不存在: ${id}`);
+  if (isReplicaFamilyMember(tasks[index]!)) {
+    throw new Error('副本为原本镜像，请编辑「原本」');
+  }
   if (toIndex < 0 || toIndex >= tasks.length) {
     throw new Error(`目标索引无效: ${toIndex}`);
   }
@@ -739,6 +751,11 @@ export async function renameTask(
   name: string,
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  if (isReplicaFamilyMember(task)) {
+    throw new Error('副本为原本镜像，请编辑「原本」');
+  }
   const normalized = String(name ?? '').trim();
   if (!normalized) {
     throw new Error('任务名称不能为空');

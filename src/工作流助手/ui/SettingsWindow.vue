@@ -1523,13 +1523,13 @@ function saveRunLogTaskTags(taskId: string): void {
           />
           <TaskPlotWorldbookPanel
             v-model:enabled="taskPlotWorldbookOverridesModel"
-            :tasks="displayTasks"
+            :tasks="taskTabTasks"
             :default-plot-worldbook-config="settings.plotWorldbookConfig"
           />
           <Context7Section v-model:config="defaultContextConfigRef" />
           <TaskContextPanel
             v-model:enabled="taskContextOverridesModel"
-            :tasks="displayTasks"
+            :tasks="taskTabTasks"
             :default-context-config="defaultContextConfigRef"
           />
 
@@ -1773,6 +1773,7 @@ function saveRunLogTaskTags(taskId: string): void {
               <p v-if="isViewingReplicaMember" class="acu-notes replica-family-bar__hint">
                 当前为副本预览（占位符已替换为精确属性值）；编辑请切回「原本」。
               </p>
+              <template v-if="!isViewingReplicaMember">
               <div class="acu-row acu-row--inline acu-task-editor__toolbar">
                 <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />
                 <div class="acu-task-editor__actions">
@@ -2063,12 +2064,13 @@ function saveRunLogTaskTags(taskId: string): void {
                 </template>
                 </div>
               </div>
+              </template>
               <TaskPromptAutoSegmentsPanel
-                v-if="selectedTask"
-                :task="isViewingReplicaMember && editorTask ? editorTask : selectedTask"
-                :readonly="isViewingReplicaMember"
+                v-if="selectedTask && !isViewingReplicaMember"
+                :task="selectedTask"
               />
               <div class="acu-subsection acu-task-prompt-zone">
+              <template v-if="!isViewingReplicaMember">
               <div class="acu-row acu-row--extract-tags">
                 <label class="acu-label-with-help" for="extract-inject-tags-input">
                   提取写入标签
@@ -2185,6 +2187,7 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
                 灰色自动段为合并预览，请在上方「任务级提示词自动段」中编辑。
               </p>
+              </template>
               <template v-for="row in promptPreviewRows" :key="promptRowKey(row)">
                 <PromptSegmentCard
                   :row-key="promptRowKey(row)"
