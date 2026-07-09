@@ -121,6 +121,7 @@ function buildPlotPlaceholderOptions(task: PostProcessTask): PlotPlaceholderReso
   return {
     historyFallback: 'all-tags',
     ...(replicaAttrSpec ? { replicaAttrSpec } : {}),
+    ...(task.replicaFamilyAttrValue ? { replicaAttrValue: task.replicaFamilyAttrValue } : {}),
   };
 }
 

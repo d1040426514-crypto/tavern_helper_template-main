@@ -53,6 +53,17 @@ test('buildTaskWorldbookTriggerText expands {{item@id=2}} precisely', () => {
   assert.equal(out, '<item id="2">B</item>');
 });
 
+test('buildTaskWorldbookTriggerText expands {{replica:val}} for replica member', () => {
+  const out = buildTaskWorldbookTriggerText(
+    [{ content: 'id={{replica:val}}', enabled: true }],
+    new Map(),
+    new Map(),
+    new Set(),
+    { historyFallback: 'all-tags', replicaAttrValue: '2' },
+  );
+  assert.equal(out, 'id=2');
+});
+
 test('assemblePlotWorldbookScanText includes $8 only when prompt contains $8', () => {
   const base = 'ai context';
   const trigger = '<item id="1">A</item>';

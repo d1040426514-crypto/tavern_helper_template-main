@@ -10,6 +10,7 @@ import {
   overwriteRelayTagMap,
   refreshNestedExtractTagsInContent,
   replacePlotTagPlaceholdersWithHistory,
+  resolvePlaceholderForInject,
   type RelayTagMap,
 } from './utils';
 import { ENUM_REGISTRY_MARKER } from './replica-enum-parse';
@@ -257,6 +258,30 @@ test('joinWritableRelayValues drops registry marker and keeps real XML', () => {
   ]);
   assert.equal(joined, '<item name="甲">A</item>\n\n<item name="乙">B</item>');
   assert.equal(joinWritableRelayValues([ENUM_REGISTRY_MARKER]), '');
+});
+
+test('replica:val resolves to replicaAttrValue in member context', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('处理 {{replica:val}}', new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+    replicaAttrValue: '1',
+  });
+  assert.equal(out, '处理 1');
+});
+
+test('replica:val resolves empty outside replica member context', () => {
+  const relay: RelayTagMap = new Map([['replica:val', ['should-not-use']]]);
+  const out = replacePlotTagPlaceholdersWithHistory('{{replica:val}}', relay, new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, '');
+});
+
+test('replica:val ignores relay tag even when replicaAttrValue set', () => {
+  const relay: RelayTagMap = new Map([['replica:val', ['wrong']]]);
+  const out = resolvePlaceholderForInject('replica:val', relay, new Map(), new Set(), {
+    replicaAttrValue: '甲',
+  });
+  assert.equal(out, '甲');
 });
 
 if (process.exitCode) {

@@ -87,7 +87,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
             name: '',
             role: 'system',
             content:
-              '你是工作流助手。用户消息给出单个物品实例。请根据该物品输出处理结果，包裹在 <item name="…">…</item> 中，name 属性须与当前实例一致。',
+              '你是工作流助手。当前实例标识：{{replica:val}}。用户消息给出单个物品实例。请根据该物品输出处理结果，包裹在 <item name="…">…</item> 中，name 属性须与当前实例一致。',
             enabled: true,
           },
           {

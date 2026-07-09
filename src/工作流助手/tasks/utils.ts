@@ -155,6 +155,13 @@ export function extractTagsFromText(text: string, tagNames: string[]): string {
 
 export const PLOT_TAG_PLACEHOLDER_RE = /\{\{([^}]+)\}\}/g;
 
+/** 副本族成员任务专用：解析为当前副本的 replicaFamilyAttrValue */
+export const REPLICA_ATTR_VALUE_PLACEHOLDER = 'replica:val';
+
+export function isReplicaAttrValuePlaceholder(name: string): boolean {
+  return name.trim().toLowerCase() === REPLICA_ATTR_VALUE_PLACEHOLDER;
+}
+
 function isPlotTagPlaceholderName(name: string): boolean {
   const trimmed = name.trim();
   return trimmed.length > 0 && !trimmed.toLowerCase().startsWith('task:');
@@ -294,6 +301,8 @@ export type PlotPlaceholderResolveOptions = {
   restrictToInjectOnly?: boolean;
   historyFallback?: 'inject-only' | 'all-tags';
   replicaAttrSpec?: { tagName: string; attrName: string };
+  /** 副本族成员当前实例的属性值（如 item@id=1 时为 "1"） */
+  replicaAttrValue?: string;
 };
 
 function applyNestedRefresh(
@@ -318,6 +327,10 @@ export function resolvePlaceholderForInject(
   injectOnlyTags: Set<string>,
   options?: PlotPlaceholderResolveOptions,
 ): string {
+  if (isReplicaAttrValuePlaceholder(placeholderName)) {
+    return options?.replicaAttrValue ?? '';
+  }
+
   const historyFallback = options?.historyFallback ?? 'inject-only';
   const replicaSpec = options?.replicaAttrSpec;
 
@@ -681,12 +694,8 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {
-    code: 'chatBodyTagReplaceRules',
-    desc: '【非占位符】聊天正文标签替换：可为多个 AI 输出摘取标签各配一条模板；阶段任务产出匹配时原位替换 assistant 楼正文内文',
-  },
-  {
-    code: 'structuredOutputMode',
-    desc: '任务级严格 JSON 变量更新（mvu_json_patch / addon_json_patch）：需配合 API 预设 DeepSeek 结构化模板；解析失败会重试，成功则归一化为 <UpdateVariable> 包裹块',
+    code: '{{replica:val}}',
+    desc: '副本族成员任务专用。解析为当前副本实例的属性值（replicaFamilyAttrValue）；例如 replicaFamilySpec 为 item@id、副本对应 item@id=1 时解析为 1。根模板与普通任务中解析为空，不回退 relay/history。',
   },
   { code: '{{char}} 等', desc: '提示词段在脚本占位符替换后，会再经酒馆宏、助手宏与 EJS 模板处理' },
   {
