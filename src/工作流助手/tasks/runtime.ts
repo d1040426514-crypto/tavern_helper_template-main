@@ -38,12 +38,11 @@ import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
 import { applyChatBodyTagReplaceAfterStage } from './chat-body-tag-replace';
 import {
+  buildStageProgressDisplayItems,
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
-  getReplicaDisplaySuffix,
-  getReplicaFamilyBaseName,
-  getReplicaFamilyGroupId,
   prepareStageTasksWithReplicaSync,
+  type ReplicaMemberProgressState,
 } from './replica-family';
 
 export interface TaskRunResult {
@@ -336,17 +335,16 @@ function createStageProgressReporter(
   allTasks: PostProcessTask[],
   onProgress?: (update: TaskProgressUpdate) => void,
 ): StageProgressReporter {
-  const tasks: TaskProgressItem[] = stageTasks.map(t => {
-    const suffix = getReplicaDisplaySuffix(t);
-    const base = getReplicaFamilyGroupId(t) ? getReplicaFamilyBaseName(t, allTasks) : t.name;
-    const displayName = suffix ? `${base} ${suffix}` : t.name;
-    const shortName = suffix && getReplicaFamilyGroupId(t) && stageTasks.length >= 2 ? suffix : displayName;
-    return {
-      taskId: t.id,
-      taskName: shortName,
-      status: 'pending' as const,
-    };
-  });
+  const memberStates = new Map<string, ReplicaMemberProgressState>();
+  for (const task of stageTasks) {
+    memberStates.set(task.id, { status: 'pending' });
+  }
+
+  let tasks: TaskProgressItem[] = buildStageProgressDisplayItems(stageTasks, allTasks, memberStates);
+
+  const refreshDisplayItems = () => {
+    tasks = buildStageProgressDisplayItems(stageTasks, allTasks, memberStates);
+  };
 
   const pushSnapshot = () => {
     const snapshot: TaskProgressSnapshot = {
@@ -359,23 +357,27 @@ function createStageProgressReporter(
 
   return {
     setRunning(taskId: string) {
-      const item = tasks.find(t => t.taskId === taskId);
-      if (item) item.status = 'running';
+      const state = memberStates.get(taskId);
+      if (!state) return;
+      state.status = 'running';
+      state.detail = undefined;
+      refreshDisplayItems();
       pushSnapshot();
     },
     setFinished(taskId: string, result: TaskRunResult) {
-      const item = tasks.find(t => t.taskId === taskId);
-      if (!item) return;
+      const state = memberStates.get(taskId);
+      if (!state) return;
       if (result.skipped) {
-        item.status = 'skipped';
-        item.detail = result.skipReason;
+        state.status = 'skipped';
+        state.detail = result.skipReason;
       } else if (result.success) {
-        item.status = 'done';
-        item.detail = undefined;
+        state.status = 'done';
+        state.detail = undefined;
       } else {
-        item.status = 'failed';
-        item.detail = result.skipReason;
+        state.status = 'failed';
+        state.detail = result.skipReason;
       }
+      refreshDisplayItems();
       pushSnapshot();
     },
     pushSnapshot,

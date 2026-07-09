@@ -13,6 +13,7 @@ import { collectEnumRegistryAttrValues } from './replica-enum-parse';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
 import { PostProcessTaskSchema, type PostProcessTask, type ReplicaFamilyScheduleMode } from './schema';
+import type { TaskProgressItem, TaskProgressStatus } from '../ui/task-progress-display';
 
 const REPLICA_NAME_SUFFIX_RE = / \{.+\}$/;
 
@@ -248,6 +249,79 @@ export function getReplicaFamilyBaseName(task: PostProcessTask, allTasks: PostPr
 export function getReplicaDisplaySuffix(task: PostProcessTask): string | null {
   if (task.replicaFamilyAttrValue) return task.replicaFamilyAttrValue;
   return null;
+}
+
+export const REPLICA_PROGRESS_GROUP_PREFIX = 'replica-group:';
+
+export function getReplicaProgressGroupId(task: PostProcessTask): string | null {
+  if (!task.replicaFamilyRootId) return null;
+  return `${REPLICA_PROGRESS_GROUP_PREFIX}${task.replicaFamilyRootId}`;
+}
+
+export type ReplicaMemberProgressState = {
+  status: TaskProgressStatus;
+  detail?: string;
+};
+
+export function buildReplicaAggregatedStatus(memberStatuses: TaskProgressStatus[]): TaskProgressStatus {
+  if (!memberStatuses.length) return 'pending';
+  if (memberStatuses.some(s => s === 'running')) return 'running';
+  if (memberStatuses.some(s => s === 'failed')) return 'failed';
+  if (memberStatuses.every(s => s === 'skipped')) return 'skipped';
+  if (memberStatuses.every(s => s === 'done' || s === 'skipped')) return 'done';
+  return 'pending';
+}
+
+export function buildReplicaGroupDetail(memberStatuses: TaskProgressStatus[]): string | undefined {
+  if (memberStatuses.length <= 1) return undefined;
+  const finished = memberStatuses.filter(s => s === 'done' || s === 'skipped').length;
+  if (finished >= memberStatuses.length) return undefined;
+  return `${finished}/${memberStatuses.length}`;
+}
+
+export function buildStageProgressDisplayItems(
+  stageTasks: PostProcessTask[],
+  allTasks: PostProcessTask[],
+  memberStates: Map<string, ReplicaMemberProgressState> = new Map(),
+): TaskProgressItem[] {
+  const seenGroups = new Set<string>();
+  const items: TaskProgressItem[] = [];
+
+  for (const task of stageTasks) {
+    const groupId = getReplicaProgressGroupId(task);
+    if (groupId) {
+      if (seenGroups.has(groupId)) continue;
+      seenGroups.add(groupId);
+      const members = stageTasks.filter(t => getReplicaProgressGroupId(t) === groupId);
+      const memberStatuses = members.map(m => memberStates.get(m.id)?.status ?? 'pending');
+      const status = buildReplicaAggregatedStatus(memberStatuses);
+      let detail = buildReplicaGroupDetail(memberStatuses);
+      if (status === 'failed') {
+        const failed = members.find(m => memberStates.get(m.id)?.status === 'failed');
+        detail = failed ? memberStates.get(failed.id)?.detail : detail;
+      } else if (status === 'skipped') {
+        const skipped = members.find(m => memberStates.get(m.id)?.status === 'skipped');
+        detail = skipped ? memberStates.get(skipped.id)?.detail : detail;
+      }
+      items.push({
+        taskId: groupId,
+        taskName: getReplicaFamilyBaseName(task, allTasks),
+        status,
+        detail,
+      });
+      continue;
+    }
+
+    const state = memberStates.get(task.id);
+    items.push({
+      taskId: task.id,
+      taskName: task.name,
+      status: state?.status ?? 'pending',
+      detail: state?.detail,
+    });
+  }
+
+  return items;
 }
 
 export function getReplicaAttrSpecForTask(
