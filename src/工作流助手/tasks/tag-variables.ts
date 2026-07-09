@@ -4,6 +4,7 @@ import {
   expandWritableKeysFromPlaceholder,
   formatTagValueForInject,
   getPlotPlaceholderTagNames,
+  joinWritableRelayValues,
   mergeRelayTagMap,
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
@@ -358,7 +359,7 @@ export async function applyTagVariableInjectTemplate(
 
   const flatAggregated: Record<string, string> = {};
   for (const [key, values] of aggregated.entries()) {
-    const inner = values.filter(Boolean).join('\n\n').trim();
+    const inner = joinWritableRelayValues(values);
     if (inner) flatAggregated[key] = inner;
   }
 
@@ -375,7 +376,7 @@ export async function applyTagVariableInjectTemplate(
     for (const key of expandWritableKeysFromPlaceholder(placeholderName, aggregated.keys())) {
       const mapKey = [...aggregated.keys()].find(k => k.toLowerCase() === key.toLowerCase());
       if (!mapKey) continue;
-      const inner = (aggregated.get(mapKey) ?? []).filter(Boolean).join('\n\n').trim();
+      const inner = joinWritableRelayValues(aggregated.get(mapKey) ?? []);
       if (!inner) continue;
       flatToWrite[mapKey] = inner;
     }

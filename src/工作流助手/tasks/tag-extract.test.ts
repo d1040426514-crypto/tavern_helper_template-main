@@ -5,6 +5,7 @@ import {
   filterXmlExtractedTagsForDisplay,
   formatTagValueForInject,
   formatTagValuesForInject,
+  joinWritableRelayValues,
   mergeRelayTagMap,
   overwriteRelayTagMap,
   refreshNestedExtractTagsInContent,
@@ -245,6 +246,17 @@ test('filterXmlExtractedTagsForDisplay drops ReplicaEnum registry markers', () =
     result: '摘要',
     'item@name=甲': '<item name="甲">内容</item>',
   });
+});
+
+test('joinWritableRelayValues drops registry marker and keeps real XML', () => {
+  const joined = joinWritableRelayValues([
+    ENUM_REGISTRY_MARKER,
+    '<item name="甲">A</item>',
+    ENUM_REGISTRY_MARKER,
+    '<item name="乙">B</item>',
+  ]);
+  assert.equal(joined, '<item name="甲">A</item>\n\n<item name="乙">B</item>');
+  assert.equal(joinWritableRelayValues([ENUM_REGISTRY_MARKER]), '');
 });
 
 if (process.exitCode) {

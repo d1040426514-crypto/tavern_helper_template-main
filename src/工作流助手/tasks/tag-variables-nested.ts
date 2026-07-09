@@ -5,6 +5,7 @@ import {
   parseDynamicAttrPlaceholder,
   storedTagValueToInner,
 } from './tag-extract';
+import { isEnumRegistryMarker } from './replica-enum-parse';
 
 export type TagContainerRaw = Record<string, unknown>;
 
@@ -63,7 +64,7 @@ export function buildDynamicAttrWritePlan(
     const parsed = parseCompositeKey(key);
     if (!parsed) continue;
     const text = String(value ?? '').trim();
-    if (!text) continue;
+    if (!text || isEnumRegistryMarker(text)) continue;
     entries[parsed.attrValue] = text;
   }
 

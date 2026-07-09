@@ -47,6 +47,16 @@ test('dynamic write plan builds nested group', () => {
   assert.equal(plan!.entries['1'], 'A');
 });
 
+test('dynamic write plan ignores ReplicaEnum registry marker', () => {
+  const plan = buildDynamicAttrWritePlan('item@name', {
+    'item@name=甲': '\u0000',
+    'item@name=乙': '<item name="乙">内容</item>',
+  });
+  assert.ok(plan);
+  assert.equal(plan!.entries['甲'], undefined);
+  assert.equal(plan!.entries['乙'], '<item name="乙">内容</item>');
+});
+
 test('merge nested keeps stale attr keys', () => {
   const plan = buildDynamicAttrWritePlan('item@id', {
     'item@id=1': 'A',

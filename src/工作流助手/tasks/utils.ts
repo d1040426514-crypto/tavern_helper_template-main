@@ -112,6 +112,14 @@ export function formatTagValuesForInject(key: string, values: string[]): string 
   return formatTagValueForInject(key, inners.join('\n\n'));
 }
 
+/** 合并 relay 多段值为可写入内文，排除 ReplicaEnum 注册标记 */
+export function joinWritableRelayValues(values: string[]): string {
+  const parts = values
+    .map(v => String(v ?? '').trim())
+    .filter(v => v && !isEnumRegistryMarker(v));
+  return parts.join('\n\n');
+}
+
 /** 运行日志等 UI：仅展示经 XML 摘取的真实内文，排除 ReplicaEnum 注册标记 */
 export function filterXmlExtractedTagsForDisplay(tags: Record<string, string>): Record<string, string> {
   return Object.fromEntries(
