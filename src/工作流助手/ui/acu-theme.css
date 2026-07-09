@@ -1241,6 +1241,37 @@
   background: color-mix(in srgb, var(--acu-danger) 10%, transparent);
 }
 
+.acu-fullscreen-toggle {
+  min-width: 32px;
+  min-height: 32px;
+  padding: 6px 10px;
+  color: var(--acu-text-3);
+}
+
+.acu-fullscreen-toggle:hover:not(:disabled) {
+  color: var(--acu-text-1);
+  background: var(--acu-hover-overlay);
+}
+
+/* PC 手动全屏（设置窗） */
+@media (min-width: 641px) {
+  .acu-overlay--fullscreen {
+    align-items: stretch;
+    justify-content: stretch;
+    padding: 0;
+  }
+
+  .acu-window--fullscreen {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;
+    max-height: none;
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+  }
+}
+
 /* ── 世界书列表 ── */
 .qrf_worldbook_list {
   max-height: 180px;
@@ -2469,6 +2500,10 @@
     min-height: 32px;
     padding: 4px 8px;
     font-size: 16px;
+  }
+
+  .acu-fullscreen-toggle {
+    display: none;
   }
 
   /* ── 分页横滑 + 短标签 ── */

@@ -93,6 +93,17 @@ const selectedTaskId = ref(settings.value.tasks[0]?.id ?? '');
 const viewTasks = ref<PostProcessTask[]>([]);
 const chatScopeInfo = ref(getChatScopeState());
 const chatScopeActive = ref(!!getChatScopeState());
+const windowFullscreen = ref(false);
+
+function toggleWindowFullscreen(): void {
+  windowFullscreen.value = !windowFullscreen.value;
+}
+
+function onFullscreenKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape' || !windowFullscreen.value) return;
+  event.preventDefault();
+  windowFullscreen.value = false;
+}
 
 const displayTasks = computed(() => (chatScopeActive.value ? viewTasks.value : settings.value.tasks));
 
@@ -1001,6 +1012,7 @@ let offTasksChanged: EventOnReturn | null = null;
 let offChatScopeChanged: EventOnReturn | null = null;
 
 onMounted(() => {
+  document.addEventListener('keydown', onFullscreenKeydown);
   void refreshTaskView();
   offTasksChanged = eventOn(ACU_PP_TASKS_CHANGED, (payload?: TasksChangedPayload) => {
     if (payload?.source === 'ui') {
@@ -1024,6 +1036,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  document.removeEventListener('keydown', onFullscreenKeydown);
   offTasksChanged?.stop();
   offChatScopeChanged?.stop();
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
@@ -1322,8 +1335,8 @@ function saveRunLogTaskTags(taskId: string): void {
 </script>
 
 <template>
-  <div class="acu-overlay acu-pp-root">
-    <div class="acu-window">
+  <div class="acu-overlay acu-pp-root" :class="{ 'acu-overlay--fullscreen': windowFullscreen }">
+    <div class="acu-window" :class="{ 'acu-window--fullscreen': windowFullscreen }">
       <div class="acu-window-header">
         <div class="acu-window-title">
           <span class="acu-window-title-mark">流</span>
@@ -1343,6 +1356,19 @@ function saveRunLogTaskTags(taskId: string): void {
               {{ theme.name }}
             </button>
           </div>
+          <button
+            class="acu-btn acu-icon-btn acu-fullscreen-toggle"
+            type="button"
+            :title="windowFullscreen ? '退出全屏' : '全屏'"
+            :aria-pressed="windowFullscreen"
+            @click="toggleWindowFullscreen"
+          >
+            <i
+              class="fa-fw fa-solid"
+              :class="windowFullscreen ? 'fa-compress' : 'fa-expand'"
+              aria-hidden="true"
+            ></i>
+          </button>
           <button class="acu-btn acu-window-close" type="button" title="关闭" @click="closeWindow">×</button>
         </div>
       </div>
