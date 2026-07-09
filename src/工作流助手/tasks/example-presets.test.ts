@@ -25,4 +25,27 @@ test('正文润色示例 preset has content extract and body replace rule', () =
   assert.equal(task.stage, 1);
 });
 
+test('副本族与动态占位符示例 preset configures replica family task', () => {
+  const preset = BUILTIN_PRESETS.find(p => p.name === '副本族与动态占位符示例');
+  assert.ok(preset, 'preset should exist');
+
+  const enumTask = preset.tasks.find(t => t.id === 'example-enum-item');
+  assert.ok(enumTask);
+  assert.equal(enumTask.enabled, true);
+  assert.equal(enumTask.stage, 1);
+
+  const replicaTask = preset.tasks.find(t => t.id === 'example-replica-family');
+  assert.ok(replicaTask);
+  assert.equal(replicaTask.enabled, true);
+  assert.equal(replicaTask.stage, 2);
+  assert.deepEqual(replicaTask.extractInjectTags, ['item@id']);
+  assert.equal(replicaTask.syncAsReplicaFamily, true);
+  assert.equal(replicaTask.replicaFamilySpec, 'item@id');
+  assert.equal(replicaTask.replicaFamilyEnumSpec, 'item@id');
+  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('{{item@id}}')));
+  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('<item id')));
+  assert.equal(preset.tagVariableInjectTemplate, '{{item@id}}');
+  assert.equal(preset.finalInjectTemplate, 'FLOOR_INJECT:{{item@id}}');
+});
+
 console.log('example-presets.test.ts: all passed');
