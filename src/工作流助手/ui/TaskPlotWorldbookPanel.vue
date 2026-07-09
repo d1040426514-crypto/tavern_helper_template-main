@@ -87,7 +87,9 @@ watch(
     <AcuHelpPanel v-model:open="helpOpen" id="task-plot-worldbook-panel-help" label="按任务配置 $1 世界书说明">
       <p class="acu-notes acu-notes--sm" style="margin: 0">
         关闭时，所有含 <code>$1</code> 的任务均使用上方「$1 默认世界书」。开启后可按任务单独配置世界书与条目；仅当任务提示词含
-        <code>$1</code> 时生效。
+        <code>$1</code> 时生效。触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的
+        <code v-pre>{{标签}}</code>（含
+        <code>item@id</code> 完整标签块）+（提示词含 <code>$8</code> 时）过滤后的用户输入；触发后条目按酒馆位置/深度/顺序排列（对齐 shujuku）。
       </p>
     </AcuHelpPanel>
     <div v-show="enabled" class="acu-subsection">

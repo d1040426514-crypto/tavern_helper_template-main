@@ -132,6 +132,7 @@ export async function resolveTaskPlaceholders(
   const promptContents = iterTaskPromptContents(task);
   const needs$1 = promptContents.some(c => c.includes('$1'));
   const needs$7 = promptContents.some(c => c.includes('$7'));
+  const needs$8InScan = promptContents.some(c => c.includes('$8'));
   const taskContextSettings = settingsWithTaskContext(ctx.settings, task);
   const vars = { ...ctx.vars };
 
@@ -152,7 +153,9 @@ export async function resolveTaskPlaceholders(
       const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
       const wb = await getWorldbookContentForPostProcess(
         wbConfig,
-        [baseScan, triggerText].filter(Boolean).join('\n'),
+        [baseScan, triggerText, needs$8InScan ? (ctx.vars.$8?.trim() ?? '') : '']
+          .filter(Boolean)
+          .join('\n'),
         ctx.messageId,
       );
       const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);

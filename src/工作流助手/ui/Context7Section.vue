@@ -51,7 +51,7 @@ function removeContextExcludeRule(index: number) {
         style="width: 72px"
       />
       <span>条 AI 楼层作为 $7 占位符上下文</span>
-      <span class="acu-notes">（0 = 不注入历史 AI 正文，仍含当前楼；每楼经提取规则可产出多段标签，如 &lt;tp&gt; 与 &lt;gametxt&gt;；同 N 亦用于 $1 世界书扫描）</span>
+      <span class="acu-notes">（0 = 不注入历史 AI 正文，仍含当前楼；同 N 亦作为 $1 触发扫描基底之一，经相同「提取规则 / 排除规则」处理）</span>
     </div>
     <div class="acu-subsection">
       <div class="acu-heading-with-help">

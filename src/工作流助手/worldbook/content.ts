@@ -7,12 +7,17 @@ import {
 import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
+import { sortPlotWorldbookEntries } from './entry-order';
 import { scanTriggeredWorldbookEntries } from './scan';
 import type { ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
-type DecoratedEntry = WorldbookEntry & { bookName: string; normalizedComment: string };
+type DecoratedEntry = WorldbookEntry & {
+  bookName: string;
+  normalizedComment: string;
+  placeholderOriginalIndex: number;
+};
 
 /** 条目宏/EJS 完成后：排除规则 + worldbook_context 包装（对齐 shujuku 剧情 $1 替换） */
 export function finalizePlotWorldbookPlaceholderContent(
@@ -39,9 +44,13 @@ async function resolveBookNames(config: PlotWorldbookConfig): Promise<string[]> 
   }
 }
 
-function decorateEntry(entry: WorldbookEntry, bookName: string): DecoratedEntry {
+function decorateEntry(
+  entry: WorldbookEntry,
+  bookName: string,
+  placeholderOriginalIndex: number,
+): DecoratedEntry {
   const normalizedComment = normalizeWorldbookComment(entry.name);
-  return { ...entry, bookName, normalizedComment };
+  return { ...entry, bookName, normalizedComment, placeholderOriginalIndex };
 }
 
 function isSelectedEntry(entry: DecoratedEntry, config: PlotWorldbookConfig): boolean {
@@ -77,11 +86,12 @@ export async function getWorldbookContentForPostProcess(
   if (bookNames.length === 0) return '';
 
   const allEntries: DecoratedEntry[] = [];
+  let placeholderOriginalIndex = 0;
   for (const bookName of bookNames) {
     try {
       const entries = await getWorldbook(bookName);
       for (const entry of entries) {
-        const decorated = decorateEntry(entry, bookName);
+        const decorated = decorateEntry(entry, bookName, placeholderOriginalIndex++);
         if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
         if (!isDbGeneratedEntry(decorated.normalizedComment) && isEntryBlocked(entry)) continue;
         if (!isDbGeneratedEntry(decorated.normalizedComment) && !isPlotWorldbookEntrySelectable(entry)) continue;
@@ -94,7 +104,7 @@ export async function getWorldbookContentForPostProcess(
   }
 
   if (allEntries.length === 0) return '';
-  const triggered = scanTriggeredWorldbookEntries(allEntries, baseScanText);
+  const triggered = sortPlotWorldbookEntries(scanTriggeredWorldbookEntries(allEntries, baseScanText));
   return formatWorldbookEntries(triggered, messageId);
 }
 

@@ -616,32 +616,19 @@ export function buildTaskWorldbookTriggerText(
   injectOnlyTags: Set<string>,
   options?: PlotPlaceholderResolveOptions,
 ): string {
-  const tagNames: string[] = [];
-  const seen = new Set<string>();
+  const blocks: string[] = [];
   for (const group of promptGroups) {
     if (!isPromptGroupEnabled(group)) continue;
-    for (const name of getPlotPlaceholderTagNames(group.content)) {
-      if (!seen.has(name)) {
-        seen.add(name);
-        tagNames.push(name);
-      }
-    }
-  }
-  if (!tagNames.length) return '';
-
-  const blocks: string[] = [];
-  for (const tagName of tagNames) {
-    const out = resolvePlaceholderForInject(
-      tagName,
+    const expanded = replacePlotTagPlaceholdersWithHistory(
+      group.content,
       relayTagMap,
       messageVarHistoryMap,
       injectOnlyTags,
       options,
     );
-    if (!out) continue;
-    blocks.push(out);
+    if (expanded.trim()) blocks.push(expanded);
   }
-  return blocks.join('\n');
+  return blocks.join('\n\n');
 }
 
 export function expandWritableKeysFromPlaceholder(
@@ -678,7 +665,7 @@ export function replacePlaceholdersInText(text: string, vars: Record<string, str
 export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   {
     code: '$1',
-    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块；基于最近 N 条 AI 楼（提取/排除与 gametxt 规则同 $7）+ 提示词 {{标签名}} 触发；N 同 contextTurnCount；条目内容支持酒馆宏/EJS。在「世界书与上下文」开启「按任务配置 $1 世界书」后可逐任务自定义，否则全部沿用默认世界书',
+    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}}（含 item@id 等动态占位符的完整属性标签块）+（提示词含 $8 时）过滤后的 $8；触发后条目按酒馆位置/深度/顺序排列（对齐 shujuku）；N 同 contextTurnCount；条目内容支持酒馆宏/EJS。在「世界书与上下文」开启「按任务配置 $1 世界书」后可逐任务自定义，否则全部沿用默认世界书',
   },
   { code: '$5', desc: '纪要索引（世界书条目或数据库表快照；支持酒馆宏/EJS）' },
   { code: '$7', desc: '最近 N 条 AI 楼层上下文（提取/排除规则同「$7 默认上下文」）；在「世界书与上下文」开启「按任务配置 $7 上下文」后可逐任务自定义 N 与规则，否则全部沿用默认' },
