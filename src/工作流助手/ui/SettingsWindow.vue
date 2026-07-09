@@ -44,6 +44,7 @@ import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   hasReplicaFamilyTasks,
+  mirrorAllReplicaFamilies,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
 } from '../tasks/replica-family';
@@ -391,11 +392,29 @@ const taskContextOverridesModel = computed({
 
 void refreshTaskView();
 
+let syncingReplicas = false;
+
+function ensureReplicasMirroredInPlace(tasks: PostProcessTask[]): void {
+  if (syncingReplicas) return;
+  syncingReplicas = true;
+  try {
+    const mirrored = mirrorAllReplicaFamilies(tasks);
+    if (mirrored === tasks) return;
+    for (let i = 0; i < mirrored.length; i++) {
+      tasks[i] = mirrored[i]!;
+    }
+  } finally {
+    syncingReplicas = false;
+  }
+}
+
 let persistViewTasksTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersistViewTasks() {
   if (!chatScopeActive.value) return;
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
   persistViewTasksTimer = setTimeout(() => {
+    persistViewTasksTimer = null;
+    ensureReplicasMirroredInPlace(viewTasks.value);
     void replaceTasks(viewTasks.value, 'ui');
   }, 300);
 }
@@ -410,6 +429,7 @@ function schedulePersistGlobalSettings() {
   if (persistGlobalSettingsTimer) clearTimeout(persistGlobalSettingsTimer);
   persistGlobalSettingsTimer = setTimeout(() => {
     persistGlobalSettingsTimer = null;
+    ensureReplicasMirroredInPlace(settings.value.tasks);
     store.persist();
   }, 300);
 }
@@ -876,8 +896,12 @@ function syncWorkflowPresetsToViews(updated: PostProcessTask): void {
 async function afterTaskWorkflowPresetMutation(updated: PostProcessTask): Promise<void> {
   syncWorkflowPresetsToViews(updated);
   if (chatScopeActive.value) {
+    ensureReplicasMirroredInPlace(viewTasks.value);
     await refreshTaskView({ skipTasksFlush: true, skipPresetSync: true });
   } else {
+    const idx = settings.value.tasks.findIndex(t => t.id === updated.id);
+    if (idx >= 0) settings.value.tasks[idx] = updated;
+    ensureReplicasMirroredInPlace(settings.value.tasks);
     store.saveActivePreset();
   }
 }

@@ -27,6 +27,7 @@ import {
   enableReplicaFamilyOnTask,
   getReplicaTasks,
   listReplicaFamilyScheduleEntries,
+  mirrorAllReplicaFamilies,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
   validateReplicaFamilyEligibility,
@@ -201,9 +202,10 @@ export async function updateTask(
     id,
   });
   tasks[index] = updated;
-  await writeTasks(settings, tasks, source);
+  const mirrored = mirrorAllReplicaFamilies(tasks);
+  await writeTasks(settings, mirrored, source);
   await emitTasksChanged('update', source, id);
-  return updated;
+  return mirrored.find(t => t.id === id) ?? updated;
 }
 
 export async function deleteTask(id: string, source: TaskWriteSource = 'api'): Promise<boolean> {
@@ -224,7 +226,8 @@ export async function replaceTasks(
 ): Promise<void> {
   const settings = loadSettings();
   const parsed = tasks.map(t => PostProcessTaskSchema.parse(t));
-  await writeTasks(settings, parsed, source);
+  const mirrored = mirrorAllReplicaFamilies(parsed);
+  await writeTasks(settings, mirrored, source);
   await emitTasksChanged('replace', source);
 }
 
@@ -869,10 +872,16 @@ export async function applyTaskWorkflowPreset(
   name: string,
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
-  const task = getTask(taskId);
-  if (!task) throw new Error(`任务不存在: ${taskId}`);
-  const next = applyTaskWorkflowPresetOnTask(task, name);
-  return updateTask(taskId, next, source);
+  const settings = loadSettings();
+  const tasks = listTasks();
+  const index = tasks.findIndex(t => t.id === taskId);
+  if (index < 0) throw new Error(`任务不存在: ${taskId}`);
+  const next = applyTaskWorkflowPresetOnTask(tasks[index]!, name);
+  tasks[index] = next;
+  const mirrored = mirrorAllReplicaFamilies(tasks);
+  await writeTasks(settings, mirrored, source);
+  await emitTasksChanged('update', source, taskId);
+  return mirrored.find(t => t.id === taskId) ?? next;
 }
 
 export async function deleteTaskWorkflowPreset(
