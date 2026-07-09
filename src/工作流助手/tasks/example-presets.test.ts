@@ -33,19 +33,21 @@ test('副本族与动态占位符示例 preset configures replica family task', 
   assert.ok(enumTask);
   assert.equal(enumTask.enabled, true);
   assert.equal(enumTask.stage, 1);
+  assert.ok(enumTask.promptGroups.some(g => g.content.includes('item@name')));
+  assert.ok(enumTask.promptGroups.some(g => g.content.includes('${name 1}')));
 
   const replicaTask = preset.tasks.find(t => t.id === 'example-replica-family');
   assert.ok(replicaTask);
   assert.equal(replicaTask.enabled, true);
   assert.equal(replicaTask.stage, 2);
-  assert.deepEqual(replicaTask.extractInjectTags, ['item@id']);
+  assert.deepEqual(replicaTask.extractInjectTags, ['item@name']);
   assert.equal(replicaTask.syncAsReplicaFamily, true);
-  assert.equal(replicaTask.replicaFamilySpec, 'item@id');
-  assert.equal(replicaTask.replicaFamilyEnumSpec, 'item@id');
-  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('{{item@id}}')));
-  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('<item id')));
-  assert.equal(preset.tagVariableInjectTemplate, '{{item@id}}');
-  assert.equal(preset.finalInjectTemplate, 'FLOOR_INJECT:{{item@id}}');
+  assert.equal(replicaTask.replicaFamilySpec, 'item@name');
+  assert.equal(replicaTask.replicaFamilyEnumSpec, 'item@name');
+  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('{{item@name}}')));
+  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('<item name')));
+  assert.equal(preset.tagVariableInjectTemplate, '{{item@name}}');
+  assert.equal(preset.finalInjectTemplate, 'FLOOR_INJECT:{{item@name}}');
 });
 
 console.log('example-presets.test.ts: all passed');

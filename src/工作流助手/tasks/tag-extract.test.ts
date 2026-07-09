@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { extractInjectTagsFromResponse } from './tag-extract';
 import {
   extractPlotTagsFromResponse,
+  filterXmlExtractedTagsForDisplay,
   formatTagValueForInject,
   formatTagValuesForInject,
   mergeRelayTagMap,
@@ -10,6 +11,7 @@ import {
   replacePlotTagPlaceholdersWithHistory,
   type RelayTagMap,
 } from './utils';
+import { ENUM_REGISTRY_MARKER } from './replica-enum-parse';
 
 function test(name: string, fn: () => void): void {
   try {
@@ -229,6 +231,20 @@ test('refreshNestedExtractTagsInContent ignores unconfigured tags', () => {
     { historyFallback: 'all-tags' },
   );
   assert.equal(out, '<story><other>old</other></story>');
+});
+
+test('filterXmlExtractedTagsForDisplay drops ReplicaEnum registry markers', () => {
+  const filtered = filterXmlExtractedTagsForDisplay({
+    result: '摘要',
+    'item@id=1': ENUM_REGISTRY_MARKER,
+    'item@id=2': ENUM_REGISTRY_MARKER,
+    'item@name=甲': '<item name="甲">内容</item>',
+    empty: '   ',
+  });
+  assert.deepEqual(filtered, {
+    result: '摘要',
+    'item@name=甲': '<item name="甲">内容</item>',
+  });
 });
 
 if (process.exitCode) {

@@ -3,7 +3,8 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
 import type { PostProcessTask, ReplicaFamilyScheduleMode, TaskWorkflowPresetEntry } from '../tasks/schema';
-import { PLACEHOLDER_LEGEND } from '../tasks/utils';
+import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
+import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
   getPostProcessWritableTagNames,
   pickTagsForPostProcessWrite,
@@ -1219,9 +1220,8 @@ function runLogPromptSegmentTitle(msg: { role: string; name?: string }): string 
 }
 
 function runLogExtractedTagEntries(r: { extractedTags?: Record<string, string> }): [string, string][] {
-  const tags = r.extractedTags;
-  if (!tags || typeof tags !== 'object') return [];
-  return Object.entries(tags).filter(([, value]) => String(value ?? '').trim());
+  const tags = filterXmlExtractedTagsForDisplay(r.extractedTags ?? {});
+  return Object.entries(tags);
 }
 
 function runLogWritableTagNames(): Set<string> {
@@ -1246,7 +1246,7 @@ function initRunLogTagDrafts(): void {
   const editMode: Record<string, boolean> = {};
   for (const r of settings.value.lastRunStatus?.taskResults ?? []) {
     if (!r.taskId) continue;
-    drafts[r.taskId] = _.cloneDeep(r.extractedTags ?? {});
+    drafts[r.taskId] = _.cloneDeep(filterXmlExtractedTagsForDisplay(r.extractedTags ?? {}));
     editMode[r.taskId] = false;
   }
   runLogTagDrafts.value = drafts;
@@ -1266,7 +1266,7 @@ function isRunLogTagEditing(taskId: string): boolean {
 function revertRunLogTagDraft(taskId: string): void {
   const result = settings.value.lastRunStatus?.taskResults?.find(t => t.taskId === taskId);
   if (!result) return;
-  runLogTagDrafts.value[taskId] = _.cloneDeep(result.extractedTags ?? {});
+  runLogTagDrafts.value[taskId] = _.cloneDeep(filterXmlExtractedTagsForDisplay(result.extractedTags ?? {}));
 }
 
 function toggleRunLogTagEdit(taskId: string): void {
@@ -1306,6 +1306,9 @@ function saveRunLogTaskTags(taskId: string): void {
 
   const writable = runLogWritableTagNames();
   const toWrite = pickTagsForPostProcessWrite(draft, writable);
+  for (const key of Object.keys(toWrite)) {
+    if (isEnumRegistryMarker(toWrite[key] ?? '')) delete toWrite[key];
+  }
   if (!Object.keys(toWrite).length) {
     acuToast('warning', '当前模板未声明可写入的标签，或本任务无可写入摘取');
     return;

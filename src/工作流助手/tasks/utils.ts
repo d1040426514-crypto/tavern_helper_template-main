@@ -112,6 +112,13 @@ export function formatTagValuesForInject(key: string, values: string[]): string 
   return formatTagValueForInject(key, inners.join('\n\n'));
 }
 
+/** 运行日志等 UI：仅展示经 XML 摘取的真实内文，排除 ReplicaEnum 注册标记 */
+export function filterXmlExtractedTagsForDisplay(tags: Record<string, string>): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(tags).filter(([, v]) => String(v ?? '').trim() && !isEnumRegistryMarker(v)),
+  );
+}
+
 function extractTagsList(tags: string[]): string[] {
   return tags.map(t => t.trim()).filter(Boolean);
 }
