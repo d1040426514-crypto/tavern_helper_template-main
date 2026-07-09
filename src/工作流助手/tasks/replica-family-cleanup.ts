@@ -9,6 +9,7 @@ import {
 import { countAssistantRounds } from './schedule';
 import type { PostProcessTask, ScriptSettings } from './schema';
 import type { TagContainerRaw } from './tag-variables-nested';
+import { isAccessibleMessageFloor } from './message-floor';
 
 const TAG_DATA_ROOT_KEY = 'post_process_tags';
 
@@ -248,6 +249,7 @@ export function pruneFloorTagKeysForReplica(
   messageId: number,
 ): void {
   if (!attrValuesToRemove.length) return;
+  if (!isAccessibleMessageFloor(messageId)) return;
   const parsed = parseExtractTagSpec(spec);
   if (!parsed?.attrName) return;
   const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);

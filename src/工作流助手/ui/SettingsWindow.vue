@@ -47,7 +47,8 @@ import {
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
 } from '../tasks/replica-family';
-import { ensureReplicaFamilyCleanupDefaults } from '../tasks/replica-family-cleanup';
+import { ensureReplicaFamilyCleanupDefaults, applyReplicaFamilyCleanup } from '../tasks/replica-family-cleanup';
+import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
 import {
   addPromptGroup as addPromptGroupInStore,
   clearChatScope,
@@ -62,6 +63,7 @@ import {
   setTaskEnabled as setTaskEnabledInStore,
   saveTaskWorkflowPreset as saveTaskWorkflowPresetInStore,
   applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
+  applyReplicaFamilyCleanupInStore,
   deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
   updateReplicaFamilyScheduleMode as updateReplicaFamilyScheduleModeInStore,
   updateReplicaMemberSchedule as updateReplicaMemberScheduleInStore,
@@ -795,6 +797,65 @@ function onReplicaMemberScheduleChange(
   if (idx < 0) return;
   const member = settings.value.tasks[idx]!;
   if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
+}
+
+function resolveReplicaCleanupMessageFloorId(): number {
+  const fromRun = settings.value.lastRunStatus?.messageId;
+  if (fromRun != null) {
+    const normalized = normalizeMessageFloorId(fromRun);
+    if (normalized != null) return normalized;
+  }
+  const latest = findLatestAccessibleFloorId();
+  return latest ?? 0;
+}
+
+async function deleteSelectedReplicaMember(): Promise<void> {
+  const root = selectedTask.value;
+  if (!root?.syncAsReplicaFamily) return;
+  const target = editorTask.value;
+  if (!target?.replicaFamilyRootId || target.id === root.id) return;
+
+  const attrValue = target.replicaFamilyAttrValue ?? '';
+  const attrLabel = attrValue || target.name.trim() || '该副本';
+  const rootLabel = (root.replicaFamilyBaseName ?? root.name).trim() || '副本族';
+  const floorId = resolveReplicaCleanupMessageFloorId();
+  const floorHint =
+    floorId > 0 && isAccessibleMessageFloor(floorId)
+      ? `并清除楼层 #${floorId} 中对应的 post_process_tags 变量 key`
+      : '（当前无法定位可写楼层，将仅删除副本任务）';
+
+  if (
+    !(await acuConfirm({
+      message: `删除「${rootLabel}」的副本「${attrLabel}」，${floorHint}？`,
+    }))
+  ) {
+    return;
+  }
+
+  const keepAttrs = replicaFamilyMembers.value
+    .filter(m => m.id !== target.id)
+    .map(m => m.replicaFamilyAttrValue ?? '')
+    .filter(Boolean);
+  const keepByRoot = { [root.id]: keepAttrs };
+
+  try {
+    if (chatScopeActive.value) {
+      await applyReplicaFamilyCleanupInStore(keepByRoot, floorId, 'ui');
+      await refreshTaskView();
+    } else {
+      const next = applyReplicaFamilyCleanup(settings.value, keepByRoot, floorId, {
+        persistManualKeepByRoot: keepByRoot,
+      });
+      settings.value.tasks = next.tasks;
+      settings.value.replicaFamilyCleanup = next.replicaFamilyCleanup!;
+      store.persist();
+    }
+    selectedReplicaViewId.value = null;
+    acuToast('success', `已删除副本「${attrLabel}」`);
+  } catch (e) {
+    console.error(`${SCRIPT_LOG_PREFIX} 删除副本族副本失败:`, e);
+    acuToast('error', `删除失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
 }
 
 function syncWorkflowPresetsToViews(updated: PostProcessTask): void {
@@ -1673,6 +1734,16 @@ function saveRunLogTaskTags(taskId: string): void {
                   @click="selectedReplicaViewId = rep.id"
                 >
                   {{ rep.replicaFamilyAttrValue ?? rep.name }}
+                </button>
+                <button
+                  v-if="isViewingReplicaMember"
+                  type="button"
+                  class="acu-btn acu-btn--sm acu-icon-btn danger replica-family-bar__clear"
+                  title="删除当前副本及楼层变量"
+                  aria-label="删除当前副本及楼层变量"
+                  @click="deleteSelectedReplicaMember"
+                >
+                  <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
                 </button>
               </div>
               <p v-if="isViewingReplicaMember" class="acu-notes replica-family-bar__hint">

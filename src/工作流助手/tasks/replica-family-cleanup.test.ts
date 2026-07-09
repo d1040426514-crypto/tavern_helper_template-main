@@ -23,6 +23,30 @@ function test(name: string, fn: () => void): void {
   }
 }
 
+function withAccessibleMessageFloor(messageId: number, fn: () => void): void {
+  const g = globalThis as Record<string, unknown>;
+  const prev = {
+    getChatMessages: g.getChatMessages,
+    getVariables: g.getVariables,
+  };
+  g.getChatMessages = (id: number) => {
+    if (id === messageId) {
+      return [{ role: 'assistant', message: 'reply', message_id: messageId }];
+    }
+    return [];
+  };
+  g.getVariables = (opt: { type: string; message_id?: number }) => {
+    if (opt.type === 'message' && opt.message_id === messageId) return {};
+    throw new Error('floor inaccessible');
+  };
+  try {
+    fn();
+  } finally {
+    g.getChatMessages = prev.getChatMessages;
+    g.getVariables = prev.getVariables;
+  }
+}
+
 function baseSettings(overrides: Partial<ScriptSettings> = {}): ScriptSettings {
   const root: PostProcessTask = {
     id: 'root',
@@ -133,64 +157,92 @@ test('tickCleanupRound and shouldTriggerCleanup', () => {
 });
 
 test('applyReplicaFamilyCleanup removes unkept replica tasks', () => {
-  const g = globalThis as Record<string, unknown>;
-  g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
-  const settings = baseSettings();
-  const next = applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0);
-  assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'root').length, 1);
-  assert.equal(next.tasks.find(t => t.replicaFamilyAttrValue === '2'), undefined);
-  assert.equal(next.replicaFamilyCleanup.roundsSinceCleanup, 0);
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings();
+    const next = applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0);
+    assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'root').length, 1);
+    assert.equal(next.tasks.find(t => t.replicaFamilyAttrValue === '2'), undefined);
+    assert.equal(next.replicaFamilyCleanup.roundsSinceCleanup, 0);
+  });
 });
 
 test('applyReplicaFamilyCleanup without persist leaves lastManualKeepByRoot unchanged', () => {
-  const g = globalThis as Record<string, unknown>;
-  g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
-  const settings = baseSettings({
-    replicaFamilyCleanup: {
-      ...baseSettings().replicaFamilyCleanup!,
-      lastManualKeepByRoot: { root: ['9'] },
-    },
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings({
+      replicaFamilyCleanup: {
+        ...baseSettings().replicaFamilyCleanup!,
+        lastManualKeepByRoot: { root: ['9'] },
+      },
+    });
+    applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0);
+    assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['9'] });
   });
-  applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0);
-  assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['9'] });
 });
 
 test('applyReplicaFamilyCleanup with persist writes only user selection', () => {
-  const g = globalThis as Record<string, unknown>;
-  g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
-  const settings = baseSettings({
-    replicaFamilyCleanup: {
-      ...baseSettings().replicaFamilyCleanup!,
-      lastManualKeepByRoot: { root: ['9'] },
-    },
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings({
+      replicaFamilyCleanup: {
+        ...baseSettings().replicaFamilyCleanup!,
+        lastManualKeepByRoot: { root: ['9'] },
+      },
+    });
+    applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0, {
+      persistManualKeepByRoot: { root: ['1'] },
+    });
+    assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['1'] });
   });
-  applyReplicaFamilyCleanup(settings, { root: ['1'] }, 0, {
-    persistManualKeepByRoot: { root: ['1'] },
-  });
-  assert.deepEqual(settings.replicaFamilyCleanup!.lastManualKeepByRoot, { root: ['1'] });
 });
 
 test('pruneFloorTagKeysForReplica removes nested and flat keys for unkept attrs', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    let vars: Record<string, unknown> = {
+      post_process_tags: {
+        item_id: { '1': 'keep-me', '2': 'drop-me' },
+        'item@id=1': 'flat-keep',
+        'item@id=2': 'flat-drop',
+      },
+    };
+    g.updateVariablesWith = (
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      _opts: unknown,
+    ) => {
+      vars = fn(vars);
+      return vars;
+    };
+    pruneFloorTagKeysForReplica('item@id', ['2'], 0);
+    const tags = vars.post_process_tags as Record<string, unknown>;
+    assert.deepEqual(tags.item_id, { '1': 'keep-me' });
+    assert.equal(tags['item@id=1'], 'flat-keep');
+    assert.equal(tags['item@id=2'], undefined);
+  });
+});
+
+test('pruneFloorTagKeysForReplica skips inaccessible message floor', () => {
   const g = globalThis as Record<string, unknown>;
   let vars: Record<string, unknown> = {
-    post_process_tags: {
-      item_id: { '1': 'keep-me', '2': 'drop-me' },
-      'item@id=1': 'flat-keep',
-      'item@id=2': 'flat-drop',
-    },
+    post_process_tags: { 'item@id=2': 'flat-drop' },
   };
+  let updateCalled = false;
+  g.getChatMessages = () => [];
   g.updateVariablesWith = (
     fn: (v: Record<string, unknown>) => Record<string, unknown>,
     _opts: unknown,
   ) => {
+    updateCalled = true;
     vars = fn(vars);
     return vars;
   };
   pruneFloorTagKeysForReplica('item@id', ['2'], 0);
-  const tags = vars.post_process_tags as Record<string, unknown>;
-  assert.deepEqual(tags.item_id, { '1': 'keep-me' });
-  assert.equal(tags['item@id=1'], 'flat-keep');
-  assert.equal(tags['item@id=2'], undefined);
+  assert.equal(updateCalled, false);
+  assert.equal((vars.post_process_tags as Record<string, unknown>)['item@id=2'], 'flat-drop');
 });
 
 test('incrementReplicaRunCounts accumulates per member', () => {
