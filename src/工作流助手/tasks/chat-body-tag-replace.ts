@@ -14,7 +14,7 @@ import {
 } from './tag-variables';
 import { overwriteRelayTagMap, replacePlotTagPlaceholdersWithHistory, type RelayTagMap } from './utils';
 import type { SharedContext } from './placeholders';
-import type { ChatBodyTagReplaceRule, ScriptSettings } from './schema';
+import type { ChatBodyTagReplaceRule, PostProcessTask, ScriptSettings } from './schema';
 import type { TaskRunResult } from './runtime';
 
 export const BODY_REPLACE_ORIGIN_KEY = '_post_process_body_replace_origin';
@@ -133,6 +133,7 @@ export async function renderChatBodyTagReplaceTemplate(
   template: string,
   allStageResults: TaskRunResult[],
   messageId: number,
+  allTasks: PostProcessTask[],
 ): Promise<string> {
   const trimmed = template.trim();
   if (!trimmed) return '';
@@ -148,6 +149,7 @@ export async function renderChatBodyTagReplaceTemplate(
   }
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
+    allTasks,
   });
   return processTemplateText(out, messageId);
 }
@@ -240,7 +242,12 @@ export async function applyChatBodyTagReplaceAfterStage(
 
     writeFloorTagValues(messageId, stageTags);
 
-    const rendered = await renderChatBodyTagReplaceTemplate(rule.template, allStageResults, messageId);
+    const rendered = await renderChatBodyTagReplaceTemplate(
+      rule.template,
+      allStageResults,
+      messageId,
+      settings.tasks,
+    );
     const renderedInnerByKey: Record<string, string> = {};
     const spec = parseExtractTagSpec(rule.targetTag.trim());
     if (!spec) continue;

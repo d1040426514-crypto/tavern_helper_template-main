@@ -162,11 +162,11 @@ test('relay wins over history with all-tags fallback', () => {
   assert.equal(out, '<foo>new</foo>');
 });
 
-test('all-tags fallback empty when neither relay nor history', () => {
+test('all-tags fallback preserves unconfigured ASCII placeholder for tavern macros', () => {
   const out = replacePlotTagPlaceholdersWithHistory('x{{missing}}y', new Map(), new Map(), new Set(), {
     historyFallback: 'all-tags',
   });
-  assert.equal(out, 'xy');
+  assert.equal(out, 'x{{missing}}y');
 });
 
 test('mergeRelayTagMap appends same key', () => {
@@ -282,6 +282,59 @@ test('replica:val ignores relay tag even when replicaAttrValue set', () => {
     replicaAttrValue: '甲',
   });
   assert.equal(out, '甲');
+});
+
+test('{{char}} preserved when not script-owned and unresolved', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('hi {{char}} bye', new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, 'hi {{char}} bye');
+});
+
+test('configured plot tag still replaces to empty when no data', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('{{result}}', new Map(), new Map(), new Set(['result']), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, '');
+});
+
+test('replica:launched resolves launched suffixes', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rep = {
+    ...root,
+    id: 'rep-1',
+    name: '副本族处理 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '开启：{{replica:launched:副本族处理}}',
+    new Map(),
+    new Map(),
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [root, rep] },
+  );
+  assert.equal(out, '开启：1');
 });
 
 if (process.exitCode) {

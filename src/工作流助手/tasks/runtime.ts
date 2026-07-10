@@ -172,6 +172,7 @@ async function runSingleTask(
     ctx.messageVarHistoryMap,
     ctx.injectOnlyTagsUnion,
     ctx.messageId,
+    ctx.settings.tasks,
   );
   if (!messages.length) {
     return {

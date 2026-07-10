@@ -23,7 +23,6 @@ import {
 import { resolveTaskPlotWorldbookConfig } from './plot-worldbook-config';
 import { sanitizeUserInputForPostProcess } from './sanitize-context';
 import { settingsWithTaskContext } from './context-config';
-import { shieldScriptPlaceholders, unshieldScriptPlaceholders } from './placeholder-shield';
 import { normalizeContextTagRules } from './context-tags';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
@@ -116,10 +115,14 @@ export async function buildSharedContext(
   };
 }
 
-function buildPlotPlaceholderOptions(task: PostProcessTask): PlotPlaceholderResolveOptions {
+function buildPlotPlaceholderOptions(
+  task: PostProcessTask,
+  allTasks: PostProcessTask[],
+): PlotPlaceholderResolveOptions {
   const replicaAttrSpec = getReplicaAttrSpecForTask(task);
   return {
     historyFallback: 'all-tags',
+    allTasks,
     ...(replicaAttrSpec ? { replicaAttrSpec } : {}),
     ...(task.replicaFamilyAttrValue ? { replicaAttrValue: task.replicaFamilyAttrValue } : {}),
   };
@@ -149,7 +152,7 @@ export async function resolveTaskPlaceholders(
         relayTagMap,
         ctx.messageVarHistoryMap,
         ctx.injectOnlyTagsUnion,
-        buildPlotPlaceholderOptions(task),
+        buildPlotPlaceholderOptions(task, ctx.settings.tasks),
       );
       const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
       const wb = await getWorldbookContentForPostProcess(
@@ -175,21 +178,22 @@ export async function renderTaskMessages(
   messageVarHistoryMap: RelayTagMap,
   injectOnlyTagsUnion: Set<string>,
   messageId: number,
+  allTasks: PostProcessTask[],
 ): Promise<RunLogMessage[]> {
   const messages: RunLogMessage[] = [];
+  const plotOptions = buildPlotPlaceholderOptions(task, allTasks);
   for (const g of buildEffectivePromptGroups(task)) {
     if (!isPromptGroupEnabled(g)) continue;
-    const shield = shieldScriptPlaceholders(g.content);
-    let content = await processTemplateText(shield.text, messageId);
-    content = unshieldScriptPlaceholders(content, shield.tokens);
+    let content = g.content;
     content = replacePlaceholdersInText(content, vars);
     content = replacePlotTagPlaceholdersWithHistory(
       content,
       relayTagMap,
       messageVarHistoryMap,
       injectOnlyTagsUnion,
-      buildPlotPlaceholderOptions(task),
+      plotOptions,
     );
+    content = await processTemplateText(content, messageId);
     if (!content.trim()) continue;
     messages.push({
       role: normalizePromptRole(g.role),

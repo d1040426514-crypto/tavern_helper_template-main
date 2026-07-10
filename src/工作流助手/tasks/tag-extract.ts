@@ -366,7 +366,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         title: '2. 配置副本族任务',
-        desc: '本任务提示词中含且仅含一种动态占位符（如 {{item@id}}，不带 = 值）。可与 {{result}}、$7、{{replica:val}} 等其它占位符并存，但不能同时出现两种 {{tag@attr}}。{{replica:val}} 在各副本运行时解析为当前实例属性值（如 1）。',
+        desc: '本任务提示词中含且仅含一种动态占位符（如 {{item@id}}，不带 = 值）。可与 {{result}}、$7、{{replica:val}}、{{replica:launched:任务名}} 等其它占位符并存，但不能同时出现两种 {{tag@attr}}。{{replica:val}} 在各副本运行时解析为当前实例属性值（如 1）。',
       },
       {
         title: '3. 启用任务',
@@ -388,6 +388,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '副本保留 id、属性值、启动状态与独立启停；不可修改任务级工作流配置（提示词、API、阶段、提取标签等），第 2 页「按任务配置」仅针对原本；删除副本与手动调度除外。',
       '直接编辑副本会在下次镜像时被覆盖。',
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
+      '提示词可用 {{replica:launched:任务名}} 列出指定副本族原本在本轮已开启副本的后缀名（顿号连接，不含共有任务名前缀）。',
     ],
     example:
       'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',

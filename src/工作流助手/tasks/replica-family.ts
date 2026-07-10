@@ -427,6 +427,74 @@ export function listReplicaFamilyScheduleEntries(
   }));
 }
 
+export const REPLICA_LAUNCHED_PLACEHOLDER_PREFIX = 'replica:launched:';
+
+export function parseReplicaLaunchedPlaceholder(name: string): string | null {
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  const prefix = REPLICA_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
+  if (!lower.startsWith(prefix)) return null;
+  const ref = trimmed.slice(REPLICA_LAUNCHED_PLACEHOLDER_PREFIX.length).trim();
+  return ref || null;
+}
+
+export function isReplicaLaunchedPlaceholder(name: string): boolean {
+  return parseReplicaLaunchedPlaceholder(name) != null;
+}
+
+export function findReplicaFamilyRootByRef(ref: string, allTasks: PostProcessTask[]): PostProcessTask | undefined {
+  const trimmed = ref.trim();
+  if (!trimmed) return undefined;
+
+  const direct = allTasks.find(t => t.id === trimmed || t.name === trimmed);
+  if (direct) {
+    if (isReplicaFamilyRootTemplate(direct)) return direct;
+    if (direct.replicaFamilyRootId) {
+      return allTasks.find(t => t.id === direct.replicaFamilyRootId);
+    }
+  }
+
+  return allTasks.find(
+    t =>
+      isReplicaFamilyRootTemplate(t) &&
+      (t.replicaFamilyBaseName?.trim() === trimmed || t.name === trimmed),
+  );
+}
+
+export function listLaunchedReplicaSuffixes(
+  root: PostProcessTask,
+  allTasks: PostProcessTask[],
+  relayMap: RelayTagMap,
+): string[] {
+  const replicas = getReplicaTasks(root.id, allTasks);
+  const attrValues = collectAttrValuesForReplicaRoot(root, relayMap);
+  const relaySet = new Set(attrValues);
+  const mode = getReplicaFamilyScheduleMode(root);
+
+  const runnable = replicas.filter(r => {
+    if (!shouldRunReplicaAtRuntime(r, root)) return false;
+    if (mode === 'auto') {
+      return relaySet.has(r.replicaFamilyAttrValue ?? '');
+    }
+    return true;
+  });
+
+  const suffixes = runnable
+    .map(r => getReplicaDisplaySuffix(r))
+    .filter((s): s is string => !!s);
+  return sortAttrValues([...new Set(suffixes)]);
+}
+
+export function resolveReplicaLaunchedPlaceholder(
+  ref: string,
+  allTasks: PostProcessTask[],
+  relayMap: RelayTagMap,
+): string {
+  const root = findReplicaFamilyRootByRef(ref, allTasks);
+  if (!root) return '';
+  return listLaunchedReplicaSuffixes(root, allTasks, relayMap).join('、');
+}
+
 export type PrepareStageReplicaSyncResult = {
   tasks: PostProcessTask[];
   allTasks: PostProcessTask[];

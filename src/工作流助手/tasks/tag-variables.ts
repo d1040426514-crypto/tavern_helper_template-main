@@ -421,6 +421,7 @@ export async function mergeAiFloorInjectBlock(
   }
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
+    allTasks: settings.tasks,
   });
   return processTemplateText(out, messageId);
 }

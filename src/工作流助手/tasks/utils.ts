@@ -16,6 +16,8 @@ import {
   findAllTagInstances,
 } from './tag-extract';
 import { isEnumRegistryMarker } from './replica-enum-parse';
+import { parseReplicaLaunchedPlaceholder, resolveReplicaLaunchedPlaceholder } from './replica-family';
+import type { PostProcessTask } from './schema';
 
 export type RelayTagMap = Map<string, string[]>;
 
@@ -303,7 +305,34 @@ export type PlotPlaceholderResolveOptions = {
   replicaAttrSpec?: { tagName: string; attrName: string };
   /** 副本族成员当前实例的属性值（如 item@id=1 时为 "1"） */
   replicaAttrValue?: string;
+  /** 全部任务列表，供 {{replica:launched:…}} 解析 */
+  allTasks?: PostProcessTask[];
 };
+
+/** 脚本认领的占位符：无数据时也替换为空，不留给酒馆宏 */
+export function isScriptOwnedPlaceholder(
+  placeholderName: string,
+  injectOnlyTags: Set<string>,
+  options?: PlotPlaceholderResolveOptions,
+): boolean {
+  const trimmed = placeholderName.trim();
+  if (!trimmed) return false;
+
+  const lower = trimmed.toLowerCase();
+  if (lower.startsWith('replica:')) return true;
+
+  if (parseDynamicAttrPlaceholder(trimmed)) return true;
+  if (compositePlaceholderToKey(trimmed)) return true;
+
+  const replicaSpec = options?.replicaAttrSpec;
+  if (replicaSpec && isCompositeUnderAttrSpec(trimmed, replicaSpec)) return true;
+
+  if (isPlaceholderInjectAllowed(trimmed, injectOnlyTags)) return true;
+
+  if (!/^[\w]+$/.test(trimmed)) return true;
+
+  return false;
+}
 
 function applyNestedRefresh(
   text: string,
@@ -329,6 +358,12 @@ export function resolvePlaceholderForInject(
 ): string {
   if (isReplicaAttrValuePlaceholder(placeholderName)) {
     return options?.replicaAttrValue ?? '';
+  }
+
+  const launchedRef = parseReplicaLaunchedPlaceholder(placeholderName);
+  if (launchedRef != null) {
+    if (!options?.allTasks?.length) return '';
+    return resolveReplicaLaunchedPlaceholder(launchedRef, options.allTasks, relayTagMap);
   }
 
   const historyFallback = options?.historyFallback ?? 'inject-only';
@@ -371,6 +406,7 @@ export function resolvePlaceholderForInject(
 
 export function isPlaceholderInjectAllowed(placeholderName: string, injectOnlyTags: Set<string>): boolean {
   const lower = placeholderName.toLowerCase();
+  if (lower.startsWith('replica:')) return false;
   for (const spec of injectOnlyTags) {
     if (spec.toLowerCase() === lower) return true;
   }
@@ -614,7 +650,9 @@ export function replacePlotTagPlaceholdersWithHistory(
       injectOnlyTags,
       options,
     );
-    return out;
+    if (out) return out;
+    if (isScriptOwnedPlaceholder(tagName, injectOnlyTags, options)) return '';
+    return placeholder;
   });
 }
 
@@ -697,7 +735,14 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
     code: '{{replica:val}}',
     desc: '副本族成员任务专用。解析为当前副本实例的属性值（replicaFamilyAttrValue）；例如 replicaFamilySpec 为 item@id、副本对应 item@id=1 时解析为 1。根模板与普通任务中解析为空，不回退 relay/history。',
   },
-  { code: '{{char}} 等', desc: '提示词段在脚本占位符替换后，会再经酒馆宏、助手宏与 EJS 模板处理' },
+  {
+    code: '{{replica:launched:任务名}}',
+    desc: '解析为指定副本族原本在本轮可运行（已开启）副本的后缀名列表（replicaFamilyAttrValue），顿号连接，不含共有任务名前缀；支持任务名或任务 Id。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。',
+  },
+  {
+    code: '{{char}} 等',
+    desc: '未被脚本认领的 ASCII 占位符在 $ 与脚本 {{}} 替换后保留，再经酒馆宏、助手宏与 EJS 模板处理。任务提示词与注入模板统一顺序：$ 变量 → 脚本 {{}} → 宏/EJS',
+  },
   {
     code: 'post_process_tags',
     desc: '【非占位符】消息楼层标签变量；复合 key 如 post_process_tags.item@id=1。item@id 配置下无 id 的实例回退裸 key item',

@@ -11,16 +11,20 @@ import {
 import {
   assertReplicaMemberPatchAllowed,
   expandEnabledTasksForRuntime,
+  findReplicaFamilyRootByRef,
   isReplicaFamilyMember,
   isReplicaFamilyRootTemplate,
+  listLaunchedReplicaSuffixes,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
+  resolveReplicaLaunchedPlaceholder,
   scanDynamicAttrPlaceholders,
   substituteDynamicPlaceholder,
   syncReplicaFamily,
   syncReplicaFromRoot,
   validateReplicaFamilyEligibility,
 } from './replica-family';
+import type { RelayTagMap } from './utils';
 
 function baseTask(overrides: Partial<PostProcessTask> = {}): PostProcessTask {
   return {
@@ -274,6 +278,66 @@ test('assertReplicaMemberPatchAllowed blocks workflow fields', () => {
     assertReplicaMemberPatchAllowed(member, { replicaFamilyLaunched: true }),
   );
   assert.doesNotThrow(() => assertReplicaMemberPatchAllowed(member, { enabled: false }));
+});
+
+function relayMap(entries: Record<string, string>): RelayTagMap {
+  return new Map(Object.entries(entries).map(([k, v]) => [k, [v]]));
+}
+
+test('findReplicaFamilyRootByRef by name and member id', () => {
+  const root = baseTask({ name: '副本族处理', replicaFamilyBaseName: '副本族处理' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['1'], [root]);
+  const rep = merged.tasks.find(t => t.replicaFamilyAttrValue === '1')!;
+  assert.equal(findReplicaFamilyRootByRef('副本族处理', merged.tasks)?.id, root.id);
+  assert.equal(findReplicaFamilyRootByRef(rep.id, merged.tasks)?.id, root.id);
+});
+
+test('listLaunchedReplicaSuffixes manual only launched', () => {
+  const root = baseTask({
+    name: '副本族处理',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  const rep1 = tasks.find(t => t.replicaFamilyAttrValue === '1')!;
+  const rep2 = tasks.find(t => t.replicaFamilyAttrValue === '2')!;
+  tasks = tasks.map(t => {
+    if (t.id === rep1.id) return { ...t, replicaFamilyLaunched: true };
+    if (t.id === rep2.id) return { ...t, replicaFamilyLaunched: false };
+    return t;
+  });
+  const syncedRoot = tasks.find(t => t.id === root.id)!;
+  assert.deepEqual(listLaunchedReplicaSuffixes(syncedRoot, tasks, new Map()), ['1']);
+});
+
+test('listLaunchedReplicaSuffixes auto filters by relay enum', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
+  const tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  const syncedRoot = tasks.find(t => t.id === root.id)!;
+  const relay = relayMap({ 'item@id=1': '\u0000' });
+  assert.deepEqual(listLaunchedReplicaSuffixes(syncedRoot, tasks, relay), ['1']);
+});
+
+test('resolveReplicaLaunchedPlaceholder joins with dunhao', () => {
+  const root = baseTask({
+    name: '副本族处理',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyAttrValue === '1' || t.replicaFamilyAttrValue === '2'
+      ? { ...t, replicaFamilyLaunched: true }
+      : t,
+  );
+  assert.equal(
+    resolveReplicaLaunchedPlaceholder('副本族处理', tasks, new Map()),
+    '1、2',
+  );
+});
+
+test('resolveReplicaLaunchedPlaceholder returns empty for unknown root', () => {
+  assert.equal(resolveReplicaLaunchedPlaceholder('不存在', [], new Map()), '');
 });
 
 if (process.exitCode) process.exit(process.exitCode);
