@@ -114,6 +114,12 @@ test('computeAutoKeepSet keeps launched manual and active replicas', () => {
   assert.deepEqual(keep.root, ['1']);
 });
 
+test('computeAutoKeepSet protects newly created members in same cleanup round', () => {
+  const settings = baseSettings();
+  const keep = computeAutoKeepSet(settings, ['rep-2']);
+  assert.deepEqual(keep.root.sort(), ['1', '2']);
+});
+
 test('computeAutoKeepSet ignores lastManualKeepByRoot when not launched or active', () => {
   const settings = baseSettings({
     replicaFamilyCleanup: {
@@ -136,6 +142,12 @@ test('computeManualDialogDefaultSelection includes last manual keep', () => {
   assert.deepEqual(keep.root.sort(), ['1', '2']);
 });
 
+test('computeManualDialogDefaultSelection protects newly created members', () => {
+  const settings = baseSettings();
+  const keep = computeManualDialogDefaultSelection(settings, ['rep-2']);
+  assert.deepEqual(keep.root.sort(), ['1', '2']);
+});
+
 test('listReplicaFamilyCleanupCandidates marks last manual keep as defaultSelected', () => {
   const settings = baseSettings({
     replicaFamilyCleanup: {
@@ -144,6 +156,13 @@ test('listReplicaFamilyCleanupCandidates marks last manual keep as defaultSelect
     },
   });
   const groups = listReplicaFamilyCleanupCandidates(settings);
+  const rep2 = groups[0]!.members.find(m => m.attrValue === '2');
+  assert.equal(rep2?.defaultSelected, true);
+});
+
+test('listReplicaFamilyCleanupCandidates marks protected new members as defaultSelected', () => {
+  const settings = baseSettings();
+  const groups = listReplicaFamilyCleanupCandidates(settings, ['rep-2']);
   const rep2 = groups[0]!.members.find(m => m.attrValue === '2');
   assert.equal(rep2?.defaultSelected, true);
 });

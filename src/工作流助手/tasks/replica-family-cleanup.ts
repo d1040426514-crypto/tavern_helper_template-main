@@ -117,13 +117,20 @@ function computeMemberActivityScore(runCount: number, cycleRounds: number): numb
   return runCount / cycleRounds;
 }
 
+function isMemberProtectedThisRound(memberId: string, protectMemberIds?: readonly string[]): boolean {
+  if (!protectMemberIds?.length) return false;
+  return protectMemberIds.includes(memberId);
+}
+
 function isMemberKeepByScheduleAndActivity(
   member: PostProcessTask,
   root: PostProcessTask,
   runCount: number,
   cycleRounds: number,
   activityRatio: number,
+  protectMemberIds?: readonly string[],
 ): boolean {
+  if (isMemberProtectedThisRound(member.id, protectMemberIds)) return true;
   if (getReplicaFamilyScheduleMode(root) === 'manual' && isReplicaLaunched(member)) return true;
   return computeMemberActivityScore(runCount, cycleRounds) >= activityRatio;
 }
@@ -135,10 +142,19 @@ function isMemberManualDialogDefault(
   cycleRounds: number,
   activityRatio: number,
   lastManualKeep: string[],
+  protectMemberIds?: readonly string[],
 ): boolean {
+  if (isMemberProtectedThisRound(member.id, protectMemberIds)) return true;
   const attrValue = member.replicaFamilyAttrValue ?? '';
   if (lastManualKeep.includes(attrValue)) return true;
-  return isMemberKeepByScheduleAndActivity(member, root, runCount, cycleRounds, activityRatio);
+  return isMemberKeepByScheduleAndActivity(
+    member,
+    root,
+    runCount,
+    cycleRounds,
+    activityRatio,
+    protectMemberIds,
+  );
 }
 
 function collectKeepAttrsForRoot(
@@ -162,19 +178,32 @@ function collectKeepAttrsForRoot(
   return keep;
 }
 
-export function computeAutoKeepSet(settings: ScriptSettings): Record<string, string[]> {
+export function computeAutoKeepSet(
+  settings: ScriptSettings,
+  protectMemberIds?: readonly string[],
+): Record<string, string[]> {
   const state = ensureCleanupState(settings);
   const result: Record<string, string[]> = {};
   for (const root of settings.tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
     result[root.id] = collectKeepAttrsForRoot(root, settings.tasks, state, (member, root, runCount) =>
-      isMemberKeepByScheduleAndActivity(member, root, runCount, state.cycleRounds, state.activityRatio),
+      isMemberKeepByScheduleAndActivity(
+        member,
+        root,
+        runCount,
+        state.cycleRounds,
+        state.activityRatio,
+        protectMemberIds,
+      ),
     );
   }
   return result;
 }
 
-export function computeManualDialogDefaultSelection(settings: ScriptSettings): Record<string, string[]> {
+export function computeManualDialogDefaultSelection(
+  settings: ScriptSettings,
+  protectMemberIds?: readonly string[],
+): Record<string, string[]> {
   const state = ensureCleanupState(settings);
   const result: Record<string, string[]> = {};
   for (const root of settings.tasks) {
@@ -188,6 +217,7 @@ export function computeManualDialogDefaultSelection(settings: ScriptSettings): R
         state.cycleRounds,
         state.activityRatio,
         lastManualKeep,
+        protectMemberIds,
       ),
     );
   }
@@ -195,11 +225,17 @@ export function computeManualDialogDefaultSelection(settings: ScriptSettings): R
 }
 
 /** @deprecated 使用 computeManualDialogDefaultSelection */
-export function computeDefaultSelection(settings: ScriptSettings): Record<string, string[]> {
-  return computeManualDialogDefaultSelection(settings);
+export function computeDefaultSelection(
+  settings: ScriptSettings,
+  protectMemberIds?: readonly string[],
+): Record<string, string[]> {
+  return computeManualDialogDefaultSelection(settings, protectMemberIds);
 }
 
-export function listReplicaFamilyCleanupCandidates(settings: ScriptSettings): ReplicaCleanupCandidateGroup[] {
+export function listReplicaFamilyCleanupCandidates(
+  settings: ScriptSettings,
+  protectMemberIds?: readonly string[],
+): ReplicaCleanupCandidateGroup[] {
   const state = ensureCleanupState(settings);
   const groups: ReplicaCleanupCandidateGroup[] = [];
   for (const root of settings.tasks) {
@@ -216,6 +252,7 @@ export function listReplicaFamilyCleanupCandidates(settings: ScriptSettings): Re
         state.cycleRounds,
         state.activityRatio,
         lastManualKeep,
+        protectMemberIds,
       );
       return {
         memberId: member.id,

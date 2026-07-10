@@ -98,13 +98,14 @@ async function runReplicaFamilyCleanupIfDue(
   baseSettings: ScriptSettings,
   effectiveSettings: ScriptSettings,
   messageId: number,
+  newlyCreatedReplicaIds: string[] = [],
 ): Promise<void> {
   tickCleanupRound(effectiveSettings);
   if (!shouldTriggerCleanup(effectiveSettings)) return;
 
   const cleanup = effectiveSettings.replicaFamilyCleanup;
   if (cleanup.mode === 'auto') {
-    const keepSet = computeAutoKeepSet(effectiveSettings);
+    const keepSet = computeAutoKeepSet(effectiveSettings, newlyCreatedReplicaIds);
     const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId);
     Object.assign(effectiveSettings, next);
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
@@ -119,7 +120,7 @@ async function runReplicaFamilyCleanupIfDue(
     });
   });
 
-  const result = await showReplicaFamilyCleanupDialog(effectiveSettings);
+  const result = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
   if (!result) return;
   const next = applyReplicaFamilyCleanup(
     effectiveSettings,
@@ -271,7 +272,7 @@ export async function handleMessageReceived(
     }
 
     hideTaskProgressToast();
-    await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId);
+    await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
   } catch (e) {
     console.error(SCRIPT_LOG_PREFIX, e);
     acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);

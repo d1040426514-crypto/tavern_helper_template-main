@@ -23,12 +23,13 @@ function syncTeleportedStyles(mountEl: HTMLElement): void {
 
 export function showReplicaFamilyCleanupDialog(
   settings: ScriptSettings,
+  protectMemberIds?: readonly string[],
 ): Promise<ReplicaFamilyCleanupDialogResult | null> {
   if (pendingResolve) {
     return Promise.resolve(null);
   }
 
-  const groups = listReplicaFamilyCleanupCandidates(settings);
+  const groups = listReplicaFamilyCleanupCandidates(settings, protectMemberIds);
   if (!groups.length || !groups.some(g => g.members.length)) {
     return Promise.resolve(null);
   }
