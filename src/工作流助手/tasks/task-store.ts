@@ -11,7 +11,8 @@ import {
 } from './chat-task-scope';
 import { resolveEffectiveSettings } from './effective-settings';
 import { emitChatScopeChanged, emitTasksChanged } from './events';
-import { syncActivePresetTasksFromRuntime } from './persist-runtime-tasks';
+import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
+import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
 import {
   PostProcessPresetSchema,
   PostProcessTaskSchema,
@@ -41,6 +42,7 @@ import {
   resetReplicaFamilyCleanupCycle,
   updateReplicaFamilyCleanupConfig,
   type ReplicaCleanupCandidateGroup,
+  type RemovedReplicaCleanupInfo,
 } from './replica-family-cleanup';
 import {
   applyTaskWorkflowPresetOnTask,
@@ -843,17 +845,18 @@ export function listReplicaFamilyCleanupCandidatesFromStore(): ReplicaCleanupCan
 export async function applyReplicaFamilyCleanupInStore(
   keepByRoot: Record<string, string[]>,
   messageId: number,
-  source: TaskWriteSource = 'api',
+  _source: TaskWriteSource = 'api',
 ): Promise<void> {
-  const settings = loadSettings();
-  const next = applyReplicaFamilyCleanup(settings, keepByRoot, messageId, {
+  const baseSettings = loadSettings();
+  const effectiveSettings = resolveEffectiveSettings(baseSettings);
+  const removedOut: RemovedReplicaCleanupInfo[] = [];
+  const next = applyReplicaFamilyCleanup(effectiveSettings, keepByRoot, messageId, {
     persistManualKeepByRoot: keepByRoot,
+    removedOut,
   });
-  settings.tasks = next.tasks;
-  settings.replicaFamilyCleanup = next.replicaFamilyCleanup;
-  syncActivePresetTasksFromRuntime(settings);
-  saveSettings(settings);
-  await emitTasksChanged('update', source);
+  Object.assign(effectiveSettings, next);
+  await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
 }
 
 export async function resetReplicaFamilyCleanupCycleInStore(

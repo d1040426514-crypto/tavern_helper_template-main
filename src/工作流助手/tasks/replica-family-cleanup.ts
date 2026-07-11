@@ -317,8 +317,16 @@ export function pruneFloorTagKeysForReplica(
   );
 }
 
+export type RemovedReplicaCleanupInfo = {
+  rootId: string;
+  spec: string;
+  attrValues: string[];
+};
+
 export type ApplyReplicaFamilyCleanupOptions = {
   persistManualKeepByRoot?: Record<string, string[]>;
+  /** 输出：本次清理实际移除的副本（供世界书条目/账本联动清理） */
+  removedOut?: RemovedReplicaCleanupInfo[];
 };
 
 export function applyReplicaFamilyCleanup(
@@ -352,6 +360,11 @@ export function applyReplicaFamilyCleanup(
       for (const id of removeMemberIds) {
         delete state.cycleRunCounts[id];
       }
+      options?.removedOut?.push({
+        rootId: root.id,
+        spec,
+        attrValues: [...toRemove],
+      });
     }
 
   }

@@ -48,7 +48,12 @@ import {
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
 } from '../tasks/replica-family';
-import { ensureReplicaFamilyCleanupDefaults, applyReplicaFamilyCleanup } from '../tasks/replica-family-cleanup';
+import {
+  ensureReplicaFamilyCleanupDefaults,
+  applyReplicaFamilyCleanup,
+  type RemovedReplicaCleanupInfo,
+} from '../tasks/replica-family-cleanup';
+import { pruneWorldbookForRemovedReplicas } from '../tasks/prune-applied-for-replica';
 import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
 import {
   addPromptGroup as addPromptGroupInStore,
@@ -961,12 +966,15 @@ async function deleteSelectedReplicaMember(): Promise<void> {
       await applyReplicaFamilyCleanupInStore(keepByRoot, floorId, 'ui');
       await refreshTaskView();
     } else {
+      const removedOut: RemovedReplicaCleanupInfo[] = [];
       const next = applyReplicaFamilyCleanup(settings.value, keepByRoot, floorId, {
         persistManualKeepByRoot: keepByRoot,
+        removedOut,
       });
       settings.value.tasks = next.tasks;
       settings.value.replicaFamilyCleanup = next.replicaFamilyCleanup!;
       store.persist();
+      await pruneWorldbookForRemovedReplicas(removedOut, settings.value.chatWorldbookWriteRules ?? []);
     }
     selectedReplicaViewId.value = null;
     acuToast('success', `已删除副本「${attrLabel}」`);
@@ -2473,10 +2481,10 @@ function saveRunLogTaskTags(taskId: string): void {
                 与「聊天正文标签替换」独立：阶段任务产出匹配标签后，将写入模板渲染结果 upsert 到世界书条目（默认角色卡主世界书）。典型用于副本族任务 + 绿灯条目，属性值（如 <code>item@name=圣剑</code>）可自动作为 keyword。
               </p>
               <p class="acu-notes acu-notes--sm">
-                同一标签可配置多条规则。写入结果保存在 assistant 楼 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑本层会先回放到上一层状态再重新写入。
+                同一标签可配置多条规则。写入结果保存在 assistant 楼 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑 / 滑楼（切换候选回复，Swipe）本层会先回放到上一层状态再重新写入，并同步恢复对应的任务副本。
               </p>
               <p class="acu-notes acu-notes--sm">
-                托管条目默认名前缀 <code>WorkflowHelper-</code>（及规则自定义条目名前缀）；仅这些条目会被自动清理/重放。模板占位符同正文替换。
+                托管条目默认名前缀 <code>WorkflowHelper-</code>（及规则自定义条目名前缀）；仅这些条目会被自动清理/重放。<strong>副本族清理</strong> 或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
               </p>
               <p class="acu-notes acu-notes--sm">
                 注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong> 仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong>防止递归触发</strong> 对应世界书条目「禁止本条目递归激活其他条目」，默认开启。

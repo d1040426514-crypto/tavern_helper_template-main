@@ -211,6 +211,21 @@ export async function upsertEntryByStableName(
   return { uid: resultUid, created: true, previous };
 }
 
+function snapshotLedgerKey(bookName: string, entryName: string): string {
+  return `${bookName.trim()}\0${entryName.trim()}`;
+}
+
+/** 同楼快照：同 bookName+entryName 仅保留首次（写入前状态），后续阶段不重复追加 */
+export function upsertSnapshotKeepFirstInList(
+  list: WorldbookWriteSnapshotEntry[],
+  snapshot: WorldbookWriteSnapshotEntry,
+): { list: WorldbookWriteSnapshotEntry[]; skipped: boolean } {
+  const key = snapshotLedgerKey(snapshot.bookName, snapshot.entryName);
+  const exists = list.some(e => snapshotLedgerKey(e.bookName, e.entryName) === key);
+  if (exists) return { list, skipped: true };
+  return { list: [...list, snapshot], skipped: false };
+}
+
 async function appendSnapshotToMessage(
   messageId: number,
   snapshot: WorldbookWriteSnapshotEntry,
@@ -219,8 +234,8 @@ async function appendSnapshotToMessage(
   if (!msg) return;
   const data = (msg.data ?? {}) as Record<string, unknown>;
   const raw = data[POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY];
-  const list = Array.isArray(raw) ? [...(raw as WorldbookWriteSnapshotEntry[])] : [];
-  list.push(snapshot);
+  const prev = Array.isArray(raw) ? [...(raw as WorldbookWriteSnapshotEntry[])] : [];
+  const { list } = upsertSnapshotKeepFirstInList(prev, snapshot);
   await setChatMessages(
     [
       {

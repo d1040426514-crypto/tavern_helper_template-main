@@ -49,7 +49,14 @@ import {
   incrementReplicaRunCounts,
   shouldTriggerCleanup,
   tickCleanupRound,
+  type RemovedReplicaCleanupInfo,
 } from './replica-family-cleanup';
+import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
+import {
+  clearReplicaStateMessageKeys,
+  reconcileReplicaTasksFromChat,
+  writeReplicaStateSnapshot,
+} from './replica-reconcile';
 import { showReplicaFamilyCleanupDialog } from '../ui/mount-cleanup-dialog';
 import type { ScriptSettings } from './schema';
 import {
@@ -110,9 +117,11 @@ async function runReplicaFamilyCleanupIfDue(
   const cleanup = effectiveSettings.replicaFamilyCleanup;
   if (cleanup.mode === 'auto') {
     const keepSet = computeAutoKeepSet(effectiveSettings, newlyCreatedReplicaIds);
-    const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId);
+    const removedOut: RemovedReplicaCleanupInfo[] = [];
+    const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId, { removedOut });
     Object.assign(effectiveSettings, next);
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
     return;
   }
 
@@ -126,14 +135,14 @@ async function runReplicaFamilyCleanupIfDue(
 
   const result = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
   if (!result) return;
-  const next = applyReplicaFamilyCleanup(
-    effectiveSettings,
-    result.keepByRoot,
-    messageId,
-    result.persistManualKeep ? { persistManualKeepByRoot: result.keepByRoot } : undefined,
-  );
+  const removedOut: RemovedReplicaCleanupInfo[] = [];
+  const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepByRoot, messageId, {
+    ...(result.persistManualKeep ? { persistManualKeepByRoot: result.keepByRoot } : {}),
+    removedOut,
+  });
   Object.assign(effectiveSettings, next);
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
 }
 
 /** 自动触发时接受的消息类型（手动 force 不受限） */
@@ -234,6 +243,11 @@ export async function handleMessageReceived(
       await restoreBodyReplaceOrigin(targetId);
       await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
       await clearWorldbookWriteMessageKeys(targetId);
+      await reconcileReplicaTasksFromChat({ excludeMessageId: targetId, reason: 'rerun' });
+      await clearReplicaStateMessageKeys(targetId);
+      const reconciled = resolveEffectiveSettings(loadSettings());
+      settings.tasks = reconciled.tasks;
+      settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
     }
     await ensureBodyReplaceOriginCaptured(targetId);
     applyAssistantChatTagExtract(targetId, settings, { isRerun });
@@ -279,6 +293,7 @@ export async function handleMessageReceived(
 
     hideTaskProgressToast();
     await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
+    await writeReplicaStateSnapshot(targetId, settings.tasks);
   } catch (e) {
     console.error(SCRIPT_LOG_PREFIX, e);
     acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);
