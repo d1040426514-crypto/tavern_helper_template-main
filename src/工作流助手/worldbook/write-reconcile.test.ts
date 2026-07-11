@@ -5,7 +5,9 @@ import {
   customEntryNamePrefix,
   isManagedWorldbookEntryName,
   ledgerEntryKey,
+  ledgerStableNamesForBook,
   mergeAppliedLedgerEntries,
+  shouldDeleteManagedEntryAsOrphan,
 } from './write-reconcile';
 import type { WorldbookWriteAppliedEntry } from './write-sync';
 
@@ -66,6 +68,22 @@ test('isManagedWorldbookEntryName matches custom entryName prefix', () => {
 test('isManagedWorldbookEntryName custom without placeholder', () => {
   const rules = [baseRule({ entryName: 'CustomPrefix' })];
   assert.equal(isManagedWorldbookEntryName('CustomPrefix-foo', rules), true);
+});
+
+test('shouldDeleteManagedEntryAsOrphan deletes only ledger orphans', () => {
+  const rules = [baseRule()];
+  const keep = new Set(['WorkflowHelper-a']);
+  assert.equal(shouldDeleteManagedEntryAsOrphan('WorkflowHelper-a', rules, keep), false);
+  assert.equal(shouldDeleteManagedEntryAsOrphan('WorkflowHelper-b', rules, keep), true);
+  assert.equal(shouldDeleteManagedEntryAsOrphan('ManualEntry', rules, keep), false);
+});
+
+test('ledgerStableNamesForBook filters by book', () => {
+  const ledger = mergeAppliedLedgerEntries([
+    [applied('WorkflowHelper-a', 'a', 'BookA'), applied('WorkflowHelper-b', 'b', 'BookB')],
+  ]);
+  const names = ledgerStableNamesForBook(ledger, 'BookA');
+  assert.deepEqual([...names], ['WorkflowHelper-a']);
 });
 
 console.log('write-reconcile.test.ts: all passed');
