@@ -30,8 +30,8 @@ test('item@id splits by attribute', () => {
   const { extractedTags, injectedFragments } = extractInjectTagsFromResponse(text, ['item@id']);
   assert.equal(extractedTags['item@id=1'], 'A');
   assert.equal(extractedTags['item@id=2'], 'B');
-  assert.equal(injectedFragments[0], '<item id="1">A</item>');
-  assert.equal(injectedFragments[1], '<item id="2">B</item>');
+  assert.equal(injectedFragments[0], '<item id="1">\nA\n</item>');
+  assert.equal(injectedFragments[1], '<item id="2">\nB\n</item>');
 });
 
 test('item@id falls back bare key when no id', () => {
@@ -73,51 +73,52 @@ test('item@id still enumerates all attr instances', () => {
 });
 
 test('formatTagValueForInject composite inner rebuilds attr block', () => {
-  assert.equal(formatTagValueForInject('item@id=1', 'A'), '<item id="1">A</item>');
+  assert.equal(formatTagValueForInject('item@id=1', 'A'), '<item id="1">\nA\n</item>');
 });
 
-test('formatTagValueForInject full block passthrough', () => {
+test('formatTagValueForInject full block rewraps with newlines', () => {
   const block = '<item id="1">A</item>';
-  assert.equal(formatTagValueForInject('item@id=1', block), block);
+  assert.equal(formatTagValueForInject('item@id=1', block), '<item id="1">\nA\n</item>');
 });
 
 test('formatTagValueForInject wraps inner', () => {
-  assert.equal(formatTagValueForInject('result', 'hello'), '<result>hello</result>');
+  assert.equal(formatTagValueForInject('result', 'hello'), '<result>\nhello\n</result>');
 });
 
 test('formatTagValueForInject bare key wraps nested child tags', () => {
   const inner = '<npc act="李明">李明</npc>';
   const out = formatTagValueForInject('不在场npc', inner);
-  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+  assert.equal(out, `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
-test('formatTagValueForInject bare key passthrough own full block', () => {
-  const block = '<不在场npc><npc act="李明">李明</npc></不在场npc>';
-  assert.equal(formatTagValueForInject('不在场npc', block), block);
+test('formatTagValueForInject bare key passthrough own full block rewraps', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const block = `<不在场npc>${inner}</不在场npc>`;
+  assert.equal(formatTagValueForInject('不在场npc', block), `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
-test('formatTagValueForInject composite npc@act passthrough', () => {
+test('formatTagValueForInject composite npc@act rewraps full block', () => {
   const block = '<npc act="李明">李明</npc>';
-  assert.equal(formatTagValueForInject('npc@act=李明', block), block);
+  assert.equal(formatTagValueForInject('npc@act=李明', block), '<npc act="李明">\n李明\n</npc>');
 });
 
 test('formatTagValueForInject item key does not match itemize', () => {
   const inner = '<itemize>list</itemize>';
   const out = formatTagValueForInject('item', inner);
-  assert.equal(out, `<item>${inner}</item>`);
+  assert.equal(out, `<item>\n${inner}\n</item>`);
 });
 
 test('placeholder 不在场npc preserves outer wrapper', () => {
   const inner = '<npc act="李明">李明</npc>';
   const map: RelayTagMap = new Map([['不在场npc', [inner]]]);
   const out = replacePlotTagPlaceholdersWithHistory('{{不在场npc}}', map, new Map(), new Set(['不在场npc']));
-  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+  assert.equal(out, `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
 test('placeholder item@id=1 precise', () => {
   const map: RelayTagMap = new Map([['item@id=1', ['<item id="1">A</item>']]]);
   const out = replacePlotTagPlaceholdersWithHistory('x {{item@id=1}} y', map, new Map(), new Set(['item@id']));
-  assert.equal(out, 'x <item id="1">A</item> y');
+  assert.equal(out, 'x <item id="1">\nA\n</item> y');
   assert.ok(!out.includes('<item><item'));
 });
 
@@ -128,9 +129,9 @@ test('placeholder item expands all', () => {
     ['item', ['<item>无id</item>']],
   ]);
   const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id']));
-  assert.ok(out.includes('<item id="1">A</item>'));
-  assert.ok(out.includes('<item id="2">B</item>'));
-  assert.ok(out.includes('<item>无id</item>'));
+  assert.ok(out.includes('<item id="1">\nA\n</item>'));
+  assert.ok(out.includes('<item id="2">\nB\n</item>'));
+  assert.ok(out.includes('<item>\n无id\n</item>'));
   assert.ok(!out.includes('<item><item'));
 });
 
@@ -150,7 +151,7 @@ test('historyFallback all-tags without injectOnly whitelist', () => {
   const out = replacePlotTagPlaceholdersWithHistory('{{archived}}', new Map(), history, new Set(), {
     historyFallback: 'all-tags',
   });
-  assert.equal(out, '<archived>saved</archived>');
+  assert.equal(out, '<archived>\nsaved\n</archived>');
 });
 
 test('relay wins over history with all-tags fallback', () => {
@@ -159,7 +160,7 @@ test('relay wins over history with all-tags fallback', () => {
   const out = replacePlotTagPlaceholdersWithHistory('{{foo}}', relay, history, new Set(), {
     historyFallback: 'all-tags',
   });
-  assert.equal(out, '<foo>new</foo>');
+  assert.equal(out, '<foo>\nnew\n</foo>');
 });
 
 test('all-tags fallback preserves unconfigured ASCII placeholder for tavern macros', () => {
@@ -187,7 +188,7 @@ test('overwriteRelayTagMap overwrites same key', () => {
 
 test('formatTagValuesForInject merges inners under one outer tag', () => {
   const out = formatTagValuesForInject('result', ['A', 'B']);
-  assert.equal(out, '<result>A\n\nB</result>');
+  assert.equal(out, '<result>\nA\n\nB\n</result>');
 });
 
 test('replica composite placeholder prefers floor over relay', () => {
@@ -197,7 +198,7 @@ test('replica composite placeholder prefers floor over relay', () => {
     historyFallback: 'all-tags',
     replicaAttrSpec: { tagName: 'item', attrName: 'id' },
   });
-  assert.equal(out, 'x <item id="1">floor</item> y');
+  assert.equal(out, 'x <item id="1">\nfloor\n</item> y');
 });
 
 test('replica composite placeholder empty floor yields empty attr block', () => {
@@ -206,7 +207,7 @@ test('replica composite placeholder empty floor yields empty attr block', () => 
     historyFallback: 'all-tags',
     replicaAttrSpec: { tagName: 'item', attrName: 'id' },
   });
-  assert.equal(out, '<item id="2"></item>');
+  assert.equal(out, '<item id="2">\n\n</item>');
 });
 
 test('outer tag refreshes nested inner from relay', () => {
@@ -217,7 +218,7 @@ test('outer tag refreshes nested inner from relay', () => {
   const out = replacePlotTagPlaceholdersWithHistory('{{story}}', relay, new Map(), new Set(['story', 'npc']), {
     historyFallback: 'all-tags',
   });
-  assert.equal(out, '<story><npc>new</npc></story>');
+  assert.equal(out, '<story>\n<npc>\nnew\n</npc>\n</story>');
 });
 
 test('refreshNestedExtractTagsInContent ignores unconfigured tags', () => {

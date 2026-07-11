@@ -198,7 +198,11 @@ function extractByAttrSpec(text: string, spec: ExtractTagSpec): Record<string, s
   return result;
 }
 
-/** 带属性标签块（引用时重建完整开闭标签） */
+/** 带属性标签块（引用时重建完整开闭标签，开/闭标签与内文分行） */
+export function formatBareTagBlock(tagName: string, inner = ''): string {
+  return `<${tagName}>\n${String(inner ?? '')}\n</${tagName}>`;
+}
+
 export function formatAttrTagBlock(
   tagName: string,
   attrName: string,
@@ -206,7 +210,7 @@ export function formatAttrTagBlock(
   inner = '',
 ): string {
   const safeValue = String(attrValue ?? '').replace(/"/g, '&quot;');
-  return `<${tagName} ${attrName}="${safeValue}">${inner}</${tagName}>`;
+  return `<${tagName} ${attrName}="${safeValue}">\n${String(inner ?? '')}\n</${tagName}>`;
 }
 
 /** 将已存储值剥为内文（兼容旧完整块存档） */
@@ -220,13 +224,13 @@ export function storedTagValueToInner(key: string, value: string): string {
   return instances[0].inner.trim();
 }
 
-function formatExtractedFragmentForKey(key: string, value: string): string {
+export function formatExtractedFragmentForKey(key: string, value: string): string {
   const v = String(value ?? '').trim();
   if (!v) return '';
   const parsed = parseCompositeKey(key);
   if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, v);
   const bare = key.indexOf('@') === -1 ? key : key.slice(0, key.indexOf('@'));
-  return `<${bare}>${v}</${bare}>`;
+  return formatBareTagBlock(bare, v);
 }
 
 export interface InjectTagExtractionResult {
@@ -260,7 +264,7 @@ export function extractInjectTagsFromResponse(
       const inner = extractBareTagLastInner(text, spec.tagName);
       if (inner === null) continue;
       extractedTags[spec.tagName] = inner;
-      injectedFragments.push(`<${spec.tagName}>${inner}</${spec.tagName}>`);
+      injectedFragments.push(formatExtractedFragmentForKey(spec.tagName, inner));
       resolvedKeys.push(spec.tagName);
       continue;
     }

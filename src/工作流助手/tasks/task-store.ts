@@ -90,6 +90,7 @@ export type PresetFieldsPatch = Partial<{
   tagVariableInjectTemplate: string;
   chatExtractTags: ScriptSettings['chatExtractTags'];
   chatBodyTagReplaceRules: ScriptSettings['chatBodyTagReplaceRules'];
+  chatWorldbookWriteRules: ScriptSettings['chatWorldbookWriteRules'];
 }>;
 
 function defaultTaskFields(): PostProcessTask {
@@ -263,6 +264,7 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   settings.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
   settings.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
   settings.chatBodyTagReplaceRules = _.cloneDeep(preset.chatBodyTagReplaceRules ?? []);
+  settings.chatWorldbookWriteRules = _.cloneDeep(preset.chatWorldbookWriteRules ?? []);
   settings.contextTurnCount = preset.contextTurnCount;
   settings.contextExtractRules = _.cloneDeep(preset.contextExtractRules);
   settings.contextExcludeRules = _.cloneDeep(preset.contextExcludeRules);

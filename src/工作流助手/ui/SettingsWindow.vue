@@ -73,6 +73,10 @@ import {
 } from '../tasks/task-store';
 import { resolveEffectiveSettings } from '../tasks/effective-settings';
 import { loadSettings } from '../settings';
+import {
+  DEFAULT_WORLDBOOK_WRITE_PLACEMENT,
+  normalizeWorldbookWritePlacement,
+} from '../worldbook/entry-order';
 import type { PlotWorldbookConfig, TaskContextConfig } from '../tasks/schema';
 import {
   ACU_PP_CHAT_SCOPE_CHANGED,
@@ -470,6 +474,7 @@ const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
 const chatBodyTagReplaceHelpOpen = ref(false);
+const chatWorldbookWriteHelpOpen = ref(false);
 const apiRouteConcurrencyHelpOpen = ref(false);
 const apiConfigExpanded = ref(false);
 const executionStrategyExpanded = ref(false);
@@ -546,6 +551,86 @@ function addChatBodyTagReplaceRule(): void {
 function removeChatBodyTagReplaceRule(id: string): void {
   ensureChatBodyTagReplaceRules();
   settings.value.chatBodyTagReplaceRules = settings.value.chatBodyTagReplaceRules.filter(r => r.id !== id);
+}
+
+const allWorldbookNames = ref<string[]>([]);
+
+function refreshWorldbookNamesList(): void {
+  try {
+    allWorldbookNames.value = getWorldbookNames();
+  } catch {
+    allWorldbookNames.value = [];
+  }
+}
+
+const worldbookWriteTargetTagOptions = computed(() => {
+  const tags = new Set<string>(assistantChatExtractTags.value);
+  for (const task of settings.value.tasks ?? []) {
+    for (const tag of task.extractInjectTags ?? []) {
+      const trimmed = tag.trim();
+      if (trimmed) tags.add(trimmed);
+    }
+  }
+  return [...tags];
+});
+
+function ensureChatWorldbookWriteRules(): void {
+  if (!settings.value.chatWorldbookWriteRules) {
+    settings.value.chatWorldbookWriteRules = [];
+  }
+}
+
+function addChatWorldbookWriteRule(): void {
+  ensureChatWorldbookWriteRules();
+  const nextTag = worldbookWriteTargetTagOptions.value[0] ?? '';
+  const hasAttr = nextTag.includes('@');
+  settings.value.chatWorldbookWriteRules.push({
+    id: `wb-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    targetTag: nextTag,
+    template: nextTag ? `{{${nextTag}}}` : '',
+    entryName: '',
+    bookSource: 'character',
+    manualBookName: '',
+    entryType: hasAttr ? 'keyword' : 'constant',
+    keywords: '',
+    splitByAttr: hasAttr,
+    placement: { ...DEFAULT_WORLDBOOK_WRITE_PLACEMENT },
+    preventRecursion: true,
+  });
+}
+
+function worldbookWriteEntryNamePlaceholder(rule: {
+  targetTag?: string;
+  splitByAttr?: boolean;
+}): string {
+  const tag = (rule.targetTag ?? '').trim();
+  if (!tag) return '留空则 WorkflowHelper-标签名';
+  const atIdx = tag.indexOf('@');
+  if (rule.splitByAttr && atIdx > 0) {
+    const tagName = tag.slice(0, atIdx);
+    const attrName = tag.slice(atIdx + 1);
+    return `留空则 WorkflowHelper-${tagName} ${attrName}-属性值`;
+  }
+  const tagName = atIdx > 0 ? tag.slice(0, atIdx) : tag;
+  return `留空则 WorkflowHelper-${tagName}`;
+}
+
+function removeChatWorldbookWriteRule(id: string): void {
+  ensureChatWorldbookWriteRules();
+  settings.value.chatWorldbookWriteRules = settings.value.chatWorldbookWriteRules.filter(r => r.id !== id);
+}
+
+function isWorldbookWriteAtDepth(rule: { placement?: { position?: string } }): boolean {
+  const pos = rule.placement?.position ?? 'at_depth_as_system';
+  return pos === 'at_depth_as_system' || pos === 'at_depth';
+}
+
+function ensureWorldbookWritePlacement(rule: { placement?: { position?: string; depth?: number; order?: number } }): void {
+  rule.placement = normalizeWorldbookWritePlacement(rule.placement);
+}
+
+function syncWorldbookWritePlacement(rule: { placement?: { position?: string; depth?: number; order?: number } }): void {
+  rule.placement = normalizeWorldbookWritePlacement(rule.placement);
 }
 
 watch(
@@ -1112,6 +1197,7 @@ let offChatScopeChanged: EventOnReturn | null = null;
 
 onMounted(() => {
   document.addEventListener('keydown', onFullscreenKeydown);
+  refreshWorldbookNamesList();
   void refreshTaskView();
   offTasksChanged = eventOn(ACU_PP_TASKS_CHANGED, (payload?: TasksChangedPayload) => {
     if (payload?.source === 'ui') {
@@ -2366,6 +2452,173 @@ function saveRunLogTaskTags(taskId: string): void {
               >
                 添加规则
               </button>
+            </template>
+          </div>
+
+          <div class="acu-section">
+            <div class="acu-heading-with-help">
+              <h4>世界书写入规则</h4>
+              <AcuHelpIconBtn
+                v-model:open="chatWorldbookWriteHelpOpen"
+                panel-id="chat-worldbook-write-help"
+                label="世界书写入规则说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="chatWorldbookWriteHelpOpen"
+              id="chat-worldbook-write-help"
+              label="世界书写入规则说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin-top: 0">
+                与「聊天正文标签替换」独立：阶段任务产出匹配标签后，将写入模板渲染结果 upsert 到世界书条目（默认角色卡主世界书）。典型用于副本族任务 + 绿灯条目，属性值（如 <code>item@name=圣剑</code>）可自动作为 keyword。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                同一标签可配置多条规则。写入结果保存在 assistant 楼 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑本层会先回放到上一层状态再重新写入。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                托管条目默认名前缀 <code>WorkflowHelper-</code>（及规则自定义条目名前缀）；仅这些条目会被自动清理/重放。模板占位符同正文替换。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong> 仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong>防止递归触发</strong> 对应世界书条目「禁止本条目递归激活其他条目」，默认开启。
+              </p>
+              <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                条目名留空时使用默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。可手动填写覆盖，拆分时可用 <code>{attrValue}</code> 占位。写入内容保留完整标签块。
+              </p>
+            </AcuHelpPanel>
+            <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
+              请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
+            </p>
+            <template v-else>
+              <div
+                v-for="rule in settings.chatWorldbookWriteRules ?? []"
+                :key="rule.id"
+                class="acu-row"
+                style="align-items: flex-start; gap: 8px; margin-bottom: 12px; flex-wrap: wrap"
+              >
+                <div style="flex: 0 0 130px">
+                  <label class="acu-label-with-help">目标标签</label>
+                  <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
+                    <option v-for="tag in worldbookWriteTargetTagOptions" :key="tag" :value="tag">
+                      {{ tag }}
+                    </option>
+                  </select>
+                </div>
+                <div style="flex: 1; min-width: 160px">
+                  <label class="acu-label-with-help">写入模板</label>
+                  <textarea v-model="rule.template" class="acu-textarea" rows="2" placeholder="可用 {{task:任务名}} 与 {{标签名}}" />
+                </div>
+                <div style="flex: 0 0 160px">
+                  <label class="acu-label-with-help">条目名</label>
+                  <input
+                    v-model="rule.entryName"
+                    class="acu-input"
+                    style="width: 100%"
+                    :placeholder="worldbookWriteEntryNamePlaceholder(rule)"
+                  />
+                </div>
+                <div style="flex: 0 0 100px">
+                  <label class="acu-label-with-help">条目类型</label>
+                  <select v-model="rule.entryType" class="acu-input" style="width: 100%">
+                    <option value="keyword">绿灯 keyword</option>
+                    <option value="constant">蓝灯 constant</option>
+                  </select>
+                </div>
+                <div style="flex: 0 0 120px">
+                  <label class="acu-label-with-help">关键字</label>
+                  <input
+                    v-model="rule.keywords"
+                    class="acu-input"
+                    style="width: 100%"
+                    placeholder="静态 key，逗号分隔"
+                    :disabled="rule.entryType !== 'keyword'"
+                  />
+                </div>
+                <div style="flex: 0 0 90px">
+                  <label class="acu-label-with-help">按属性拆分</label>
+                  <label class="acu-checkbox-row" style="margin-top: 6px">
+                    <input v-model="rule.splitByAttr" type="checkbox" />
+                    <span>启用</span>
+                  </label>
+                </div>
+                <div style="flex: 0 0 110px">
+                  <label class="acu-label-with-help">目标世界书</label>
+                  <select v-model="rule.bookSource" class="acu-input" style="width: 100%">
+                    <option value="character">角色主世界书</option>
+                    <option value="manual">手动指定</option>
+                  </select>
+                </div>
+                <div v-if="rule.bookSource === 'manual'" style="flex: 0 0 140px">
+                  <label class="acu-label-with-help">世界书名</label>
+                  <select v-model="rule.manualBookName" class="acu-input" style="width: 100%">
+                    <option value="">请选择</option>
+                    <option v-for="name in allWorldbookNames" :key="name" :value="name">
+                      {{ name }}
+                    </option>
+                  </select>
+                </div>
+                <div style="flex: 0 0 130px">
+                  <label class="acu-label-with-help">位置</label>
+                  <select
+                    v-model="rule.placement.position"
+                    class="acu-input"
+                    style="width: 100%"
+                    @focus="ensureWorldbookWritePlacement(rule)"
+                    @change="syncWorldbookWritePlacement(rule)"
+                  >
+                    <option value="at_depth_as_system">系统深度</option>
+                    <option value="before_character_definition">角色定义前</option>
+                    <option value="after_character_definition">角色定义后</option>
+                  </select>
+                </div>
+                <div v-if="isWorldbookWriteAtDepth(rule)" style="flex: 0 0 88px">
+                  <label class="acu-label-with-help">插入深度</label>
+                  <input
+                    v-model.number="rule.placement.depth"
+                    type="number"
+                    class="acu-input"
+                    style="width: 100%"
+                    step="1"
+                    @focus="ensureWorldbookWritePlacement(rule)"
+                  />
+                </div>
+                <div style="flex: 0 0 88px">
+                  <label class="acu-label-with-help">插入顺序</label>
+                  <input
+                    v-model.number="rule.placement.order"
+                    type="number"
+                    class="acu-input"
+                    style="width: 100%"
+                    min="1"
+                    step="1"
+                    @focus="ensureWorldbookWritePlacement(rule)"
+                    @change="syncWorldbookWritePlacement(rule)"
+                  />
+                </div>
+                <div style="flex: 0 0 100px">
+                  <label class="acu-label-with-help">防止递归触发</label>
+                  <label class="acu-checkbox-row" style="margin-top: 6px">
+                    <input v-model="rule.preventRecursion" type="checkbox" />
+                    <span>启用</span>
+                  </label>
+                </div>
+                <button
+                  type="button"
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  title="删除规则"
+                  style="margin-top: 22px"
+                  @click="removeChatWorldbookWriteRule(rule.id)"
+                >
+                  <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                </button>
+              </div>
+              <div class="acu-row acu-row--inline" style="gap: 8px">
+                <button type="button" class="acu-btn acu-btn--sm" @click="addChatWorldbookWriteRule">
+                  添加规则
+                </button>
+                <button type="button" class="acu-btn acu-btn--sm" @click="refreshWorldbookNamesList">
+                  刷新世界书列表
+                </button>
+              </div>
             </template>
           </div>
         </div>

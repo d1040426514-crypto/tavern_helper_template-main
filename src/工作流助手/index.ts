@@ -6,6 +6,7 @@ import { emitChatScopeChanged, ACU_PP_TASKS_CHANGED } from './tasks/events';
 import { registerTrigger } from './tasks/trigger';
 import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
+import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import { registerExtensionsMenuEntry } from './ui/extensions-menu';
 import { loadSettings, useSettingsStore } from './settings';
@@ -51,6 +52,7 @@ $(() => {
   const offChatTagExtract = registerUserChatTagExtractTrigger();
   const offTagInherit = registerTagVariableInheritance();
   const offChat = reloadOnChatChange();
+  const offWorldbookReconcile = registerWorldbookWriteReconcile();
 
   mountAcuPostProcessAPI();
 
@@ -71,6 +73,7 @@ $(() => {
     offChatTagExtract.stop();
     offTagInherit.stop();
     offChat.stop();
+    offWorldbookReconcile.stop();
     offTasksReload.stop();
     offChatScopeNotify.stop();
     closeSettingsWindow();

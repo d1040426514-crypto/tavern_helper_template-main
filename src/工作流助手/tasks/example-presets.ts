@@ -32,6 +32,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     taskContextOverridesEnabled: false,
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
+    chatWorldbookWriteRules: [],
   },
   {
     name: '副本族与动态占位符示例',
@@ -110,6 +111,16 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     finalInjectTemplate: 'FLOOR_INJECT:{{item@name}}',
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
+    chatWorldbookWriteRules: [
+      {
+        id: 'example-wb-item-name',
+        targetTag: 'item@name',
+        template: '{{item@name}}',
+        entryType: 'keyword',
+        splitByAttr: true,
+        bookSource: 'character',
+      },
+    ],
     contextTurnCount: 3,
     contextExtractRules: [],
     contextExcludeRules: [],
@@ -163,6 +174,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
         template: '{{content}}',
       },
     ],
+    chatWorldbookWriteRules: [],
     contextTurnCount: 1,
     contextExtractRules: [
       { start: '<tp', end: '</tp>' },

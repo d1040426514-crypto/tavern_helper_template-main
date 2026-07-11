@@ -13,6 +13,7 @@ export function resolveEffectiveSettings(base: ScriptSettings): ScriptSettings {
   s.tagVariableInjectTemplate = snap.tagVariableInjectTemplate;
   s.chatExtractTags = _.cloneDeep(snap.chatExtractTags ?? { user: [], assistant: [] });
   s.chatBodyTagReplaceRules = _.cloneDeep(snap.chatBodyTagReplaceRules ?? []);
+  s.chatWorldbookWriteRules = _.cloneDeep(snap.chatWorldbookWriteRules ?? []);
   s.contextTurnCount = snap.contextTurnCount;
   s.contextExtractRules = _.cloneDeep(snap.contextExtractRules);
   s.contextExcludeRules = _.cloneDeep(snap.contextExcludeRules);

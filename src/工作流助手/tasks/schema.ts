@@ -251,6 +251,30 @@ export const ChatBodyTagReplaceRuleSchema = z.object({
   template: z.string().default(''),
 });
 
+export const ChatWorldbookWritePlacementSchema = z.object({
+  position: z.string().default('at_depth_as_system'),
+  depth: z.number().int().default(2),
+  order: z.number().int().default(10000),
+});
+
+export const ChatWorldbookWriteRuleSchema = z.object({
+  id: z.string().default(''),
+  targetTag: z.string().default(''),
+  template: z.string().default(''),
+  entryName: z.string().default(''),
+  bookSource: z.enum(['character', 'manual']).default('character'),
+  manualBookName: z.string().default(''),
+  entryType: z.enum(['constant', 'keyword']).default('constant'),
+  keywords: z.string().default(''),
+  splitByAttr: z.boolean().default(false),
+  placement: ChatWorldbookWritePlacementSchema.default({
+    position: 'at_depth_as_system',
+    depth: 2,
+    order: 10000,
+  }),
+  preventRecursion: z.boolean().default(true),
+});
+
 export const PostProcessPresetSchema = z.object({
   name: z.string(),
   tasks: z.array(PostProcessTaskSchema).default([]),
@@ -258,6 +282,7 @@ export const PostProcessPresetSchema = z.object({
   tagVariableInjectTemplate: z.string().default(''),
   chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
   chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),
+  chatWorldbookWriteRules: z.array(ChatWorldbookWriteRuleSchema).default([]),
   contextTurnCount: z.number().int().min(0).default(3),
   contextExtractRules: z.array(ContextTagRuleSchema).default([]),
   contextExcludeRules: z.array(ContextTagRuleSchema).default([]),
@@ -321,6 +346,7 @@ export const ScriptSettingsSchema = z
     tagVariableInjectTemplate: z.string().default(''),
     chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
     chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),
+    chatWorldbookWriteRules: z.array(ChatWorldbookWriteRuleSchema).default([]),
     presets: z.array(PostProcessPresetSchema).default([]),
     activePresetName: z.string().default(''),
     scheduleState: z.record(z.string(), ScheduleStateEntrySchema).default({}),
@@ -377,6 +403,8 @@ export type RunLogMessage = z.infer<typeof RunLogMessageSchema>;
 export type RunLogTaskResult = z.infer<typeof RunLogTaskResultSchema>;
 export type ScheduleStateEntry = z.infer<typeof ScheduleStateEntrySchema>;
 export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;
+export type ChatWorldbookWriteRule = z.infer<typeof ChatWorldbookWriteRuleSchema>;
+export type ChatWorldbookWritePlacement = z.infer<typeof ChatWorldbookWritePlacementSchema>;
 export type ChatTaskScopeState = z.infer<typeof ChatTaskScopeStateSchema>;
 export type TaskWorkflowPresetEntry = z.infer<typeof TaskWorkflowPresetEntrySchema>;
 export type TaskWorkflowPresetSnapshot = z.infer<typeof TaskWorkflowPresetSnapshotSchema>;

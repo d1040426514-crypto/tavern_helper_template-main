@@ -1,4 +1,28 @@
 import type { WorldbookEntry } from '@types/function/worldbook';
+import type { ChatWorldbookWritePlacement } from '../tasks/schema';
+
+export const DEFAULT_WORLDBOOK_WRITE_PLACEMENT: ChatWorldbookWritePlacement = {
+  position: 'at_depth_as_system',
+  depth: 2,
+  order: 10000,
+};
+
+function parsePlacementInt(value: unknown, fallback: number): number {
+  const n = typeof value === 'number' ? value : parseInt(String(value ?? ''), 10);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+/** 对齐 shujuku normalizePlacementConfig_ACU */
+export function normalizeWorldbookWritePlacement(
+  raw?: Partial<ChatWorldbookWritePlacement> | null,
+  fallbackPlacement: ChatWorldbookWritePlacement = DEFAULT_WORLDBOOK_WRITE_PLACEMENT,
+): ChatWorldbookWritePlacement {
+  const source = raw && typeof raw === 'object' ? raw : {};
+  const position = normalizePlotWorldbookPosition(source.position ?? fallbackPlacement.position);
+  const depth = parsePlacementInt(source.depth, fallbackPlacement.depth);
+  const order = Math.max(1, parsePlacementInt(source.order, fallbackPlacement.order));
+  return { position, depth, order };
+}
 
 export type PlotWorldbookSortEntry = WorldbookEntry & {
   bookName?: string;

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   comparePlotWorldbookEntriesForPlaceholder,
+  normalizeWorldbookWritePlacement,
   sortPlotWorldbookEntries,
   type PlotWorldbookSortEntry,
 } from './entry-order';
@@ -77,6 +78,18 @@ test('segment order before_char then after_char then at_depth', () => {
     entry({ uid: 1, name: 'before', position: { type: 'before_character_definition', role: 'system', depth: 0, order: 1 } }),
   ]);
   assert.deepEqual(sorted.map(e => e.uid), [1, 2, 3]);
+});
+
+test('normalizeWorldbookWritePlacement clamps invalid order and normalizes position', () => {
+  assert.deepEqual(
+    normalizeWorldbookWritePlacement({ position: 'before_char', depth: 'x' as unknown as number, order: 0 }),
+    { position: 'before_character_definition', depth: 2, order: 1 },
+  );
+  assert.deepEqual(normalizeWorldbookWritePlacement({ order: 42 }), {
+    position: 'at_depth_as_system',
+    depth: 2,
+    order: 42,
+  });
 });
 
 test('tie-break uses placeholderOriginalIndex then bookName then uid', () => {

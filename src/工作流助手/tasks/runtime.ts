@@ -37,6 +37,7 @@ import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
 import { applyChatBodyTagReplaceAfterStage } from './chat-body-tag-replace';
+import { applyChatWorldbookWriteAfterStage } from '../worldbook/write-from-template';
 import {
   buildStageProgressDisplayItems,
   disableReplicaFamilyOnTasks,
@@ -522,6 +523,13 @@ export async function runPostProcessTasks(
           scheduleCtx.currentAiText = text;
           scheduleCtx.currentPairText = [ctx.userText, text].filter(Boolean).join('\n');
         },
+      });
+
+      await applyChatWorldbookWriteAfterStage({
+        messageId: ctx.messageId,
+        settings,
+        stageResults,
+        allStageResults: results,
       });
     }
   } catch (e) {

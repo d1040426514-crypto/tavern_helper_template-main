@@ -18,6 +18,10 @@ import {
 import { applyAssistantChatTagExtract } from './chat-tag-extract';
 import { ensureBodyReplaceOriginCaptured, restoreBodyReplaceOrigin } from './chat-body-tag-replace';
 import {
+  clearWorldbookWriteMessageKeys,
+  reconcileWorldbookWritesFromChat,
+} from '../worldbook/write-reconcile';
+import {
   applyTagVariableInjectTemplate,
   mergeAiFloorInjectBlock,
   restorePostProcessTagsFromPreviousFloor,
@@ -228,6 +232,8 @@ export async function handleMessageReceived(
     if (isRerun) {
       restorePostProcessTagsFromPreviousFloor(targetId);
       await restoreBodyReplaceOrigin(targetId);
+      await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
+      await clearWorldbookWriteMessageKeys(targetId);
     }
     await ensureBodyReplaceOriginCaptured(targetId);
     applyAssistantChatTagExtract(targetId, settings, { isRerun });

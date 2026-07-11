@@ -32,6 +32,7 @@ function baseSettings(): ScriptSettings {
     tagVariableInjectTemplate: '',
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
+    chatWorldbookWriteRules: [],
     presets: [],
     activePresetName: '',
     scheduleState: {},

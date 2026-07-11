@@ -67,7 +67,7 @@ check('裸 result 向后兼容取最后内文', () => {
   const text = '<result>x</result><result type="a">y</result>';
   const { extractedTags, injectedFragments } = extractPlotTagsFromResponse(text, ['result']);
   assert.equal(extractedTags.result, 'y');
-  assert.equal(injectedFragments[0], '<result>y</result>');
+  assert.equal(injectedFragments[0], '<result>\ny\n</result>');
 });
 
 check('裸 item 配置取最后一次', () => {
@@ -85,7 +85,7 @@ check('带属性开标签裸 result 仍可摘', () => {
 check('{{item@id=1}} 精确引用完整块', () => {
   const map: RelayTagMap = new Map([['item@id=1', ['<item id="1">A</item>']]]);
   const out = replacePlotTagPlaceholdersWithHistory('X{{item@id=1}}Y', map, new Map(), new Set(['item@id']));
-  assert.equal(out, 'X<item id="1">A</item>Y');
+  assert.equal(out, 'X<item id="1">\nA\n</item>Y');
   assert.ok(!out.includes('<item><item'));
   assert.ok(!out.includes('<item@id=1>'));
 });
@@ -97,49 +97,50 @@ check('{{item}} 展开全部实例', () => {
     ['item', ['<item>无id</item>']],
   ]);
   const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id']));
-  assert.ok(out.includes('<item id="1">A</item>'));
-  assert.ok(out.includes('<item id="2">B</item>'));
-  assert.ok(out.includes('<item>无id</item>'));
+  assert.ok(out.includes('<item id="1">\nA\n</item>'));
+  assert.ok(out.includes('<item id="2">\nB\n</item>'));
+  assert.ok(out.includes('<item>\n无id\n</item>'));
   assert.ok(!out.includes('<item><item'));
 });
 
 check('{{result}} 内文仍包裸标签', () => {
   const map: RelayTagMap = new Map([['result', ['hello']]]);
   const out = replacePlotTagPlaceholdersWithHistory('{{result}}', map, new Map(), new Set(['result']));
-  assert.equal(out, '<result>hello</result>');
+  assert.equal(out, '<result>\nhello\n</result>');
 });
 
-check('formatTagValueForInject 完整块原样', () => {
+check('formatTagValueForInject 完整块重包换行', () => {
   const block = '<item id="1">A</item>';
-  assert.equal(formatTagValueForInject('item@id=1', block), block);
+  assert.equal(formatTagValueForInject('item@id=1', block), '<item id="1">\nA\n</item>');
 });
 
 check('formatTagValueForInject 裸名 inner 含子标签仍包外层', () => {
   const inner = '<npc act="李明">李明</npc>';
   const out = formatTagValueForInject('不在场npc', inner);
-  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+  assert.equal(out, `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
-check('formatTagValueForInject 裸名已是自身完整块原样', () => {
-  const block = '<不在场npc><npc act="李明">李明</npc></不在场npc>';
-  assert.equal(formatTagValueForInject('不在场npc', block), block);
+check('formatTagValueForInject 裸名已是自身完整块重包换行', () => {
+  const inner = '<npc act="李明">李明</npc>';
+  const block = `<不在场npc>${inner}</不在场npc>`;
+  assert.equal(formatTagValueForInject('不在场npc', block), `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
-check('formatTagValueForInject npc@act 复合 key 完整块原样', () => {
+check('formatTagValueForInject npc@act 复合 key 完整块重包换行', () => {
   const block = '<npc act="李明">李明</npc>';
-  assert.equal(formatTagValueForInject('npc@act=李明', block), block);
+  assert.equal(formatTagValueForInject('npc@act=李明', block), '<npc act="李明">\n李明\n</npc>');
 });
 
 check('formatTagValueForInject item 不匹配 itemize 前缀', () => {
   const inner = '<itemize>list</itemize>';
-  assert.equal(formatTagValueForInject('item', inner), `<item>${inner}</item>`);
+  assert.equal(formatTagValueForInject('item', inner), `<item>\n${inner}\n</item>`);
 });
 
 check('{{不在场npc}} 引用保留外层', () => {
   const inner = '<npc act="李明">李明</npc>';
   const map: RelayTagMap = new Map([['不在场npc', [inner]]]);
   const out = replacePlotTagPlaceholdersWithHistory('{{不在场npc}}', map, new Map(), new Set(['不在场npc']));
-  assert.equal(out, `<不在场npc>${inner}</不在场npc>`);
+  assert.equal(out, `<不在场npc>\n${inner}\n</不在场npc>`);
 });
 
 check('buildExtractedBlockFromTags 不双重包裹', () => {
@@ -147,9 +148,9 @@ check('buildExtractedBlockFromTags 不双重包裹', () => {
     'item@id=1': 'A',
     result: 'hello',
   });
-  assert.ok(block.includes('<item id="1">A</item>'));
+  assert.ok(block.includes('<item id="1">\nA\n</item>'));
   assert.equal(block.includes('<item@id=1>'), false);
-  assert.ok(block.includes('<result>hello</result>'));
+  assert.ok(block.includes('<result>\nhello\n</result>'));
   assert.ok(!block.includes('<item><item'));
 });
 
@@ -180,7 +181,7 @@ check('overwriteRelayTagMap 同 key 覆盖', () => {
 
 check('formatTagValuesForInject 多段合并单外层', () => {
   const out = formatTagValuesForInject('result', ['hello', 'world']);
-  assert.equal(out, '<result>hello\n\nworld</result>');
+  assert.equal(out, '<result>\nhello\n\nworld\n</result>');
 });
 
 check('expandWritableKeys {{item}} 含复合 key', () => {

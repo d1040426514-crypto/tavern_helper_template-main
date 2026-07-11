@@ -4,6 +4,7 @@ import {
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
   formatAttrTagBlock,
+  formatBareTagBlock,
   formatEmptyAttrTagBlock,
   isCompositeUnderAttrSpec,
   parseCompositeKey,
@@ -98,11 +99,11 @@ export function isStoredFullBlockForKey(key: string, value: string): boolean {
 export function formatTagValueForInject(key: string, value: string): string {
   const v = String(value ?? '').trim();
   if (!v || isEnumRegistryMarker(v)) return '';
-  if (isStoredFullBlockForKey(key, v)) return v;
+  const inner = isStoredFullBlockForKey(key, v) ? storedTagValueToInner(key, v) : v;
   const parsed = parseCompositeKey(key);
-  if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, v);
+  if (parsed) return formatAttrTagBlock(parsed.tagName, parsed.attrName, parsed.attrValue, inner);
   const bare = bareTagNameFromKey(key);
-  return `<${bare}>${v}</${bare}>`;
+  return formatBareTagBlock(bare, inner);
 }
 
 export function formatTagValuesForInject(key: string, values: string[]): string {
@@ -150,7 +151,7 @@ export function extractTagsFromText(text: string, tagNames: string[]): string {
   const parts: string[] = [];
   for (const tag of tagNames) {
     const content = extractLastTagContent(text, tag);
-    if (content != null) parts.push(`<${tag}>${content}</${tag}>`);
+    if (content != null) parts.push(formatBareTagBlock(tag, content));
   }
   return parts.join('\n\n');
 }

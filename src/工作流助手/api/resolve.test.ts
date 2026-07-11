@@ -31,6 +31,7 @@ function baseSettings(partial?: Partial<ScriptSettings>): ScriptSettings {
     tagVariableInjectTemplate: '',
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
+    chatWorldbookWriteRules: [],
     presets: [],
     activePresetName: '',
     scheduleState: {},
