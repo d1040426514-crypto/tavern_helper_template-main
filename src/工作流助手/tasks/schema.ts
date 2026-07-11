@@ -69,6 +69,8 @@ export const PlotWorldbookConfigSchema = z.object({
   enabledEntries: z.record(z.string(), z.array(z.number())).default({}),
 });
 
+export const PlotWorldbookModeSchema = z.enum(['inherit', 'custom', 'inheritRoot']);
+
 export const ApiConfigSchema = z.object({
   url: z.string().default(''),
   apiKey: z.string().default(''),
@@ -144,7 +146,7 @@ export const TaskWorkflowPresetSnapshotSchema = z.object({
   minLength: z.number().int().min(0).default(0),
   skipIfTagsFound: z.array(z.string()).optional(),
   schedule: TaskScheduleSchema.optional(),
-  plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
+  plotWorldbookMode: PlotWorldbookModeSchema.default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
   contextMode: z.enum(['inherit', 'custom']).default('inherit'),
   contextConfig: TaskContextConfigSchema.optional(),
@@ -186,7 +188,7 @@ const PostProcessTaskShape = z.object({
   apiPrimaryMaxConcurrency: z.number().int().min(0).default(5),
   apiFallbackMaxConcurrencies: z.array(z.number().int().min(0)).default([]),
   schedule: TaskScheduleSchema.optional(),
-  plotWorldbookMode: z.enum(['inherit', 'custom']).default('inherit'),
+  plotWorldbookMode: PlotWorldbookModeSchema.default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
   contextMode: z.enum(['inherit', 'custom']).default('inherit'),
   contextConfig: TaskContextConfigSchema.optional(),
@@ -366,6 +368,7 @@ export type ApiConfig = z.infer<typeof ApiConfigSchema>;
 export type ApiPreset = z.infer<typeof ApiPresetSchema>;
 export type ApiPresetBinding = z.infer<typeof ApiPresetBindingSchema>;
 export type PlotWorldbookConfig = z.infer<typeof PlotWorldbookConfigSchema>;
+export type PlotWorldbookMode = z.infer<typeof PlotWorldbookModeSchema>;
 export type TaskContextConfig = z.infer<typeof TaskContextConfigSchema>;
 export type PostProcessPreset = z.infer<typeof PostProcessPresetSchema>;
 export type ScriptSettings = z.infer<typeof ScriptSettingsSchema>;

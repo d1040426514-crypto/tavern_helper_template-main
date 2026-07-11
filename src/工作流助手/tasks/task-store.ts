@@ -66,7 +66,7 @@ import {
   normalizeExtractInjectTags,
   type TaskExecutionOptionsPatch,
 } from './task-extract-tags-merge';
-import type { PlotWorldbookConfig, TaskContextConfig } from './schema';
+import type { PlotWorldbookConfig, PlotWorldbookMode, TaskContextConfig } from './schema';
 import type { z } from 'zod';
 import { PromptGroupSchema, PromptAutoSegmentSchema, PromptAutoSlotSchema } from './schema';
 
@@ -335,7 +335,7 @@ export async function updatePresetFields(
 
 export async function updateTaskPlotWorldbook(
   id: string,
-  input: { mode?: 'inherit' | 'custom'; config?: PlotWorldbookConfig },
+  input: { mode?: PlotWorldbookMode; config?: PlotWorldbookConfig },
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
   const patch: Partial<PostProcessTask> = {};

@@ -116,6 +116,19 @@ const showReplicaFamilyCleanupPanel = computed(() => hasReplicaFamilyTasks(setti
 /** 任务 tab 列表：隐藏副本族副本（仅显示原本与普通任务） */
 const taskTabTasks = computed(() => displayTasks.value.filter(t => !t.replicaFamilyRootId));
 
+/** 世界书页任务列表：原本 + 普通任务 + 全部副本成员 */
+const plotWorldbookPanelTasks = computed(() => {
+  const members = displayTasks.value
+    .filter(t => t.replicaFamilyRootId)
+    .sort((a, b) =>
+      (a.replicaFamilyAttrValue ?? '').localeCompare(b.replicaFamilyAttrValue ?? '', undefined, {
+        numeric: true,
+        sensitivity: 'base',
+      }),
+    );
+  return [...taskTabTasks.value, ...members];
+});
+
 const selectedReplicaViewId = ref<string | null>(null);
 
 const selectedTask = computed(() => taskTabTasks.value.find(t => t.id === selectedTaskId.value));
@@ -1523,7 +1536,7 @@ function saveRunLogTaskTags(taskId: string): void {
           />
           <TaskPlotWorldbookPanel
             v-model:enabled="taskPlotWorldbookOverridesModel"
-            :tasks="taskTabTasks"
+            :tasks="plotWorldbookPanelTasks"
             :default-plot-worldbook-config="settings.plotWorldbookConfig"
           />
           <Context7Section v-model:config="defaultContextConfigRef" />

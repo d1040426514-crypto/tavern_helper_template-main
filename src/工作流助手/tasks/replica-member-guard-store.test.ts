@@ -54,7 +54,7 @@ g.window = {
 };
 
 void (async () => {
-  const { clearChatScope, createTask, deleteTask, listTasks, replaceTasks, updateTask } = await import(
+  const { clearChatScope, createTask, deleteTask, listTasks, replaceTasks, updateTask, updateTaskPlotWorldbook } = await import(
     './task-store'
   );
   const { updateReplicaMemberSchedule } = await import('./task-store');
@@ -81,6 +81,22 @@ void (async () => {
     assert.ok(replica);
 
     await assert.rejects(() => updateTask(replica!.id, { stage: 9 }, 'api'), /副本为原本镜像/);
+
+    const memberConfig = {
+      source: 'manual' as const,
+      manualSelection: ['MemberBook'],
+      enabledEntries: { MemberBook: [1] },
+    };
+    const wbUpdated = await updateTaskPlotWorldbook(
+      replica!.id,
+      { mode: 'custom', config: memberConfig },
+      'api',
+    );
+    assert.equal(wbUpdated.plotWorldbookMode, 'custom');
+    assert.deepEqual(wbUpdated.plotWorldbookConfig, memberConfig);
+
+    const inheritRootUpdated = await updateTaskPlotWorldbook(replica!.id, { mode: 'inheritRoot' }, 'api');
+    assert.equal(inheritRootUpdated.plotWorldbookMode, 'inheritRoot');
 
     const scheduled = await updateReplicaMemberSchedule(replica!.id, { launched: true }, 'api');
     assert.equal(scheduled.replicaFamilyLaunched, true);

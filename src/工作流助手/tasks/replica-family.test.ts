@@ -278,6 +278,82 @@ test('assertReplicaMemberPatchAllowed blocks workflow fields', () => {
     assertReplicaMemberPatchAllowed(member, { replicaFamilyLaunched: true }),
   );
   assert.doesNotThrow(() => assertReplicaMemberPatchAllowed(member, { enabled: false }));
+  assert.doesNotThrow(() =>
+    assertReplicaMemberPatchAllowed(member, {
+      plotWorldbookMode: 'custom',
+      plotWorldbookConfig: {
+        source: 'manual',
+        manualSelection: ['MemberBook'],
+        enabledEntries: { MemberBook: [1] },
+      },
+    }),
+  );
+  assert.doesNotThrow(() =>
+    assertReplicaMemberPatchAllowed(member, { plotWorldbookMode: 'inheritRoot' }),
+  );
+});
+
+test('syncReplicaFromRoot preserves custom plotWorldbookConfig on member', () => {
+  const root = baseTask({
+    plotWorldbookMode: 'custom' as const,
+    plotWorldbookConfig: {
+      source: 'manual' as const,
+      manualSelection: ['RootBook'],
+      enabledEntries: { RootBook: [1] },
+    },
+    promptGroups: [{ name: '', role: 'user', content: 'handle {{item@id}} here', enabled: true }],
+  });
+  const memberConfig = {
+    source: 'manual' as const,
+    manualSelection: ['MemberBook'],
+    enabledEntries: { MemberBook: [2] },
+  };
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [{ name: '', role: 'user', content: 'stale', enabled: true }],
+    plotWorldbookMode: 'custom' as const,
+    plotWorldbookConfig: memberConfig,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.plotWorldbookMode, 'custom');
+  assert.deepEqual(synced.plotWorldbookConfig, memberConfig);
+});
+
+test('syncReplicaFromRoot preserves inheritRoot mode and clears config', () => {
+  const root = baseTask({
+    plotWorldbookMode: 'custom' as const,
+    plotWorldbookConfig: {
+      source: 'manual' as const,
+      manualSelection: ['RootBook'],
+      enabledEntries: { RootBook: [1] },
+    },
+    promptGroups: [{ name: '', role: 'user', content: 'handle {{item@id}} here', enabled: true }],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [{ name: '', role: 'user', content: 'stale', enabled: true }],
+    plotWorldbookMode: 'inheritRoot' as const,
+    plotWorldbookConfig: {
+      source: 'manual' as const,
+      manualSelection: ['Stale'],
+      enabledEntries: {},
+    },
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.plotWorldbookMode, 'inheritRoot');
+  assert.equal(synced.plotWorldbookConfig, undefined);
 });
 
 function relayMap(entries: Record<string, string>): RelayTagMap {

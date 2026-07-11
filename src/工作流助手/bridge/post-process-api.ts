@@ -65,6 +65,7 @@ import { getLastPlaceholderVars, getLastPromptMessages } from '../tasks/runtime'
 import type {
   ChatTaskScopeState,
   PlotWorldbookConfig,
+  PlotWorldbookMode,
   PostProcessTask,
   ReplicaFamilyScheduleMode,
   ScriptSettings,
@@ -93,7 +94,7 @@ export interface AcuPostProcessTaskAPI {
   updatePresetFields(fields: PresetFieldsPatch): Promise<void>;
   updateTaskPlotWorldbook(
     taskId: string,
-    input: { mode?: 'inherit' | 'custom'; config?: PlotWorldbookConfig },
+    input: { mode?: PlotWorldbookMode; config?: PlotWorldbookConfig },
   ): Promise<PostProcessTask>;
   updateTaskContext(
     taskId: string,

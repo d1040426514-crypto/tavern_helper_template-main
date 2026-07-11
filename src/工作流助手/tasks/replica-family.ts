@@ -109,11 +109,29 @@ function substituteStructuredOutputRules(
   };
 }
 
+function resolveReplicaPlotWorldbookFields(
+  replica: PostProcessTask,
+  root: PostProcessTask,
+): Pick<PostProcessTask, 'plotWorldbookMode' | 'plotWorldbookConfig'> {
+  const mode = replica.plotWorldbookMode ?? root.plotWorldbookMode ?? 'inherit';
+  if (mode === 'custom') {
+    return {
+      plotWorldbookMode: mode,
+      plotWorldbookConfig: replica.plotWorldbookConfig ?? root.plotWorldbookConfig,
+    };
+  }
+  return {
+    plotWorldbookMode: mode,
+    plotWorldbookConfig: undefined,
+  };
+}
+
 /** 将副本镜像为原本的实时副本：全字段同步（含 API），保留副本身份字段，提示词动态占位符精确化 */
 export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessTask): PostProcessTask {
   const attrValue = replica.replicaFamilyAttrValue ?? '';
   if (!attrValue) return replica;
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
+  const plotWorldbook = resolveReplicaPlotWorldbookFields(replica, root);
 
   return PostProcessTaskSchema.parse({
     ...structuredClone(root),
@@ -129,6 +147,7 @@ export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessT
     promptGroups: clonePromptGroupsFromRoot(root, spec, attrValue),
     promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
     structuredOutputRules: substituteStructuredOutputRules(root.structuredOutputRules, spec, attrValue),
+    ...plotWorldbook,
   });
 }
 
@@ -271,6 +290,8 @@ export function isReplicaFamilyMember(task: PostProcessTask): boolean {
 export const REPLICA_MEMBER_WRITABLE_KEYS = new Set<keyof PostProcessTask>([
   'replicaFamilyLaunched',
   'enabled',
+  'plotWorldbookMode',
+  'plotWorldbookConfig',
 ]);
 
 const REPLICA_MEMBER_PATCH_DENIED_MSG = '副本为原本镜像，请编辑「原本」';

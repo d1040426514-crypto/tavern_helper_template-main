@@ -58,6 +58,12 @@ test('custom without plotWorldbookConfig falls back to global', () => {
   assert.equal(resolved.manualSelection[0], 'GlobalBook');
 });
 
+const rootConfig: PlotWorldbookConfig = {
+  source: 'manual',
+  manualSelection: ['RootBook'],
+  enabledEntries: { RootBook: [3] },
+};
+
 test('overrides disabled forces global even for custom task', () => {
   const task = {
     ...baseTask,
@@ -67,6 +73,54 @@ test('overrides disabled forces global even for custom task', () => {
   const resolved = resolveTaskPlotWorldbookConfig(task, {
     ...baseSettings,
     taskPlotWorldbookOverridesEnabled: false,
+  });
+  assert.equal(resolved.manualSelection[0], 'GlobalBook');
+});
+
+test('inheritRoot uses root custom plotWorldbookConfig', () => {
+  const root = {
+    id: 'root-1',
+    plotWorldbookMode: 'custom',
+    plotWorldbookConfig: rootConfig,
+  } as PostProcessTask;
+  const member = {
+    id: 'rep-1',
+    plotWorldbookMode: 'inheritRoot',
+    replicaFamilyRootId: 'root-1',
+  } as PostProcessTask;
+  const resolved = resolveTaskPlotWorldbookConfig(member, {
+    ...baseSettings,
+    tasks: [root, member],
+  });
+  assert.equal(resolved.manualSelection[0], 'RootBook');
+});
+
+test('inheritRoot falls back to global when root is inherit', () => {
+  const root = {
+    id: 'root-1',
+    plotWorldbookMode: 'inherit',
+  } as PostProcessTask;
+  const member = {
+    id: 'rep-1',
+    plotWorldbookMode: 'inheritRoot',
+    replicaFamilyRootId: 'root-1',
+  } as PostProcessTask;
+  const resolved = resolveTaskPlotWorldbookConfig(member, {
+    ...baseSettings,
+    tasks: [root, member],
+  });
+  assert.equal(resolved.manualSelection[0], 'GlobalBook');
+});
+
+test('inheritRoot falls back to global when root not found', () => {
+  const member = {
+    id: 'rep-1',
+    plotWorldbookMode: 'inheritRoot',
+    replicaFamilyRootId: 'missing-root',
+  } as PostProcessTask;
+  const resolved = resolveTaskPlotWorldbookConfig(member, {
+    ...baseSettings,
+    tasks: [member],
   });
   assert.equal(resolved.manualSelection[0], 'GlobalBook');
 });
