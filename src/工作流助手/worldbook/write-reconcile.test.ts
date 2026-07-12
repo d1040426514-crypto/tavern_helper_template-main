@@ -4,11 +4,12 @@ import type { ChatWorldbookWriteRule } from '../tasks/schema';
 import {
   customEntryNamePrefix,
   isManagedWorldbookEntryName,
+  isManagedWorldbookEntryNameForRule,
   ledgerEntryKey,
   ledgerStableNamesForBook,
   mergeAppliedLedgerEntries,
   shouldDeleteManagedEntryAsOrphan,
-} from './write-reconcile';
+} from './write-ledger-utils';
 import type { WorldbookWriteAppliedEntry } from './write-sync';
 
 function baseRule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldbookWriteRule {
@@ -84,6 +85,25 @@ test('ledgerStableNamesForBook filters by book', () => {
   ]);
   const names = ledgerStableNamesForBook(ledger, 'BookA');
   assert.deepEqual([...names], ['WorkflowHelper-a']);
+});
+
+test('isManagedWorldbookEntryNameForRule splitByAttr tag', () => {
+  const rule = baseRule({ targetTag: 'item@name', splitByAttr: true });
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-圣剑', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-', rule), false);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-result', rule), false);
+});
+
+test('isManagedWorldbookEntryNameForRule bare tag without split', () => {
+  const rule = baseRule({ targetTag: 'result', splitByAttr: false });
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-result', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-result extra', rule), true);
+});
+
+test('isManagedWorldbookEntryNameForRule custom entryName prefix', () => {
+  const rule = baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true });
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-断剑', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-断剑', rule), false);
 });
 
 console.log('write-reconcile.test.ts: all passed');

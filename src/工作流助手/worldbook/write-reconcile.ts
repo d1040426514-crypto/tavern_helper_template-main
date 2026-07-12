@@ -4,6 +4,13 @@ import { resolveEffectiveSettings } from '../tasks/effective-settings';
 import type { ChatWorldbookWriteRule } from '../tasks/schema';
 import { resolveWriteTargetBookName, upsertEntryByStableName } from './write-from-template';
 import {
+  isManagedWorldbookEntryName,
+  ledgerEntryKey,
+  ledgerStableNamesForBook,
+  mergeAppliedLedgerEntries,
+  shouldDeleteManagedEntryAsOrphan,
+} from './write-ledger-utils';
+import {
   POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
   WORKFLOW_HELPER_ENTRY_PREFIX,
   withWorldbookWriteLock,
@@ -18,6 +25,15 @@ export {
   withWorldbookWriteLock,
   WORKFLOW_HELPER_ENTRY_PREFIX,
 } from './write-sync';
+export {
+  customEntryNamePrefix,
+  isManagedWorldbookEntryName,
+  isManagedWorldbookEntryNameForRule,
+  ledgerEntryKey,
+  ledgerStableNamesForBook,
+  mergeAppliedLedgerEntries,
+  shouldDeleteManagedEntryAsOrphan,
+} from './write-ledger-utils';
 
 export type ReconcileWorldbookWritesOptions = {
   excludeMessageId?: number;
@@ -35,42 +51,6 @@ function isMvuExtraAnalysisActive(): boolean {
   } catch {
     return false;
   }
-}
-
-export function ledgerEntryKey(bookName: string, stableName: string): string {
-  return `${bookName.trim()}\0${stableName.trim()}`;
-}
-
-export function customEntryNamePrefix(rule: ChatWorldbookWriteRule): string | null {
-  const custom = rule.entryName.trim();
-  if (!custom) return null;
-  if (custom.includes('{attrValue}')) {
-    return custom.split('{attrValue}')[0] ?? null;
-  }
-  return custom;
-}
-
-export function isManagedWorldbookEntryName(name: string, rules: ChatWorldbookWriteRule[]): boolean {
-  const trimmed = (name || '').trim();
-  if (!trimmed) return false;
-  if (trimmed.startsWith(WORKFLOW_HELPER_ENTRY_PREFIX)) return true;
-  return rules.some(rule => {
-    const prefix = customEntryNamePrefix(rule);
-    return !!prefix && trimmed.startsWith(prefix);
-  });
-}
-
-export function mergeAppliedLedgerEntries(
-  batches: WorldbookWriteAppliedEntry[][],
-): Map<string, WorldbookWriteAppliedEntry> {
-  const merged = new Map<string, WorldbookWriteAppliedEntry>();
-  for (const batch of batches) {
-    for (const entry of batch) {
-      if (!entry?.bookName?.trim() || !entry?.stableName?.trim()) continue;
-      merged.set(ledgerEntryKey(entry.bookName, entry.stableName), entry);
-    }
-  }
-  return merged;
 }
 
 export function collectTargetBookNames(rules: ChatWorldbookWriteRule[]): string[] {
@@ -136,31 +116,6 @@ export function isChatLedgerReadable(): boolean {
   } catch {
     return false;
   }
-}
-
-export function ledgerStableNamesForBook(
-  ledger: Map<string, WorldbookWriteAppliedEntry>,
-  bookName: string,
-): Set<string> {
-  const names = new Set<string>();
-  const trimmedBook = bookName.trim();
-  for (const entry of ledger.values()) {
-    if (entry.bookName.trim() !== trimmedBook) continue;
-    names.add(entry.stableName.trim());
-  }
-  return names;
-}
-
-/** 托管条目是否应删除：在 ledger 中无对应 stableName 的孤儿 */
-export function shouldDeleteManagedEntryAsOrphan(
-  entryName: string,
-  rules: ChatWorldbookWriteRule[],
-  ledgerStableNames: Set<string>,
-): boolean {
-  const trimmed = (entryName || '').trim();
-  if (!trimmed) return false;
-  if (!isManagedWorldbookEntryName(trimmed, rules)) return false;
-  return !ledgerStableNames.has(trimmed);
 }
 
 /** 仅删除 ledger 中不存在的托管条目（保留 uid/顺序） */

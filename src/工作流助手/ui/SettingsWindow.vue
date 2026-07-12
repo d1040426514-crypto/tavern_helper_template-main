@@ -82,7 +82,11 @@ import {
   DEFAULT_WORLDBOOK_WRITE_PLACEMENT,
   normalizeWorldbookWritePlacement,
 } from '../worldbook/entry-order';
-import type { PlotWorldbookConfig, TaskContextConfig } from '../tasks/schema';
+import {
+  migrateWorldbookWriteRuleTarget,
+  resolveWriteTargetBookName,
+} from '../worldbook/write-book-migrate';
+import type { PlotWorldbookConfig, TaskContextConfig, ChatWorldbookWriteRule } from '../tasks/schema';
 import {
   ACU_PP_CHAT_SCOPE_CHANGED,
   ACU_PP_TASKS_CHANGED,
@@ -623,6 +627,59 @@ function worldbookWriteEntryNamePlaceholder(rule: {
 function removeChatWorldbookWriteRule(id: string): void {
   ensureChatWorldbookWriteRules();
   settings.value.chatWorldbookWriteRules = settings.value.chatWorldbookWriteRules.filter(r => r.id !== id);
+  ruleBookTargetSnapshot.value.delete(id);
+  ruleBookMigratingIds.value.delete(id);
+}
+
+const ruleBookTargetSnapshot = ref(new Map<string, string | null>());
+const ruleBookMigratingIds = ref(new Set<string>());
+
+function rememberRuleBookTargetSnapshot(rule: ChatWorldbookWriteRule): void {
+  const resolved = resolveWriteTargetBookName(rule);
+  if (resolved) ruleBookTargetSnapshot.value.set(rule.id, resolved);
+}
+
+function syncAllRuleBookTargetSnapshots(): void {
+  const next = new Map<string, string | null>();
+  for (const rule of settings.value.chatWorldbookWriteRules ?? []) {
+    const resolved = resolveWriteTargetBookName(rule);
+    if (resolved) next.set(rule.id, resolved);
+  }
+  ruleBookTargetSnapshot.value = next;
+}
+
+function isRuleBookTargetMigrating(ruleId: string): boolean {
+  return ruleBookMigratingIds.value.has(ruleId);
+}
+
+async function onRuleBookTargetChanged(rule: ChatWorldbookWriteRule): Promise<void> {
+  const oldBook = ruleBookTargetSnapshot.value.get(rule.id) ?? null;
+  const newBook = resolveWriteTargetBookName(rule);
+  if (!oldBook || !newBook || oldBook === newBook) {
+    if (newBook) ruleBookTargetSnapshot.value.set(rule.id, newBook);
+    return;
+  }
+  if (ruleBookMigratingIds.value.has(rule.id)) return;
+
+  ruleBookMigratingIds.value.add(rule.id);
+  try {
+    acuToast('info', `正在将条目从「${oldBook}」迁移到「${newBook}」…`);
+    const { moved, deletedFromOld } = await migrateWorldbookWriteRuleTarget({
+      rule,
+      fromBook: oldBook,
+      toBook: newBook,
+    });
+    ruleBookTargetSnapshot.value.set(rule.id, newBook);
+    if (moved > 0 || deletedFromOld > 0) {
+      acuToast('success', `已迁移 ${moved} 个条目到「${newBook}」（自旧书清理 ${deletedFromOld} 个）`);
+    } else {
+      acuToast('success', `目标世界书已切换为「${newBook}」`);
+    }
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : String(e));
+  } finally {
+    ruleBookMigratingIds.value.delete(rule.id);
+  }
 }
 
 function isWorldbookWriteAtDepth(rule: { placement?: { position?: string } }): boolean {
@@ -1206,6 +1263,7 @@ let offChatScopeChanged: EventOnReturn | null = null;
 onMounted(() => {
   document.addEventListener('keydown', onFullscreenKeydown);
   refreshWorldbookNamesList();
+  syncAllRuleBookTargetSnapshots();
   void refreshTaskView();
   offTasksChanged = eventOn(ACU_PP_TASKS_CHANGED, (payload?: TasksChangedPayload) => {
     if (payload?.source === 'ui') {
@@ -2518,6 +2576,9 @@ function saveRunLogTaskTags(taskId: string): void {
                 托管条目默认名前缀 <code>WorkflowHelper-</code>（及规则自定义条目名前缀）；仅这些条目会被自动清理/重放。<strong>副本族清理</strong> 或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
               </p>
               <p class="acu-notes acu-notes--sm">
+                切换「目标世界书」或手动指定书名时，该规则已写入的托管条目会自动从旧书迁移到新书（含账本重放与孤儿清理），无需手动删旧条目。
+              </p>
+              <p class="acu-notes acu-notes--sm">
                 注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong> 仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong>防止递归触发</strong> 对应世界书条目「禁止本条目递归激活其他条目」，默认开启。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
@@ -2581,14 +2642,28 @@ function saveRunLogTaskTags(taskId: string): void {
                 </div>
                 <div style="flex: 0 0 110px">
                   <label class="acu-label-with-help">目标世界书</label>
-                  <select v-model="rule.bookSource" class="acu-input" style="width: 100%">
+                  <select
+                    v-model="rule.bookSource"
+                    class="acu-input"
+                    style="width: 100%"
+                    :disabled="isRuleBookTargetMigrating(rule.id)"
+                    @focus="rememberRuleBookTargetSnapshot(rule)"
+                    @change="onRuleBookTargetChanged(rule)"
+                  >
                     <option value="character">角色主世界书</option>
                     <option value="manual">手动指定</option>
                   </select>
                 </div>
                 <div v-if="rule.bookSource === 'manual'" style="flex: 0 0 140px">
                   <label class="acu-label-with-help">世界书名</label>
-                  <select v-model="rule.manualBookName" class="acu-input" style="width: 100%">
+                  <select
+                    v-model="rule.manualBookName"
+                    class="acu-input"
+                    style="width: 100%"
+                    :disabled="isRuleBookTargetMigrating(rule.id)"
+                    @focus="rememberRuleBookTargetSnapshot(rule)"
+                    @change="onRuleBookTargetChanged(rule)"
+                  >
                     <option value="">请选择</option>
                     <option v-for="name in allWorldbookNames" :key="name" :value="name">
                       {{ name }}
