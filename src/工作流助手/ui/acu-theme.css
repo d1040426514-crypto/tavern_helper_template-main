@@ -1991,6 +1991,199 @@
   word-break: break-word;
 }
 
+.acu-run-log-page-meta {
+  margin-bottom: 12px;
+}
+
+.acu-section--run-log-wb .acu-run-log-wb-sync {
+  margin-bottom: 0;
+}
+
+.acu-run-log-wb-sync {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-md);
+  background: var(--acu-bg-2);
+  overflow: hidden;
+}
+
+.acu-run-log-wb-sync__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-1);
+}
+
+.acu-run-log-wb-sync__summary::-webkit-details-marker {
+  display: none;
+}
+
+.acu-run-log-wb-sync__summary::before {
+  content: '▸';
+  flex-shrink: 0;
+  margin-right: 2px;
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-body-lg);
+  transition: transform 0.15s ease;
+}
+
+.acu-run-log-wb-sync[open] > .acu-run-log-wb-sync__summary--root::before,
+.acu-run-log-wb-sync__group[open] > .acu-run-log-wb-sync__summary--group::before {
+  transform: rotate(90deg);
+}
+
+.acu-run-log-wb-sync__summary--root {
+  padding: 10px 14px;
+  font-size: var(--acu-font-size-body-sm);
+  color: var(--acu-text-2);
+}
+
+.acu-run-log-wb-sync__summary--root:hover {
+  background: var(--acu-hover-overlay);
+}
+
+.acu-run-log-wb-sync[open] > .acu-run-log-wb-sync__summary--root {
+  border-bottom: 1px solid var(--acu-border);
+}
+
+.acu-run-log-wb-sync__summary--group {
+  padding: 10px 12px;
+  font-size: var(--acu-font-size-body);
+  background: var(--acu-bg-1);
+}
+
+.acu-run-log-wb-sync__summary--group:hover {
+  background: var(--acu-hover-overlay);
+}
+
+.acu-run-log-wb-sync__group[open] > .acu-run-log-wb-sync__summary--group {
+  border-bottom: 1px solid var(--acu-border);
+}
+
+.acu-run-log-wb-sync__dirty-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--acu-warning, #e6a817);
+  flex-shrink: 0;
+}
+
+.acu-run-log-wb-sync__panel {
+  padding: 12px 14px 14px;
+  background: var(--acu-bg-1);
+}
+
+.acu-run-log-wb-sync__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.acu-run-log-wb-sync__head-left {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.acu-run-log-wb-sync__head-left .acu-run-log-label {
+  margin: 0;
+}
+
+.acu-run-log-wb-sync__hint {
+  margin: 0 0 10px;
+}
+
+.acu-run-log-wb-sync__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.acu-run-log-wb-sync__empty {
+  margin-top: 4px;
+}
+
+.acu-run-log-wb-sync__empty .acu-notes {
+  margin: 0;
+}
+
+.acu-run-log-wb-sync__groups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.acu-run-log-wb-sync__group {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-md);
+  background: var(--acu-bg-2);
+  overflow: hidden;
+}
+
+.acu-run-log-wb-sync__group-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px 12px;
+}
+
+.acu-run-log-wb-sync__entry {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  background: var(--acu-bg-1);
+  padding: 10px 12px 12px;
+}
+
+.acu-run-log-wb-sync__entry-head {
+  margin-bottom: 8px;
+}
+
+.acu-run-log-wb-sync__entry-title {
+  display: block;
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-1);
+  margin-bottom: 4px;
+}
+
+.acu-run-log-wb-sync__entry-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  font-size: var(--acu-font-size-caption);
+  color: var(--acu-text-3);
+}
+
+.acu-run-log-wb-sync__entry-meta-sep {
+  color: var(--acu-text-3);
+  user-select: none;
+}
+
+.acu-run-log-wb-sync__meta {
+  font-size: var(--acu-font-size-body-sm);
+}
+
+.acu-run-log-wb-sync__input {
+  width: 100%;
+  min-height: 96px;
+  margin-bottom: 8px;
+}
+
+.acu-run-log-wb-sync__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .acu-run-log-label {
   font-size: var(--acu-font-size-body);
   font-weight: 600;

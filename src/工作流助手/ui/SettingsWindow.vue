@@ -27,6 +27,7 @@ import PromptSegmentCard from './PromptSegmentCard.vue';
 import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
 import ReplicaFamilyCleanupPanel from './ReplicaFamilyCleanupPanel.vue';
 import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
+import RunLogWorldbookSyncPanel from './RunLogWorldbookSyncPanel.vue';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
@@ -2738,12 +2739,18 @@ function saveRunLogTaskTags(taskId: string): void {
         </div>
 
         <div v-show="currentPage === 4" class="acu-page">
+          <div v-if="settings.lastRunStatus.messageId != null" class="acu-notes acu-run-log-page-meta">
+            当前楼层 #{{ settings.lastRunStatus.messageId }}
+            <span v-if="settings.lastRunStatus.at"> · {{ formatRunLogTime(settings.lastRunStatus.at) }}</span>
+          </div>
+
+          <div class="acu-section acu-section--run-log-wb">
+            <h4>世界书同步编辑</h4>
+            <RunLogWorldbookSyncPanel />
+          </div>
+
           <div class="acu-section">
             <h4>运行日志</h4>
-            <div v-if="settings.lastRunStatus.messageId != null" class="acu-notes" style="margin-bottom: 10px">
-              当前楼层 #{{ settings.lastRunStatus.messageId }}
-              <span v-if="settings.lastRunStatus.at"> · {{ formatRunLogTime(settings.lastRunStatus.at) }}</span>
-            </div>
             <div v-if="settings.lastRunStatus.taskResults?.length" class="acu-run-log-task-list">
               <details
                 v-for="r in settings.lastRunStatus.taskResults"

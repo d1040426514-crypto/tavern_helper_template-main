@@ -199,6 +199,27 @@ export function applyTagsToRawContainer(raw: TagContainerRaw, tags: Record<strin
   return normalizeTagContainerRaw(next);
 }
 
+export function removeTagKeyFromRawContainer(raw: TagContainerRaw, tagKey: string): TagContainerRaw {
+  const parsed = parseCompositeKey(tagKey);
+  if (!parsed) {
+    const next = { ...raw };
+    delete next[tagKey];
+    return next;
+  }
+
+  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
+  const next = { ...raw };
+  const existing = next[groupKey];
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    const group = { ...(existing as Record<string, string>) };
+    delete group[parsed.attrValue];
+    if (Object.keys(group).length) next[groupKey] = group;
+    else delete next[groupKey];
+  }
+  delete next[tagKey];
+  return next;
+}
+
 export function isDynamicAttrPlaceholder(placeholderName: string): boolean {
   return parseDynamicAttrPlaceholder(placeholderName) != null;
 }

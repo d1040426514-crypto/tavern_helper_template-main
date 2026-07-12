@@ -18,6 +18,7 @@ import {
   mergeNestedGroupIntoRawContainer,
   mergeRawTagContainers,
   normalizeTagContainerRaw,
+  removeTagKeyFromRawContainer,
   type TagContainerRaw,
 } from './tag-variables-nested';
 import { isAccessibleMessageFloor, normalizeMessageFloorId } from './message-floor';
@@ -336,6 +337,23 @@ export function writeFloorTagValues(messageId: number, tags: Record<string, stri
       let raw = readTagContainerRaw(variables);
       raw = applyTagsToRawContainer(raw, tags);
       variables[TAG_DATA_ROOT_KEY] = raw;
+      return variables;
+    },
+    { type: 'message', message_id: messageId },
+  );
+}
+
+export function removeFloorTagKey(messageId: number, tagKey: string): void {
+  if (!isAccessibleMessageFloor(messageId)) return;
+
+  updateVariablesWith(
+    variables => {
+      migrateLegacyTagsOnFloor(variables);
+      let raw = readTagContainerRaw(variables);
+      raw = removeTagKeyFromRawContainer(raw, tagKey);
+      raw = normalizeTagContainerRaw(raw);
+      if (Object.keys(raw).length) variables[TAG_DATA_ROOT_KEY] = raw;
+      else delete variables[TAG_DATA_ROOT_KEY];
       return variables;
     },
     { type: 'message', message_id: messageId },
