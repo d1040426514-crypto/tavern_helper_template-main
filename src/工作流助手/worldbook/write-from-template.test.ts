@@ -81,6 +81,11 @@ test('resolveEntryKeys merges static keywords', () => {
   assert.deepEqual(keys, ['圣剑', 'foo', 'bar']);
 });
 
+test('resolveEntryKeys bare tag keyword defaults to tag name', () => {
+  const keys = resolveEntryKeys(baseRule({ targetTag: 'result', splitByAttr: false }));
+  assert.deepEqual(keys, ['result']);
+});
+
 test('buildWorldbookEntryPartial keyword selective', () => {
   const partial = buildWorldbookEntryPartial(baseRule(), 'content', 'item@name=圣剑');
   assert.equal(partial.strategy?.type, 'selective');

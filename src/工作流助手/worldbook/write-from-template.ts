@@ -105,6 +105,9 @@ export function resolveEntryKeys(rule: ChatWorldbookWriteRule, compositeKey?: st
       return [...splitCommaKeywords(parsed.attrValue), ...staticKeys];
     }
   }
+  if (staticKeys.length) return staticKeys;
+  // 裸标签 keyword 条目：未填静态关键字时默认使用标签名（如 result）
+  if (spec && !spec.attrName) return [spec.tagName];
   return staticKeys;
 }
 
