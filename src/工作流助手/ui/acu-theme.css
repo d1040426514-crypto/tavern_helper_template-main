@@ -465,6 +465,19 @@
   gap: 8px;
 }
 
+.acu-api-config__recommended-model {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.acu-api-config__recommended-model-text {
+  font-size: var(--acu-font-size-panel-title);
+  font-weight: 500;
+  color: var(--acu-text-1);
+}
+
 .acu-api-routing-row {
   display: flex;
   align-items: center;

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import type { PostProcessTask } from './schema';
 import {
   applyTaskWorkflowPresetOnTask,
+  applyTaskWorkflowSnapshot,
   buildTaskWorkflowSnapshot,
   exportTaskWorkflowPresetsJson,
   importTaskWorkflowPresetsFromJson,
@@ -50,6 +51,17 @@ test('snapshot excludes API fields, identity and replica schedule', () => {
   assert.equal((snap as Record<string, unknown>).taskWorkflowPresets, undefined);
   assert.equal((snap as Record<string, unknown>).replicaFamilyScheduleMode, undefined);
   assert.equal(snap.promptGroups?.[0]?.content, 'hello');
+});
+
+test('snapshot includes recommendedModel and apply restores it', () => {
+  const task = { ...baseTask(), recommendedModel: 'deepseek-chat' };
+  const snap = buildTaskWorkflowSnapshot(task);
+  assert.equal(snap.recommendedModel, 'deepseek-chat');
+
+  const target = { ...baseTask(), recommendedModel: '' };
+  const applied = applyTaskWorkflowSnapshot(target, snap);
+  assert.equal(applied.recommendedModel, 'deepseek-chat');
+  assert.equal(applied.apiPresetName, 'my-api');
 });
 
 test('apply preset keeps API fields, id and replica schedule mode', () => {

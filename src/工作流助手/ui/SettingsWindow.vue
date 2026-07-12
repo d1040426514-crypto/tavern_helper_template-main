@@ -1257,6 +1257,23 @@ function saveTaskPreset() {
   }
 }
 
+async function confirmEditRecommendedModel(): Promise<void> {
+  const task = selectedTask.value;
+  if (!task) return;
+  const value = await acuPrompt({
+    title: '编辑推荐模型',
+    message: '请输入推荐模型名称（仅用于展示，不影响实际 API 调用）：',
+    confirmText: '确定',
+    danger: false,
+    prompt: {
+      placeholder: '例如 deepseek-chat',
+      defaultValue: task.recommendedModel ?? '',
+    },
+  });
+  if (value === null) return;
+  task.recommendedModel = value.trim();
+}
+
 async function confirmRenameSelectedTask(): Promise<void> {
   const task = selectedTask.value;
   if (!task) return;
@@ -1982,6 +1999,20 @@ function saveRunLogTaskTags(taskId: string): void {
                 </AcuHelpPanel>
 
                 <div class="acu-api-config__block">
+                  <div class="acu-api-config__recommended-model">
+                    <span class="acu-api-config__recommended-model-text">
+                      推荐模型：{{ selectedTask.recommendedModel?.trim() || '' }}
+                    </span>
+                    <button
+                      class="acu-btn acu-btn--sm acu-icon-btn"
+                      type="button"
+                      title="编辑推荐模型"
+                      aria-label="编辑推荐模型"
+                      @click="confirmEditRecommendedModel"
+                    >
+                      <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
+                    </button>
+                  </div>
                   <label class="acu-field-label">主要 API 预设</label>
                   <div class="acu-api-routing-row">
                     <select
