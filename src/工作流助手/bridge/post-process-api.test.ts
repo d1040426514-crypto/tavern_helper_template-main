@@ -85,6 +85,13 @@ async function main(): Promise<void> {
     const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
     assert.deepEqual(missing, []);
     assert.equal(expectedMethods.length, 59);
+
+    const exposed = acuPostProcessTaskApi.getEffectiveSettings();
+    assert.equal(exposed.apiConfig.apiKey, '');
+    for (const preset of exposed.apiPresets) {
+      assert.equal(preset.apiConfig.apiKey, '');
+    }
+
     console.log('ok acuPostProcessTaskApi exposes all P0-P2 methods');
   } catch (e) {
     console.error('FAIL acuPostProcessTaskApi exposes all P0-P2 methods', e);

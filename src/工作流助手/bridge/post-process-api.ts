@@ -61,7 +61,11 @@ import {
 } from '../tasks/task-store';
 import { buildEffectivePromptGroups } from '../tasks/prompt-auto-segments';
 import { rerunCurrentFloor, triggerTask, type TriggerTaskOptions } from '../tasks/trigger';
-import { getLastPlaceholderVars, getLastPromptMessages } from '../tasks/runtime';
+import {
+  getLastPromptMessages,
+  getLastPlaceholderVars,
+} from '../tasks/runtime';
+import { sanitizeSettingsForExternalApi } from '../settings-security';
 import type {
   ChatTaskScopeState,
   PlotWorldbookConfig,
@@ -229,7 +233,7 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => moveTaskToIndex(taskId, toIndex, 'api')) as Promise<void>,
   rerunCurrentFloor: () => rerunCurrentFloor(),
   triggerTask: (taskId, options) => triggerTask(taskId, options),
-  getEffectiveSettings: () => getEffectiveSettings(),
+  getEffectiveSettings: () => sanitizeSettingsForExternalApi(getEffectiveSettings()),
   getActivePresetName: () => getActivePresetName(),
   getLastPromptMessages: () => getLastPromptMessages(),
   getLastPlaceholderVars: () => getLastPlaceholderVars(),

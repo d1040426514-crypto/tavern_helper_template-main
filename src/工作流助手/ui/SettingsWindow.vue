@@ -2,6 +2,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
+import { redactScriptSettingsForShare } from '../settings-security';
 import type { PostProcessTask, ReplicaFamilyScheduleMode, TaskWorkflowPresetEntry } from '../tasks/schema';
 import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
 import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
@@ -1415,12 +1416,19 @@ async function confirmDeleteTaskPreset(): Promise<void> {
   }
 }
 
-function exportPresetJson() {
-  const blob = new Blob([JSON.stringify(settings.value, null, 2)], { type: 'application/json' });
+function downloadSettingsJson(data: unknown, filename: string): void {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = 'workflow-assistant-settings.json';
+  a.download = filename;
   a.click();
+}
+
+function exportPresetJson() {
+  downloadSettingsJson(
+    redactScriptSettingsForShare(settings.value),
+    'workflow-assistant-settings.json',
+  );
 }
 
 function triggerImportPreset() {
@@ -1436,12 +1444,16 @@ async function onImportPresetFile(event: Event) {
   try {
     const text = await file.text();
     const data: unknown = JSON.parse(text);
-    const name = store.importPresetFromJson(data, file.name);
+    const result = store.importPresetFromJson(data, file.name);
     selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
-    acuToast('success',`已导入并应用预设「${name}」`);
+    if (result.strippedApiSecrets) {
+      acuToast('info', `已导入并应用预设「${result.name}」；已忽略文件中的 API 配置，请在本机 API 页填写密钥`);
+    } else {
+      acuToast('success', `已导入并应用预设「${result.name}」`);
+    }
   } catch (error) {
     console.error(`${SCRIPT_LOG_PREFIX} 导入预设失败:`, error);
-    acuToast('error',`导入预设失败: ${error instanceof Error ? error.message : String(error)}`);
+    acuToast('error', `导入预设失败: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
@@ -1733,7 +1745,6 @@ function saveRunLogTaskTags(taskId: string): void {
         <div v-show="currentPage === 3" class="acu-page">
           <div class="acu-section acu-preset-section">
             <h4>全局预设</h4>
-            <p class="acu-notes">切换预设会加载对应任务模板；修改后请点击保存图标写回当前预设，或点击另存为图标输入新名称保存。</p>
             <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
               当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API 或本页任务编辑仅影响此聊天，不会修改全局活动预设。
               <button class="acu-btn acu-btn--sm" type="button" style="margin-left: 8px" @click="handleClearChatScope">
@@ -1761,7 +1772,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn"
                   type="button"
-                  title="导出 JSON"
+                  title="导出 JSON（不含 API 密钥）"
                   aria-label="导出 JSON"
                   @click="exportPresetJson"
                 >

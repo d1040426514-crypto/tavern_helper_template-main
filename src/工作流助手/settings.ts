@@ -3,11 +3,20 @@ import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
 import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
 import {
+  detectSecretsInImportRaw,
+  importedSettingsHadApiConfig,
+} from './settings-security';
+import {
   PostProcessPresetSchema,
   ScriptSettingsSchema,
   type PostProcessPreset,
   type ScriptSettings,
 } from './tasks/schema';
+
+export type ImportPresetResult = {
+  name: string;
+  strippedApiSecrets: boolean;
+};
 
 function loadRawSettings(): Record<string, unknown> {
   try {
@@ -207,11 +216,14 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     return base || `导入预设-${new Date().toLocaleString('zh-CN')}`;
   }
 
-  function importPresetFromJson(raw: unknown, fileName?: string): string {
+  function importPresetFromJson(raw: unknown, fileName?: string): ImportPresetResult {
     const migrated = migrateImportedPreset(raw);
     const presetOnly = PostProcessPresetSchema.safeParse(migrated);
     if (presetOnly.success) {
-      return addOrUpdatePreset(presetOnly.data);
+      return {
+        name: addOrUpdatePreset(presetOnly.data),
+        strippedApiSecrets: false,
+      };
     }
 
     const fullSettings = ScriptSettingsSchema.safeParse(migrated);
@@ -234,18 +246,12 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
         taskContextOverridesEnabled: s.taskContextOverridesEnabled ?? false,
       };
 
-      if (s.apiPresets.length) {
-        for (const apiPreset of s.apiPresets) {
-          const idx = settings.value.apiPresets.findIndex(p => p.name === apiPreset.name);
-          if (idx >= 0) settings.value.apiPresets[idx] = _.cloneDeep(apiPreset);
-          else settings.value.apiPresets.push(_.cloneDeep(apiPreset));
-        }
-      }
-      if (s.defaultTaskApiPreset) {
-        settings.value.defaultTaskApiPreset = s.defaultTaskApiPreset;
-      }
+      const hadApiInFile = importedSettingsHadApiConfig(s) || detectSecretsInImportRaw(raw);
 
-      return addOrUpdatePreset(preset);
+      return {
+        name: addOrUpdatePreset(preset),
+        strippedApiSecrets: hadApiInFile,
+      };
     }
 
     throw new Error('无法识别的预设 JSON 格式（需为预设对象或完整设置导出文件）');
