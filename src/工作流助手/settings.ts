@@ -7,6 +7,16 @@ import {
   importedSettingsHadApiConfig,
 } from './settings-security';
 import {
+  extractLegacySecretsFromRaw,
+  extractSecretsFromSettings,
+  legacySecretsPayloadHasData,
+  loadApiSecretsPayload,
+  mergeApiSecretsPayload,
+  mergeSecretsIntoSettings,
+  saveApiSecretsPayload,
+  stripSecretsForPersistence,
+} from './settings/api-secrets';
+import {
   PostProcessPresetSchema,
   ScriptSettingsSchema,
   type PostProcessPreset,
@@ -107,9 +117,22 @@ export function loadSettings(): ScriptSettings {
   try {
     const raw = loadRawSettings();
     const merged = migrateSettingsRaw({ ...defaults, ...raw });
+    const legacySecrets = extractLegacySecretsFromRaw(merged);
+    const hadLegacyInScriptVars = legacySecretsPayloadHasData(legacySecrets);
+    const storedSecrets = loadApiSecretsPayload();
+    const combinedSecrets = hadLegacyInScriptVars
+      ? mergeApiSecretsPayload(storedSecrets, legacySecrets)
+      : storedSecrets;
+
     const migrated = migrateImportedPreset(merged) as Record<string, unknown>;
-    const settings = ScriptSettingsSchema.parse(migrated);
+    let settings = ScriptSettingsSchema.parse(migrated);
     ensureReplicaFamilyCleanupDefaults(settings);
+    settings = mergeSecretsIntoSettings(settings, combinedSecrets);
+
+    if (hadLegacyInScriptVars) {
+      saveSettings(settings);
+    }
+
     return settings;
   } catch (error) {
     console.error('[工作流助手] 设置解析失败，已回退默认配置:', error);
@@ -118,7 +141,12 @@ export function loadSettings(): ScriptSettings {
 }
 
 export function saveSettings(settings: ScriptSettings): void {
-  insertOrAssignVariables(_.cloneDeep(settings), { type: 'script', script_id: getScriptId() });
+  const secrets = extractSecretsFromSettings(settings);
+  saveApiSecretsPayload(secrets);
+  insertOrAssignVariables(stripSecretsForPersistence(settings), {
+    type: 'script',
+    script_id: getScriptId(),
+  });
 }
 
 export const useSettingsStore = defineStore('ai-post-process-settings', () => {

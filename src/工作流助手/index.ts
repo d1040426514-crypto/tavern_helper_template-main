@@ -10,6 +10,7 @@ import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { registerReplicaReconcile } from './tasks/replica-reconcile';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import { registerExtensionsMenuEntry } from './ui/extensions-menu';
+import { initApiSecretsStorage } from './settings/api-secrets-storage';
 import { loadSettings, useSettingsStore } from './settings';
 import { updateGlobalTheme } from './ui/theme';
 import { ensureAcuToastStyles } from './ui/toast-styles';
@@ -18,6 +19,7 @@ import { RERUN_BUTTON_LABEL, SCRIPT_DISPLAY_NAME, SCRIPT_LOG_PREFIX } from './ui
 
 export const RERUN_BUTTON_NAME = RERUN_BUTTON_LABEL;
 
+initApiSecretsStorage();
 updateGlobalTheme(loadSettings().uiThemeId);
 ensureAcuToastStyles();
 
