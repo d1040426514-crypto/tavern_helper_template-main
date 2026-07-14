@@ -110,6 +110,54 @@ test('scanDynamicAttrPlaceholders', () => {
   assert.deepEqual(scanDynamicAttrPlaceholders(baseTask()), ['item@id']);
 });
 
+test('scanDynamicAttrPlaceholders ignores total: placeholders', () => {
+  assert.deepEqual(
+    scanDynamicAttrPlaceholders(
+      baseTask({
+        promptGroups: [
+          { name: '', role: 'user', content: 'only {{total:item@id}} here', enabled: true },
+        ],
+      }),
+    ),
+    [],
+  );
+});
+
+test('validate rejects when only total: placeholder is present', () => {
+  const r = validateReplicaFamilyEligibility(
+    baseTask({
+      promptGroups: [{ name: '', role: 'user', content: '{{total:item@id}}', enabled: true }],
+    }),
+  );
+  assert.equal(r.ok, false);
+});
+
+test('validate accepts item@id even when total:item@id also present', () => {
+  const r = validateReplicaFamilyEligibility(
+    baseTask({
+      promptGroups: [
+        {
+          name: '',
+          role: 'user',
+          content: 'list {{total:item@id}} then member uses {{item@id}}',
+          enabled: true,
+        },
+      ],
+    }),
+  );
+  assert.equal(r.ok, true);
+  if (r.ok) assert.equal(r.spec, 'item@id');
+});
+
+test('substituteDynamicPlaceholder leaves total: untouched', () => {
+  const out = substituteDynamicPlaceholder(
+    'all={{total:item@id}} one={{item@id}}',
+    'item@id',
+    '2',
+  );
+  assert.equal(out, 'all={{total:item@id}} one={{item@id=2}}');
+});
+
 test('syncReplicaFromRoot mirrors workflow fields and preserves identity', () => {
   const root = baseTask({
     stage: 5,

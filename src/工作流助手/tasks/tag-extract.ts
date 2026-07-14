@@ -18,7 +18,7 @@ export function buildCompositeKey(tagName: string, attrName: string, attrValue: 
   return `${tagName}@${attrName}=${attrValue}`;
 }
 
-/** 动态属性占位符 {{tag@attr}}（无 =值） */
+/** 动态属性占位符 {{tag@attr}}（无 =值）；拒绝 total: 等脚本命名空间，避免污染副本族扫描 */
 export function parseDynamicAttrPlaceholder(name: string): { tagName: string; attrName: string } | null {
   const trimmed = name.trim();
   const atIdx = trimmed.indexOf('@');
@@ -28,7 +28,17 @@ export function parseDynamicAttrPlaceholder(name: string): { tagName: string; at
   const tagName = trimmed.slice(0, atIdx).trim();
   const attrName = trimmed.slice(atIdx + 1).trim();
   if (!tagName || !attrName) return null;
+  // tag/attr 含冒号视为脚本前缀占位符（如 total:item@id），不是动态属性规格
+  if (tagName.includes(':') || attrName.includes(':')) return null;
   return { tagName, attrName };
+}
+
+/** {{total:tag@attr}}：展开全部 tag@attr=* 实例 */
+export function parseTotalPlaceholder(name: string): { tagName: string; attrName: string } | null {
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  if (!lower.startsWith('total:')) return null;
+  return parseDynamicAttrPlaceholder(trimmed.slice('total:'.length).trim());
 }
 
 export function buildAttrGroupKey(tagName: string, attrName: string): string {

@@ -176,6 +176,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
       plotWorldbookConfig: _.cloneDeep(s.plotWorldbookConfig),
       taskPlotWorldbookOverridesEnabled: s.taskPlotWorldbookOverridesEnabled,
       taskContextOverridesEnabled: s.taskContextOverridesEnabled,
+      memoryRecallRecentCount: s.memoryRecallRecentCount ?? 10,
     };
   }
 
@@ -213,6 +214,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     settings.value.plotWorldbookConfig = _.cloneDeep(preset.plotWorldbookConfig);
     settings.value.taskPlotWorldbookOverridesEnabled = preset.taskPlotWorldbookOverridesEnabled ?? false;
     settings.value.taskContextOverridesEnabled = preset.taskContextOverridesEnabled ?? false;
+    settings.value.memoryRecallRecentCount = preset.memoryRecallRecentCount ?? 10;
     ensureReplicaFamilyCleanupDefaults(settings.value);
     persist();
   }
@@ -272,6 +274,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
         plotWorldbookConfig: s.plotWorldbookConfig,
         taskPlotWorldbookOverridesEnabled: s.taskPlotWorldbookOverridesEnabled ?? false,
         taskContextOverridesEnabled: s.taskContextOverridesEnabled ?? false,
+        memoryRecallRecentCount: s.memoryRecallRecentCount ?? 10,
       };
 
       const hadApiInFile = importedSettingsHadApiConfig(s) || detectSecretsInImportRaw(raw);

@@ -40,6 +40,7 @@ export function buildChatSnapshotFromSettings(settings: ScriptSettings): PostPro
     plotWorldbookConfig: _.cloneDeep(settings.plotWorldbookConfig),
     taskPlotWorldbookOverridesEnabled: settings.taskPlotWorldbookOverridesEnabled ?? false,
     taskContextOverridesEnabled: settings.taskContextOverridesEnabled ?? false,
+    memoryRecallRecentCount: settings.memoryRecallRecentCount ?? 10,
   });
 }
 

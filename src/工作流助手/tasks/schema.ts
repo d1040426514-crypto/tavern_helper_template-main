@@ -297,6 +297,8 @@ export const PostProcessPresetSchema = z.object({
   }),
   taskPlotWorldbookOverridesEnabled: z.boolean().default(false),
   taskContextOverridesEnabled: z.boolean().default(false),
+  /** $6：最近 N 条 AM 纪要世界书条目 */
+  memoryRecallRecentCount: z.number().int().min(0).default(10),
 });
 
 export const ScheduleStateEntrySchema = z.object({
@@ -346,6 +348,7 @@ export const ScriptSettingsSchema = z
     }),
     taskPlotWorldbookOverridesEnabled: z.boolean().default(false),
     taskContextOverridesEnabled: z.boolean().default(false),
+    memoryRecallRecentCount: z.number().int().min(0).default(10),
     finalInjectTemplate: z.string().default(''),
     tagVariableInjectTemplate: z.string().default(''),
     chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),

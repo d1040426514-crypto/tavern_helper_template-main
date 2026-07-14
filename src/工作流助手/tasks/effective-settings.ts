@@ -20,5 +20,6 @@ export function resolveEffectiveSettings(base: ScriptSettings): ScriptSettings {
   s.plotWorldbookConfig = _.cloneDeep(snap.plotWorldbookConfig);
   s.taskPlotWorldbookOverridesEnabled = snap.taskPlotWorldbookOverridesEnabled ?? false;
   s.taskContextOverridesEnabled = snap.taskContextOverridesEnabled ?? false;
+  s.memoryRecallRecentCount = snap.memoryRecallRecentCount ?? 10;
   return ScriptSettingsSchema.parse(s);
 }

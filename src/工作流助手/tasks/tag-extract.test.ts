@@ -122,17 +122,32 @@ test('placeholder item@id=1 precise', () => {
   assert.ok(!out.includes('<item><item'));
 });
 
-test('placeholder item expands all', () => {
+test('placeholder item expands bare key only', () => {
   const map: RelayTagMap = new Map([
     ['item@id=1', ['<item id="1">A</item>']],
     ['item@id=2', ['<item id="2">B</item>']],
     ['item', ['<item>无id</item>']],
   ]);
-  const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id']));
-  assert.ok(out.includes('<item id="1">\nA\n</item>'));
-  assert.ok(out.includes('<item id="2">\nB\n</item>'));
-  assert.ok(out.includes('<item>\n无id\n</item>'));
-  assert.ok(!out.includes('<item><item'));
+  const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id', 'item']));
+  assert.equal(out, '<item>\n无id\n</item>');
+  assert.ok(!out.includes('<item id="1">'));
+  assert.ok(!out.includes('<item id="2">'));
+});
+
+test('placeholder total:item@id expands all attr instances', () => {
+  const map: RelayTagMap = new Map([
+    ['item@id=2', ['<item id="2">B</item>']],
+    ['item@id=1', ['<item id="1">A</item>']],
+    ['item', ['<item>无id</item>']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:item@id}}',
+    map,
+    new Map(),
+    new Set(['item@id']),
+  );
+  assert.ok(out.indexOf('<item id="1">') < out.indexOf('<item id="2">'));
+  assert.ok(!out.includes('<item>无id</item>'));
 });
 
 test('placeholder item@id dynamic expands attr instances only', () => {
@@ -254,7 +269,9 @@ test('refreshNestedExtractTagsInContent ignores unconfigured tags', () => {
     new Set(['story']),
     { historyFallback: 'all-tags' },
   );
-  assert.equal(out, '<story><other>old</other></story>');
+  // story 在注入名单内会按 format 规范换行包裹；未配置的 other 不被刷新为 relay 新值
+  assert.equal(out, '<story>\n<other>old</other>\n</story>');
+  assert.ok(!out.includes('<other>new</other>'));
 });
 
 test('filterXmlExtractedTagsForDisplay drops ReplicaEnum registry markers', () => {

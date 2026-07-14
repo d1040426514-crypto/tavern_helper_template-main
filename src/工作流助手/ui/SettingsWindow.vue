@@ -277,6 +277,7 @@ function buildPresetFieldsPatch() {
     plotWorldbookConfig: _.cloneDeep(settings.value.plotWorldbookConfig),
     taskPlotWorldbookOverridesEnabled: settings.value.taskPlotWorldbookOverridesEnabled,
     taskContextOverridesEnabled: settings.value.taskContextOverridesEnabled,
+    memoryRecallRecentCount: settings.value.memoryRecallRecentCount ?? 10,
   };
 }
 
@@ -339,6 +340,7 @@ function syncPresetFieldsFromEffective() {
   settings.value.plotWorldbookConfig = _.cloneDeep(effective.plotWorldbookConfig);
   settings.value.taskPlotWorldbookOverridesEnabled = effective.taskPlotWorldbookOverridesEnabled;
   settings.value.taskContextOverridesEnabled = effective.taskContextOverridesEnabled;
+  settings.value.memoryRecallRecentCount = effective.memoryRecallRecentCount ?? 10;
   defaultContextConfigRef.value = {
     contextTurnCount: effective.contextTurnCount,
     contextExtractRules: _.cloneDeep(effective.contextExtractRules),
@@ -415,6 +417,19 @@ const taskContextOverridesModel = computed({
   get: () => settings.value.taskContextOverridesEnabled,
   set(v: boolean) {
     settings.value.taskContextOverridesEnabled = v;
+    if (chatScopeActive.value) {
+      void persistPresetFieldsNow();
+      return;
+    }
+    schedulePersistPresetFields();
+  },
+});
+
+const memoryRecallRecentCountModel = computed({
+  get: () => settings.value.memoryRecallRecentCount ?? 10,
+  set(v: number) {
+    const n = Number.isFinite(v) ? Math.max(0, Math.floor(v)) : 10;
+    settings.value.memoryRecallRecentCount = n;
     if (chatScopeActive.value) {
       void persistPresetFieldsNow();
       return;
@@ -1822,6 +1837,25 @@ function saveRunLogTaskTags(taskId: string): void {
             :tasks="taskTabTasks"
             :default-context-config="defaultContextConfigRef"
           />
+          <div class="acu-section">
+            <h4>$6 记忆回溯</h4>
+            <p class="acu-notes">
+              从世界书读取 shujuku「总结条目 / 小总结条目」中带 AM 编码的纪要条目，取最近 N 条（AM 编码最大），包装为
+              <code>&lt;记忆回溯&gt;</code>。全局配置，不按任务。
+            </p>
+            <div class="acu-row">
+              <label>最近</label>
+              <input
+                v-model.number="memoryRecallRecentCountModel"
+                class="acu-input"
+                type="number"
+                min="0"
+                step="1"
+                style="width: 5em"
+              />
+              <span>条 AM 纪要</span>
+            </div>
+          </div>
 
           <div class="acu-section">
             <h4>占位符说明</h4>

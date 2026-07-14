@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
-import type { PlotWorldbookConfig } from '../tasks/schema';
+import { loadSettings } from '../settings';
+import { resolveEffectiveSettings } from '../tasks/effective-settings';
+import type { ChatWorldbookWriteRule, PlotWorldbookConfig } from '../tasks/schema';
 import { shouldShowEntryInUi } from '../worldbook/blocked';
 import {
   isPlotWorldbookEntrySelectable,
@@ -24,9 +26,18 @@ const config = defineModel<PlotWorldbookConfig>('config', { required: true });
 const bookFilter = ref('');
 const entryFilter = ref('');
 const loading = ref(false);
+const writeRules = ref<ChatWorldbookWriteRule[]>([]);
 const entryGroups = ref<
   { bookName: string; entries: { uid: number; label: string; checked: boolean; disabled: boolean }[] }[]
 >([]);
+
+function refreshWriteRules() {
+  try {
+    writeRules.value = resolveEffectiveSettings(loadSettings()).chatWorldbookWriteRules ?? [];
+  } catch {
+    writeRules.value = [];
+  }
+}
 
 const cfg = computed(() => config.value);
 
@@ -102,17 +113,19 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
     }
     bookNames = [...new Set(bookNames.filter(Boolean))];
 
+    refreshWriteRules();
+    const rules = writeRules.value;
     const groups: typeof entryGroups.value = [];
     const enabledEntries = { ...cfg.value.enabledEntries };
     const initialEnabledEntries = { ...cfg.value.enabledEntries };
     for (const bookName of bookNames) {
       const entries = await getWorldbook(bookName);
-      const selectableUids = selectablePlotWorldbookEntryUids(entries);
+      const selectableUids = selectablePlotWorldbookEntryUids(entries, rules);
       if (enabledEntries[bookName] === undefined) {
         enabledEntries[bookName] = selectableUids;
       } else {
         const prev = enabledEntries[bookName] ?? [];
-        const sanitized = sanitizePlotWorldbookEnabledUids(entries, prev);
+        const sanitized = sanitizePlotWorldbookEnabledUids(entries, prev, rules);
         const prevKey = [...prev].sort((a, b) => a - b).join(',');
         const sanitizedKey = [...sanitized].sort((a, b) => a - b).join(',');
         if (prevKey !== sanitizedKey) {
@@ -121,12 +134,12 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
       }
       const enabled = enabledEntries[bookName] ?? [];
       const visible = entries
-        .filter(e => shouldShowEntryInUi({ name: e.name }))
+        .filter(e => shouldShowEntryInUi({ name: e.name }, rules))
         .map(e => ({
           uid: e.uid,
           label: e.name || `条目 ${e.uid}`,
           checked: enabled.includes(e.uid),
-          disabled: !isPlotWorldbookEntrySelectable(e),
+          disabled: !isPlotWorldbookEntrySelectable(e, rules),
         }));
       if (visible.length) groups.push({ bookName, entries: visible });
     }
@@ -198,6 +211,7 @@ async function refreshBookList() {
 }
 
 onMounted(async () => {
+  refreshWriteRules();
   if (cfg.value.source === 'manual') await refreshBookList();
   await refreshEntries();
 });

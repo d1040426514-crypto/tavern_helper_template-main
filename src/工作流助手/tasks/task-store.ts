@@ -88,6 +88,7 @@ export type PresetFieldsPatch = Partial<{
   plotWorldbookConfig: PlotWorldbookConfig;
   taskPlotWorldbookOverridesEnabled: boolean;
   taskContextOverridesEnabled: boolean;
+  memoryRecallRecentCount: number;
   finalInjectTemplate: string;
   tagVariableInjectTemplate: string;
   chatExtractTags: ScriptSettings['chatExtractTags'];
@@ -273,6 +274,7 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   settings.plotWorldbookConfig = _.cloneDeep(preset.plotWorldbookConfig);
   settings.taskPlotWorldbookOverridesEnabled = preset.taskPlotWorldbookOverridesEnabled ?? false;
   settings.taskContextOverridesEnabled = preset.taskContextOverridesEnabled ?? false;
+  settings.memoryRecallRecentCount = preset.memoryRecallRecentCount ?? 10;
   saveSettings(settings);
   await clearChatTaskScope();
   await emitChatScopeChanged('inherit_global', scope.originPresetName);

@@ -1,0 +1,76 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {
+  finalizeManagedWorldbookPlaceholderContent,
+  finalizePlotWorldbookPlaceholderContent,
+  isSelectedPlotWorldbookEntry,
+} from './content';
+import type { PlotWorldbookConfig } from '../tasks/schema';
+
+function baseConfig(overrides: Partial<PlotWorldbookConfig> = {}): PlotWorldbookConfig {
+  return {
+    source: 'character',
+    manualSelection: [],
+    enabledEntries: {},
+    ...overrides,
+  };
+}
+
+test('isSelectedPlotWorldbookEntry includes all when enabledEntries empty', () => {
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 99, normalizedComment: '普通条目' },
+      baseConfig(),
+    ),
+    true,
+  );
+});
+
+test('isSelectedPlotWorldbookEntry does not auto-include WorkflowHelper for $1', () => {
+  const config = baseConfig({ enabledEntries: { BookA: [1] } });
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 99, normalizedComment: 'WorkflowHelper-result' },
+      config,
+    ),
+    false,
+  );
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 2, normalizedComment: '普通条目' },
+      config,
+    ),
+    false,
+  );
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 1, normalizedComment: '普通条目' },
+      config,
+    ),
+    true,
+  );
+});
+
+test('isSelectedPlotWorldbookEntry still auto-includes non-chronicle DB entries', () => {
+  const config = baseConfig({ enabledEntries: { BookA: [1] } });
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 50, normalizedComment: 'TavernDB-ACU-ReadableDataTable' },
+      config,
+    ),
+    true,
+  );
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 51, normalizedComment: '总结条目1' },
+      config,
+    ),
+    false,
+  );
+});
+
+test('finalize wrappers differ for $1 and $2', () => {
+  assert.match(finalizePlotWorldbookPlaceholderContent('hello', []), /<worldbook_context>/);
+  assert.match(finalizeManagedWorldbookPlaceholderContent('hello', []), /<worldbook_extra>/);
+  assert.equal(finalizeManagedWorldbookPlaceholderContent('  ', []), '');
+});

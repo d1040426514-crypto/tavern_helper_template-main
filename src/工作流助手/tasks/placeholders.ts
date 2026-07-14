@@ -1,9 +1,12 @@
 import { resolveSummaryIndexContent } from '../bridge/summary-index';
 import { buildAssistantContextSlice, buildPlotWorldbookBaseScanText } from './assistant-context';
 import {
+  finalizeManagedWorldbookPlaceholderContent,
   finalizePlotWorldbookPlaceholderContent,
+  getManagedWorldbookContentForPostProcess,
   getWorldbookContentForPostProcess,
 } from '../worldbook/content';
+import { getMemoryRecallContentForPostProcess } from '../worldbook/memory-recall';
 import {
   buildCurrentFloorTagMap,
   buildInjectOnlyTagsUnion,
@@ -37,6 +40,7 @@ export interface SharedContext {
   settings: ScriptSettings;
   vars: Record<string, string>;
   taskWorldbookCache: Map<string, string>;
+  taskManagedWorldbookCache: Map<string, string>;
   messageVarHistoryMap: RelayTagMap;
   injectOnlyTagsUnion: Set<string>;
 }
@@ -48,6 +52,14 @@ function buildContext7(settings: ScriptSettings, messageId: number, aiText: stri
 async function resolve$5(settings: ScriptSettings, snapshot: DataSnapshot, messageId: number): Promise<string> {
   const raw = await resolveSummaryIndexContent(snapshot.tablesJson, settings.plotWorldbookConfig);
   return processTemplateText(raw, messageId, { role: 'system' });
+}
+
+async function resolve$6(settings: ScriptSettings, messageId: number): Promise<string> {
+  return getMemoryRecallContentForPostProcess(
+    settings.plotWorldbookConfig,
+    settings.memoryRecallRecentCount ?? 10,
+    messageId,
+  );
 }
 
 export async function buildSharedContext(
@@ -68,6 +80,7 @@ export async function buildSharedContext(
 
   const $7 = buildContext7(settings, messageId, aiText);
   const $5 = await resolve$5(settings, snapshot, messageId);
+  const $6 = await resolve$6(settings, messageId);
 
   let $U = '';
   let $C = '';
@@ -88,7 +101,9 @@ export async function buildSharedContext(
 
   const vars: Record<string, string> = {
     $1: '',
+    $2: '',
     $5,
+    $6,
     $7,
     $8: sanitizeUserInputForPostProcess(userText),
     $U: $U ?? '',
@@ -112,6 +127,7 @@ export async function buildSharedContext(
     settings,
     vars,
     taskWorldbookCache: new Map(),
+    taskManagedWorldbookCache: new Map(),
     messageVarHistoryMap,
     injectOnlyTagsUnion,
   };
@@ -130,6 +146,26 @@ function buildPlotPlaceholderOptions(
   };
 }
 
+function buildWorldbookScanText(
+  task: PostProcessTask,
+  ctx: SharedContext,
+  relayTagMap: RelayTagMap,
+  taskContextSettings: ScriptSettings,
+  needs$8InScan: boolean,
+): string {
+  const baseScan = buildPlotWorldbookBaseScanText(taskContextSettings, ctx.messageId, ctx.aiText);
+  const triggerText = buildTaskWorldbookTriggerText(
+    buildEffectivePromptGroups(task),
+    relayTagMap,
+    ctx.messageVarHistoryMap,
+    ctx.injectOnlyTagsUnion,
+    buildPlotPlaceholderOptions(task, ctx.settings.tasks),
+  );
+  return [baseScan, triggerText, needs$8InScan ? (ctx.vars.$8?.trim() ?? '') : '']
+    .filter(Boolean)
+    .join('\n');
+}
+
 export async function resolveTaskPlaceholders(
   task: PostProcessTask,
   ctx: SharedContext,
@@ -137,6 +173,7 @@ export async function resolveTaskPlaceholders(
 ): Promise<Record<string, string>> {
   const promptContents = iterTaskPromptContents(task);
   const needs$1 = promptContents.some(c => c.includes('$1'));
+  const needs$2 = promptContents.some(c => c.includes('$2'));
   const needs$7 = promptContents.some(c => c.includes('$7'));
   const needs$8InScan = promptContents.some(c => c.includes('$8'));
   const taskContextSettings = settingsWithTaskContext(ctx.settings, task);
@@ -146,30 +183,41 @@ export async function resolveTaskPlaceholders(
     vars.$7 = buildContext7(taskContextSettings, ctx.messageId, ctx.aiText);
   }
 
+  const scanText =
+    needs$1 || needs$2
+      ? buildWorldbookScanText(task, ctx, relayTagMap, taskContextSettings, needs$8InScan)
+      : '';
+  const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);
+
   if (needs$1) {
     if (!ctx.taskWorldbookCache.has(task.id)) {
-      const baseScan = buildPlotWorldbookBaseScanText(taskContextSettings, ctx.messageId, ctx.aiText);
-      const triggerText = buildTaskWorldbookTriggerText(
-        buildEffectivePromptGroups(task),
-        relayTagMap,
-        ctx.messageVarHistoryMap,
-        ctx.injectOnlyTagsUnion,
-        buildPlotPlaceholderOptions(task, ctx.settings.tasks),
-      );
       const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
       const wb = await getWorldbookContentForPostProcess(
         wbConfig,
-        [baseScan, triggerText, needs$8InScan ? (ctx.vars.$8?.trim() ?? '') : '']
-          .filter(Boolean)
-          .join('\n'),
+        scanText,
         ctx.messageId,
+        ctx.settings.chatWorldbookWriteRules,
       );
-      const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);
-      const finalized = finalizePlotWorldbookPlaceholderContent(wb, excludeRules);
-      ctx.taskWorldbookCache.set(task.id, finalized);
+      ctx.taskWorldbookCache.set(task.id, finalizePlotWorldbookPlaceholderContent(wb, excludeRules));
     }
     vars.$1 = ctx.taskWorldbookCache.get(task.id) ?? '';
   }
+
+  if (needs$2) {
+    if (!ctx.taskManagedWorldbookCache.has(task.id)) {
+      const wb = await getManagedWorldbookContentForPostProcess(
+        scanText,
+        ctx.messageId,
+        ctx.settings.chatWorldbookWriteRules,
+      );
+      ctx.taskManagedWorldbookCache.set(
+        task.id,
+        finalizeManagedWorldbookPlaceholderContent(wb, excludeRules),
+      );
+    }
+    vars.$2 = ctx.taskManagedWorldbookCache.get(task.id) ?? '';
+  }
+
   return vars;
 }
 

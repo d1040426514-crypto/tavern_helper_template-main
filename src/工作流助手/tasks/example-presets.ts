@@ -30,6 +30,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    memoryRecallRecentCount: 10,
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
     chatWorldbookWriteRules: [],
@@ -127,6 +128,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    memoryRecallRecentCount: 10,
   },
   {
     name: '正文润色示例',
@@ -184,6 +186,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     plotWorldbookConfig: { source: 'character', manualSelection: [], enabledEntries: {} },
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
+    memoryRecallRecentCount: 10,
   },
 ];
 
@@ -199,6 +202,7 @@ export function getDefaultSettingsPartial() {
     plotWorldbookConfig: preset.plotWorldbookConfig,
     taskPlotWorldbookOverridesEnabled: preset.taskPlotWorldbookOverridesEnabled ?? false,
     taskContextOverridesEnabled: preset.taskContextOverridesEnabled ?? false,
+    memoryRecallRecentCount: preset.memoryRecallRecentCount ?? 10,
     presets: BUILTIN_PRESETS,
     activePresetName: preset.name,
   };

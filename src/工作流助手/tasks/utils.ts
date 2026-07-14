@@ -10,6 +10,7 @@ import {
   parseCompositePlaceholder,
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  parseTotalPlaceholder,
   sortAttrValues,
   storedTagValueToInner,
   findAllTagInstances,
@@ -29,6 +30,7 @@ export {
   parseCompositePlaceholder,
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  parseTotalPlaceholder,
   sortAttrValues,
   type ExtractTagSpec,
 } from './tag-extract';
@@ -192,8 +194,7 @@ export function collectRelayKeysForBareTag(tagMap: RelayTagMap, bareTagName: str
   const lower = bareTagName.toLowerCase();
   const keys: string[] = [];
   for (const k of tagMap.keys()) {
-    const kl = k.toLowerCase();
-    if (kl === lower || kl.startsWith(`${lower}@`)) keys.push(k);
+    if (k.toLowerCase() === lower) keys.push(k);
   }
   return keys.sort((a, b) => a.localeCompare(b));
 }
@@ -335,6 +336,7 @@ export function isScriptOwnedPlaceholder(
 
   const lower = trimmed.toLowerCase();
   if (lower.startsWith('replica:')) return true;
+  if (lower.startsWith('total:')) return true;
 
   if (parseDynamicAttrPlaceholder(trimmed)) return true;
   if (compositePlaceholderToKey(trimmed)) return true;
@@ -381,6 +383,18 @@ export function resolvePlaceholderForInject(
     return resolveReplicaLaunchedPlaceholder(launchedRef, options.allTasks, relayTagMap);
   }
 
+  const totalSpec = parseTotalPlaceholder(placeholderName);
+  if (totalSpec) {
+    const dynName = `${totalSpec.tagName}@${totalSpec.attrName}`;
+    return resolvePlaceholderForInject(
+      dynName,
+      relayTagMap,
+      messageVarHistoryMap,
+      injectOnlyTags,
+      options,
+    );
+  }
+
   const historyFallback = options?.historyFallback ?? 'inject-only';
   const replicaSpec = options?.replicaAttrSpec;
 
@@ -422,6 +436,12 @@ export function resolvePlaceholderForInject(
 export function isPlaceholderInjectAllowed(placeholderName: string, injectOnlyTags: Set<string>): boolean {
   const lower = placeholderName.toLowerCase();
   if (lower.startsWith('replica:')) return false;
+
+  const totalSpec = parseTotalPlaceholder(placeholderName);
+  if (totalSpec) {
+    return isPlaceholderInjectAllowed(`${totalSpec.tagName}@${totalSpec.attrName}`, injectOnlyTags);
+  }
+
   for (const spec of injectOnlyTags) {
     if (spec.toLowerCase() === lower) return true;
   }
@@ -700,6 +720,14 @@ export function expandWritableKeysFromPlaceholder(
   placeholderName: string,
   availableKeys: Iterable<string>,
 ): string[] {
+  const totalSpec = parseTotalPlaceholder(placeholderName);
+  if (totalSpec) {
+    return expandWritableKeysFromPlaceholder(
+      `${totalSpec.tagName}@${totalSpec.attrName}`,
+      availableKeys,
+    );
+  }
+
   const dyn = parseDynamicAttrPlaceholder(placeholderName);
   if (dyn) {
     return collectCompositeKeysForAttrSpec(
@@ -730,9 +758,17 @@ export function replacePlaceholdersInText(text: string, vars: Record<string, str
 export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   {
     code: '$1',
-    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}}（含 item@id 等动态占位符的完整属性标签块）+（提示词含 $8 时）过滤后的 $8；触发后条目按酒馆位置/深度/顺序排列（对齐 shujuku）；N 同 contextTurnCount；条目内容支持酒馆宏/EJS。在「世界书与上下文」开启「按任务配置 $1 世界书」后可逐任务自定义，否则全部沿用默认世界书',
+    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块（不含工作流助手托管条目与纪要记忆条目）；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}} +（提示词含 $8 时）过滤后的 $8；N 同 contextTurnCount。可按任务配置 $1 世界书',
+  },
+  {
+    code: '$2',
+    desc: '工作流助手托管世界书条目（WorkflowHelper-* / 自定义 entryName）关键词扫描，替换为 <worldbook_extra> 块；扫描基底同 $1。恒定条目始终触发，绿灯按关键字命中',
   },
   { code: '$5', desc: '纪要索引（世界书条目或数据库表快照；支持酒馆宏/EJS）' },
+  {
+    code: '$6',
+    desc: '最近 N 条 AM 编码对应的纪要世界书条目（总结条目/小总结条目），包装为 <记忆回溯>；N 在「世界书与上下文」→「$6 记忆回溯」配置，全局非按任务',
+  },
   { code: '$7', desc: '最近 N 条 AI 楼层上下文（提取/排除规则同「$7 默认上下文」）；在「世界书与上下文」开启「按任务配置 $7 上下文」后可逐任务自定义 N 与规则，否则全部沿用默认' },
   {
     code: '$8',
@@ -742,7 +778,11 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。副本族仅借 <ReplicaEnum> 注册的 relay key 决定副本数量（无内文），占位符内容读楼层变量。同 key 跨任务/跨阶段内文以换行合并为单段。支持 item@id 配置：{{item}} 展开全部实例；{{item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。裸名 {{item}} 仅展开 key=item；{{item@id}} 或 {{total:item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。副本族仅借 <ReplicaEnum> 注册的 relay key 决定副本数量（无内文），占位符内容读楼层变量。',
+  },
+  {
+    code: '{{total:标签@属性}}',
+    desc: '显式展开全部该属性规格的复合实例，例如 {{total:item@id}} 等同 {{item@id}}',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {

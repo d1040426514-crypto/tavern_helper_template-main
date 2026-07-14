@@ -1,7 +1,9 @@
 import {
-  isDbGeneratedEntry,
+  isChronicleMemoryWorldbookEntry,
   isEntryBlocked,
+  isManagedPlotWorldbookEntry,
   isOutlineOrSummaryIndexEntry,
+  isPlotDollar1AutoIncludedEntry,
   normalizeWorldbookComment,
 } from './blocked';
 import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
@@ -9,7 +11,8 @@ import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { sortPlotWorldbookEntries } from './entry-order';
 import { scanTriggeredWorldbookEntries } from './scan';
-import type { ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
+import { resolveWriteTargetBookName } from './write-from-template';
+import type { ChatWorldbookWriteRule, ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
@@ -29,6 +32,16 @@ export function finalizePlotWorldbookPlaceholderContent(
   return `\n<worldbook_context>\n${filtered}\n</worldbook_context>\n`;
 }
 
+/** $2：排除规则 + worldbook_extra 包装（与 $1 区分，避免与标签占位符重复时难拆） */
+export function finalizeManagedWorldbookPlaceholderContent(
+  raw: string,
+  excludeRules: ContextTagRule[],
+): string {
+  const filtered = applyExcludeRulesToText(raw, excludeRules).trim();
+  if (!filtered) return '';
+  return `\n<worldbook_extra>\n${filtered}\n</worldbook_extra>\n`;
+}
+
 async function resolveBookNames(config: PlotWorldbookConfig): Promise<string[]> {
   if (config.source === 'manual') {
     return [...new Set(config.manualSelection.filter(Boolean))];
@@ -44,6 +57,24 @@ async function resolveBookNames(config: PlotWorldbookConfig): Promise<string[]> 
   }
 }
 
+function resolveManagedBookNames(writeRules: ChatWorldbookWriteRule[]): string[] {
+  const names: string[] = [];
+  for (const rule of writeRules) {
+    const book = resolveWriteTargetBookName(rule);
+    if (book) names.push(book);
+  }
+  if (names.length > 0) return [...new Set(names)];
+  try {
+    const charBooks = getCharWorldbookNames('current');
+    const fallback: string[] = [];
+    if (charBooks.primary) fallback.push(charBooks.primary);
+    fallback.push(...charBooks.additional);
+    return [...new Set(fallback.filter(Boolean))];
+  } catch {
+    return [];
+  }
+}
+
 function decorateEntry(
   entry: WorldbookEntry,
   bookName: string,
@@ -53,11 +84,15 @@ function decorateEntry(
   return { ...entry, bookName, normalizedComment, placeholderOriginalIndex };
 }
 
-function isSelectedEntry(entry: DecoratedEntry, config: PlotWorldbookConfig): boolean {
+/** 对齐 shujuku isSelected：$1 仅对非纪要 DB 条目旁路；托管条目不走 $1 */
+export function isSelectedPlotWorldbookEntry(
+  entry: { bookName: string; uid: number; normalizedComment: string },
+  config: PlotWorldbookConfig,
+): boolean {
   const enabledMap = config.enabledEntries || {};
   const hasAnySelection = Object.keys(enabledMap).length > 0;
   if (!hasAnySelection) return true;
-  if (isDbGeneratedEntry(entry.normalizedComment)) return true;
+  if (isPlotDollar1AutoIncludedEntry(entry.normalizedComment)) return true;
   const list = enabledMap[entry.bookName];
   if (list == null || !Array.isArray(list)) return true;
   return list.includes(entry.uid);
@@ -81,6 +116,7 @@ export async function getWorldbookContentForPostProcess(
   config: PlotWorldbookConfig,
   baseScanText: string,
   messageId: number,
+  writeRules: ChatWorldbookWriteRule[] = [],
 ): Promise<string> {
   const bookNames = await resolveBookNames(config);
   if (bookNames.length === 0) return '';
@@ -93,9 +129,12 @@ export async function getWorldbookContentForPostProcess(
       for (const entry of entries) {
         const decorated = decorateEntry(entry, bookName, placeholderOriginalIndex++);
         if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
-        if (!isDbGeneratedEntry(decorated.normalizedComment) && isEntryBlocked(entry)) continue;
-        if (!isDbGeneratedEntry(decorated.normalizedComment) && !isPlotWorldbookEntrySelectable(entry)) continue;
-        if (!isSelectedEntry(decorated, config)) continue;
+        if (isChronicleMemoryWorldbookEntry(decorated.normalizedComment)) continue;
+        if (isManagedPlotWorldbookEntry(decorated.normalizedComment, writeRules)) continue;
+        const autoIncluded = isPlotDollar1AutoIncludedEntry(decorated.normalizedComment);
+        if (!autoIncluded && isEntryBlocked(entry)) continue;
+        if (!autoIncluded && !isPlotWorldbookEntrySelectable(entry, writeRules)) continue;
+        if (!isSelectedPlotWorldbookEntry(decorated, config)) continue;
         allEntries.push(decorated);
       }
     } catch {
@@ -108,4 +147,34 @@ export async function getWorldbookContentForPostProcess(
   return formatWorldbookEntries(triggered, messageId);
 }
 
-export { resolveBookNames };
+/** $2：仅托管条目，关键词扫描；恒定条目始终触发 */
+export async function getManagedWorldbookContentForPostProcess(
+  baseScanText: string,
+  messageId: number,
+  writeRules: ChatWorldbookWriteRule[] = [],
+): Promise<string> {
+  const bookNames = resolveManagedBookNames(writeRules);
+  if (bookNames.length === 0) return '';
+
+  const allEntries: DecoratedEntry[] = [];
+  let placeholderOriginalIndex = 0;
+  for (const bookName of bookNames) {
+    try {
+      const entries = await getWorldbook(bookName);
+      for (const entry of entries) {
+        if (!entry.enabled) continue;
+        const decorated = decorateEntry(entry, bookName, placeholderOriginalIndex++);
+        if (!isManagedPlotWorldbookEntry(decorated.normalizedComment, writeRules)) continue;
+        allEntries.push(decorated);
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  if (allEntries.length === 0) return '';
+  const triggered = sortPlotWorldbookEntries(scanTriggeredWorldbookEntries(allEntries, baseScanText));
+  return formatWorldbookEntries(triggered, messageId);
+}
+
+export { resolveBookNames, resolveManagedBookNames };
