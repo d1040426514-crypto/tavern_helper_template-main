@@ -69,8 +69,8 @@ async function formatWorldbookEntries(
 ): Promise<string> {
   const parts: string[] = [];
   for (const entry of entries) {
-    const title = await processTemplateText(entry.name || 'Entry', messageId);
-    const content = await processTemplateText(entry.content || '', messageId);
+    const title = await processTemplateText(entry.name || 'Entry', messageId, { source: 'world_info' });
+    const content = await processTemplateText(entry.content || '', messageId, { source: 'world_info' });
     if (!title && !content) continue;
     parts.push(`# ${title || 'Entry'}\n${content}`);
   }

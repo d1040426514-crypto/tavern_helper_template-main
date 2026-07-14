@@ -1,4 +1,7 @@
-import { applyTavernPromptMacros } from './helper-macros';
+import {
+  applyTavernPromptMacros,
+  type ApplyTavernPromptMacrosOptions,
+} from './helper-macros';
 
 /** 对后处理文本应用酒馆宏、助手宏与提示词模板 EJS（在脚本占位符替换之后调用） */
 
@@ -28,13 +31,17 @@ async function applyEjsTemplate(text: string, messageId: number): Promise<string
 
 /**
  * 处理顺序：
- * formatAsTavernRegexedString（正则 + ST 宏 + 全部 MacroLike）→ EJS → 再跑一轮宏
+ * formatAsTavernRegexedString（或禁用时仅 ST 宏）→ EJS → 再跑一轮宏
  */
-export async function processTemplateText(text: string, messageId: number): Promise<string> {
+export async function processTemplateText(
+  text: string,
+  messageId: number,
+  options?: ApplyTavernPromptMacrosOptions,
+): Promise<string> {
   if (!text?.trim()) return text ?? '';
 
-  let result = applyTavernPromptMacros(text, messageId);
+  let result = applyTavernPromptMacros(text, messageId, options);
   result = await applyEjsTemplate(result, messageId);
-  result = applyTavernPromptMacros(result, messageId);
+  result = applyTavernPromptMacros(result, messageId, options);
   return result;
 }

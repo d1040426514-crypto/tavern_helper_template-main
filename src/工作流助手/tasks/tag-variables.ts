@@ -441,5 +441,5 @@ export async function mergeAiFloorInjectBlock(
     historyFallback: 'all-tags',
     allTasks: settings.tasks,
   });
-  return processTemplateText(out, messageId);
+  return processTemplateText(out, messageId, { role: 'system' });
 }

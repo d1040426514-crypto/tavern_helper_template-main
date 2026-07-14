@@ -151,7 +151,7 @@ export async function renderChatBodyTagReplaceTemplate(
     historyFallback: 'all-tags',
     allTasks,
   });
-  return processTemplateText(out, messageId);
+  return processTemplateText(out, messageId, { role: 'system' });
 }
 
 function templateInnerForKey(key: string, rendered: string): string {

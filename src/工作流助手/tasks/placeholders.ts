@@ -47,7 +47,7 @@ function buildContext7(settings: ScriptSettings, messageId: number, aiText: stri
 
 async function resolve$5(settings: ScriptSettings, snapshot: DataSnapshot, messageId: number): Promise<string> {
   const raw = await resolveSummaryIndexContent(snapshot.tablesJson, settings.plotWorldbookConfig);
-  return processTemplateText(raw, messageId);
+  return processTemplateText(raw, messageId, { role: 'system' });
 }
 
 export async function buildSharedContext(
@@ -73,13 +73,15 @@ export async function buildSharedContext(
   let $C = '';
   try {
     const persona = getPersona('current');
-    $U = await processTemplateText([persona.name, persona.description].filter(Boolean).join('\n'), messageId);
+    $U = await processTemplateText([persona.name, persona.description].filter(Boolean).join('\n'), messageId, {
+      role: 'system',
+    });
   } catch {
     $U = '';
   }
   try {
     const char = await getCharacter('current');
-    $C = await processTemplateText(char.description ?? '', messageId);
+    $C = await processTemplateText(char.description ?? '', messageId, { role: 'system' });
   } catch {
     $C = '';
   }
@@ -193,7 +195,7 @@ export async function renderTaskMessages(
       injectOnlyTagsUnion,
       plotOptions,
     );
-    content = await processTemplateText(content, messageId);
+    content = await processTemplateText(content, messageId, { role: normalizePromptRole(g.role) });
     if (!content.trim()) continue;
     messages.push({
       role: normalizePromptRole(g.role),
