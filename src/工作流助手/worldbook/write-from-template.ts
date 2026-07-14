@@ -15,9 +15,12 @@ import {
   withWorldbookWriteLock,
   type WorldbookWriteAppliedEntry,
 } from './write-sync';
+import { resolveWrapperStableNames } from './write-ledger-utils';
 import type { ChatWorldbookWriteRule, ScriptSettings } from '../tasks/schema';
 import type { TaskRunResult } from '../tasks/runtime';
 import { parseCommaSeparatedList } from '../tasks/comma-separated';
+
+export { resolveWrapperEntryBaseName, resolveWrapperStableNames } from './write-ledger-utils';
 
 export const POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY = '_post_process_worldbook_write_snapshots';
 
@@ -63,6 +66,72 @@ export function resolveStableEntryName(rule: ChatWorldbookWriteRule, attrValue?:
     return `${custom}-${attrValue}`;
   }
   return custom;
+}
+
+/** 按属性拆分包裹：XML 标签名（可配置；空则用目标标签 tagName） */
+export function resolveWrapTagName(rule: ChatWorldbookWriteRule): string {
+  const custom = (rule.wrapTagName ?? '').trim();
+  if (custom) return custom;
+  const spec = parseExtractTagSpec(rule.targetTag.trim());
+  return (spec?.tagName ?? rule.targetTag.trim()).trim();
+}
+
+export function resolveWrapperContent(rule: ChatWorldbookWriteRule, side: 'before' | 'after'): string {
+  const tag = resolveWrapTagName(rule);
+  if (!tag) return '';
+  return side === 'before' ? `<${tag}>` : `</${tag}>`;
+}
+
+function buildPositionWithOrder(rule: ChatWorldbookWriteRule, order: number): WorldbookEntry['position'] {
+  const placement = normalizeWorldbookWritePlacement(rule.placement);
+  const normalized = normalizePlotWorldbookPosition(placement.position);
+  if (normalized === 'at_depth_as_system') {
+    return {
+      type: 'at_depth',
+      role: 'system',
+      depth: placement.depth,
+      order,
+    };
+  }
+  return {
+    type: normalized,
+    role: 'system',
+    depth: 0,
+    order,
+  };
+}
+
+/** 包裹条目固定 constant；order 为规则 order±1 */
+export function buildWrapperEntryPartial(
+  rule: ChatWorldbookWriteRule,
+  side: 'before' | 'after',
+): Partial<WorldbookEntry> {
+  const placement = normalizeWorldbookWritePlacement(rule.placement);
+  const baseOrder = placement.order;
+  const order = side === 'before' ? Math.max(1, baseOrder - 1) : baseOrder + 1;
+  const content = resolveWrapperContent(rule, side);
+  return {
+    enabled: true,
+    content,
+    strategy: {
+      type: 'constant',
+      keys: [],
+      keys_secondary: { logic: 'and_any', keys: [] },
+      scan_depth: 'same_as_global',
+    },
+    position: buildPositionWithOrder(rule, order),
+    probability: 100,
+    recursion: {
+      prevent_incoming: false,
+      prevent_outgoing: rule.preventRecursion !== false,
+      delay_until: null,
+    },
+    effect: {
+      sticky: null,
+      cooldown: null,
+      delay: null,
+    },
+  };
 }
 
 export function resolveWorldbookWriteContent(
@@ -339,6 +408,7 @@ export async function applyChatWorldbookWriteAfterStage(
       const useSplit = rule.splitByAttr && !!spec?.attrName;
       const keysToWrite = useSplit ? Object.keys(stageTags) : [spec?.tagName ?? rule.targetTag.trim()];
 
+      let writtenCount = 0;
       for (const tagKey of keysToWrite) {
         const rendered = await renderChatBodyTagReplaceTemplate(
           rule.template,
@@ -372,6 +442,31 @@ export async function applyChatWorldbookWriteAfterStage(
           partial: appliedPartial,
         };
         await appendAppliedToMessage(messageId, applied);
+        writtenCount += 1;
+      }
+
+      if (useSplit && writtenCount > 0) {
+        const { before, after } = resolveWrapperStableNames(rule);
+        for (const side of ['before', 'after'] as const) {
+          const stableName = side === 'before' ? before : after;
+          const partial = buildWrapperEntryPartial(rule, side);
+          if (!partial.content) continue;
+          partial.name = stableName;
+
+          const { previous } = await upsertEntryByStableName(bookName, stableName, partial);
+          if (previous) {
+            await appendSnapshotToMessage(messageId, previous);
+          }
+
+          const appliedPartial = _.cloneDeep(partial);
+          appliedPartial.name = stableName;
+          await appendAppliedToMessage(messageId, {
+            ruleId: rule.id,
+            bookName,
+            stableName,
+            partial: appliedPartial,
+          });
+        }
       }
     }
   });

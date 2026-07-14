@@ -23,6 +23,7 @@ function baseRule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldboo
     entryType: 'keyword',
     keywords: '',
     splitByAttr: true,
+    wrapTagName: '',
     placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
     preventRecursion: true,
     ...overrides,
@@ -104,6 +105,19 @@ test('isManagedWorldbookEntryNameForRule custom entryName prefix', () => {
   const rule = baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true });
   assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-断剑', rule), true);
   assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-断剑', rule), false);
+});
+
+test('isManagedWorldbookEntryNameForRule wrapper entries when splitByAttr', () => {
+  const rule = baseRule({ targetTag: 'item@name', splitByAttr: true });
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-上', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-下', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-上', baseRule({ splitByAttr: false })), false);
+});
+
+test('isManagedWorldbookEntryNameForRule custom wrapper base', () => {
+  const rule = baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true });
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-上', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-下', rule), true);
 });
 
 console.log('write-reconcile.test.ts: all passed');

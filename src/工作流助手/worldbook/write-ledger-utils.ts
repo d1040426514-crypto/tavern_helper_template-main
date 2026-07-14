@@ -1,4 +1,5 @@
 import type { ChatWorldbookWriteRule } from '../tasks/schema';
+import { parseExtractTagSpec } from '../tasks/tag-extract';
 import { WORKFLOW_HELPER_ENTRY_PREFIX, type WorldbookWriteAppliedEntry } from './write-sync';
 
 export function ledgerEntryKey(bookName: string, stableName: string): string {
@@ -14,11 +15,42 @@ export function customEntryNamePrefix(rule: ChatWorldbookWriteRule): string | nu
   return custom;
 }
 
+/** 包裹条目共用 base（不含 -包裹-上/下） */
+export function resolveWrapperEntryBaseName(rule: ChatWorldbookWriteRule): string {
+  const custom = rule.entryName.trim();
+  if (custom) {
+    if (custom.includes('{attrValue}')) {
+      const prefix = custom.split('{attrValue}')[0] ?? '';
+      const trimmed = prefix.replace(/[-_\s]+$/u, '').trim();
+      return trimmed || prefix.trim() || 'WorkflowHelper';
+    }
+    return custom;
+  }
+  const spec = parseExtractTagSpec(rule.targetTag.trim());
+  const tagName = spec?.tagName ?? rule.targetTag.trim();
+  return `WorkflowHelper-${tagName}`;
+}
+
+export function resolveWrapperStableNames(rule: ChatWorldbookWriteRule): { before: string; after: string } {
+  const base = resolveWrapperEntryBaseName(rule);
+  return {
+    before: `${base}-包裹-上`,
+    after: `${base}-包裹-下`,
+  };
+}
+
+function isWrapperEntryNameForRule(name: string, rule: ChatWorldbookWriteRule): boolean {
+  if (!rule.splitByAttr) return false;
+  const { before, after } = resolveWrapperStableNames(rule);
+  return name === before || name === after;
+}
+
 export function isManagedWorldbookEntryName(name: string, rules: ChatWorldbookWriteRule[]): boolean {
   const trimmed = (name || '').trim();
   if (!trimmed) return false;
   if (trimmed.startsWith(WORKFLOW_HELPER_ENTRY_PREFIX)) return true;
   return rules.some(rule => {
+    if (isWrapperEntryNameForRule(trimmed, rule)) return true;
     const prefix = customEntryNamePrefix(rule);
     return !!prefix && trimmed.startsWith(prefix);
   });
@@ -28,6 +60,7 @@ export function isManagedWorldbookEntryName(name: string, rules: ChatWorldbookWr
 export function isManagedWorldbookEntryNameForRule(name: string, rule: ChatWorldbookWriteRule): boolean {
   const trimmed = (name || '').trim();
   if (!trimmed) return false;
+  if (isWrapperEntryNameForRule(trimmed, rule)) return true;
   const customPrefix = customEntryNamePrefix(rule);
   if (customPrefix) return trimmed.startsWith(customPrefix);
   const tag = rule.targetTag.trim();

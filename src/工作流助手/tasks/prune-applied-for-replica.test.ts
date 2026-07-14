@@ -14,6 +14,7 @@ function rule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldbookWri
     entryType: 'keyword',
     keywords: '',
     splitByAttr: true,
+    wrapTagName: '',
     placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
     preventRecursion: true,
     ...overrides,

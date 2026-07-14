@@ -610,9 +610,18 @@ function addChatWorldbookWriteRule(): void {
     entryType: hasAttr ? 'keyword' : 'constant',
     keywords: '',
     splitByAttr: hasAttr,
+    wrapTagName: '',
     placement: { ...DEFAULT_WORLDBOOK_WRITE_PLACEMENT },
     preventRecursion: true,
   });
+}
+
+function worldbookWriteWrapTagPlaceholder(rule: { targetTag?: string }): string {
+  const tag = (rule.targetTag ?? '').trim();
+  if (!tag) return '默认：目标标签名';
+  const atIdx = tag.indexOf('@');
+  const tagName = atIdx > 0 ? tag.slice(0, atIdx) : tag;
+  return `留空则 ${tagName}`;
 }
 
 function worldbookWriteEntryNamePlaceholder(rule: {
@@ -2674,7 +2683,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong> 仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong>防止递归触发</strong> 对应世界书条目「禁止本条目递归激活其他条目」，默认开启。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-                条目名留空时使用默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。可手动填写覆盖，拆分时可用 <code>{attrValue}</code> 占位。写入内容保留完整标签块。
+                条目名留空时使用默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。可手动填写覆盖，拆分时可用 <code>{attrValue}</code> 占位。写入内容保留完整标签块。开启按属性拆分且实际写出属性条目时，会额外维护两条独立恒定条目 <code>{base}-包裹-上</code> / <code>{base}-包裹-下</code>（正文为可配置的开/闭标签，插入顺序分别为规则 order±1）。
               </p>
             </AcuHelpPanel>
             <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
@@ -2731,6 +2740,15 @@ function saveRunLogTaskTags(taskId: string): void {
                     <input v-model="rule.splitByAttr" type="checkbox" />
                     <span>启用</span>
                   </label>
+                </div>
+                <div v-if="rule.splitByAttr" style="flex: 0 0 120px">
+                  <label class="acu-label-with-help">包裹标签名</label>
+                  <input
+                    v-model="rule.wrapTagName"
+                    class="acu-input"
+                    style="width: 100%"
+                    :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
+                  />
                 </div>
                 <div style="flex: 0 0 110px">
                   <label class="acu-label-with-help">目标世界书</label>

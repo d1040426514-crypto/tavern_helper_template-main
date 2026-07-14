@@ -2,9 +2,14 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   buildWorldbookEntryPartial,
+  buildWrapperEntryPartial,
   defaultWorldbookEntryName,
   resolveEntryKeys,
   resolveStableEntryName,
+  resolveWrapTagName,
+  resolveWrapperContent,
+  resolveWrapperEntryBaseName,
+  resolveWrapperStableNames,
   resolveWorldbookWriteContent,
   resolveWriteTargetBookName,
 } from './write-from-template';
@@ -21,6 +26,7 @@ function baseRule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldboo
     entryType: 'keyword',
     keywords: '',
     splitByAttr: true,
+    wrapTagName: '',
     placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
     preventRecursion: true,
     ...overrides,
@@ -131,6 +137,40 @@ test('buildWorldbookEntryPartial preventRecursion maps to prevent_outgoing', () 
 test('resolveWriteTargetBookName manual', () => {
   assert.equal(resolveWriteTargetBookName(baseRule({ bookSource: 'manual', manualBookName: 'MyBook' })), 'MyBook');
   assert.equal(resolveWriteTargetBookName(baseRule({ bookSource: 'manual', manualBookName: '' })), null);
+});
+
+test('resolveWrapTagName defaults to target tagName', () => {
+  assert.equal(resolveWrapTagName(baseRule()), 'item');
+  assert.equal(resolveWrapTagName(baseRule({ wrapTagName: '物品列表' })), '物品列表');
+});
+
+test('resolveWrapperEntryBaseName default and custom', () => {
+  assert.equal(resolveWrapperEntryBaseName(baseRule()), 'WorkflowHelper-item');
+  assert.equal(resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry' })), 'MyEntry');
+  assert.equal(resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry-{attrValue}' })), 'MyEntry');
+});
+
+test('resolveWrapperStableNames appends 包裹-上/下', () => {
+  assert.deepEqual(resolveWrapperStableNames(baseRule()), {
+    before: 'WorkflowHelper-item-包裹-上',
+    after: 'WorkflowHelper-item-包裹-下',
+  });
+});
+
+test('resolveWrapperContent open/close tags', () => {
+  assert.equal(resolveWrapperContent(baseRule(), 'before'), '<item>');
+  assert.equal(resolveWrapperContent(baseRule(), 'after'), '</item>');
+  assert.equal(resolveWrapperContent(baseRule({ wrapTagName: 'bag' }), 'before'), '<bag>');
+});
+
+test('buildWrapperEntryPartial constant with order offset', () => {
+  const before = buildWrapperEntryPartial(baseRule(), 'before');
+  const after = buildWrapperEntryPartial(baseRule(), 'after');
+  assert.equal(before.strategy?.type, 'constant');
+  assert.equal(before.content, '<item>');
+  assert.equal(before.position?.order, 9999);
+  assert.equal(after.content, '</item>');
+  assert.equal(after.position?.order, 10001);
 });
 
 console.log('write-from-template.test.ts: all passed');

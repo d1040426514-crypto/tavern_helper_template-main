@@ -269,6 +269,8 @@ export const ChatWorldbookWriteRuleSchema = z.object({
   entryType: z.enum(['constant', 'keyword']).default('constant'),
   keywords: z.string().default(''),
   splitByAttr: z.boolean().default(false),
+  /** 按属性拆分时包裹开/闭标签名；空则用目标标签的 tagName */
+  wrapTagName: z.string().default(''),
   placement: ChatWorldbookWritePlacementSchema.default({
     position: 'at_depth_as_system',
     depth: 2,
