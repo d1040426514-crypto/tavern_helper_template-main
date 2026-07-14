@@ -1,4 +1,9 @@
-import { isChronicleMemoryWorldbookEntry, normalizeWorldbookComment } from './blocked';
+import {
+  isChronicleMemoryRowEntry,
+  isChronicleMemoryWrapAfter,
+  isChronicleMemoryWrapBefore,
+  normalizeWorldbookComment,
+} from './blocked';
 import { processTemplateText } from '../tasks/template-process';
 import { resolveBookNames } from './content';
 import type { PlotWorldbookConfig } from '../tasks/schema';
@@ -41,24 +46,32 @@ export function selectRecentChronicleMemoryEntries(
   return taken.sort((a, b) => a.am - b.am || a.entry.uid - b.entry.uid);
 }
 
-export function wrapMemoryRecallContent(raw: string): string {
-  const trimmed = String(raw || '').trim();
-  if (!trimmed) return '';
-  return `\n<记忆回溯>\n${trimmed}\n</记忆回溯>\n`;
+/** 有选中行时：包裹上 → 行 → 包裹下；条目 content 原样拼接（不做外层 <记忆回溯>） */
+export function assembleMemoryRecallEntries(parts: {
+  wrapBefore?: WorldbookEntry | null;
+  rows: WorldbookEntry[];
+  wrapAfter?: WorldbookEntry | null;
+}): WorldbookEntry[] {
+  if (parts.rows.length === 0) return [];
+  const out: WorldbookEntry[] = [];
+  if (parts.wrapBefore) out.push(parts.wrapBefore);
+  out.push(...parts.rows);
+  if (parts.wrapAfter) out.push(parts.wrapAfter);
+  return out;
 }
 
-async function formatEntries(entries: WorldbookEntry[], messageId: number): Promise<string> {
+async function formatEntryContents(entries: WorldbookEntry[], messageId: number): Promise<string> {
   const parts: string[] = [];
   for (const entry of entries) {
-    const title = await processTemplateText(entry.name || 'Entry', messageId, { source: 'world_info' });
     const content = await processTemplateText(entry.content || '', messageId, { source: 'world_info' });
-    if (!title && !content) continue;
-    parts.push(`# ${title || 'Entry'}\n${content}`);
+    const trimmed = String(content || '').trim();
+    if (!trimmed) continue;
+    parts.push(trimmed);
   }
   return parts.join('\n\n');
 }
 
-/** $6：最近 N 条 AM 纪要世界书条目，包 <记忆回溯> */
+/** $6：最近 N 条 AM 纪要行 + 可选 包裹上下；content 原样输出 */
 export async function getMemoryRecallContentForPostProcess(
   config: PlotWorldbookConfig,
   recentCount: number,
@@ -68,13 +81,24 @@ export async function getMemoryRecallContentForPostProcess(
   if (bookNames.length === 0) return '';
 
   const candidates: ChronicleMemoryCandidate[] = [];
+  let wrapBefore: WorldbookEntry | null = null;
+  let wrapAfter: WorldbookEntry | null = null;
+
   for (const bookName of bookNames) {
     try {
       const entries = await getWorldbook(bookName);
       for (const entry of entries) {
         if (!entry.enabled) continue;
         const normalized = normalizeWorldbookComment(entry.name);
-        if (!isChronicleMemoryWorldbookEntry(normalized)) continue;
+        if (isChronicleMemoryWrapBefore(normalized)) {
+          if (!wrapBefore) wrapBefore = entry;
+          continue;
+        }
+        if (isChronicleMemoryWrapAfter(normalized)) {
+          if (!wrapAfter) wrapAfter = entry;
+          continue;
+        }
+        if (!isChronicleMemoryRowEntry(normalized)) continue;
         const am = extractAmCodeFromEntry(entry);
         if (am == null) continue;
         candidates.push({ entry, bookName, am });
@@ -85,10 +109,11 @@ export async function getMemoryRecallContentForPostProcess(
   }
 
   const selected = selectRecentChronicleMemoryEntries(candidates, recentCount);
-  if (selected.length === 0) return '';
-  const raw = await formatEntries(
-    selected.map(c => c.entry),
-    messageId,
-  );
-  return wrapMemoryRecallContent(raw);
+  const ordered = assembleMemoryRecallEntries({
+    wrapBefore,
+    rows: selected.map(c => c.entry),
+    wrapAfter,
+  });
+  if (ordered.length === 0) return '';
+  return formatEntryContents(ordered, messageId);
 }

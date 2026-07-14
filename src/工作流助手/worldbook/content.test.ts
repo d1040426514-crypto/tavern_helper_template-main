@@ -67,6 +67,20 @@ test('isSelectedPlotWorldbookEntry still auto-includes non-chronicle DB entries'
     ),
     false,
   );
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 52, normalizedComment: 'TavernDB-ACU-CustomExport-纪要-1' },
+      config,
+    ),
+    false,
+  );
+  assert.equal(
+    isSelectedPlotWorldbookEntry(
+      { bookName: 'BookA', uid: 53, normalizedComment: 'TavernDB-ACU-CustomExport-纪要-包裹-上' },
+      config,
+    ),
+    false,
+  );
 });
 
 test('finalize wrappers differ for $1 and $2', () => {

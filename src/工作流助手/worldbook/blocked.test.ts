@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   isAutoIncludedPlotWorldbookEntry,
+  isChronicleMemoryRowEntry,
+  isChronicleMemoryWrapAfter,
+  isChronicleMemoryWrapBefore,
+  isChronicleMemoryWrapEntry,
   isChronicleMemoryWorldbookEntry,
   isManagedPlotWorldbookEntry,
   isPlotDollar1AutoIncludedEntry,
@@ -33,17 +37,41 @@ test('isWorkflowHelperManagedEntry matches default prefix', () => {
   assert.equal(isWorkflowHelperManagedEntry('普通条目'), false);
 });
 
-test('isChronicleMemoryWorldbookEntry matches summary prefixes', () => {
+test('isChronicleMemoryRowEntry matches CustomExport rows and legacy summary', () => {
+  assert.equal(isChronicleMemoryRowEntry('TavernDB-ACU-CustomExport-纪要-1'), true);
+  assert.equal(isChronicleMemoryRowEntry('TavernDB-ACU-CustomExport-纪要-12'), true);
+  assert.equal(isChronicleMemoryRowEntry('总结条目1'), true);
+  assert.equal(isChronicleMemoryRowEntry('小总结条目2'), true);
+  assert.equal(isChronicleMemoryRowEntry('TavernDB-ACU-CustomExport-纪要-包裹-上'), false);
+  assert.equal(isChronicleMemoryRowEntry('TavernDB-ACU-CustomExport-纪要索引'), false);
+  assert.equal(isChronicleMemoryRowEntry('TavernDB-ACU-foo'), false);
+});
+
+test('isChronicleMemoryWrapEntry matches 包裹上/下', () => {
+  assert.equal(isChronicleMemoryWrapEntry('TavernDB-ACU-CustomExport-纪要-包裹-上'), true);
+  assert.equal(isChronicleMemoryWrapEntry('TavernDB-ACU-CustomExport-纪要-包裹-下'), true);
+  assert.equal(isChronicleMemoryWrapBefore('TavernDB-ACU-CustomExport-纪要-包裹-上'), true);
+  assert.equal(isChronicleMemoryWrapAfter('TavernDB-ACU-CustomExport-纪要-包裹-下'), true);
+  assert.equal(isChronicleMemoryWrapEntry('TavernDB-ACU-CustomExport-纪要-1'), false);
+});
+
+test('isChronicleMemoryWorldbookEntry covers row, wrap, and header', () => {
+  assert.equal(isChronicleMemoryWorldbookEntry('TavernDB-ACU-CustomExport-纪要-1'), true);
+  assert.equal(isChronicleMemoryWorldbookEntry('TavernDB-ACU-CustomExport-纪要-包裹-上'), true);
+  assert.equal(isChronicleMemoryWorldbookEntry('TavernDB-ACU-CustomExport-纪要-表头'), true);
   assert.equal(isChronicleMemoryWorldbookEntry('总结条目1'), true);
-  assert.equal(isChronicleMemoryWorldbookEntry('小总结条目2'), true);
+  assert.equal(isChronicleMemoryWorldbookEntry('TavernDB-ACU-CustomExport-纪要索引'), false);
   assert.equal(isChronicleMemoryWorldbookEntry('TavernDB-ACU-foo'), false);
 });
 
-test('isPlotDollar1AutoIncludedEntry excludes managed and chronicle', () => {
+test('isPlotDollar1AutoIncludedEntry excludes managed and chronicle CustomExport', () => {
   assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-foo'), true);
   assert.equal(isPlotDollar1AutoIncludedEntry('重要人物条目-x'), true);
   assert.equal(isPlotDollar1AutoIncludedEntry('WorkflowHelper-item'), false);
   assert.equal(isPlotDollar1AutoIncludedEntry('总结条目1'), false);
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-纪要-1'), false);
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-纪要-包裹-下'), false);
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-纪要-表头'), false);
   assert.equal(isPlotDollar1AutoIncludedEntry('普通条目'), false);
 });
 

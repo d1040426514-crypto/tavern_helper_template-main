@@ -1840,8 +1840,13 @@ function saveRunLogTaskTags(taskId: string): void {
           <div class="acu-section">
             <h4>$6 记忆回溯</h4>
             <p class="acu-notes">
-              从世界书读取 shujuku「总结条目 / 小总结条目」中带 AM 编码的纪要条目，取最近 N 条（AM 编码最大），包装为
-              <code>&lt;记忆回溯&gt;</code>。全局配置，不按任务。
+              从世界书读取 shujuku
+              <code>CustomExport-纪要-N</code>
+              （兼认遗留总结条目）中带 AM 编码的行条目，取最近 N 条；若存在
+              <code>纪要-包裹-上/下</code>
+              则一并附上（不计 N）。条目 content 原样拼接，不再额外包
+              <code>&lt;记忆回溯&gt;</code>
+              。全局配置，不按任务。
             </p>
             <div class="acu-row">
               <label>最近</label>

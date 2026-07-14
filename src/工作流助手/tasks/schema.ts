@@ -297,7 +297,7 @@ export const PostProcessPresetSchema = z.object({
   }),
   taskPlotWorldbookOverridesEnabled: z.boolean().default(false),
   taskContextOverridesEnabled: z.boolean().default(false),
-  /** $6：最近 N 条 AM 纪要世界书条目 */
+  /** $6：最近 N 条 AM 纪要行条目（CustomExport-纪要-N） */
   memoryRecallRecentCount: z.number().int().min(0).default(10),
 });
 
