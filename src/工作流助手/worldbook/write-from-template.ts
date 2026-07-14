@@ -17,6 +17,7 @@ import {
 } from './write-sync';
 import type { ChatWorldbookWriteRule, ScriptSettings } from '../tasks/schema';
 import type { TaskRunResult } from '../tasks/runtime';
+import { parseCommaSeparatedList } from '../tasks/comma-separated';
 
 export const POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY = '_post_process_worldbook_write_snapshots';
 
@@ -38,10 +39,7 @@ function isMvuExtraAnalysisActive(): boolean {
 }
 
 function splitCommaKeywords(raw: string): string[] {
-  return String(raw ?? '')
-    .split(/[,，]/)
-    .map(s => s.trim())
-    .filter(Boolean);
+  return parseCommaSeparatedList(raw);
 }
 
 export function defaultWorldbookEntryName(rule: ChatWorldbookWriteRule, attrValue?: string): string {

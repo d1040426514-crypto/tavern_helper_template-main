@@ -13,6 +13,11 @@ import {
 } from '../tasks/tag-variables';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
+import {
+  commaSeparatedListsEqual,
+  formatCommaSeparatedList,
+  parseCommaSeparatedList,
+} from '../tasks/comma-separated';
 import { STRUCTURED_OUTPUT_MODE_HELP } from '../tasks/strict-variable-response';
 import {
   syncStructuredOutputPromptGroup,
@@ -829,20 +834,101 @@ const timeSourceType = computed({
   },
 });
 
-const timeTagNames = computed({
-  get: () => {
+const chatExtractUserTagsDraft = ref('');
+const chatExtractAssistantTagsDraft = ref('');
+const extractInjectTagsDraft = ref('');
+const timeTagNamesDraft = ref('');
+
+function syncCommaListDraftIfNeeded(draft: { value: string }, model: string[]): void {
+  const parsed = parseCommaSeparatedList(draft.value);
+  if (!commaSeparatedListsEqual(parsed, model)) {
+    draft.value = formatCommaSeparatedList(model);
+  }
+}
+
+watch(
+  () => settings.value.chatExtractTags?.user ?? [],
+  tags => syncCommaListDraftIfNeeded(chatExtractUserTagsDraft, tags),
+  { deep: true, immediate: true },
+);
+
+watch(
+  () => settings.value.chatExtractTags?.assistant ?? [],
+  tags => syncCommaListDraftIfNeeded(chatExtractAssistantTagsDraft, tags),
+  { deep: true, immediate: true },
+);
+
+watch(
+  () => selectedTask.value?.extractInjectTags ?? [],
+  tags => syncCommaListDraftIfNeeded(extractInjectTagsDraft, tags),
+  { deep: true, immediate: true },
+);
+
+watch(
+  () => {
     const src = selectedTask.value?.schedule?.timeInterval?.timeSource;
-    return src?.type === 'message_tag' ? src.tagNames.join(',') : 'time';
+    return src?.type === 'message_tag' ? src.tagNames : ['time'];
   },
-  set: (v: string) => {
-    const task = selectedTask.value;
-    if (!task?.schedule?.timeInterval?.timeSource || task.schedule.timeInterval.timeSource.type !== 'message_tag') return;
-    task.schedule.timeInterval.timeSource.tagNames = v
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-  },
-});
+  tags => syncCommaListDraftIfNeeded(timeTagNamesDraft, tags),
+  { deep: true, immediate: true },
+);
+
+function onChatExtractUserTagsInput(e: Event): void {
+  const raw = (e.target as HTMLInputElement).value;
+  chatExtractUserTagsDraft.value = raw;
+  settings.value.chatExtractTags = {
+    user: parseCommaSeparatedList(raw),
+    assistant: settings.value.chatExtractTags?.assistant ?? [],
+  };
+}
+
+function onChatExtractUserTagsBlur(): void {
+  chatExtractUserTagsDraft.value = formatCommaSeparatedList(settings.value.chatExtractTags?.user ?? []);
+}
+
+function onChatExtractAssistantTagsInput(e: Event): void {
+  const raw = (e.target as HTMLInputElement).value;
+  chatExtractAssistantTagsDraft.value = raw;
+  settings.value.chatExtractTags = {
+    user: settings.value.chatExtractTags?.user ?? [],
+    assistant: parseCommaSeparatedList(raw),
+  };
+}
+
+function onChatExtractAssistantTagsBlur(): void {
+  chatExtractAssistantTagsDraft.value = formatCommaSeparatedList(
+    settings.value.chatExtractTags?.assistant ?? [],
+  );
+}
+
+function onExtractInjectTagsInput(e: Event): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  const raw = (e.target as HTMLInputElement).value;
+  extractInjectTagsDraft.value = raw;
+  task.extractInjectTags = parseCommaSeparatedList(raw);
+}
+
+function onExtractInjectTagsBlur(): void {
+  extractInjectTagsDraft.value = formatCommaSeparatedList(selectedTask.value?.extractInjectTags ?? []);
+}
+
+function onTimeTagNamesInput(e: Event): void {
+  const raw = (e.target as HTMLInputElement).value;
+  timeTagNamesDraft.value = raw;
+  const task = selectedTask.value;
+  if (!task?.schedule?.timeInterval?.timeSource || task.schedule.timeInterval.timeSource.type !== 'message_tag') {
+    return;
+  }
+  task.schedule.timeInterval.timeSource.tagNames = parseCommaSeparatedList(raw);
+}
+
+function onTimeTagNamesBlur(): void {
+  const src = selectedTask.value?.schedule?.timeInterval?.timeSource;
+  timeTagNamesDraft.value = formatCommaSeparatedList(
+    src?.type === 'message_tag' ? src.tagNames : [],
+  );
+}
 
 const timeTagScope = computed({
   get: () => {
@@ -1847,17 +1933,10 @@ function saveRunLogTaskTags(taskId: string): void {
                 id="chat-extract-user-tags"
                 class="acu-input"
                 style="flex: 1"
-                placeholder="逗号分隔，如 input,context 或 item@id；留空=关闭"
-                :value="(settings.chatExtractTags?.user ?? []).join(',')"
-                @input="
-                  settings.chatExtractTags = {
-                    user: ($event.target as HTMLInputElement).value
-                      .split(',')
-                      .map(s => s.trim())
-                      .filter(Boolean),
-                    assistant: settings.chatExtractTags?.assistant ?? [],
-                  }
-                "
+                placeholder="半角或全角逗号分隔，如 input,context 或 item@id；留空=关闭"
+                :value="chatExtractUserTagsDraft"
+                @input="onChatExtractUserTagsInput"
+                @blur="onChatExtractUserTagsBlur"
               />
             </div>
             <div class="acu-row acu-row--extract-tags">
@@ -1866,17 +1945,10 @@ function saveRunLogTaskTags(taskId: string): void {
                 id="chat-extract-assistant-tags"
                 class="acu-input"
                 style="flex: 1"
-                placeholder="逗号分隔，如 gametxt,summary 或 item@id；留空=关闭"
-                :value="(settings.chatExtractTags?.assistant ?? []).join(',')"
-                @input="
-                  settings.chatExtractTags = {
-                    user: settings.chatExtractTags?.user ?? [],
-                    assistant: ($event.target as HTMLInputElement).value
-                      .split(',')
-                      .map(s => s.trim())
-                      .filter(Boolean),
-                  }
-                "
+                placeholder="半角或全角逗号分隔，如 gametxt,summary 或 item@id；留空=关闭"
+                :value="chatExtractAssistantTagsDraft"
+                @input="onChatExtractAssistantTagsInput"
+                @blur="onChatExtractAssistantTagsBlur"
               />
             </div>
           </div>
@@ -2212,8 +2284,15 @@ function saveRunLogTaskTags(taskId: string): void {
                   </div>
                   <template v-if="timeSourceType === 'message_tag'">
                     <div class="acu-row">
-                      <label>标签名（逗号分隔）</label>
-                      <input v-model="timeTagNames" class="acu-input" placeholder="time, 世界时间" style="flex: 1" />
+                      <label>标签名（半角或全角逗号分隔）</label>
+                      <input
+                        class="acu-input"
+                        style="flex: 1"
+                        placeholder="time,世界时间 或 time，世界时间"
+                        :value="timeTagNamesDraft"
+                        @input="onTimeTagNamesInput"
+                        @blur="onTimeTagNamesBlur"
+                      />
                     </div>
                     <div class="acu-row">
                       <label>扫描范围</label>
@@ -2292,9 +2371,10 @@ function saveRunLogTaskTags(taskId: string): void {
                   id="extract-inject-tags-input"
                   class="acu-input"
                   style="flex: 1"
-                  placeholder="如 recall,supplement 或 item@id"
-                  :value="(selectedTask.extractInjectTags ?? []).join(',')"
-                  @input="selectedTask.extractInjectTags = ($event.target as HTMLInputElement).value.split(',').map(s => s.trim()).filter(Boolean)"
+                  placeholder="半角或全角逗号分隔，如 recall,supplement 或 item@id"
+                  :value="extractInjectTagsDraft"
+                  @input="onExtractInjectTagsInput"
+                  @blur="onExtractInjectTagsBlur"
                 />
               </div>
               <AcuHelpPanel
