@@ -1,5 +1,4 @@
 import {
-  buildCompositeKey,
   buildExtractSpecKey,
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
@@ -13,7 +12,6 @@ import {
   parseExtractTagSpec,
   sortAttrValues,
   storedTagValueToInner,
-  type ExtractTagSpec,
   findAllTagInstances,
 } from './tag-extract';
 import { isEnumRegistryMarker } from './replica-enum-parse';
@@ -650,7 +648,6 @@ export function replacePlotTagPlaceholdersWithHistory(
   options?: PlotPlaceholderResolveOptions,
 ): string {
   const re = new RegExp(PLOT_TAG_PLACEHOLDER_RE.source, 'g');
-  const historyFallback = options?.historyFallback ?? 'inject-only';
 
   return String(text || '').replace(re, (placeholder, rawName: string) => {
     const tagName = rawName.trim();
