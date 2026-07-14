@@ -170,6 +170,27 @@ test('all-tags fallback preserves unconfigured ASCII placeholder for tavern macr
   assert.equal(out, 'x{{missing}}y');
 });
 
+test('preserves tavern and helper variable macros for macro pass', () => {
+  const macros =
+    '{{getvar::复活机制}}' +
+    '{{get_message_variable::stat_data.世界.时间}}' +
+    '{{format_message_variable::stat_data.世界}}' +
+    '{{get_global_variable::x}}' +
+    '{{format_chat_variable::商品.1}}' +
+    '{{.local}}{{$global}}';
+  const out = replacePlotTagPlaceholdersWithHistory(macros, new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, macros);
+});
+
+test('still clears unowned chinese script tags with no data', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('x{{中文标签}}y', new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, 'xy');
+});
+
 test('mergeRelayTagMap appends same key', () => {
   const map: RelayTagMap = new Map();
   mergeRelayTagMap(map, { 'item@id=1': 'S1' });
