@@ -1,3 +1,4 @@
+import { waitUntil } from 'async-wait-until';
 import { reloadOnChatChange } from '@util/script';
 
 import { Addon } from './global-api';
@@ -30,6 +31,14 @@ export {
 
 export const REPROCESS_ADDON_BUTTON_NAME = '重新处理addon变量';
 
+function parentHasSillyTavern(): boolean {
+  try {
+    return !!_.get(window.parent, 'SillyTavern');
+  } catch {
+    return false;
+  }
+}
+
 function initAddonMvu(): void {
   backfillChatAddonData();
 
@@ -56,6 +65,11 @@ function initAddonMvu(): void {
   console.info('[addon-mvu] 已加载: addon_data 继承、<AddonJSONPatch> 解析与 Addon 全局 API 已启用');
 }
 
-$(() => {
+$(async () => {
+  try {
+    await waitUntil(() => parentHasSillyTavern(), { timeout: 60000 });
+  } catch {
+    // parent.SillyTavern 超时未就绪时仍尝试初始化; reloadOnChatChange 会做防御处理
+  }
   errorCatched(initAddonMvu)();
 });

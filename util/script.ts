@@ -41,9 +41,52 @@ export function createScriptIdDiv(): JQuery<HTMLDivElement> {
   return $('<div>').attr('script_id', getScriptId()) as JQuery<HTMLDivElement>;
 }
 
+function tryGetParentSillyTavern(): unknown {
+  try {
+    return _.get(window.parent, 'SillyTavern');
+  } catch {
+    return undefined;
+  }
+}
+
+function tryGetCurrentChatId(): string | undefined {
+  try {
+    if (!tryGetParentSillyTavern()) {
+      return undefined;
+    }
+    const id = SillyTavern.getCurrentChatId();
+    return id ? String(id) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 聊天切换时刷新脚本 iframe. 初始化时若 parent.SillyTavern 尚未就绪,
+ * 不会抛错, 而是等首次 CHAT_CHANGED / 稍后回填当前 chatId.
+ */
 export function reloadOnChatChange(): EventOnReturn {
-  let chat_id = SillyTavern.getCurrentChatId();
+  let chat_id = tryGetCurrentChatId();
+
+  if (chat_id === undefined) {
+    void (async () => {
+      const { waitUntil } = await import('async-wait-until');
+      try {
+        await waitUntil(() => !!tryGetParentSillyTavern(), { timeout: 30000 });
+      } catch {
+        // ignore timeout; CHAT_CHANGED may still set chat_id later
+      }
+      if (chat_id === undefined) {
+        chat_id = tryGetCurrentChatId();
+      }
+    })();
+  }
+
   return eventOn(tavern_events.CHAT_CHANGED, new_chat_id => {
+    if (chat_id === undefined) {
+      chat_id = new_chat_id;
+      return;
+    }
     if (chat_id !== new_chat_id) {
       chat_id = new_chat_id;
       window.location.reload();
