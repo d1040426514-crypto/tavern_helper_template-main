@@ -41,7 +41,11 @@ import AcuConfirmDialog from './AcuConfirmDialog.vue';
 import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
 import { useTaskClipboard } from './composables/useTaskClipboard';
 import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
-import { movePromptGroupAt } from '../tasks/prompt-group-ops';
+import {
+  movePromptGroupAt,
+  remapManualExpandedKeys,
+  reorderPromptGroupsAt,
+} from '../tasks/prompt-group-ops';
 import {
   alignFallbackMaxConcurrencies,
   DEFAULT_ROUTE_MAX_CONCURRENCY,
@@ -182,6 +186,9 @@ const promptPreviewRows = computed(() => {
 const manualPromptGroupCount = computed(() => promptPreviewTask.value?.promptGroups?.length ?? 0);
 
 const expandedPromptRowKeys = ref<Set<string>>(new Set());
+const promptZoneRef = ref<HTMLElement | null>(null);
+const promptDrag = ref<{ fromIndex: number; toIndex: number } | null>(null);
+let promptDragCleanup: (() => void) | null = null;
 
 function promptRowKey(row: (typeof promptPreviewRows.value)[number]): string {
   return row.kind === 'manual' ? `m-${row.manualIndex}` : `a-${row.segmentId}`;
@@ -198,8 +205,85 @@ function togglePromptRow(key: string) {
   expandedPromptRowKeys.value = next;
 }
 
+function promptDropMarker(manualIndex: number): 'before' | 'after' | null {
+  const drag = promptDrag.value;
+  if (!drag || drag.fromIndex === drag.toIndex) return null;
+  if (drag.toIndex < drag.fromIndex && manualIndex === drag.toIndex) return 'before';
+  if (drag.toIndex > drag.fromIndex && manualIndex === drag.toIndex) return 'after';
+  return null;
+}
+
+function calcPromptDropIndex(clientY: number, fromIndex: number): number {
+  const zone = promptZoneRef.value;
+  if (!zone) return fromIndex;
+  const cards = zone.querySelectorAll<HTMLElement>('[data-manual-index]');
+  const mids: { index: number; mid: number }[] = [];
+  cards.forEach(card => {
+    const idx = Number(card.dataset.manualIndex);
+    if (!Number.isInteger(idx)) return;
+    const rect = card.getBoundingClientRect();
+    mids.push({ index: idx, mid: rect.top + rect.height / 2 });
+  });
+  mids.sort((a, b) => a.index - b.index);
+  if (mids.length === 0) return fromIndex;
+  let desired = mids.length - 1;
+  for (let i = 0; i < mids.length; i++) {
+    if (clientY < mids[i]!.mid) {
+      desired = i;
+      break;
+    }
+  }
+  return desired;
+}
+
+function onPromptDragStart(payload: { pointerId: number; clientY: number; fromIndex: number }) {
+  if (isViewingReplicaMember.value) return;
+  promptDragCleanup?.();
+  promptDrag.value = { fromIndex: payload.fromIndex, toIndex: payload.fromIndex };
+
+  // 助手脚本在 iframe，设置 UI 挂在父文档；必须在 ownerDocument 上听 pointer 事件
+  const eventDoc = promptZoneRef.value?.ownerDocument ?? document;
+  const eventTarget: Document | Window = eventDoc.defaultView ?? eventDoc;
+
+  const onMove = (e: Event) => {
+    const pe = e as PointerEvent;
+    if (pe.pointerId !== payload.pointerId) return;
+    const toIndex = calcPromptDropIndex(pe.clientY, payload.fromIndex);
+    const cur = promptDrag.value;
+    if (!cur) return;
+    if (cur.toIndex !== toIndex) {
+      promptDrag.value = { fromIndex: cur.fromIndex, toIndex };
+    }
+  };
+  const onUp = (e: Event) => {
+    const pe = e as PointerEvent;
+    if (pe.pointerId !== payload.pointerId) return;
+    promptDragCleanup?.();
+    promptDragCleanup = null;
+    const drag = promptDrag.value;
+    promptDrag.value = null;
+    if (!drag || drag.fromIndex === drag.toIndex) return;
+    void reorderPromptGroup(drag.fromIndex, drag.toIndex);
+  };
+  promptDragCleanup = () => {
+    eventTarget.removeEventListener('pointermove', onMove);
+    eventTarget.removeEventListener('pointerup', onUp);
+    eventTarget.removeEventListener('pointercancel', onUp);
+  };
+  eventTarget.addEventListener('pointermove', onMove);
+  eventTarget.addEventListener('pointerup', onUp);
+  eventTarget.addEventListener('pointercancel', onUp);
+  const initialTo = calcPromptDropIndex(payload.clientY, payload.fromIndex);
+  if (initialTo !== payload.fromIndex) {
+    promptDrag.value = { fromIndex: payload.fromIndex, toIndex: initialTo };
+  }
+}
+
 watch(selectedTaskId, () => {
   expandedPromptRowKeys.value = new Set();
+  promptDragCleanup?.();
+  promptDragCleanup = null;
+  promptDrag.value = null;
 });
 
 function collectUsedApiPresetNames(task: PostProcessTask | null | undefined): Set<string> {
@@ -1311,20 +1395,52 @@ async function removePromptGroup(index: number): Promise<void> {
   }
 }
 
+function applyPromptGroupsReorder(fromIndex: number, toIndex: number): void {
+  const task = promptPreviewTask.value ?? selectedTask.value;
+  if (!task || fromIndex === toIndex) return;
+  task.promptGroups = reorderPromptGroupsAt(task.promptGroups ?? [], fromIndex, toIndex);
+  expandedPromptRowKeys.value = remapManualExpandedKeys(
+    expandedPromptRowKeys.value,
+    fromIndex,
+    toIndex,
+  );
+}
+
+async function persistPromptGroupsIfChatScope(): Promise<void> {
+  if (!chatScopeActive.value) return;
+  if (persistViewTasksTimer) {
+    clearTimeout(persistViewTasksTimer);
+    persistViewTasksTimer = null;
+  }
+  await replaceTasks(viewTasks.value, 'ui');
+}
+
 async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
   const task = promptPreviewTask.value ?? selectedTask.value;
   if (!task) return;
   try {
-    task.promptGroups = movePromptGroupAt(task.promptGroups ?? [], index, delta);
-    if (chatScopeActive.value) {
-      if (persistViewTasksTimer) {
-        clearTimeout(persistViewTasksTimer);
-        persistViewTasksTimer = null;
-      }
-      await replaceTasks(viewTasks.value, 'ui');
-    }
+    const next = movePromptGroupAt(task.promptGroups ?? [], index, delta);
+    const toIndex = index + delta;
+    task.promptGroups = next;
+    expandedPromptRowKeys.value = remapManualExpandedKeys(
+      expandedPromptRowKeys.value,
+      index,
+      toIndex,
+    );
+    await persistPromptGroupsIfChatScope();
   } catch {
     // 边界不可移动时静默忽略
+  }
+}
+
+async function reorderPromptGroup(fromIndex: number, toIndex: number): Promise<void> {
+  const task = promptPreviewTask.value ?? selectedTask.value;
+  if (!task) return;
+  try {
+    applyPromptGroupsReorder(fromIndex, toIndex);
+    await persistPromptGroupsIfChatScope();
+  } catch {
+    // 越界等异常静默忽略
   }
 }
 
@@ -1402,6 +1518,9 @@ onUnmounted(() => {
   document.removeEventListener('keydown', onFullscreenKeydown);
   offTasksChanged?.stop();
   offChatScopeChanged?.stop();
+  promptDragCleanup?.();
+  promptDragCleanup = null;
+  promptDrag.value = null;
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
   if (persistPresetFieldsTimer) clearTimeout(persistPresetFieldsTimer);
   if (persistGlobalSettingsTimer) {
@@ -2404,7 +2523,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 v-if="selectedTask && !isViewingReplicaMember"
                 :task="selectedTask"
               />
-              <div class="acu-subsection acu-task-prompt-zone">
+              <div ref="promptZoneRef" class="acu-subsection acu-task-prompt-zone">
               <template v-if="!isViewingReplicaMember">
               <div class="acu-row acu-row--extract-tags">
                 <label class="acu-label-with-help" for="extract-inject-tags-input">
@@ -2534,9 +2653,16 @@ function saveRunLogTaskTags(taskId: string): void {
                   :manual-index="row.kind === 'manual' ? row.manualIndex : -1"
                   :manual-count="manualPromptGroupCount"
                   :disabled="isViewingReplicaMember"
+                  :dragging="
+                    row.kind === 'manual' && promptDrag?.fromIndex === row.manualIndex
+                  "
+                  :drop-marker="
+                    row.kind === 'manual' ? promptDropMarker(row.manualIndex) : null
+                  "
                   @toggle="togglePromptRow(promptRowKey(row))"
                   @move="delta => row.kind === 'manual' && movePromptGroup(row.manualIndex, delta)"
                   @remove="row.kind === 'manual' && removePromptGroup(row.manualIndex)"
+                  @drag-start="onPromptDragStart"
                 />
               </template>
               <button
