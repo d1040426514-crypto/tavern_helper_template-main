@@ -243,7 +243,8 @@ export async function renderTaskMessages(
       injectOnlyTagsUnion,
       plotOptions,
     );
-    content = await processTemplateText(content, messageId, { role: normalizePromptRole(g.role) });
+    // 预设段不套用「用户输入/AI输出」正则作用域，固定 slash_command；API role 仍按段配置
+    content = await processTemplateText(content, messageId, { source: 'slash_command' });
     if (!content.trim()) continue;
     messages.push({
       role: normalizePromptRole(g.role),
