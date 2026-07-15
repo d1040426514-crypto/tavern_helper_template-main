@@ -1,0 +1,362 @@
+import type {
+  AttrMap,
+  BusinessData,
+  CurrencyBlock,
+  EntityData,
+  LedgerData,
+  LedgerTimeData,
+  NamedBlock,
+  OperationsData,
+  OpsLine,
+  ProjectData,
+} from './types';
+
+/** 去掉 HTML 注释；修正标签名与属性粘连 */
+function normalizeMarkup(text: string): string {
+  return String(text ?? '')
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(
+      /<(本期结算|外因|内因|流动资金|实体|经营|运营|基础设施|仓库|人员|收入|支出|产能|可交付|闭环校验|净值|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
+      '<$1 $2',
+    );
+}
+
+function softTrim(text: string): string {
+  return String(text ?? '')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+/** 解析开标签属性。支持中英属性名：name、合计金额 等。 */
+export function parseAttrs(openTag: string): AttrMap {
+  const attrs: AttrMap = {};
+  const mTag = openTag.match(/^<\s*([^\s/>]+)([\s\S]*?)\/?>$/);
+  if (!mTag) return attrs;
+  const rest = mTag[2] ?? '';
+
+  const re = /([\u4e00-\u9fff\w.-]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s/>]+))/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(rest)) !== null) {
+    attrs[m[1]] = m[2] ?? m[3] ?? m[4] ?? '';
+  }
+  return attrs;
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+type TagHit = {
+  openTag: string;
+  attrs: AttrMap;
+  inner: string;
+  full: string;
+};
+
+/** 找出所有成对标签实例（支持开标签带属性） */
+export function findAllPairs(source: string, tagName: string): TagHit[] {
+  const text = String(source ?? '');
+  if (!text || !tagName) return [];
+  const openRe = new RegExp(`<\\s*${escapeRegExp(tagName)}(?=[\\s/>])([^>]*)>`, 'gi');
+  const closeToken = `</${tagName}>`;
+  const hits: TagHit[] = [];
+  let m: RegExpExecArray | null;
+
+  while ((m = openRe.exec(text)) !== null) {
+    const openStart = m.index;
+    const openEnd = openRe.lastIndex;
+    const openTag = m[0];
+    // 自闭合
+    if (/\/\s*>$/.test(openTag)) {
+      hits.push({
+        openTag,
+        attrs: parseAttrs(openTag),
+        inner: '',
+        full: openTag,
+      });
+      continue;
+    }
+    const closeIdx = text.toLowerCase().indexOf(closeToken.toLowerCase(), openEnd);
+    if (closeIdx === -1) break;
+    const closeEnd = closeIdx + closeToken.length;
+    const inner = text.slice(openEnd, closeIdx);
+    hits.push({
+      openTag,
+      attrs: parseAttrs(openTag),
+      inner,
+      full: text.slice(openStart, closeEnd),
+    });
+    openRe.lastIndex = closeEnd;
+  }
+  return hits;
+}
+
+export function findFirstPair(source: string, tagName: string): TagHit | null {
+  return findAllPairs(source, tagName)[0] ?? null;
+}
+
+export function findAllSelfClosing(source: string, tagName: string): AttrMap[] {
+  const text = String(source ?? '');
+  const re = new RegExp(`<\\s*${escapeRegExp(tagName)}(?=[\\s/>])([^>]*?)\\s*/>`, 'gi');
+  const out: AttrMap[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    out.push(parseAttrs(m[0]));
+  }
+  return out;
+}
+
+function namedFromHits(hits: TagHit[]): NamedBlock[] {
+  return hits.map(h => ({
+    attrs: h.attrs,
+    text: softTrim(h.inner),
+  }));
+}
+
+function pickAttr(attrs: AttrMap, ...keys: string[]): string {
+  for (const k of keys) {
+    if (attrs[k] != null && attrs[k] !== '') return attrs[k];
+  }
+  // 大小写不敏感回退
+  const lowerMap = Object.fromEntries(Object.entries(attrs).map(([k, v]) => [k.toLowerCase(), v]));
+  for (const k of keys) {
+    const v = lowerMap[k.toLowerCase()];
+    if (v != null && v !== '') return v;
+  }
+  return '';
+}
+
+export function parseLedgerTime(inner: string): LedgerTimeData {
+  const raw = softTrim(normalizeMarkup(inner));
+  const lines = raw
+    .split(/\r?\n/)
+    .map(l => l.trim())
+    .filter(Boolean);
+  const timeLine = lines.find(l => /账目结算时间|结算时间/.test(l)) ?? lines[0] ?? '';
+  const gateLines = lines.filter(l => l !== timeLine);
+  return {
+    raw,
+    timeLine,
+    gateText: softTrim(gateLines.join('\n')),
+  };
+}
+
+function parseCash(body: string): { note: string; currencies: CurrencyBlock[]; cashBase: string } {
+  const block = findFirstPair(body, '流动资金');
+  if (!block) return { note: '', currencies: [], cashBase: '' };
+  const note = pickAttr(block.attrs, 'note');
+  const currencies = findAllPairs(block.inner, '币种').map(h => ({
+    code: pickAttr(h.attrs, 'code'),
+    symbol: pickAttr(h.attrs, 'symbol'),
+    attrs: h.attrs,
+    text: softTrim(h.inner),
+  }));
+  const base = findFirstPair(block.inner, '折合基准');
+  return {
+    note,
+    currencies,
+    cashBase: softTrim(base?.inner ?? ''),
+  };
+}
+
+function parseEntity(hit: TagHit): EntityData {
+  const name = pickAttr(hit.attrs, 'name') || '未命名实体';
+  const infra = findFirstPair(hit.inner, '基础设施');
+  const facilities = infra
+    ? findAllSelfClosing(infra.inner, '设施')
+    : findAllSelfClosing(hit.inner, '设施');
+
+  const warehouse = findFirstPair(hit.inner, '仓库');
+  const whInner = warehouse?.inner ?? '';
+  const materials = namedFromHits(findAllPairs(whInner, '物资'));
+  const equipments = namedFromHits(findAllPairs(whInner, '装备'));
+
+  const staff = findFirstPair(hit.inner, '人员');
+  const roles = staff ? findAllSelfClosing(staff.inner, '职级') : [];
+
+  return {
+    name,
+    attrs: hit.attrs,
+    facilities,
+    materials,
+    equipments,
+    staffTotal: staff ? pickAttr(staff.attrs, 'total') : '',
+    roles,
+  };
+}
+
+function parseBusiness(hit: TagHit): BusinessData {
+  const name = pickAttr(hit.attrs, 'name') || '未命名经营';
+  const revenue = findFirstPair(hit.inner, '收入');
+  const expense = findFirstPair(hit.inner, '支出');
+  const capacity = findFirstPair(hit.inner, '产能');
+  const deliver = findFirstPair(hit.inner, '可交付');
+  const reconcile = findFirstPair(hit.inner, '闭环校验');
+  const net = findFirstPair(hit.inner, '净值');
+
+  const lines: OpsLine[] = capacity
+    ? findAllPairs(capacity.inner, '产线').map(h => ({
+        attrs: h.attrs,
+        text: softTrim(h.inner),
+      }))
+    : [];
+
+  return {
+    name,
+    attrs: hit.attrs,
+    revenueTotal: revenue ? pickAttr(revenue.attrs, '合计金额', '金额') : '',
+    revenuePeriod: revenue ? pickAttr(revenue.attrs, '周期') : '',
+    revenueItems: revenue ? namedFromHits(findAllPairs(revenue.inner, '条目')) : [],
+    expenseTotal: expense ? pickAttr(expense.attrs, '合计金额', '金额') : '',
+    expensePeriod: expense ? pickAttr(expense.attrs, '周期') : '',
+    expenseItems: expense ? namedFromHits(findAllPairs(expense.inner, '条目')) : [],
+    lines,
+    deliverables: deliver ? findAllSelfClosing(deliver.inner, '品项') : [],
+    deliverAttrs: deliver?.attrs ?? {},
+    reconcile: reconcile
+      ? { attrs: reconcile.attrs, text: softTrim(reconcile.inner) }
+      : { attrs: {}, text: '' },
+    netWorth: softTrim(net?.inner ?? ''),
+  };
+}
+
+function parseOperations(hit: TagHit): OperationsData {
+  const name = pickAttr(hit.attrs, 'name') || '未命名运营';
+  const manager = softTrim(findFirstPair(hit.inner, '执事')?.inner ?? '');
+  const projects: ProjectData[] = findAllPairs(hit.inner, '项目').map(h => ({
+    name: pickAttr(h.attrs, 'name') || '未命名项目',
+    attrs: h.attrs,
+    text: softTrim(h.inner),
+  }));
+  return { name, attrs: hit.attrs, manager, projects };
+}
+
+function factorChildren(parentTag: string, body: string, childTags: string[]): NamedBlock[] {
+  const parent = findFirstPair(body, parentTag);
+  if (!parent) return [];
+  const out: NamedBlock[] = [];
+  for (const tag of childTags) {
+    for (const h of findAllPairs(parent.inner, tag)) {
+      out.push({
+        attrs: { ...h.attrs, _tag: tag },
+        text: softTrim(h.inner),
+      });
+    }
+  }
+  return out;
+}
+
+function deriveHeadline(periodSummary: string): LedgerData['headline'] {
+  const duration = periodSummary.match(/历时\s*[:：]\s*(.+)/)?.[1]?.trim() ?? '';
+  const statusFull = periodSummary.match(/损益\s*[:：]\s*(.+)/)?.[1]?.trim() ?? '';
+  const delta = statusFull.match(/[（(]?\s*Δ\s*([^)）]+)[)）]?/)?.[1]?.trim() ?? '';
+  const status = statusFull.replace(/[（(]\s*Δ[\s\S]*$/, '').trim() || statusFull;
+  return { duration, status, delta };
+}
+
+/** 解析资产账本内文（通常不含外层 <资产账本> 包装） */
+export function parseLedgerBody(inner: string): Omit<LedgerData, 'ledgerTime'> {
+  const body = normalizeMarkup(inner);
+  // 若偶发完整块，剥掉外层
+  const wrapped = findFirstPair(body, '资产账本');
+  const content = wrapped ? wrapped.inner : body;
+  const rootAttrs = wrapped?.attrs ?? {};
+
+  const period = findFirstPair(content, '本期结算');
+  const periodSummary = softTrim(period?.inner ?? '');
+
+  const externalFactors = factorChildren('外因', content, ['季节', '治安', '市况', '事件']);
+  const internalFactors = factorChildren('内因', content, ['工艺', '士气', '制度']);
+
+  const cash = parseCash(content);
+  const entities = findAllPairs(content, '实体').map(parseEntity);
+  const businesses = findAllPairs(content, '经营').map(parseBusiness);
+  const operations = findAllPairs(content, '运营').map(parseOperations);
+
+  const headline = deriveHeadline(periodSummary);
+  if (!headline.duration && rootAttrs.period) headline.duration = rootAttrs.period;
+  if (!headline.status && rootAttrs.status) headline.status = rootAttrs.status;
+  if (!headline.delta && rootAttrs.delta) headline.delta = rootAttrs.delta;
+
+  return {
+    periodSummary,
+    externalFactors,
+    internalFactors,
+    cashNote: cash.note,
+    currencies: cash.currencies,
+    cashBase: cash.cashBase,
+    entities,
+    businesses,
+    operations,
+    headline,
+  };
+}
+
+export function parseLedger(ledgerTimeInner: string, ledgerInner: string): LedgerData {
+  const ledgerTime = parseLedgerTime(ledgerTimeInner);
+  const body = parseLedgerBody(ledgerInner);
+  return {
+    ledgerTime,
+    ...body,
+  };
+}
+
+export function isLedgerEmpty(data: LedgerData): boolean {
+  return (
+    !data.ledgerTime.raw &&
+    !data.periodSummary &&
+    !data.entities.length &&
+    !data.businesses.length &&
+    !data.operations.length &&
+    !data.currencies.length
+  );
+}
+
+export type CashMetrics = {
+  total: string;
+  change: string;
+  changeDir: 'up' | 'down' | 'flat';
+};
+
+/** 从币种正文提取期末与 Δ */
+export function parseCashMetrics(text: string): CashMetrics {
+  const t = String(text ?? '');
+  const total = t.match(/期末\s*([+\-]?[\d,.]+(?:\.\d+)?)/)?.[1] ?? '';
+  const change = t.match(/Δ\s*([+\-]?[\d,.]+(?:\.\d+)?)/)?.[1] ?? '';
+  let changeDir: CashMetrics['changeDir'] = 'flat';
+  if (change.startsWith('-')) changeDir = 'down';
+  else if (change.startsWith('+')) changeDir = 'up';
+  else if (change) {
+    const n = Number(change.replace(/,/g, ''));
+    if (!Number.isNaN(n)) changeDir = n > 0 ? 'up' : n < 0 ? 'down' : 'flat';
+  }
+  return { total, change, changeDir };
+}
+
+export type ProgressInfo = {
+  pct: number;
+  tone: '' | 'warn' | 'critical';
+};
+
+/** 从 progress / bar / 任意状态文案推进度 */
+export function parseProgressPct(attrs: Record<string, string>, extraText = ''): ProgressInfo {
+  const progress = String(attrs.progress ?? '');
+  const bar = String(attrs.bar ?? '');
+  const hay = `${progress} ${bar} ${extraText}`;
+  let pct = 0;
+  const pctM = progress.match(/(\d+(?:\.\d+)?)\s*%/) || hay.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (pctM) pct = Math.round(Number(pctM[1]));
+  else if (bar) {
+    const filled = (bar.match(/█/g) || []).length;
+    const empty = (bar.match(/[░▒]/g) || []).length;
+    const total = filled + empty;
+    if (total > 0) pct = Math.round((filled / total) * 100);
+  }
+  pct = Math.min(100, Math.max(0, pct));
+
+  let tone: ProgressInfo['tone'] = '';
+  if (/critical|临界|危机|告急|崩溃|damaged/i.test(hay)) tone = 'critical';
+  else if (/warn|警告|partial|idle|闲置|部分|注意/i.test(hay)) tone = 'warn';
+  return { pct, tone };
+}
