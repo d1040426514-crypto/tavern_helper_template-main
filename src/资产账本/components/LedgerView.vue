@@ -62,7 +62,12 @@
           :forced-open="forcedOpen"
         >
           <div v-for="(f, i) in data.externalFactors" :key="'ext-' + i" class="factor-row">
-            <span class="tag tag-primary">{{ f.attrs._tag || '因子' }}</span>
+            <div class="factor-head">
+              <span class="tag tag-primary">{{ f.attrs._tag || '因子' }}</span>
+              <strong v-if="factorName(f)" class="factor-title">{{ factorName(f) }}</strong>
+              <span v-if="f.text" class="factor-summary">{{ oneLine(f.text) }}</span>
+            </div>
+            <AttrChips :attrs="f.attrs" :hide="['name', '_tag']" />
             <StatRow :text="f.text" />
           </div>
         </FoldPanel>
@@ -77,7 +82,12 @@
           :forced-open="forcedOpen"
         >
           <div v-for="(f, i) in data.internalFactors" :key="'int-' + i" class="factor-row">
-            <span class="tag tag-warm">{{ f.attrs._tag || '因子' }}</span>
+            <div class="factor-head">
+              <span class="tag tag-warm">{{ f.attrs._tag || '因子' }}</span>
+              <strong v-if="factorName(f)" class="factor-title">{{ factorName(f) }}</strong>
+              <span v-if="f.text" class="factor-summary">{{ oneLine(f.text) }}</span>
+            </div>
+            <AttrChips :attrs="f.attrs" :hide="['name', '_tag']" />
             <StatRow :text="f.text" />
           </div>
         </FoldPanel>
@@ -379,7 +389,7 @@ import FoldPanel from './FoldPanel.vue';
 import PreLine from './PreLine.vue';
 import ProgressBar from './ProgressBar.vue';
 import StatRow from './StatRow.vue';
-import type { BusinessData, EntityData, LedgerData } from '../types';
+import type { BusinessData, EntityData, LedgerData, NamedBlock } from '../types';
 
 defineProps<{
   data: LedgerData;
@@ -400,6 +410,11 @@ function oneLine(text: string): string {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 72);
+}
+
+/** 有 name 才返回，避免与类型 tag 重复 */
+function factorName(f: NamedBlock): string {
+  return (f.attrs.name || '').trim();
 }
 
 function pick(attrs: Record<string, string>, key: string): string {
@@ -640,7 +655,37 @@ function statusTagClass(status: string): string {
 }
 
 .factor-row {
-  margin: 6px 0;
+  margin: 8px 0;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--border-subtle);
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.factor-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-bottom: 2px;
+}
+
+.factor-title {
+  font-size: 0.85rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.factor-summary {
+  flex: 1 1 8em;
+  min-width: 0;
+  font-size: 0.68rem;
+  color: var(--text-tertiary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .item-row {
