@@ -354,11 +354,11 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     tips: [
       {
         code: '{{item@id}}',
-        desc: '动态（无 = 值）：在注入模板或提示词中批量展开全部 item@id=* 实例；副本族任务的提示词须使用此种形式。',
+        desc: '副本族识别占位符（无 = 值）：仅作副本族原本的任务规格标识；生成任务副本时自动替换为 {{item@id=1}} 等精确形式，在各副本运行时展开对应单实例。',
       },
       {
         code: '{{total:标签@属性}}',
-        desc: '显式批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 等同 {{item@id}}。',
+        desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
       },
       {
         code: '{{item@id=1}}',

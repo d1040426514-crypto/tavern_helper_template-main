@@ -778,11 +778,15 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',
-    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。裸名 {{item}} 仅展开 key=item；{{item@id}} 或 {{total:item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。副本族仅借 <ReplicaEnum> 注册的 relay key 决定副本数量（无内文），占位符内容读楼层变量。',
+    desc: '同轮 relay 优先；relay 缺省时从 post_process_tags 回退。裸名 {{item}} 仅展开 key=item；{{total:item@id}} 展开全部 item@id=*；{{item@id=1}} 精确引用。副本族仅借 <ReplicaEnum> 注册的 relay key 决定副本数量（无内文），占位符内容读楼层变量。',
+  },
+  {
+    code: '{{标签@属性}}',
+    desc: '副本族识别占位符（无 = 值，如 {{item@id}}）：标识副本族原本的任务规格；生成副本时自动替换为 {{标签@属性=值}} 精确形式（如 {{item@id=1}}），在各副本中展开对应单实例。',
   },
   {
     code: '{{total:标签@属性}}',
-    desc: '显式展开全部该属性规格的复合实例，例如 {{total:item@id}} 等同 {{item@id}}',
+    desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {
