@@ -357,12 +357,16 @@ export const EXTRACT_INJECT_TAGS_HELP = {
         desc: '动态（无 = 值）：在注入模板或提示词中批量展开全部 item@id=* 实例；副本族任务的提示词须使用此种形式。',
       },
       {
+        code: '{{total:标签@属性}}',
+        desc: '显式批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 等同 {{item@id}}。',
+      },
+      {
         code: '{{item@id=1}}',
         desc: '精确（带 = 值）：只展开单个实例，适合固定引用某一属性值。',
       },
       {
         code: '{{item}}',
-        desc: '展开裸 key item 与全部 item@id=* 实例。',
+        desc: '仅展开裸 key item（不含 item@id=* 复合实例）。',
       },
       {
         desc: '引用时输出完整标签块，保留原始属性，避免双重包裹。',
