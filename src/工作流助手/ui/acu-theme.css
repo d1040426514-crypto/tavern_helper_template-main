@@ -1330,14 +1330,23 @@
   }
 }
 
-/* ── 世界书写入规则（两行：主行 + meta） ── */
+/* ── 世界书写入规则：左标签+模板，右侧上下两行 ── */
 .acu-wb-write-rule {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: stretch;
   gap: 8px;
   width: 100%;
   min-width: 0;
   margin-bottom: 12px;
+}
+
+.acu-wb-write-rule__side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 .acu-wb-write-rule__row {
@@ -1367,6 +1376,12 @@
 .acu-wb-write-rule__field--template {
   flex: 1 1 160px;
   min-width: 160px;
+}
+
+.acu-wb-write-rule__template-input {
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: vertical;
 }
 
 .acu-wb-write-rule__field--type {
@@ -2927,6 +2942,8 @@
   }
 
   .acu-wb-write-rule {
+    flex-direction: column;
+    align-items: stretch;
     gap: 12px;
     margin-bottom: 16px;
     padding-bottom: 12px;
@@ -2936,6 +2953,12 @@
   .acu-wb-write-rule:last-of-type {
     border-bottom: 0;
     padding-bottom: 0;
+  }
+
+  .acu-wb-write-rule__side {
+    flex: 1 1 auto;
+    width: 100%;
+    gap: 12px;
   }
 
   .acu-wb-write-rule__row {
@@ -2959,6 +2982,10 @@
     flex: 1 1 auto;
     width: 100%;
     min-width: 0;
+  }
+
+  .acu-wb-write-rule__template-input {
+    min-height: 72px;
   }
 
   .acu-wb-write-rule__field .acu-input,

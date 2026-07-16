@@ -2844,139 +2844,146 @@ function saveRunLogTaskTags(taskId: string): void {
                 :key="rule.id"
                 class="acu-wb-write-rule"
               >
-                <div class="acu-wb-write-rule__row acu-wb-write-rule__row--main">
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--tag">
-                    <label class="acu-label-with-help">目标标签</label>
-                    <select v-model="rule.targetTag" class="acu-input">
-                      <option v-for="tag in worldbookWriteTargetTagOptions" :key="tag" :value="tag">
-                        {{ tag }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--template">
-                    <label class="acu-label-with-help">写入模板</label>
-                    <textarea v-model="rule.template" class="acu-textarea" rows="2" placeholder="可用 {{task:任务名}} 与 {{标签名}}" />
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--type">
-                    <label class="acu-label-with-help">条目类型</label>
-                    <select v-model="rule.entryType" class="acu-input">
-                      <option value="keyword">绿灯 keyword</option>
-                      <option value="constant">蓝灯 constant</option>
-                    </select>
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--keywords">
-                    <label class="acu-label-with-help">关键字</label>
-                    <input
-                      v-model="rule.keywords"
-                      class="acu-input"
-                      placeholder="静态 key，逗号分隔"
-                      :disabled="rule.entryType !== 'keyword'"
-                    />
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                    <label class="acu-label-with-help">按属性拆分</label>
-                    <label class="acu-checkbox-row acu-wb-write-rule__check">
-                      <input v-model="rule.splitByAttr" type="checkbox" />
-                      <span>启用</span>
-                    </label>
-                  </div>
-                  <div
-                    v-if="rule.splitByAttr"
-                    class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
-                  >
-                    <label class="acu-label-with-help">包裹标签名</label>
-                    <input
-                      v-model="rule.wrapTagName"
-                      class="acu-input"
-                      :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
-                    />
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                    <label class="acu-label-with-help">防止递归触发</label>
-                    <label class="acu-checkbox-row acu-wb-write-rule__check">
-                      <input v-model="rule.preventRecursion" type="checkbox" />
-                      <span>启用</span>
-                    </label>
-                  </div>
+                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--tag">
+                  <label class="acu-label-with-help">目标标签</label>
+                  <select v-model="rule.targetTag" class="acu-input">
+                    <option v-for="tag in worldbookWriteTargetTagOptions" :key="tag" :value="tag">
+                      {{ tag }}
+                    </option>
+                  </select>
                 </div>
-                <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--book">
-                    <label class="acu-label-with-help">目标世界书</label>
-                    <select
-                      v-model="rule.bookSource"
-                      class="acu-input"
-                      :disabled="isRuleBookTargetMigrating(rule.id)"
-                      @focus="rememberRuleBookTargetSnapshot(rule)"
-                      @change="onRuleBookTargetChanged(rule)"
+                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--template">
+                  <label class="acu-label-with-help">写入模板</label>
+                  <textarea
+                    v-model="rule.template"
+                    class="acu-textarea acu-wb-write-rule__template-input"
+                    rows="2"
+                    placeholder="可用 {{task:任务名}} 与 {{标签名}}"
+                  />
+                </div>
+                <div class="acu-wb-write-rule__side">
+                  <div class="acu-wb-write-rule__row acu-wb-write-rule__row--main">
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--type">
+                      <label class="acu-label-with-help">条目类型</label>
+                      <select v-model="rule.entryType" class="acu-input">
+                        <option value="keyword">绿灯 keyword</option>
+                        <option value="constant">蓝灯 constant</option>
+                      </select>
+                    </div>
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--keywords">
+                      <label class="acu-label-with-help">关键字</label>
+                      <input
+                        v-model="rule.keywords"
+                        class="acu-input"
+                        placeholder="静态 key，逗号分隔"
+                        :disabled="rule.entryType !== 'keyword'"
+                      />
+                    </div>
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                      <label class="acu-label-with-help">按属性拆分</label>
+                      <label class="acu-checkbox-row acu-wb-write-rule__check">
+                        <input v-model="rule.splitByAttr" type="checkbox" />
+                        <span>启用</span>
+                      </label>
+                    </div>
+                    <div
+                      v-if="rule.splitByAttr"
+                      class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
                     >
-                      <option value="character">角色主世界书</option>
-                      <option value="manual">手动指定</option>
-                    </select>
+                      <label class="acu-label-with-help">包裹标签名</label>
+                      <input
+                        v-model="rule.wrapTagName"
+                        class="acu-input"
+                        :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
+                      />
+                    </div>
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                      <label class="acu-label-with-help">防止递归触发</label>
+                      <label class="acu-checkbox-row acu-wb-write-rule__check">
+                        <input v-model="rule.preventRecursion" type="checkbox" />
+                        <span>启用</span>
+                      </label>
+                    </div>
                   </div>
-                  <div
-                    v-if="rule.bookSource === 'manual'"
-                    class="acu-wb-write-rule__field acu-wb-write-rule__field--book-name"
-                  >
-                    <label class="acu-label-with-help">世界书名</label>
-                    <select
-                      v-model="rule.manualBookName"
-                      class="acu-input"
-                      :disabled="isRuleBookTargetMigrating(rule.id)"
-                      @focus="rememberRuleBookTargetSnapshot(rule)"
-                      @change="onRuleBookTargetChanged(rule)"
+                  <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--book">
+                      <label class="acu-label-with-help">目标世界书</label>
+                      <select
+                        v-model="rule.bookSource"
+                        class="acu-input"
+                        :disabled="isRuleBookTargetMigrating(rule.id)"
+                        @focus="rememberRuleBookTargetSnapshot(rule)"
+                        @change="onRuleBookTargetChanged(rule)"
+                      >
+                        <option value="character">角色主世界书</option>
+                        <option value="manual">手动指定</option>
+                      </select>
+                    </div>
+                    <div
+                      v-if="rule.bookSource === 'manual'"
+                      class="acu-wb-write-rule__field acu-wb-write-rule__field--book-name"
                     >
-                      <option value="">请选择</option>
-                      <option v-for="name in allWorldbookNames" :key="name" :value="name">
-                        {{ name }}
-                      </option>
-                    </select>
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--position">
-                    <label class="acu-label-with-help">位置</label>
-                    <select
-                      v-model="rule.placement.position"
-                      class="acu-input"
-                      @focus="ensureWorldbookWritePlacement(rule)"
-                      @change="syncWorldbookWritePlacement(rule)"
+                      <label class="acu-label-with-help">世界书名</label>
+                      <select
+                        v-model="rule.manualBookName"
+                        class="acu-input"
+                        :disabled="isRuleBookTargetMigrating(rule.id)"
+                        @focus="rememberRuleBookTargetSnapshot(rule)"
+                        @change="onRuleBookTargetChanged(rule)"
+                      >
+                        <option value="">请选择</option>
+                        <option v-for="name in allWorldbookNames" :key="name" :value="name">
+                          {{ name }}
+                        </option>
+                      </select>
+                    </div>
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--position">
+                      <label class="acu-label-with-help">位置</label>
+                      <select
+                        v-model="rule.placement.position"
+                        class="acu-input"
+                        @focus="ensureWorldbookWritePlacement(rule)"
+                        @change="syncWorldbookWritePlacement(rule)"
+                      >
+                        <option value="at_depth_as_system">系统深度</option>
+                        <option value="before_character_definition">角色定义前</option>
+                        <option value="after_character_definition">角色定义后</option>
+                      </select>
+                    </div>
+                    <div
+                      v-if="isWorldbookWriteAtDepth(rule)"
+                      class="acu-wb-write-rule__field acu-wb-write-rule__field--num"
                     >
-                      <option value="at_depth_as_system">系统深度</option>
-                      <option value="before_character_definition">角色定义前</option>
-                      <option value="after_character_definition">角色定义后</option>
-                    </select>
+                      <label class="acu-label-with-help">插入深度</label>
+                      <input
+                        v-model.number="rule.placement.depth"
+                        type="number"
+                        class="acu-input"
+                        step="1"
+                        @focus="ensureWorldbookWritePlacement(rule)"
+                      />
+                    </div>
+                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--num">
+                      <label class="acu-label-with-help">插入顺序</label>
+                      <input
+                        v-model.number="rule.placement.order"
+                        type="number"
+                        class="acu-input"
+                        min="1"
+                        step="1"
+                        @focus="ensureWorldbookWritePlacement(rule)"
+                        @change="syncWorldbookWritePlacement(rule)"
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      class="acu-btn acu-btn--sm acu-icon-btn acu-wb-write-rule__delete"
+                      title="删除规则"
+                      @click="removeChatWorldbookWriteRule(rule.id)"
+                    >
+                      <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                    </button>
                   </div>
-                  <div
-                    v-if="isWorldbookWriteAtDepth(rule)"
-                    class="acu-wb-write-rule__field acu-wb-write-rule__field--num"
-                  >
-                    <label class="acu-label-with-help">插入深度</label>
-                    <input
-                      v-model.number="rule.placement.depth"
-                      type="number"
-                      class="acu-input"
-                      step="1"
-                      @focus="ensureWorldbookWritePlacement(rule)"
-                    />
-                  </div>
-                  <div class="acu-wb-write-rule__field acu-wb-write-rule__field--num">
-                    <label class="acu-label-with-help">插入顺序</label>
-                    <input
-                      v-model.number="rule.placement.order"
-                      type="number"
-                      class="acu-input"
-                      min="1"
-                      step="1"
-                      @focus="ensureWorldbookWritePlacement(rule)"
-                      @change="syncWorldbookWritePlacement(rule)"
-                    />
-                  </div>
-                  <button
-                    type="button"
-                    class="acu-btn acu-btn--sm acu-icon-btn acu-wb-write-rule__delete"
-                    title="删除规则"
-                    @click="removeChatWorldbookWriteRule(rule.id)"
-                  >
-                    <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
-                  </button>
                 </div>
               </div>
               <div class="acu-row acu-row--inline" style="gap: 8px">
