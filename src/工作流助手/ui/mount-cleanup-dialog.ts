@@ -5,6 +5,7 @@ import { applyThemeTokens, updateGlobalTheme } from './theme';
 import ReplicaFamilyCleanupDialog from './ReplicaFamilyCleanupDialog.vue';
 import { listReplicaFamilyCleanupCandidates } from '../tasks/replica-family-cleanup';
 import type { ScriptSettings } from '../tasks/schema';
+import { ensureVueFeatureFlags } from './ensure-vue-feature-flags';
 import './acu-theme.css';
 
 export type ReplicaFamilyCleanupDialogResult = {
@@ -53,6 +54,7 @@ export function showReplicaFamilyCleanupDialog(
     updateGlobalTheme(uiThemeId);
     applyThemeTokens($root[0], uiThemeId);
 
+    ensureVueFeatureFlags();
     const app = createApp(ReplicaFamilyCleanupDialog, {
       groups,
       onConfirm: (keepByRoot: Record<string, string[]>) => {

@@ -7,6 +7,7 @@ import { applyThemeTokens, updateGlobalTheme } from './theme';
 import { refreshVisibleAcuToasts } from './toast-styles';
 import { acuToast } from './toast';
 import { SCRIPT_LOG_PREFIX } from './brand';
+import { ensureVueFeatureFlags } from './ensure-vue-feature-flags';
 import './acu-theme.css';
 
 let app: ReturnType<typeof createApp> | null = null;
@@ -32,16 +33,18 @@ export function openSettingsWindow(): void {
     closeSettingsWindow();
   }
 
-  app = createApp(SettingsWindow);
-  app.use(createPinia());
-  app.provide('closeSettings', closeSettingsWindow);
-  app.config.errorHandler = (err, _instance, info) => {
-    console.error(`${SCRIPT_LOG_PREFIX} 设置界面渲染失败:`, err, info);
-    acuToast('error', `设置界面错误: ${err instanceof Error ? err.message : String(err)}`);
-    closeSettingsWindow();
-  };
+  ensureVueFeatureFlags();
 
   try {
+    app = createApp(SettingsWindow);
+    app.use(createPinia());
+    app.provide('closeSettings', closeSettingsWindow);
+    app.config.errorHandler = (err, _instance, info) => {
+      console.error(`${SCRIPT_LOG_PREFIX} 设置界面渲染失败:`, err, info);
+      acuToast('error', `设置界面错误: ${err instanceof Error ? err.message : String(err)}`);
+      closeSettingsWindow();
+    };
+
     $root = createScriptIdDiv()
       .addClass('acu-pp-root')
       .css({

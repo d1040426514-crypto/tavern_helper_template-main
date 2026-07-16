@@ -15,10 +15,12 @@ import { loadSettings, useSettingsStore } from './settings';
 import { updateGlobalTheme } from './ui/theme';
 import { ensureAcuToastStyles } from './ui/toast-styles';
 import { acuToast } from './ui/toast';
+import { ensureVueFeatureFlags } from './ui/ensure-vue-feature-flags';
 import { RERUN_BUTTON_LABEL, SCRIPT_DISPLAY_NAME, SCRIPT_LOG_PREFIX } from './ui/brand';
 
 export const RERUN_BUTTON_NAME = RERUN_BUTTON_LABEL;
 
+ensureVueFeatureFlags();
 initApiSecretsStorage();
 updateGlobalTheme(loadSettings().uiThemeId);
 ensureAcuToastStyles();
