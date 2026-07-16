@@ -4,7 +4,9 @@ import {
   isManagedPlotWorldbookEntry,
   isOutlineOrSummaryIndexEntry,
   isPlotDollar1AutoIncludedEntry,
+  isProtagonistInfoWorldbookEntry,
   normalizeWorldbookComment,
+  resolveProtagonistExportEntryName,
 } from './blocked';
 import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
@@ -88,11 +90,12 @@ function decorateEntry(
 export function isSelectedPlotWorldbookEntry(
   entry: { bookName: string; uid: number; normalizedComment: string },
   config: PlotWorldbookConfig,
+  protagonistEntryName?: string,
 ): boolean {
   const enabledMap = config.enabledEntries || {};
   const hasAnySelection = Object.keys(enabledMap).length > 0;
   if (!hasAnySelection) return true;
-  if (isPlotDollar1AutoIncludedEntry(entry.normalizedComment)) return true;
+  if (isPlotDollar1AutoIncludedEntry(entry.normalizedComment, protagonistEntryName)) return true;
   const list = enabledMap[entry.bookName];
   if (list == null || !Array.isArray(list)) return true;
   return list.includes(entry.uid);
@@ -117,9 +120,11 @@ export async function getWorldbookContentForPostProcess(
   baseScanText: string,
   messageId: number,
   writeRules: ChatWorldbookWriteRule[] = [],
+  tablesJson: Record<string, unknown> | null = null,
 ): Promise<string> {
   const bookNames = await resolveBookNames(config);
   if (bookNames.length === 0) return '';
+  const protagonistEntryName = resolveProtagonistExportEntryName(tablesJson);
 
   const allEntries: DecoratedEntry[] = [];
   let placeholderOriginalIndex = 0;
@@ -131,10 +136,11 @@ export async function getWorldbookContentForPostProcess(
         if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
         if (isChronicleMemoryWorldbookEntry(decorated.normalizedComment)) continue;
         if (isManagedPlotWorldbookEntry(decorated.normalizedComment, writeRules)) continue;
-        const autoIncluded = isPlotDollar1AutoIncludedEntry(decorated.normalizedComment);
+        if (isProtagonistInfoWorldbookEntry(decorated.normalizedComment, protagonistEntryName)) continue;
+        const autoIncluded = isPlotDollar1AutoIncludedEntry(decorated.normalizedComment, protagonistEntryName);
         if (!autoIncluded && isEntryBlocked(entry)) continue;
         if (!autoIncluded && !isPlotWorldbookEntrySelectable(entry, writeRules)) continue;
-        if (!isSelectedPlotWorldbookEntry(decorated, config)) continue;
+        if (!isSelectedPlotWorldbookEntry(decorated, config, protagonistEntryName)) continue;
         allEntries.push(decorated);
       }
     } catch {

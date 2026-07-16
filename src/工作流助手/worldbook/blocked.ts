@@ -69,6 +69,53 @@ export function isChronicleMemoryWorldbookEntry(normalizedComment: string): bool
   return false;
 }
 
+const DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME = '主角信息';
+const DEFAULT_PROTAGONIST_TABLE_NAME = '主角信息表';
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function readExportConfigEntryName(table: unknown): string {
+  if (!table || typeof table !== 'object') return '';
+  const exportConfig = (table as { exportConfig?: { entryName?: unknown } }).exportConfig;
+  const entryName = String(exportConfig?.entryName ?? '').trim();
+  return entryName;
+}
+
+/** 从 shujuku tablesJson 快照解析「主角信息」CustomExport entryName */
+export function resolveProtagonistExportEntryName(
+  tablesJson: Record<string, unknown> | null | undefined,
+): string {
+  if (!tablesJson || typeof tablesJson !== 'object') return DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
+  for (const table of Object.values(tablesJson)) {
+    if (!table || typeof table !== 'object') continue;
+    const tableName = String((table as { name?: unknown }).name ?? '').trim();
+    if (tableName !== DEFAULT_PROTAGONIST_TABLE_NAME) continue;
+    const entryName = readExportConfigEntryName(table);
+    return entryName || DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
+  }
+  return DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
+}
+
+function buildProtagonistInfoCommentPatterns(entryName: string): RegExp[] {
+  const escaped = escapeRegExp(entryName.trim() || DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME);
+  return [
+    new RegExp(`^TavernDB-ACU-CustomExport-${escaped}(?:-(?:表头|包裹-上|包裹-下|[1-9]\\d*))?$`),
+    new RegExp(`^TavernDB-ACU-CustomExport-${escaped}-索引$`),
+  ];
+}
+
+/** shujuku CustomExport「主角信息」→ $1 排除、$U 最新数据 */
+export function isProtagonistInfoWorldbookEntry(
+  normalizedComment: string,
+  entryName: string = DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME,
+): boolean {
+  const normalized = String(normalizedComment || '').trim();
+  if (!normalized) return false;
+  return buildProtagonistInfoCommentPatterns(entryName).some(pattern => pattern.test(normalized));
+}
+
 /** 默认前缀托管条目（规范化后） */
 export function isWorkflowHelperManagedEntry(normalizedComment: string): boolean {
   return normalizedComment.startsWith(WORKFLOW_HELPER_ENTRY_PREFIX);
@@ -86,12 +133,16 @@ export function isManagedPlotWorldbookEntry(
 }
 
 /**
- * $1 扫描始终纳入：非纪要记忆的 DB 生成条目（不含 WorkflowHelper / CustomExport 纪要相关）。
- * 对齐 shujuku 对 isDbGenerated 的旁路，但托管与纪要记忆已拆到 $2/$6。
+ * $1 扫描始终纳入：非纪要记忆 / 非主角信息的 DB 生成条目（不含 WorkflowHelper / CustomExport 纪要相关）。
+ * 对齐 shujuku 对 isDbGenerated 的旁路，但托管、纪要记忆与主角信息已拆到 $2/$6/$U。
  */
-export function isPlotDollar1AutoIncludedEntry(nameOrNormalized: string): boolean {
+export function isPlotDollar1AutoIncludedEntry(
+  nameOrNormalized: string,
+  protagonistEntryName: string = DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME,
+): boolean {
   const normalized = normalizeWorldbookComment(nameOrNormalized);
   if (isChronicleMemoryWorldbookEntry(normalized)) return false;
+  if (isProtagonistInfoWorldbookEntry(normalized, protagonistEntryName)) return false;
   if (isWorkflowHelperManagedEntry(normalized)) return false;
   return isDbGeneratedEntry(normalized);
 }

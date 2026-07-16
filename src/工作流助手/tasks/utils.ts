@@ -758,7 +758,7 @@ export function replacePlaceholdersInText(text: string, vars: Record<string, str
 export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   {
     code: '$1',
-    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块（不含工作流助手托管条目与纪要记忆条目）；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}} +（提示词含 $8 时）过滤后的 $8；N 同 contextTurnCount。可按任务配置 $1 世界书',
+    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块（不含工作流助手托管条目、纪要记忆条目与 shujuku「主角信息」CustomExport）；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}} +（提示词含 $8 时）过滤后的 $8；N 同 contextTurnCount。可按任务配置 $1 世界书',
   },
   {
     code: '$2',
@@ -767,14 +767,17 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   { code: '$5', desc: '纪要索引（世界书条目或数据库表快照；支持酒馆宏/EJS）' },
   {
     code: '$6',
-    desc: '最近 N 条 AM 编码的 CustomExport 纪要行（兼认遗留总结条目），并附带 纪要-包裹-上/下（若有）；content 原样拼接、不再外层包 <记忆回溯>。N 在「世界书与上下文」→「$6 记忆回溯」配置，全局非按任务',
+    desc: '从世界书读取 shujuku CustomExport-纪要-N（兼认遗留总结条目）中带 AM 编码的行条目，取最近 N 条；若存在 纪要-包裹-上/下 则一并附上（不计 N）。N 在「世界书与上下文」→「$6 记忆回溯」配置，全局非按任务',
   },
   { code: '$7', desc: '最近 N 条 AI 楼层上下文（提取/排除规则同「$7 默认上下文」）；在「世界书与上下文」开启「按任务配置 $7 上下文」后可逐任务自定义 N 与规则，否则全部沿用默认' },
   {
     code: '$8',
     desc: '上一楼用户输入。① 优先从标签名含「输入」或 input 的 XML 标签取最后一次内文；② 若无，则删除从首个「以上是」+（用户的本轮输入 | Participant的本轮输入 | <用户本轮输入> | <本轮用户输入>）行起至文末的全部内容，保留该行之前的文本为正文（「以下是…」不匹配）；③ 剔除 (⚠️:…) 预设警告块',
   },
-  { code: '$U', desc: '用户 persona 描述（支持酒馆宏/EJS）' },
+  {
+    code: '$U',
+    desc: '用户占位符：<{{user}}初始设定> 内为酒馆 persona_description；<{{user}}最新数据> 内为 shujuku CustomExport「主角信息」世界书条目 content 拼接（支持酒馆宏/EJS）',
+  },
   { code: '$C', desc: '当前角色 description（支持酒馆宏/EJS）' },
   {
     code: '{{标签名}}',

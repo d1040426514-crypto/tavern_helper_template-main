@@ -9,7 +9,9 @@ import {
   isChronicleMemoryWorldbookEntry,
   isManagedPlotWorldbookEntry,
   isPlotDollar1AutoIncludedEntry,
+  isProtagonistInfoWorldbookEntry,
   isWorkflowHelperManagedEntry,
+  resolveProtagonistExportEntryName,
   shouldShowEntryInUi,
 } from './blocked';
 import type { ChatWorldbookWriteRule } from '../tasks/schema';
@@ -73,6 +75,44 @@ test('isPlotDollar1AutoIncludedEntry excludes managed and chronicle CustomExport
   assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-纪要-包裹-下'), false);
   assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-纪要-表头'), false);
   assert.equal(isPlotDollar1AutoIncludedEntry('普通条目'), false);
+});
+
+test('isProtagonistInfoWorldbookEntry matches CustomExport 主角信息 variants', () => {
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息-表头'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息-包裹-上'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息-包裹-下'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息-1'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-主角信息-索引'), true);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-纪要-1'), false);
+  assert.equal(isProtagonistInfoWorldbookEntry('TavernDB-ACU-foo'), false);
+});
+
+test('isPlotDollar1AutoIncludedEntry excludes protagonist CustomExport', () => {
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-主角信息'), false);
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-主角信息-1'), false);
+  assert.equal(isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-主角信息-索引'), false);
+});
+
+test('resolveProtagonistExportEntryName reads tablesJson exportConfig', () => {
+  assert.equal(resolveProtagonistExportEntryName(null), '主角信息');
+  assert.equal(
+    resolveProtagonistExportEntryName({
+      sheet_protagonist: {
+        name: '主角信息表',
+        exportConfig: { entryName: '玩家档案' },
+      },
+    }),
+    '玩家档案',
+  );
+  assert.equal(
+    isProtagonistInfoWorldbookEntry('TavernDB-ACU-CustomExport-玩家档案-1', '玩家档案'),
+    true,
+  );
+  assert.equal(
+    isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-玩家档案', '玩家档案'),
+    false,
+  );
 });
 
 test('isManagedPlotWorldbookEntry matches WorkflowHelper only', () => {

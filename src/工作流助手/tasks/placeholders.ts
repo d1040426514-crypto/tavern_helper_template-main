@@ -14,6 +14,7 @@ import {
   inheritTagVariables,
 } from './tag-variables';
 import { processTemplateText } from './template-process';
+import { resolveDollarUContent } from './user-placeholder';
 import { getReplicaAttrSpecForTask } from './replica-family';
 import {
   buildTaskWorldbookTriggerText,
@@ -85,10 +86,7 @@ export async function buildSharedContext(
   let $U = '';
   let $C = '';
   try {
-    const persona = getPersona('current');
-    $U = await processTemplateText([persona.name, persona.description].filter(Boolean).join('\n'), messageId, {
-      role: 'system',
-    });
+    $U = await resolveDollarUContent(snapshot, messageId);
   } catch {
     $U = '';
   }
@@ -197,6 +195,7 @@ export async function resolveTaskPlaceholders(
         scanText,
         ctx.messageId,
         ctx.settings.chatWorldbookWriteRules,
+        ctx.snapshot.tablesJson,
       );
       ctx.taskWorldbookCache.set(task.id, finalizePlotWorldbookPlaceholderContent(wb, excludeRules));
     }

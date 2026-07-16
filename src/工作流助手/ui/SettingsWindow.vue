@@ -1947,9 +1947,7 @@ function saveRunLogTaskTags(taskId: string): void {
               <code>CustomExport-纪要-N</code>
               （兼认遗留总结条目）中带 AM 编码的行条目，取最近 N 条；若存在
               <code>纪要-包裹-上/下</code>
-              则一并附上（不计 N）。条目 content 原样拼接，不再额外包
-              <code>&lt;记忆回溯&gt;</code>
-              。全局配置，不按任务。
+              则一并附上（不计 N）。
             </p>
             <div class="acu-row">
               <label>最近</label>
@@ -2682,7 +2680,7 @@ function saveRunLogTaskTags(taskId: string): void {
               label="消息楼层标签变量注入说明"
             >
               <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-                仅该注入模板中显式出现的 <code v-pre>{{标签名}}</code> 会写入当前 AI 楼消息变量
+                该注入模板中显式出现的 <code v-pre>{{标签名}}</code> 会写入当前 AI 楼消息变量
                 <code>post_process_tags.{标签名}</code>。变量随楼层自动继承，供下轮工作流解读存档数据。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
@@ -2690,7 +2688,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <code v-pre>{{get_message_variable::post_process_tags.{标签名}}}</code>
                 或 EJS 代码
                 <code v-pre>&lt;%= getMessageVar('post_process_tags.{标签名}') %&gt;</code>
-                获取。
+                供外部脚本/酒馆主聊天预设获取。
               </p>
             </AcuHelpPanel>
             <textarea
