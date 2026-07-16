@@ -16,7 +16,12 @@ import {
   unmarkProcessing,
 } from './runtime';
 import { applyAssistantChatTagExtract } from './chat-tag-extract';
-import { ensureBodyReplaceOriginCaptured, restoreBodyReplaceOrigin } from './chat-body-tag-replace';
+import {
+  clearStalePostProcessRunMarkers,
+  ensureBodyReplaceOriginCaptured,
+  hasConfiguredChatBodyTagReplaceRules,
+  restoreBodyReplaceOrigin,
+} from './chat-body-tag-replace';
 import {
   clearWorldbookWriteMessageKeys,
   reconcileWorldbookWritesFromChat,
@@ -215,14 +220,23 @@ export async function handleMessageReceived(
   if (isPostProcessSilent()) return;
   if (isProcessing(targetId)) return;
 
-  const msg = getChatMessages(targetId)[0];
+  let msg = getChatMessages(targetId)[0];
   if (!msg || msg.role !== 'assistant') return;
 
+  const explicitIsRerun = options?.isRerun === true;
+  const bodyReplaceEnabled = hasConfiguredChatBodyTagReplaceRules(settings);
+  const clearedStale = await clearStalePostProcessRunMarkers(targetId);
+  if (clearedStale) {
+    msg = getChatMessages(targetId)[0];
+    if (!msg || msg.role !== 'assistant') return;
+  }
+
   const hadDoneFlag = !!(msg.data as Record<string, unknown>)?._post_process_done;
+  // 自动重跑仅认 regenerate/swipe/continue 等；GENERATION_ENDED+继承 done 不得误判为 rerun
   const isRerun =
-    options?.isRerun ??
-    (hadDoneFlag &&
-      (options?.fromGenerationEnded === true || isContentRefreshMessageType(type)));
+    explicitIsRerun ||
+    clearedStale ||
+    (hadDoneFlag && isContentRefreshMessageType(type));
 
   if (!options?.force && hadDoneFlag && !isRerun) return;
 
@@ -240,7 +254,10 @@ export async function handleMessageReceived(
   try {
     if (isRerun) {
       restorePostProcessTagsFromPreviousFloor(targetId);
-      await restoreBodyReplaceOrigin(targetId);
+      // 仅手动重跑且启用正文替换时才 restore；自动路径若 restore 会把新楼/刷新生文打回上一轮 origin
+      if (bodyReplaceEnabled && explicitIsRerun) {
+        await restoreBodyReplaceOrigin(targetId);
+      }
       await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
       await clearWorldbookWriteMessageKeys(targetId);
       await reconcileReplicaTasksFromChat({ excludeMessageId: targetId, reason: 'rerun' });
@@ -249,7 +266,9 @@ export async function handleMessageReceived(
       settings.tasks = reconciled.tasks;
       settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
     }
-    await ensureBodyReplaceOriginCaptured(targetId);
+    if (bodyReplaceEnabled) {
+      await ensureBodyReplaceOriginCaptured(targetId);
+    }
     applyAssistantChatTagExtract(targetId, settings, { isRerun });
 
     const snapshot = captureDataSnapshot();

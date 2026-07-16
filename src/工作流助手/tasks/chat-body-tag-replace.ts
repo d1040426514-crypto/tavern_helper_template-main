@@ -167,6 +167,57 @@ function isRuleActive(rule: ChatBodyTagReplaceRule, assistantTags: string[]): bo
   return assistantTags.some(t => t.trim() === targetTag);
 }
 
+/** 是否配置了可用的聊天正文标签替换规则（无需对照 assistant 提取标签） */
+export function hasConfiguredChatBodyTagReplaceRules(settings: ScriptSettings): boolean {
+  return (settings.chatBodyTagReplaceRules ?? []).some(
+    r => r.targetTag.trim().length > 0 && r.template.trim().length > 0,
+  );
+}
+
+/** 当前正文是否仍带有本轮工作流注入后缀（用于识别「已处理」vs「继承/刷新生文」） */
+export function isPostProcessInjectSuffixPresent(message: string, inject: unknown): boolean {
+  return typeof inject === 'string' && inject.length > 0 && message.endsWith(inject);
+}
+
+/**
+ * 楼层变量常被 ST 复制到下一楼：新楼可能带着上一楼的 `_post_process_done` / origin。
+ * 若 done 已置位但正文不再以 inject 结尾，视为陈旧状态，应清除后再按新楼处理。
+ */
+export function shouldClearStalePostProcessRunMarkers(options: {
+  hadDone: boolean;
+  message: string;
+  inject: unknown;
+  explicitIsRerun: boolean;
+}): boolean {
+  if (options.explicitIsRerun || !options.hadDone) return false;
+  return !isPostProcessInjectSuffixPresent(options.message, options.inject);
+}
+
+/** 清除陈旧的 done / inject / body-replace origin，避免误 restore 上一楼正文 */
+export async function clearStalePostProcessRunMarkers(messageId: number): Promise<boolean> {
+  const msg = getChatMessages(messageId)[0];
+  if (!msg || msg.role !== 'assistant') return false;
+  const data = { ...((msg.data ?? {}) as Record<string, unknown>) };
+  const hadDone = !!data._post_process_done;
+  if (
+    !shouldClearStalePostProcessRunMarkers({
+      hadDone,
+      message: msg.message ?? '',
+      inject: data._post_process_inject_block,
+      explicitIsRerun: false,
+    })
+  ) {
+    return false;
+  }
+
+  delete data._post_process_done;
+  delete data._post_process_inject_block;
+  delete data[BODY_REPLACE_ORIGIN_KEY];
+
+  await setChatMessages([{ message_id: messageId, data }], { refresh: 'none' });
+  return true;
+}
+
 export async function ensureBodyReplaceOriginCaptured(messageId: number): Promise<void> {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return;

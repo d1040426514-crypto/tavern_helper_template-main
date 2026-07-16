@@ -2,10 +2,13 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   collectStageTagsForRule,
+  hasConfiguredChatBodyTagReplaceRules,
   replaceBareTagLastInner,
   replaceTagInnersInMessage,
+  shouldClearStalePostProcessRunMarkers,
 } from './chat-body-tag-replace';
 import type { TaskRunResult } from './runtime';
+import type { ScriptSettings } from './schema';
 
 function stageResult(extractedTags: Record<string, string>): TaskRunResult {
   return {
@@ -77,6 +80,57 @@ test('collectStageTagsForRule item@id=same value overwrites', () => {
   second.taskId = 't2';
   const tags = collectStageTagsForRule([first, second], 'item@id');
   assert.equal(tags['item@id=1'], 'B');
+});
+
+test('shouldClearStalePostProcessRunMarkers detects inherited done without inject suffix', () => {
+  assert.equal(
+    shouldClearStalePostProcessRunMarkers({
+      hadDone: true,
+      message: 'fresh ai text',
+      inject: '<资产账本/>',
+      explicitIsRerun: false,
+    }),
+    true,
+  );
+});
+
+test('shouldClearStalePostProcessRunMarkers keeps legitimately processed floor', () => {
+  assert.equal(
+    shouldClearStalePostProcessRunMarkers({
+      hadDone: true,
+      message: 'body\n<资产账本/>',
+      inject: '<资产账本/>',
+      explicitIsRerun: false,
+    }),
+    false,
+  );
+});
+
+test('shouldClearStalePostProcessRunMarkers skips explicit rerun', () => {
+  assert.equal(
+    shouldClearStalePostProcessRunMarkers({
+      hadDone: true,
+      message: 'fresh',
+      inject: '<资产账本/>',
+      explicitIsRerun: true,
+    }),
+    false,
+  );
+});
+
+test('hasConfiguredChatBodyTagReplaceRules ignores empty rules', () => {
+  assert.equal(
+    hasConfiguredChatBodyTagReplaceRules({
+      chatBodyTagReplaceRules: [{ id: '1', targetTag: '', template: '' }],
+    } as ScriptSettings),
+    false,
+  );
+  assert.equal(
+    hasConfiguredChatBodyTagReplaceRules({
+      chatBodyTagReplaceRules: [{ id: '1', targetTag: 'gametxt', template: '{{task:x}}' }],
+    } as ScriptSettings),
+    true,
+  );
 });
 
 console.log('chat-body-tag-replace.test.ts: all passed');
