@@ -16,6 +16,7 @@ const props = withDefaults(
     manualIndex?: number;
     manualCount?: number;
     disabled?: boolean;
+    dragEnabled?: boolean;
     dragging?: boolean;
     dropMarker?: 'before' | 'after' | null;
   }>(),
@@ -25,6 +26,7 @@ const props = withDefaults(
     manualIndex: -1,
     manualCount: 0,
     disabled: false,
+    dragEnabled: true,
     dragging: false,
     dropMarker: null,
   },
@@ -41,7 +43,9 @@ const displayName = computed(() => props.group.name?.trim() || '未命名段');
 
 const roleLabel = computed(() => props.group.role || 'user');
 
-const showDragHandle = computed(() => !props.readonly && !props.disabled && props.manualIndex >= 0);
+const showDragHandle = computed(
+  () => !props.readonly && !props.disabled && props.dragEnabled && props.manualIndex >= 0,
+);
 
 function onHeaderClick() {
   emit('toggle');

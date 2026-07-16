@@ -3014,6 +3014,10 @@
     align-items: center;
   }
 
+  .acu-row--task-output-settings > .acu-task-output-settings__drag-toggle {
+    grid-column: 1 / -1;
+  }
+
   .acu-row--task-output-settings > .acu-input,
   .acu-row--task-output-settings > .acu-select {
     width: 100% !important;

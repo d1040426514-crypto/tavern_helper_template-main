@@ -189,6 +189,7 @@ const manualPromptGroupCount = computed(() => promptPreviewTask.value?.promptGro
 const expandedPromptRowKeys = ref<Set<string>>(new Set());
 const promptZoneRef = ref<HTMLElement | null>(null);
 const promptDrag = ref<{ fromIndex: number; toIndex: number } | null>(null);
+const promptDragSortEnabled = ref(false);
 let promptDragCleanup: (() => void) | null = null;
 
 function promptRowKey(row: (typeof promptPreviewRows.value)[number]): string {
@@ -238,7 +239,7 @@ function calcPromptDropIndex(clientY: number, fromIndex: number): number {
 }
 
 function onPromptDragStart(payload: { pointerId: number; clientY: number; fromIndex: number }) {
-  if (isViewingReplicaMember.value) return;
+  if (!promptDragSortEnabled.value || isViewingReplicaMember.value) return;
   promptDragCleanup?.();
   promptDrag.value = { fromIndex: payload.fromIndex, toIndex: payload.fromIndex };
 
@@ -2590,6 +2591,11 @@ function saveRunLogTaskTags(taskId: string): void {
                 <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">{{ EXTRACT_INJECT_TAGS_HELP.relay }}</p>
               </AcuHelpPanel>
               <div class="acu-row acu-row--inline acu-row--task-output-settings">
+                <AcuToggle
+                  v-model="promptDragSortEnabled"
+                  class="acu-task-output-settings__drag-toggle"
+                  label="拖曳排序"
+                />
                 <label>最大重试次数</label>
                 <input v-model.number="selectedTask.maxRetries" class="acu-input" type="number" min="1" step="1" style="width: 96px" />
                 <label>最小回复字数</label>
@@ -2639,6 +2645,7 @@ function saveRunLogTaskTags(taskId: string): void {
                   :manual-index="row.kind === 'manual' ? row.manualIndex : -1"
                   :manual-count="manualPromptGroupCount"
                   :disabled="isViewingReplicaMember"
+                  :drag-enabled="promptDragSortEnabled"
                   :dragging="
                     row.kind === 'manual' && promptDrag?.fromIndex === row.manualIndex
                   "
