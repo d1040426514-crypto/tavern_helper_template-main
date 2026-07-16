@@ -7,22 +7,30 @@
       :aria-label="bodyOpen ? '收起资产账簿' : '展开资产账簿'"
       @click="bodyOpen = !bodyOpen"
     >
-      <span class="gh-icon" aria-hidden="true">📒</span>
-      <span class="gh-main-title">资产账簿</span>
-      <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{ data.ledgerTime.timeLine }}</span>
-      <span class="gh-spacer" aria-hidden="true" />
-      <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
-      <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
-      <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
-      <button
-        type="button"
-        class="gh-theme-btn"
-        title="切换主题"
-        @click.stop="emit('toggle-theme')"
+      <div class="gh-row gh-row--top">
+        <span class="gh-icon" aria-hidden="true">📒</span>
+        <span class="gh-main-title">资产账簿</span>
+        <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{ data.ledgerTime.timeLine }}</span>
+        <span class="gh-spacer" aria-hidden="true" />
+        <button
+          type="button"
+          class="gh-theme-btn"
+          title="切换主题"
+          @click.stop="emit('toggle-theme')"
+        >
+          {{ themeDark ? '☀️' : '🌓' }}
+        </button>
+        <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
+      </div>
+      <div
+        v-if="data.headline.duration || data.headline.status || data.headline.delta || data.cashTotal"
+        class="gh-row gh-row--meta"
       >
-        {{ themeDark ? '☀️' : '🌓' }}
-      </button>
-      <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
+        <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
+        <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
+        <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
+        <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
+      </div>
     </header>
 
     <div v-show="bodyOpen" class="ledger-body">
@@ -481,8 +489,9 @@ function statusTagClass(status: string): string {
 
 .ledger-global-header {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -509,6 +518,20 @@ function statusTagClass(status: string): string {
     box-shadow: var(--shadow-sm), var(--shadow-glow);
     border-color: var(--border-accent);
   }
+}
+
+.gh-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
+}
+
+.gh-row--meta {
+  gap: 4px 6px;
+  flex-wrap: wrap;
+  padding-left: 1.55rem;
 }
 
 .gh-icon {
@@ -564,6 +587,16 @@ function statusTagClass(status: string): string {
   color: var(--accent-green);
   white-space: nowrap;
   flex-shrink: 0;
+}
+
+.gh-cash {
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--accent-teal, var(--accent-primary));
+  white-space: nowrap;
+  flex-shrink: 0;
+  margin-left: auto;
 }
 
 .gh-arrow {
@@ -762,8 +795,23 @@ function statusTagClass(status: string): string {
 @media (max-width: 640px) {
   .ledger-global-header {
     padding: 3px 8px;
+    gap: 2px;
+  }
+
+  .gh-row {
     gap: 4px;
+  }
+
+  .gh-row--meta {
+    padding-left: 0;
     flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
   }
 
   .gh-main-title {
@@ -772,9 +820,8 @@ function statusTagClass(status: string): string {
 
   .gh-subtitle {
     font-size: 0.58rem;
-    /* 窄屏优先保证 pill 可见，时间可缩略 */
-    flex: 1 1 0;
-    max-width: 42%;
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .gh-spacer {
@@ -786,11 +833,13 @@ function statusTagClass(status: string): string {
     padding: 1px 5px;
   }
 
-  .gh-delta {
+  .gh-delta,
+  .gh-cash {
     font-size: 0.62rem;
-    max-width: 4.5em;
-    overflow: hidden;
-    text-overflow: ellipsis;
+  }
+
+  .gh-cash {
+    margin-left: 0;
   }
 
   .gh-theme-btn {

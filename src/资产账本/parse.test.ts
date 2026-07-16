@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { findAllPairs, parseAttrs, parseCashMetrics, parseLedger, parseLedgerBody, parseProgressPct } from './parse.ts';
+import {
+  findAllPairs,
+  parseAttrs,
+  parseCashBaseTotal,
+  parseCashMetrics,
+  parseLedger,
+  parseLedgerBody,
+  parseProgressPct,
+} from './parse.ts';
 
 function test(name: string, fn: () => void): void {
   try {
@@ -73,6 +81,7 @@ test('parseLedger combines LedgerTime + body', () => {
   assert.match(data.headline.delta, /\+320/);
   assert.equal(data.externalFactors[0]?.attrs._tag, '季节');
   assert.equal(data.currencies[0]?.symbol, '§');
+  assert.equal(data.cashTotal, '115 §');
   assert.equal(data.entities[0]?.name, '北岸工坊');
   assert.equal(data.entities[0]?.facilities[0]?.type, '锯木房');
   assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.name, '木板');
@@ -93,6 +102,12 @@ test('parseCashMetrics extracts total and delta', () => {
 
   const down = parseCashMetrics('期末90 (Δ -10)');
   assert.equal(down.changeDir, 'down');
+});
+
+test('parseCashBaseTotal extracts amount after equals', () => {
+  assert.equal(parseCashBaseTotal('∑(期末货币 × 汇率) = 115 §\n(Δ +15) → 存放:北商行账户'), '115 §');
+  assert.equal(parseCashBaseTotal('= -500G 帝冕币'), '-500G 帝冕币');
+  assert.equal(parseCashBaseTotal('无等号文案'), '');
 });
 
 test('parseProgressPct from progress and bar', () => {

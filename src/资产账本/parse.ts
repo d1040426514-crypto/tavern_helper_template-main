@@ -286,6 +286,7 @@ export function parseLedgerBody(inner: string): Omit<LedgerData, 'ledgerTime'> {
     cashNote: cash.note,
     currencies: cash.currencies,
     cashBase: cash.cashBase,
+    cashTotal: parseCashBaseTotal(cash.cashBase),
     entities,
     businesses,
     operations,
@@ -318,6 +319,16 @@ export type CashMetrics = {
   change: string;
   changeDir: 'up' | 'down' | 'flat';
 };
+
+/**
+ * 从折合基准正文提取流动资金总额。
+ * 例：`∑(期末货币 × 汇率) = 115 §` → `115 §`
+ */
+export function parseCashBaseTotal(cashBase: string): string {
+  const t = String(cashBase ?? '');
+  const m = t.match(/=\s*([+\-]?[\d,.]+(?:\.\d+)?\s*[^\n(Δ→|]*)/);
+  return softTrim(m?.[1] ?? '');
+}
 
 /** 从币种正文提取期末与 Δ */
 export function parseCashMetrics(text: string): CashMetrics {

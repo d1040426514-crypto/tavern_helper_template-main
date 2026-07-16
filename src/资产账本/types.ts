@@ -68,6 +68,8 @@ export type LedgerData = {
   cashNote: string;
   currencies: CurrencyBlock[];
   cashBase: string;
+  /** 折合基准等号后的流动资金总额展示文案 */
+  cashTotal: string;
   entities: EntityData[];
   businesses: BusinessData[];
   operations: OperationsData[];
