@@ -11,6 +11,7 @@ import {
   pickTagsForPostProcessWrite,
   writeFloorTagValues,
 } from '../tasks/tag-variables';
+import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-replace';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
 import {
@@ -1728,7 +1729,10 @@ function runLogWritableTagEntries(r: { extractedTags?: Record<string, string> })
 
 function runLogOtherTagEntries(r: { extractedTags?: Record<string, string> }): [string, string][] {
   const writable = runLogWritableTagNames();
-  return runLogExtractedTagEntries(r).filter(([tag]) => !writable.has(tag));
+  const rules = settings.value.chatWorldbookWriteRules ?? [];
+  return runLogExtractedTagEntries(r).filter(
+    ([tag]) => !writable.has(tag) && !isTagKeyManagedByWorldbookWriteRules(tag, rules),
+  );
 }
 
 const runLogTagDrafts = ref<Record<string, Record<string, string>>>({});

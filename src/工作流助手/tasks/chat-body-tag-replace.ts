@@ -14,7 +14,12 @@ import {
 } from './tag-variables';
 import { overwriteRelayTagMap, replacePlotTagPlaceholdersWithHistory, type RelayTagMap } from './utils';
 import type { SharedContext } from './placeholders';
-import type { ChatBodyTagReplaceRule, PostProcessTask, ScriptSettings } from './schema';
+import type {
+  ChatBodyTagReplaceRule,
+  ChatWorldbookWriteRule,
+  PostProcessTask,
+  ScriptSettings,
+} from './schema';
 import type { TaskRunResult } from './runtime';
 
 export const BODY_REPLACE_ORIGIN_KEY = '_post_process_body_replace_origin';
@@ -32,6 +37,21 @@ function keyMatchesExtractSpec(key: string, spec: ExtractTagSpec): boolean {
   const parsed = parseCompositeKey(key);
   if (!parsed) return false;
   return parsed.tagName === spec.tagName && parsed.attrName === spec.attrName;
+}
+
+/** 运行日志等：判断摘取键是否由世界书写入规则的目标标签管理（会写入 post_process_tags） */
+export function isTagKeyManagedByWorldbookWriteRules(
+  tagKey: string,
+  rules: ChatWorldbookWriteRule[],
+): boolean {
+  for (const rule of rules) {
+    const targetTag = rule.targetTag?.trim();
+    if (!targetTag) continue;
+    const spec = parseExtractTagSpec(targetTag);
+    if (!spec) continue;
+    if (keyMatchesExtractSpec(tagKey, spec)) return true;
+  }
+  return false;
 }
 
 export function collectStageTagsForRule(stageResults: TaskRunResult[], targetTag: string): Record<string, string> {

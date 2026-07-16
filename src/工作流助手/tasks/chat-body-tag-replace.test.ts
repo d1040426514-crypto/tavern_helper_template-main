@@ -3,12 +3,30 @@ import { test } from 'node:test';
 import {
   collectStageTagsForRule,
   hasConfiguredChatBodyTagReplaceRules,
+  isTagKeyManagedByWorldbookWriteRules,
   replaceBareTagLastInner,
   replaceTagInnersInMessage,
   shouldClearStalePostProcessRunMarkers,
 } from './chat-body-tag-replace';
 import type { TaskRunResult } from './runtime';
-import type { ScriptSettings } from './schema';
+import type { ChatWorldbookWriteRule, ScriptSettings } from './schema';
+
+function worldbookRule(partial: Partial<ChatWorldbookWriteRule> & { targetTag: string }): ChatWorldbookWriteRule {
+  return {
+    id: 'wb-1',
+    template: `{{${partial.targetTag}}}`,
+    entryName: '',
+    bookSource: 'character',
+    manualBookName: '',
+    entryType: 'constant',
+    keywords: '',
+    splitByAttr: false,
+    wrapTagName: '',
+    placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
+    preventRecursion: true,
+    ...partial,
+  };
+}
 
 function stageResult(extractedTags: Record<string, string>): TaskRunResult {
   return {
@@ -131,6 +149,24 @@ test('hasConfiguredChatBodyTagReplaceRules ignores empty rules', () => {
     } as ScriptSettings),
     true,
   );
+});
+
+test('isTagKeyManagedByWorldbookWriteRules bare result hits', () => {
+  const rules = [worldbookRule({ targetTag: 'result' })];
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('result', rules), true);
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('other', rules), false);
+});
+
+test('isTagKeyManagedByWorldbookWriteRules item@id hits composites not bare', () => {
+  const rules = [worldbookRule({ targetTag: 'item@id', splitByAttr: true })];
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('item@id=1', rules), true);
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('item@id=2', rules), true);
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('item', rules), false);
+});
+
+test('isTagKeyManagedByWorldbookWriteRules empty rules is false', () => {
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('result', []), false);
+  assert.equal(isTagKeyManagedByWorldbookWriteRules('result', [worldbookRule({ targetTag: '' })]), false);
 });
 
 console.log('chat-body-tag-replace.test.ts: all passed');
