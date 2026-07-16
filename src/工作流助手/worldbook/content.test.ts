@@ -5,6 +5,7 @@ import {
   finalizePlotWorldbookPlaceholderContent,
   isSelectedPlotWorldbookEntry,
 } from './content';
+import { removeMarkdownSection } from './blocked';
 import type { PlotWorldbookConfig } from '../tasks/schema';
 
 function baseConfig(overrides: Partial<PlotWorldbookConfig> = {}): PlotWorldbookConfig {
@@ -87,4 +88,23 @@ test('finalize wrappers differ for $1 and $2', () => {
   assert.match(finalizePlotWorldbookPlaceholderContent('hello', []), /<worldbook_context>/);
   assert.match(finalizeManagedWorldbookPlaceholderContent('hello', []), /<worldbook_extra>/);
   assert.equal(finalizeManagedWorldbookPlaceholderContent('  ', []), '');
+});
+
+test('ReadableDataTable protagonist section can be removed before $1 formatting', () => {
+  const raw = [
+    '# 主角信息表',
+    '',
+    '| 姓名 | 近况 |',
+    '|---|---|',
+    '| 波尔特 | 正常 |',
+    '',
+    '# 任务与事件表',
+    '',
+    '| 编号 | 事件 |',
+    '|---|---|',
+    '| A1 | 巡逻 |',
+  ].join('\n');
+  const sanitized = removeMarkdownSection(raw, '主角信息表');
+  assert.equal(sanitized.includes('波尔特'), false);
+  assert.equal(sanitized.includes('# 任务与事件表'), true);
 });

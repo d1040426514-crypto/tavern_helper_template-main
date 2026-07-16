@@ -39,6 +39,7 @@ export function isDbGeneratedEntry(normalizedComment: string): boolean {
 const CUSTOM_EXPORT_CHRONICLE_ROW_RE = /CustomExport-纪要-\d+$/;
 const CUSTOM_EXPORT_CHRONICLE_WRAP_RE = /CustomExport-纪要-包裹-(上|下)$/;
 const CUSTOM_EXPORT_CHRONICLE_HEADER_RE = /CustomExport-纪要-表头$/;
+export const READABLE_DATATABLE_COMMENT = 'TavernDB-ACU-ReadableDataTable';
 
 /** shujuku CustomExport 纪要数据行（及遗留总结条目）→ $6 按 AM 取最近 N 条 */
 export function isChronicleMemoryRowEntry(normalizedComment: string): boolean {
@@ -83,6 +84,11 @@ function readExportConfigEntryName(table: unknown): string {
   return entryName;
 }
 
+function readTableName(table: unknown): string {
+  if (!table || typeof table !== 'object') return '';
+  return String((table as { name?: unknown }).name ?? '').trim();
+}
+
 /** 从 shujuku tablesJson 快照解析「主角信息」CustomExport entryName */
 export function resolveProtagonistExportEntryName(
   tablesJson: Record<string, unknown> | null | undefined,
@@ -90,12 +96,24 @@ export function resolveProtagonistExportEntryName(
   if (!tablesJson || typeof tablesJson !== 'object') return DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
   for (const table of Object.values(tablesJson)) {
     if (!table || typeof table !== 'object') continue;
-    const tableName = String((table as { name?: unknown }).name ?? '').trim();
+    const tableName = readTableName(table);
     if (tableName !== DEFAULT_PROTAGONIST_TABLE_NAME) continue;
     const entryName = readExportConfigEntryName(table);
     return entryName || DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
   }
   return DEFAULT_PROTAGONIST_EXPORT_ENTRY_NAME;
+}
+
+export function resolveProtagonistTableName(
+  tablesJson: Record<string, unknown> | null | undefined,
+): string {
+  if (!tablesJson || typeof tablesJson !== 'object') return DEFAULT_PROTAGONIST_TABLE_NAME;
+  for (const table of Object.values(tablesJson)) {
+    if (!table || typeof table !== 'object') continue;
+    const tableName = readTableName(table);
+    if (tableName === DEFAULT_PROTAGONIST_TABLE_NAME) return tableName;
+  }
+  return DEFAULT_PROTAGONIST_TABLE_NAME;
 }
 
 function buildProtagonistInfoCommentPatterns(entryName: string): RegExp[] {
@@ -114,6 +132,33 @@ export function isProtagonistInfoWorldbookEntry(
   const normalized = String(normalizedComment || '').trim();
   if (!normalized) return false;
   return buildProtagonistInfoCommentPatterns(entryName).some(pattern => pattern.test(normalized));
+}
+
+function escapeMarkdownHeaderTitle(title: string): string {
+  return escapeRegExp(title.trim());
+}
+
+export function extractMarkdownSection(content: string, sectionTitle: string): string {
+  const trimmedTitle = sectionTitle.trim();
+  if (!trimmedTitle) return '';
+  const body = String(content || '').replace(/\r\n/g, '\n');
+  const pattern = new RegExp(
+    `(?:^|\\n)# ${escapeMarkdownHeaderTitle(trimmedTitle)}\\n\\n([\\s\\S]*?)(?=\\n# |$)`,
+  );
+  const match = pattern.exec(body);
+  return (match?.[1] ?? '').trim();
+}
+
+export function removeMarkdownSection(content: string, sectionTitle: string): string {
+  const trimmedTitle = sectionTitle.trim();
+  if (!trimmedTitle) return String(content || '').trim();
+  const body = String(content || '').replace(/\r\n/g, '\n');
+  const pattern = new RegExp(
+    `(?:^|\\n)# ${escapeMarkdownHeaderTitle(trimmedTitle)}\\n\\n[\\s\\S]*?(?=(\\n# )|$)`,
+    'g',
+  );
+  const removed = body.replace(pattern, (match, nextHeader) => (nextHeader ? '\n' : ''));
+  return removed.replace(/\n{3,}/g, '\n\n').trim();
 }
 
 /** 默认前缀托管条目（规范化后） */

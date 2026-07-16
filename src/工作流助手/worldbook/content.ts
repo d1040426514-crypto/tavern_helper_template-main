@@ -1,13 +1,17 @@
 import {
+  READABLE_DATATABLE_COMMENT,
   isChronicleMemoryWorldbookEntry,
   isEntryBlocked,
   isManagedPlotWorldbookEntry,
   isOutlineOrSummaryIndexEntry,
   isPlotDollar1AutoIncludedEntry,
   isProtagonistInfoWorldbookEntry,
+  removeMarkdownSection,
   normalizeWorldbookComment,
   resolveProtagonistExportEntryName,
+  resolveProtagonistTableName,
 } from './blocked';
+import { normalizePlaceholderEntryContent, shouldOmitEntryTitleInPlaceholder } from './entry-placeholder-format';
 import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
@@ -102,7 +106,7 @@ export function isSelectedPlotWorldbookEntry(
 }
 
 async function formatWorldbookEntries(
-  entries: WorldbookEntry[],
+  entries: Array<WorldbookEntry & { normalizedComment?: string }>,
   messageId: number,
 ): Promise<string> {
   const parts: string[] = [];
@@ -110,7 +114,13 @@ async function formatWorldbookEntries(
     const title = await processTemplateText(entry.name || 'Entry', messageId, { source: 'world_info' });
     const content = await processTemplateText(entry.content || '', messageId, { source: 'world_info' });
     if (!title && !content) continue;
-    parts.push(`# ${title || 'Entry'}\n${content}`);
+    const normalizedContent = normalizePlaceholderEntryContent(entry, content);
+    if (!normalizedContent) continue;
+    if (shouldOmitEntryTitleInPlaceholder(entry.normalizedComment || '')) {
+      parts.push(normalizedContent);
+    } else {
+      parts.push(`# ${title || 'Entry'}\n${normalizedContent}`);
+    }
   }
   return parts.join('\n\n');
 }
@@ -125,6 +135,7 @@ export async function getWorldbookContentForPostProcess(
   const bookNames = await resolveBookNames(config);
   if (bookNames.length === 0) return '';
   const protagonistEntryName = resolveProtagonistExportEntryName(tablesJson);
+  const protagonistTableName = resolveProtagonistTableName(tablesJson);
 
   const allEntries: DecoratedEntry[] = [];
   let placeholderOriginalIndex = 0;
@@ -141,6 +152,14 @@ export async function getWorldbookContentForPostProcess(
         if (!autoIncluded && isEntryBlocked(entry)) continue;
         if (!autoIncluded && !isPlotWorldbookEntrySelectable(entry, writeRules)) continue;
         if (!isSelectedPlotWorldbookEntry(decorated, config, protagonistEntryName)) continue;
+        if (decorated.normalizedComment === READABLE_DATATABLE_COMMENT) {
+          const sanitizedContent =
+            removeMarkdownSection(entry.content || '', protagonistTableName) ||
+            removeMarkdownSection(entry.content || '', protagonistEntryName);
+          if (!sanitizedContent.trim()) continue;
+          allEntries.push({ ...decorated, content: sanitizedContent });
+          continue;
+        }
         allEntries.push(decorated);
       }
     } catch {

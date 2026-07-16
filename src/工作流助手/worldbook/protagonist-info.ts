@@ -1,7 +1,10 @@
 import {
+  extractMarkdownSection,
   isProtagonistInfoWorldbookEntry,
   normalizeWorldbookComment,
+  READABLE_DATATABLE_COMMENT,
   resolveProtagonistExportEntryName,
+  resolveProtagonistTableName,
 } from './blocked';
 import { sortPlotWorldbookEntries } from './entry-order';
 import { processTemplateText } from '../tasks/template-process';
@@ -36,6 +39,25 @@ async function formatProtagonistEntryContents(entries: WorldbookEntry[], message
   return parts.join('\n\n');
 }
 
+async function extractProtagonistFromReadableDataTable(
+  entries: WorldbookEntry[],
+  messageId: number,
+  tablesJson: Record<string, unknown> | null,
+): Promise<string> {
+  const protagonistTableName = resolveProtagonistTableName(tablesJson);
+  const protagonistEntryName = resolveProtagonistExportEntryName(tablesJson);
+  for (const entry of entries) {
+    if (!entry.enabled) continue;
+    if (normalizeWorldbookComment(entry.name) !== READABLE_DATATABLE_COMMENT) continue;
+    const content = await processTemplateText(entry.content || '', messageId, { source: 'world_info' });
+    const section =
+      extractMarkdownSection(content, protagonistTableName) ||
+      extractMarkdownSection(content, protagonistEntryName);
+    if (section) return section;
+  }
+  return '';
+}
+
 /** 从角色绑定世界书读取 shujuku CustomExport「主角信息」条目 content（全量、不扫描关键词） */
 export async function getProtagonistInfoWorldbookContent(
   tablesJson: Record<string, unknown> | null,
@@ -46,10 +68,14 @@ export async function getProtagonistInfoWorldbookContent(
   if (bookNames.length === 0) return '';
 
   const matched: DecoratedEntry[] = [];
+  let readableFallback = '';
   let placeholderOriginalIndex = 0;
   for (const bookName of bookNames) {
     try {
       const entries = await getWorldbook(bookName);
+      if (!readableFallback) {
+        readableFallback = await extractProtagonistFromReadableDataTable(entries, messageId, tablesJson);
+      }
       for (const entry of entries) {
         const normalizedComment = normalizeWorldbookComment(entry.name);
         const decorated: DecoratedEntry = {
@@ -67,7 +93,7 @@ export async function getProtagonistInfoWorldbookContent(
     }
   }
 
-  if (matched.length === 0) return '';
+  if (matched.length === 0) return readableFallback;
   const ordered = sortPlotWorldbookEntries(matched);
   return formatProtagonistEntryContents(ordered, messageId);
 }
