@@ -1,4 +1,4 @@
-import { isDbGeneratedEntry } from './blocked';
+import { isCustomExportIndexEntry, isDbGeneratedEntry } from './blocked';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
@@ -6,11 +6,13 @@ export function shouldOmitEntryTitleInPlaceholder(normalizedComment: string): bo
   return isDbGeneratedEntry(String(normalizedComment || '').trim());
 }
 
+/** 仅剥离 shujuku buildEntryContent 默认形态：# 表名 + 空行 + 表格（中间无其他行） */
 export function stripShujukuInnerTableTitle(content: string): string {
   const text = String(content || '').replace(/\r\n/g, '\n').trim();
   if (!text.startsWith('# ')) return text;
   const lines = text.split('\n');
   if (lines.length < 4) return text;
+  if (lines[1]?.trim() !== '') return text;
   if (!lines[2]?.trim().startsWith('|') || !lines[3]?.trim().startsWith('|')) return text;
   const tableLines: string[] = [];
   for (const line of lines.slice(2)) {
@@ -21,10 +23,19 @@ export function stripShujukuInnerTableTitle(content: string): string {
   return text;
 }
 
+export function prepareRawPlaceholderEntryContent(
+  entry: Pick<WorldbookEntry, 'content'> & { normalizedComment?: string },
+): string {
+  const normalizedComment = entry.normalizedComment || '';
+  const raw = String(entry.content || '').replace(/\r\n/g, '\n');
+  if (!shouldOmitEntryTitleInPlaceholder(normalizedComment)) return raw;
+  if (isCustomExportIndexEntry(normalizedComment)) return raw;
+  return stripShujukuInnerTableTitle(raw);
+}
+
 export function normalizePlaceholderEntryContent(
   entry: Pick<WorldbookEntry, 'content'> & { normalizedComment?: string },
   content: string,
 ): string {
-  if (!shouldOmitEntryTitleInPlaceholder(entry.normalizedComment || '')) return content.trim();
-  return stripShujukuInnerTableTitle(content);
+  return content.trim();
 }

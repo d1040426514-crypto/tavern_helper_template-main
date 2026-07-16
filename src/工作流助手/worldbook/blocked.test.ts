@@ -7,6 +7,7 @@ import {
   isChronicleMemoryWrapBefore,
   isChronicleMemoryWrapEntry,
   isChronicleMemoryWorldbookEntry,
+  isCustomExportIndexEntry,
   isManagedPlotWorldbookEntry,
   isPlotDollar1AutoIncludedEntry,
   isProtagonistInfoWorldbookEntry,
@@ -113,6 +114,13 @@ test('resolveProtagonistExportEntryName reads tablesJson exportConfig', () => {
     isPlotDollar1AutoIncludedEntry('TavernDB-ACU-CustomExport-玩家档案', '玩家档案'),
     false,
   );
+});
+
+test('isCustomExportIndexEntry matches CustomExport index entries', () => {
+  assert.equal(isCustomExportIndexEntry('TavernDB-ACU-CustomExport-地点表-索引'), true);
+  assert.equal(isCustomExportIndexEntry('TavernDB-ACU-CustomExport-纪要索引'), true);
+  assert.equal(isCustomExportIndexEntry('TavernDB-ACU-CustomExport-地点表-1'), false);
+  assert.equal(isCustomExportIndexEntry('TavernDB-ACU-CustomExport-地点表'), false);
 });
 
 test('isManagedPlotWorldbookEntry matches WorkflowHelper only', () => {

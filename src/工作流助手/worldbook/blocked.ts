@@ -124,6 +124,16 @@ function buildProtagonistInfoCommentPatterns(entryName: string): RegExp[] {
   ];
 }
 
+const CUSTOM_EXPORT_INDEX_RE = /CustomExport-.+-索引$/;
+
+/** shujuku CustomExport 附加索引条目（含纪要索引）→ 占位符输出保留包裹标签 */
+export function isCustomExportIndexEntry(normalizedComment: string): boolean {
+  const normalized = String(normalizedComment || '').trim();
+  if (!normalized) return false;
+  if (normalized === 'TavernDB-ACU-CustomExport-纪要索引') return true;
+  return CUSTOM_EXPORT_INDEX_RE.test(normalized);
+}
+
 /** shujuku CustomExport「主角信息」→ $1 排除、$U 最新数据 */
 export function isProtagonistInfoWorldbookEntry(
   normalizedComment: string,

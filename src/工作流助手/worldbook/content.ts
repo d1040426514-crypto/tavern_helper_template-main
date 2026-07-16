@@ -11,7 +11,11 @@ import {
   resolveProtagonistExportEntryName,
   resolveProtagonistTableName,
 } from './blocked';
-import { normalizePlaceholderEntryContent, shouldOmitEntryTitleInPlaceholder } from './entry-placeholder-format';
+import {
+  normalizePlaceholderEntryContent,
+  prepareRawPlaceholderEntryContent,
+  shouldOmitEntryTitleInPlaceholder,
+} from './entry-placeholder-format';
 import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
@@ -112,7 +116,8 @@ async function formatWorldbookEntries(
   const parts: string[] = [];
   for (const entry of entries) {
     const title = await processTemplateText(entry.name || 'Entry', messageId, { source: 'world_info' });
-    const content = await processTemplateText(entry.content || '', messageId, { source: 'world_info' });
+    const rawContent = prepareRawPlaceholderEntryContent(entry);
+    const content = await processTemplateText(rawContent, messageId, { source: 'world_info' });
     if (!title && !content) continue;
     const normalizedContent = normalizePlaceholderEntryContent(entry, content);
     if (!normalizedContent) continue;
