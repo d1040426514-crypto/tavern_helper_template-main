@@ -57,10 +57,8 @@ function inferAttrValueFromDefaultStableName(
   if (stableName.startsWith(workflowPrefix)) {
     return stableName.slice(workflowPrefix.length);
   }
-  if (!rule.entryName.trim()) {
-    const prefix = defaultWorldbookEntryName(rule, 'PLACEHOLDER').replace('PLACEHOLDER', '');
-    if (stableName.startsWith(prefix)) return stableName.slice(prefix.length);
-  }
+  const prefix = defaultWorldbookEntryName(rule, 'PLACEHOLDER').replace('PLACEHOLDER', '');
+  if (stableName.startsWith(prefix)) return stableName.slice(prefix.length);
   return null;
 }
 

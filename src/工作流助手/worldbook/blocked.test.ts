@@ -75,11 +75,11 @@ test('isPlotDollar1AutoIncludedEntry excludes managed and chronicle CustomExport
   assert.equal(isPlotDollar1AutoIncludedEntry('普通条目'), false);
 });
 
-test('isManagedPlotWorldbookEntry matches WorkflowHelper and custom entryName', () => {
+test('isManagedPlotWorldbookEntry matches WorkflowHelper only', () => {
   assert.equal(isManagedPlotWorldbookEntry('WorkflowHelper-item name-剑'), true);
   const rules = [baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true })];
-  assert.equal(isManagedPlotWorldbookEntry('MyEntry-断剑', rules), true);
-  assert.equal(isManagedPlotWorldbookEntry('MyEntry-断剑', []), false);
+  assert.equal(isManagedPlotWorldbookEntry('MyEntry-断剑', rules), false);
+  assert.equal(isManagedPlotWorldbookEntry('WorkflowHelper-item name-断剑', rules), true);
 });
 
 test('isAutoIncludedPlotWorldbookEntry still covers DB and managed for UI hide', () => {
@@ -93,6 +93,6 @@ test('shouldShowEntryInUi hides auto-included entries', () => {
   assert.equal(shouldShowEntryInUi({ name: 'TavernDB-ACU-ReadableDataTable' }), false);
   assert.equal(shouldShowEntryInUi({ name: '普通剧情设定' }), true);
   const rules = [baseRule({ entryName: 'CustomPrefix' })];
-  assert.equal(shouldShowEntryInUi({ name: 'CustomPrefix-foo' }, rules), false);
-  assert.equal(shouldShowEntryInUi({ name: 'CustomPrefix-foo' }), true);
+  assert.equal(shouldShowEntryInUi({ name: 'CustomPrefix-foo' }, rules), true);
+  assert.equal(shouldShowEntryInUi({ name: 'WorkflowHelper-item' }, rules), false);
 });

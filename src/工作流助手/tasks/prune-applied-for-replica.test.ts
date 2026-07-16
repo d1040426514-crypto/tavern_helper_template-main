@@ -32,12 +32,12 @@ test('computePrunableWorldbookTargets maps attrValues to default stable names', 
   assert.ok(targets.every(t => t.bookName === 'BookA'));
 });
 
-test('computePrunableWorldbookTargets honors custom entryName placeholder', () => {
+test('computePrunableWorldbookTargets ignores legacy custom entryName', () => {
   const targets = computePrunableWorldbookTargets(
     [removed(['剑'])],
     [rule({ entryName: 'MyItem-{attrValue}' })],
   );
-  assert.deepEqual(targets, [{ bookName: 'BookA', stableName: 'MyItem-剑' }]);
+  assert.deepEqual(targets, [{ bookName: 'BookA', stableName: 'WorkflowHelper-item name-剑' }]);
 });
 
 test('computePrunableWorldbookTargets skips non-split rules', () => {

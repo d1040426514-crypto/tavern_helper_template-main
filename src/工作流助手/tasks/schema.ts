@@ -263,6 +263,7 @@ export const ChatWorldbookWriteRuleSchema = z.object({
   id: z.string().default(''),
   targetTag: z.string().default(''),
   template: z.string().default(''),
+  /** 已废弃：保留以免旧预设多字段解析失败；运行时忽略，条目名固定为 WorkflowHelper-… */
   entryName: z.string().default(''),
   bookSource: z.enum(['character', 'manual']).default('character'),
   manualBookName: z.string().default(''),

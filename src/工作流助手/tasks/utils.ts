@@ -762,7 +762,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '$2',
-    desc: '工作流助手托管世界书条目（WorkflowHelper-* / 自定义 entryName）关键词扫描，替换为 <worldbook_extra> 块；扫描基底同 $1。恒定条目始终触发，绿灯按关键字命中',
+    desc: '工作流助手托管世界书条目（WorkflowHelper-*）关键词扫描，替换为 <worldbook_extra> 块；扫描基底同 $1。恒定条目始终触发，绿灯按关键字命中',
   },
   { code: '$5', desc: '纪要索引（世界书条目或数据库表快照；支持酒馆宏/EJS）' },
   {

@@ -6,26 +6,13 @@ export function ledgerEntryKey(bookName: string, stableName: string): string {
   return `${bookName.trim()}\0${stableName.trim()}`;
 }
 
-export function customEntryNamePrefix(rule: ChatWorldbookWriteRule): string | null {
-  const custom = rule.entryName.trim();
-  if (!custom) return null;
-  if (custom.includes('{attrValue}')) {
-    return custom.split('{attrValue}')[0] ?? null;
-  }
-  return custom;
+/** @deprecated 手动条目名已移除；恒返回 null，保留导出以免外部引用报错 */
+export function customEntryNamePrefix(_rule: ChatWorldbookWriteRule): string | null {
+  return null;
 }
 
 /** 包裹条目共用 base（不含 -包裹-上/下） */
 export function resolveWrapperEntryBaseName(rule: ChatWorldbookWriteRule): string {
-  const custom = rule.entryName.trim();
-  if (custom) {
-    if (custom.includes('{attrValue}')) {
-      const prefix = custom.split('{attrValue}')[0] ?? '';
-      const trimmed = prefix.replace(/[-_\s]+$/u, '').trim();
-      return trimmed || prefix.trim() || 'WorkflowHelper';
-    }
-    return custom;
-  }
   const spec = parseExtractTagSpec(rule.targetTag.trim());
   const tagName = spec?.tagName ?? rule.targetTag.trim();
   return `WorkflowHelper-${tagName}`;
@@ -49,11 +36,7 @@ export function isManagedWorldbookEntryName(name: string, rules: ChatWorldbookWr
   const trimmed = (name || '').trim();
   if (!trimmed) return false;
   if (trimmed.startsWith(WORKFLOW_HELPER_ENTRY_PREFIX)) return true;
-  return rules.some(rule => {
-    if (isWrapperEntryNameForRule(trimmed, rule)) return true;
-    const prefix = customEntryNamePrefix(rule);
-    return !!prefix && trimmed.startsWith(prefix);
-  });
+  return rules.some(rule => isWrapperEntryNameForRule(trimmed, rule));
 }
 
 /** 单条世界书写入规则托管条目名判定（比全局 isManagedWorldbookEntryName 更精确） */
@@ -61,8 +44,6 @@ export function isManagedWorldbookEntryNameForRule(name: string, rule: ChatWorld
   const trimmed = (name || '').trim();
   if (!trimmed) return false;
   if (isWrapperEntryNameForRule(trimmed, rule)) return true;
-  const customPrefix = customEntryNamePrefix(rule);
-  if (customPrefix) return trimmed.startsWith(customPrefix);
   const tag = rule.targetTag.trim();
   const atIdx = tag.indexOf('@');
   const tagName = atIdx > 0 ? tag.slice(0, atIdx) : tag;

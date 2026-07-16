@@ -43,20 +43,20 @@ test('resolveStableEntryName bare tag uses tag name only', () => {
   assert.equal(name, 'WorkflowHelper-content');
 });
 
-test('resolveStableEntryName custom entryName with attrValue placeholder', () => {
+test('resolveStableEntryName ignores legacy custom entryName', () => {
   const name = resolveStableEntryName(
     baseRule({ entryName: 'MyEntry-{attrValue}' }),
     '断剑',
   );
-  assert.equal(name, 'MyEntry-断剑');
+  assert.equal(name, 'WorkflowHelper-item name-断剑');
 });
 
-test('resolveStableEntryName custom entryName appends attr when splitByAttr', () => {
+test('resolveStableEntryName ignores legacy custom entryName without placeholder', () => {
   const name = resolveStableEntryName(baseRule({ entryName: 'MyEntry' }), '断剑');
-  assert.equal(name, 'MyEntry-断剑');
+  assert.equal(name, 'WorkflowHelper-item name-断剑');
 });
 
-test('defaultWorldbookEntryName matches empty entryName resolve', () => {
+test('defaultWorldbookEntryName matches resolveStableEntryName', () => {
   const rule = baseRule();
   assert.equal(defaultWorldbookEntryName(rule, '断剑'), resolveStableEntryName(rule, '断剑'));
 });
@@ -144,10 +144,13 @@ test('resolveWrapTagName defaults to target tagName', () => {
   assert.equal(resolveWrapTagName(baseRule({ wrapTagName: '物品列表' })), '物品列表');
 });
 
-test('resolveWrapperEntryBaseName default and custom', () => {
+test('resolveWrapperEntryBaseName always uses WorkflowHelper prefix', () => {
   assert.equal(resolveWrapperEntryBaseName(baseRule()), 'WorkflowHelper-item');
-  assert.equal(resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry' })), 'MyEntry');
-  assert.equal(resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry-{attrValue}' })), 'MyEntry');
+  assert.equal(resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry' })), 'WorkflowHelper-item');
+  assert.equal(
+    resolveWrapperEntryBaseName(baseRule({ entryName: 'MyEntry-{attrValue}' })),
+    'WorkflowHelper-item',
+  );
 });
 
 test('resolveWrapperStableNames appends 包裹-上/下', () => {

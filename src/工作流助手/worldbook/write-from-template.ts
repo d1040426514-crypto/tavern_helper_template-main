@@ -54,18 +54,9 @@ export function defaultWorldbookEntryName(rule: ChatWorldbookWriteRule, attrValu
   return `WorkflowHelper-${tagName}`;
 }
 
+/** 条目名固定为默认 WorkflowHelper-…（忽略规则中遗留的 entryName 字段） */
 export function resolveStableEntryName(rule: ChatWorldbookWriteRule, attrValue?: string): string {
-  const custom = rule.entryName.trim();
-  if (!custom) {
-    return defaultWorldbookEntryName(rule, attrValue);
-  }
-  if (attrValue != null && custom.includes('{attrValue}')) {
-    return custom.split('{attrValue}').join(attrValue);
-  }
-  if (attrValue != null && rule.splitByAttr) {
-    return `${custom}-${attrValue}`;
-  }
-  return custom;
+  return defaultWorldbookEntryName(rule, attrValue);
 }
 
 /** 按属性拆分包裹：XML 标签名（可配置；空则用目标标签 tagName） */

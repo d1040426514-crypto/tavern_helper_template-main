@@ -1330,6 +1330,86 @@
   }
 }
 
+/* ── 世界书写入规则（两行：主行 + meta） ── */
+.acu-wb-write-rule {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 12px;
+}
+
+.acu-wb-write-rule__row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.acu-wb-write-rule__field {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.acu-wb-write-rule__field .acu-input,
+.acu-wb-write-rule__field .acu-textarea {
+  width: 100%;
+}
+
+.acu-wb-write-rule__field--tag {
+  flex: 0 0 130px;
+}
+
+.acu-wb-write-rule__field--template {
+  flex: 1 1 160px;
+  min-width: 160px;
+}
+
+.acu-wb-write-rule__field--type {
+  flex: 0 0 100px;
+}
+
+.acu-wb-write-rule__field--keywords {
+  flex: 0 0 120px;
+}
+
+.acu-wb-write-rule__field--check {
+  flex: 0 0 100px;
+}
+
+.acu-wb-write-rule__field--wrap {
+  flex: 0 0 120px;
+}
+
+.acu-wb-write-rule__field--book {
+  flex: 0 0 110px;
+}
+
+.acu-wb-write-rule__field--book-name {
+  flex: 0 0 140px;
+}
+
+.acu-wb-write-rule__field--position {
+  flex: 0 0 130px;
+}
+
+.acu-wb-write-rule__field--num {
+  flex: 0 0 88px;
+}
+
+.acu-wb-write-rule__check {
+  margin-top: 6px;
+}
+
+.acu-wb-write-rule__delete {
+  flex: 0 0 auto;
+  margin-top: 22px;
+}
+
 /* ── 世界书列表 ── */
 .qrf_worldbook_list {
   max-height: 180px;
@@ -2844,6 +2924,60 @@
 
   .replica-cleanup-panel__cycle-field .acu-input {
     width: 100% !important;
+  }
+
+  .acu-wb-write-rule {
+    gap: 12px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--acu-border);
+  }
+
+  .acu-wb-write-rule:last-of-type {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+
+  .acu-wb-write-rule__row {
+    flex-direction: column;
+    flex-wrap: nowrap;
+    align-items: stretch;
+    gap: 10px;
+  }
+
+  .acu-wb-write-rule__field,
+  .acu-wb-write-rule__field--tag,
+  .acu-wb-write-rule__field--template,
+  .acu-wb-write-rule__field--type,
+  .acu-wb-write-rule__field--keywords,
+  .acu-wb-write-rule__field--check,
+  .acu-wb-write-rule__field--wrap,
+  .acu-wb-write-rule__field--book,
+  .acu-wb-write-rule__field--book-name,
+  .acu-wb-write-rule__field--position,
+  .acu-wb-write-rule__field--num {
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+  }
+
+  .acu-wb-write-rule__field .acu-input,
+  .acu-wb-write-rule__field .acu-textarea,
+  .acu-wb-write-rule__field .acu-select {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .acu-wb-write-rule__check {
+    min-height: 36px;
+    align-items: center;
+  }
+
+  .acu-wb-write-rule__delete {
+    margin-top: 0;
+    align-self: flex-end;
+    min-width: 44px;
+    min-height: 44px;
   }
 
   .acu-row--task-output-settings {

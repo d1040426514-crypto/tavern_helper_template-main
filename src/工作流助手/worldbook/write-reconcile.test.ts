@@ -61,15 +61,16 @@ test('isManagedWorldbookEntryName matches WorkflowHelper prefix', () => {
   assert.equal(isManagedWorldbookEntryName('ManualEntry', rules), false);
 });
 
-test('isManagedWorldbookEntryName matches custom entryName prefix', () => {
+test('isManagedWorldbookEntryName ignores legacy custom entryName', () => {
   const rules = [baseRule({ entryName: 'MyEntry-{attrValue}' })];
-  assert.equal(isManagedWorldbookEntryName('MyEntry-断剑', rules), true);
-  assert.equal(customEntryNamePrefix(rules[0]!), 'MyEntry-');
+  assert.equal(isManagedWorldbookEntryName('MyEntry-断剑', rules), false);
+  assert.equal(customEntryNamePrefix(rules[0]!), null);
+  assert.equal(isManagedWorldbookEntryName('WorkflowHelper-item name-断剑', rules), true);
 });
 
-test('isManagedWorldbookEntryName custom without placeholder', () => {
+test('isManagedWorldbookEntryName legacy custom without placeholder is not managed', () => {
   const rules = [baseRule({ entryName: 'CustomPrefix' })];
-  assert.equal(isManagedWorldbookEntryName('CustomPrefix-foo', rules), true);
+  assert.equal(isManagedWorldbookEntryName('CustomPrefix-foo', rules), false);
 });
 
 test('shouldDeleteManagedEntryAsOrphan deletes only ledger orphans', () => {
@@ -101,10 +102,10 @@ test('isManagedWorldbookEntryNameForRule bare tag without split', () => {
   assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-result extra', rule), true);
 });
 
-test('isManagedWorldbookEntryNameForRule custom entryName prefix', () => {
+test('isManagedWorldbookEntryNameForRule ignores legacy custom entryName', () => {
   const rule = baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true });
-  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-断剑', rule), true);
-  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-断剑', rule), false);
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-断剑', rule), false);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item name-断剑', rule), true);
 });
 
 test('isManagedWorldbookEntryNameForRule wrapper entries when splitByAttr', () => {
@@ -114,10 +115,11 @@ test('isManagedWorldbookEntryNameForRule wrapper entries when splitByAttr', () =
   assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-上', baseRule({ splitByAttr: false })), false);
 });
 
-test('isManagedWorldbookEntryNameForRule custom wrapper base', () => {
+test('isManagedWorldbookEntryNameForRule legacy custom wrapper base is not managed', () => {
   const rule = baseRule({ entryName: 'MyEntry-{attrValue}', splitByAttr: true });
-  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-上', rule), true);
-  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-下', rule), true);
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-上', rule), false);
+  assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-下', rule), false);
+  assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-上', rule), true);
 });
 
 console.log('write-reconcile.test.ts: all passed');

@@ -74,7 +74,7 @@ export function isWorkflowHelperManagedEntry(normalizedComment: string): boolean
   return normalizedComment.startsWith(WORKFLOW_HELPER_ENTRY_PREFIX);
 }
 
-/** 工作流助手托管条目（默认前缀或规则自定义 entryName）→ 专供 $2 */
+/** 工作流助手托管条目（WorkflowHelper- 前缀）→ 专供 $2 */
 export function isManagedPlotWorldbookEntry(
   nameOrNormalized: string,
   writeRules: ChatWorldbookWriteRule[] = [],
