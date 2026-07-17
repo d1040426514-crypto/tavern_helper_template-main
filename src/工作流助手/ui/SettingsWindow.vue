@@ -596,6 +596,9 @@ const chatWorldbookWriteHelpOpen = ref(false);
 const apiRouteConcurrencyHelpOpen = ref(false);
 const apiConfigExpanded = ref(false);
 const executionStrategyExpanded = ref(false);
+const chatBodyTagReplaceExpanded = ref(false);
+const chatWorldbookWriteExpanded = ref(false);
+const promptSectionExpanded = ref(false);
 
 const PAGE_TABS = [
   { id: 1, label: 'API', shortLabel: 'API' },
@@ -672,6 +675,33 @@ function addChatBodyTagReplaceRule(): void {
 function removeChatBodyTagReplaceRule(id: string): void {
   ensureChatBodyTagReplaceRules();
   settings.value.chatBodyTagReplaceRules = settings.value.chatBodyTagReplaceRules.filter(r => r.id !== id);
+}
+
+async function confirmRemoveChatBodyTagReplaceRule(id: string): Promise<void> {
+  ensureChatBodyTagReplaceRules();
+  const rule = settings.value.chatBodyTagReplaceRules.find(r => r.id === id);
+  if (!rule) return;
+  const label = rule.targetTag?.trim() || '未命名标签';
+  if (!(await acuConfirm({ message: `删除聊天正文标签替换规则「${label}」？` }))) return;
+  removeChatBodyTagReplaceRule(id);
+}
+
+function truncateRulePreview(text: string, maxLen = 48): string {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return '（空模板）';
+  return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized;
+}
+
+function worldbookWriteRuleBookLabel(rule: {
+  bookSource?: string;
+  manualBookName?: string;
+}): string {
+  if (rule.bookSource === 'manual') return rule.manualBookName?.trim() || '未指定世界书';
+  return '角色主世界书';
+}
+
+function worldbookWriteRuleEntryTypeLabel(entryType?: string): string {
+  return entryType === 'keyword' ? '绿灯 keyword' : '蓝灯 constant';
 }
 
 const allWorldbookNames = ref<string[]>([]);
@@ -935,6 +965,35 @@ const apiConfigSummary = computed(() => {
 const executionStrategySummary = computed(() =>
   scheduleMode.value === 'time' ? '按游戏时间间隔' : '按回合间隔',
 );
+
+const chatBodyTagReplaceSummary = computed(() => {
+  const count = settings.value.chatBodyTagReplaceRules?.length ?? 0;
+  if (count === 0) {
+    return assistantChatExtractTags.value.length ? '暂无规则' : '未配置 AI 输出摘取';
+  }
+  return `${count} 条规则`;
+});
+
+const chatWorldbookWriteSummary = computed(() => {
+  const count = settings.value.chatWorldbookWriteRules?.length ?? 0;
+  if (count === 0) {
+    return worldbookWriteTargetTagOptions.value.length ? '暂无规则' : '未配置可用标签';
+  }
+  return `${count} 条规则`;
+});
+
+const promptSectionSummary = computed(() => {
+  const task = promptPreviewTask.value;
+  if (!task) return '';
+  const tagCount = (task.extractInjectTags ?? []).map(t => t.trim()).filter(Boolean).length;
+  const manual = manualPromptGroupCount.value;
+  const auto = promptPreviewRows.value.filter(row => row.kind === 'auto').length;
+  const parts: string[] = [];
+  if (tagCount > 0) parts.push(`${tagCount} 个摘取标签`);
+  parts.push(`${manual} 个手动段`);
+  if (auto > 0) parts.push(`${auto} 个自动段预览`);
+  return parts.join(' · ');
+});
 
 const timeIntervalValue = computed({
   get: () => selectedTask.value?.schedule?.timeInterval?.value ?? 1,
@@ -2553,7 +2612,23 @@ function saveRunLogTaskTags(taskId: string): void {
                 v-if="selectedTask && !isViewingReplicaMember"
                 :task="selectedTask"
               />
-              <div ref="promptZoneRef" class="acu-subsection acu-task-prompt-zone">
+              <div class="acu-subsection acu-collapsible-subsection acu-prompt-section">
+                <button
+                  type="button"
+                  class="acu-collapsible-subsection__header"
+                  :aria-expanded="promptSectionExpanded"
+                  @click="promptSectionExpanded = !promptSectionExpanded"
+                >
+                  <span class="acu-collapsible-subsection__title">提示词段</span>
+                  <span class="acu-collapsible-subsection__summary">{{ promptSectionSummary }}</span>
+                  <i
+                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                    :class="promptSectionExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                    aria-hidden="true"
+                  />
+                </button>
+                <div v-show="promptSectionExpanded" class="acu-collapsible-subsection__body">
+                  <div ref="promptZoneRef" class="acu-task-prompt-zone">
               <template v-if="!isViewingReplicaMember">
               <div class="acu-row acu-row--extract-tags">
                 <label class="acu-label-with-help" for="extract-inject-tags-input">
@@ -2709,6 +2784,8 @@ function saveRunLogTaskTags(taskId: string): void {
               >
                 + 提示词段
               </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -2775,14 +2852,28 @@ function saveRunLogTaskTags(taskId: string): void {
           </div>
 
           <div class="acu-section">
-            <div class="acu-heading-with-help">
-              <h4>聊天正文标签替换</h4>
-              <AcuHelpIconBtn
-                v-model:open="chatBodyTagReplaceHelpOpen"
-                panel-id="chat-body-tag-replace-help"
-                label="聊天正文标签替换说明"
-              />
-            </div>
+            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section">
+              <button
+                type="button"
+                class="acu-collapsible-subsection__header acu-collapsible-subsection__header--with-help"
+                :aria-expanded="chatBodyTagReplaceExpanded"
+                @click="chatBodyTagReplaceExpanded = !chatBodyTagReplaceExpanded"
+              >
+                <span class="acu-collapsible-subsection__title">聊天正文标签替换</span>
+                <span class="acu-collapsible-subsection__summary">{{ chatBodyTagReplaceSummary }}</span>
+                <AcuHelpIconBtn
+                  v-model:open="chatBodyTagReplaceHelpOpen"
+                  panel-id="chat-body-tag-replace-help"
+                  label="聊天正文标签替换说明"
+                  @click.stop
+                />
+                <i
+                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                  :class="chatBodyTagReplaceExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <div v-show="chatBodyTagReplaceExpanded" class="acu-collapsible-subsection__body">
             <AcuHelpPanel
               v-model:open="chatBodyTagReplaceHelpOpen"
               id="chat-body-tag-replace-help"
@@ -2802,67 +2893,96 @@ function saveRunLogTaskTags(taskId: string): void {
               请先在上方「聊天摘取标签」中配置 AI 输出摘取项。
             </p>
             <template v-else>
-              <div
-                v-for="rule in settings.chatBodyTagReplaceRules ?? []"
-                :key="rule.id"
-                class="acu-row"
-                style="align-items: flex-start; gap: 8px; margin-bottom: 10px"
-              >
-                <div style="flex: 0 0 140px">
-                  <label class="acu-label-with-help">目标标签</label>
-                  <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
-                    <option
-                      v-for="tag in assistantChatExtractTags"
-                      :key="tag"
-                      :value="tag"
-                      :disabled="isChatBodyReplaceTagUsedByOther(tag, rule.id)"
-                    >
-                      {{ tag }}
-                    </option>
-                  </select>
-                  <span v-if="isChatBodyReplaceTagStale(rule.targetTag)" class="acu-notes acu-log-warn" style="display: block; margin-top: 4px">
-                    未在 AI 输出摘取列表中
-                  </span>
-                </div>
-                <div style="flex: 1">
-                  <label class="acu-label-with-help">写入模板</label>
-                  <textarea
-                    v-model="rule.template"
-                    class="acu-textarea"
-                    rows="3"
-                    placeholder="替换为该模板渲染后的内文，可用 {{task:任务名}} 与 {{标签名}}"
-                  />
-                </div>
-                <button
-                  type="button"
-                  class="acu-btn acu-btn--sm acu-icon-btn"
-                  title="删除规则"
-                  style="margin-top: 22px"
-                  @click="removeChatBodyTagReplaceRule(rule.id)"
+              <div class="acu-config-rules-list">
+                <details
+                  v-for="rule in settings.chatBodyTagReplaceRules ?? []"
+                  :key="rule.id"
+                  class="acu-config-rule-item"
                 >
-                  <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
-                </button>
+                  <summary class="acu-config-rule-item__summary">
+                    <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
+                    <span class="acu-config-rule-item__meta">{{ truncateRulePreview(rule.template) }}</span>
+                    <span
+                      v-if="isChatBodyReplaceTagStale(rule.targetTag)"
+                      class="acu-notes acu-log-warn acu-config-rule-item__warn"
+                    >
+                      未在 AI 输出摘取列表中
+                    </span>
+                  </summary>
+                  <div class="acu-config-rule-item__body">
+                    <div class="acu-row" style="align-items: flex-start; gap: 8px">
+                      <div style="flex: 0 0 140px">
+                        <label class="acu-label-with-help">目标标签</label>
+                        <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
+                          <option
+                            v-for="tag in assistantChatExtractTags"
+                            :key="tag"
+                            :value="tag"
+                            :disabled="isChatBodyReplaceTagUsedByOther(tag, rule.id)"
+                          >
+                            {{ tag }}
+                          </option>
+                        </select>
+                      </div>
+                      <div style="flex: 1">
+                        <label class="acu-label-with-help">写入模板</label>
+                        <textarea
+                          v-model="rule.template"
+                          class="acu-textarea"
+                          rows="3"
+                          placeholder="替换为该模板渲染后的内文，可用 {{task:任务名}} 与 {{标签名}}"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        class="acu-btn acu-btn--sm acu-icon-btn"
+                        title="删除规则"
+                        aria-label="删除规则"
+                        style="margin-top: 22px"
+                        @click="confirmRemoveChatBodyTagReplaceRule(rule.id)"
+                      >
+                        <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                      </button>
+                    </div>
+                  </div>
+                </details>
               </div>
               <button
                 type="button"
-                class="acu-btn acu-btn--sm"
+                class="acu-btn acu-btn--sm acu-config-rules-list__add"
                 :disabled="!availableChatBodyReplaceTags.length"
                 @click="addChatBodyTagReplaceRule"
               >
                 添加规则
               </button>
             </template>
+              </div>
+            </div>
           </div>
 
           <div class="acu-section">
-            <div class="acu-heading-with-help">
-              <h4>世界书写入规则</h4>
-              <AcuHelpIconBtn
-                v-model:open="chatWorldbookWriteHelpOpen"
-                panel-id="chat-worldbook-write-help"
-                label="世界书写入规则说明"
-              />
-            </div>
+            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section">
+              <button
+                type="button"
+                class="acu-collapsible-subsection__header acu-collapsible-subsection__header--with-help"
+                :aria-expanded="chatWorldbookWriteExpanded"
+                @click="chatWorldbookWriteExpanded = !chatWorldbookWriteExpanded"
+              >
+                <span class="acu-collapsible-subsection__title">世界书写入规则</span>
+                <span class="acu-collapsible-subsection__summary">{{ chatWorldbookWriteSummary }}</span>
+                <AcuHelpIconBtn
+                  v-model:open="chatWorldbookWriteHelpOpen"
+                  panel-id="chat-worldbook-write-help"
+                  label="世界书写入规则说明"
+                  @click.stop
+                />
+                <i
+                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                  :class="chatWorldbookWriteExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <div v-show="chatWorldbookWriteExpanded" class="acu-collapsible-subsection__body">
             <AcuHelpPanel
               v-model:open="chatWorldbookWriteHelpOpen"
               id="chat-worldbook-write-help"
@@ -2891,11 +3011,22 @@ function saveRunLogTaskTags(taskId: string): void {
               请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
             </p>
             <template v-if="worldbookWriteTargetTagOptions.length">
-              <div
-                v-for="rule in settings.chatWorldbookWriteRules ?? []"
-                :key="rule.id"
-                class="acu-wb-write-rule"
-              >
+              <div class="acu-config-rules-list">
+                <details
+                  v-for="rule in settings.chatWorldbookWriteRules ?? []"
+                  :key="rule.id"
+                  class="acu-config-rule-item acu-config-rule-item--wb"
+                >
+                  <summary class="acu-config-rule-item__summary">
+                    <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
+                    <span class="acu-config-rule-item__meta">
+                      {{ worldbookWriteRuleEntryTypeLabel(rule.entryType) }} ·
+                      {{ worldbookWriteRuleBookLabel(rule) }} ·
+                      {{ truncateRulePreview(rule.template) }}
+                    </span>
+                  </summary>
+                  <div class="acu-config-rule-item__body">
+              <div class="acu-wb-write-rule">
                 <div class="acu-wb-write-rule__field acu-wb-write-rule__field--tag">
                   <label class="acu-label-with-help">目标标签</label>
                   <select v-model="rule.targetTag" class="acu-input">
@@ -3033,6 +3164,7 @@ function saveRunLogTaskTags(taskId: string): void {
                       type="button"
                       class="acu-btn acu-btn--sm acu-icon-btn acu-wb-write-rule__delete"
                       title="删除规则"
+                      aria-label="删除规则"
                       @click="removeChatWorldbookWriteRule(rule.id)"
                     >
                       <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
@@ -3040,8 +3172,11 @@ function saveRunLogTaskTags(taskId: string): void {
                   </div>
                 </div>
               </div>
+                  </div>
+                </details>
+              </div>
             </template>
-            <div class="acu-row acu-row--inline" style="gap: 8px">
+            <div class="acu-row acu-row--inline acu-config-rules-list__actions" style="gap: 8px">
               <button
                 v-if="worldbookWriteTargetTagOptions.length"
                 type="button"
@@ -3058,6 +3193,8 @@ function saveRunLogTaskTags(taskId: string): void {
               >
                 清理全部世界书条目
               </button>
+            </div>
+              </div>
             </div>
           </div>
         </div>

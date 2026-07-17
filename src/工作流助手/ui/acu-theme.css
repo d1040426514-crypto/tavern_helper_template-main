@@ -621,6 +621,105 @@
   margin-top: 8px;
 }
 
+.acu-collapsible-subsection__header--with-help .acu-collapsible-subsection__summary {
+  flex: 1;
+  min-width: 0;
+}
+
+.acu-config-rules-section .acu-collapsible-subsection__body > .acu-notes:first-child,
+.acu-config-rules-section .acu-collapsible-subsection__body > .acu-help-panel:first-child {
+  margin-top: 10px;
+}
+
+.acu-config-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.acu-config-rules-list__add,
+.acu-config-rules-list__actions {
+  margin-top: 10px;
+}
+
+.acu-config-rule-item {
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-md);
+  background: var(--acu-bg-2);
+  overflow: hidden;
+}
+
+.acu-config-rule-item__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 14px;
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  font-size: var(--acu-font-size-body);
+  color: var(--acu-text-1);
+}
+
+.acu-config-rule-item__summary::-webkit-details-marker {
+  display: none;
+}
+
+.acu-config-rule-item__summary::before {
+  content: '▸';
+  flex-shrink: 0;
+  margin-right: 2px;
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-body-lg);
+  transition: transform 0.15s ease;
+}
+
+.acu-config-rule-item[open] > .acu-config-rule-item__summary::before {
+  transform: rotate(90deg);
+}
+
+.acu-config-rule-item__summary:hover {
+  background: var(--acu-hover-overlay);
+}
+
+.acu-config-rule-item[open] > .acu-config-rule-item__summary {
+  border-bottom: 1px solid var(--acu-border);
+  background: var(--acu-bg-1);
+}
+
+.acu-config-rule-item__name {
+  color: var(--acu-text-1);
+  font-size: var(--acu-font-size-body-lg);
+}
+
+.acu-config-rule-item__meta {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--acu-font-size-caption);
+  color: var(--acu-text-3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acu-config-rule-item__warn {
+  font-size: var(--acu-font-size-caption);
+}
+
+.acu-config-rule-item__body {
+  padding: 12px 14px 14px;
+}
+
+.acu-config-rule-item--wb .acu-wb-write-rule {
+  margin-bottom: 0;
+}
+
+.acu-prompt-section .acu-task-prompt-zone {
+  margin-top: 10px;
+}
+
 .acu-auto-segment-slot {
   margin-bottom: 12px;
   padding: 10px 12px;
