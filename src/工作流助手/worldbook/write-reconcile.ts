@@ -13,6 +13,9 @@ import {
 import {
   POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
   WORKFLOW_HELPER_ENTRY_PREFIX,
+  getSelectedWorldInfoBookName,
+  reloadSelectedWorldInfoEditor,
+  reloadWorldInfoEditorIfSelected,
   withWorldbookWriteLock,
   type WorldbookWriteAppliedEntry,
 } from './write-sync';
@@ -161,7 +164,31 @@ export async function purgeAllManagedWorldbookEntries(): Promise<number> {
       bookNames = collectTargetBookNames(rules);
     }
     if (!bookNames.length) return 0;
-    return deleteOrphanManagedWorldbookEntries(bookNames, rules, new Map());
+
+    const selectedBook = getSelectedWorldInfoBookName();
+    const emptyKeep = new Set<string>();
+    let deleted = 0;
+    const affectedBooks: string[] = [];
+    for (const bookName of bookNames) {
+      const isSelected = !!selectedBook && bookName === selectedBook;
+      try {
+        const result = await deleteWorldbookEntries(
+          bookName,
+          entry => shouldDeleteManagedEntryAsOrphan(entry.name || '', rules, emptyKeep),
+          isSelected ? { render: 'immediate' } : undefined,
+        );
+        const n = result?.deleted_entries?.length ?? 0;
+        deleted += n;
+        if (n > 0) affectedBooks.push(bookName);
+      } catch (e) {
+        console.warn('[工作流助手] 清理托管世界书条目失败:', bookName, e);
+      }
+    }
+
+    if (selectedBook && affectedBooks.includes(selectedBook)) {
+      reloadSelectedWorldInfoEditor(selectedBook);
+    }
+    return deleted;
   });
 }
 
@@ -203,15 +230,18 @@ export async function reconcileWorldbookWritesFromChat(
         return;
       }
 
+      const writtenBooks = new Set<string>();
       for (const entry of ledger.values()) {
         const partial = _.cloneDeep(entry.partial);
         partial.name = entry.stableName;
         try {
           await upsertEntryByStableName(entry.bookName, entry.stableName, partial);
+          writtenBooks.add(entry.bookName);
         } catch (e) {
           console.warn('[工作流助手] 重放世界书条目失败:', entry.stableName, e);
         }
       }
+      reloadWorldInfoEditorIfSelected(writtenBooks);
       if (isInit) {
         initReconcileSucceeded = true;
         lastInitReconcileLedgerSize = ledger.size;

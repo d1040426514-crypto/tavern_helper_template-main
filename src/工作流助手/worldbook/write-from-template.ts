@@ -12,6 +12,7 @@ import { writeFloorTagValues } from '../tasks/tag-variables';
 import { normalizePlotWorldbookPosition, normalizeWorldbookWritePlacement } from './entry-order';
 import {
   appendAppliedToMessage,
+  reloadWorldInfoEditorIfSelected,
   withWorldbookWriteLock,
   type WorldbookWriteAppliedEntry,
 } from './write-sync';
@@ -380,6 +381,7 @@ export async function applyChatWorldbookWriteAfterStage(
 
   await withWorldbookWriteLock(async () => {
     const assistantTags = settings.chatExtractTags?.assistant ?? [];
+    const writtenBooks = new Set<string>();
 
     for (const rule of rules) {
       if (!isWorldbookWriteRuleActive(rule, assistantTags, stageResults)) continue;
@@ -433,6 +435,7 @@ export async function applyChatWorldbookWriteAfterStage(
           partial: appliedPartial,
         };
         await appendAppliedToMessage(messageId, applied);
+        writtenBooks.add(bookName);
         writtenCount += 1;
       }
 
@@ -457,8 +460,11 @@ export async function applyChatWorldbookWriteAfterStage(
             stableName,
             partial: appliedPartial,
           });
+          writtenBooks.add(bookName);
         }
       }
     }
+
+    reloadWorldInfoEditorIfSelected(writtenBooks);
   });
 }

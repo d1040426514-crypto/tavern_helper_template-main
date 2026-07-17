@@ -41,6 +41,52 @@ export async function withWorldbookWriteLock<T>(fn: () => Promise<T>): Promise<T
   return run;
 }
 
+/** 酒馆世界书编辑器当前选中的书名（用于仅刷新当前打开的编辑器） */
+export function getSelectedWorldInfoBookName(): string | null {
+  try {
+    const sel = (parent as unknown as { document?: Document })?.document?.querySelector?.(
+      '#world_info',
+    ) as HTMLSelectElement | null;
+    const label = sel?.selectedOptions?.[0]?.textContent?.trim();
+    return label || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 仅刷新当前已打开的世界书编辑器（loadIfNotSelected=false，避免把其它书载入界面）。
+ * @returns 是否成功调用
+ */
+export function reloadSelectedWorldInfoEditor(bookName: string): boolean {
+  const trimmed = bookName.trim();
+  if (!trimmed) return false;
+  try {
+    const st =
+      (globalThis as { SillyTavern?: { reloadWorldInfoEditor?: (file: string, loadIfNotSelected?: boolean) => void } })
+        .SillyTavern ??
+      (parent as unknown as { SillyTavern?: { reloadWorldInfoEditor?: (file: string, loadIfNotSelected?: boolean) => void } })
+        ?.SillyTavern;
+    if (typeof st?.reloadWorldInfoEditor !== 'function') return false;
+    st.reloadWorldInfoEditor(trimmed, false);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** 若当前编辑器正打开 `writtenBooks` 中的某本，则刷新该编辑器 */
+export function reloadWorldInfoEditorIfSelected(writtenBooks: Iterable<string>): {
+  selectedBook: string | null;
+  reloaded: boolean;
+} {
+  const selectedBook = getSelectedWorldInfoBookName();
+  if (!selectedBook) return { selectedBook: null, reloaded: false };
+  const set = writtenBooks instanceof Set ? writtenBooks : new Set([...writtenBooks].map(b => b.trim()));
+  if (!set.has(selectedBook)) return { selectedBook, reloaded: false };
+  return { selectedBook, reloaded: reloadSelectedWorldInfoEditor(selectedBook) };
+}
+
 export async function appendAppliedToMessage(
   messageId: number,
   applied: WorldbookWriteAppliedEntry,
