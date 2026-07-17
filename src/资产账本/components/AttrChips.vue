@@ -31,11 +31,15 @@ const visible = computed(() => {
   flex-wrap: wrap;
   gap: 0.25em 0.65em;
   margin-bottom: 0.25em;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .attrs__item {
   font-size: 0.72rem;
   color: var(--text-secondary);
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .attrs__k {
@@ -48,5 +52,6 @@ const visible = computed(() => {
 
 .attrs__v {
   font-weight: 550;
+  overflow-wrap: anywhere;
 }
 </style>

@@ -794,24 +794,23 @@ function statusTagClass(status: string): string {
 
 @media (max-width: 640px) {
   .ledger-global-header {
-    padding: 3px 8px;
-    gap: 2px;
+    padding: 6px 8px;
+    gap: 4px;
   }
 
   .gh-row {
     gap: 4px;
+    flex-wrap: wrap;
+  }
+
+  .gh-row--top {
+    align-items: center;
   }
 
   .gh-row--meta {
     padding-left: 0;
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-
-    &::-webkit-scrollbar {
-      display: none;
-    }
+    flex-wrap: wrap;
+    overflow-x: visible;
   }
 
   .gh-main-title {
@@ -819,9 +818,14 @@ function statusTagClass(status: string): string {
   }
 
   .gh-subtitle {
-    font-size: 0.58rem;
-    flex: 1 1 auto;
-    min-width: 0;
+    flex: 1 1 100%;
+    order: 5;
+    font-size: 0.62rem;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
+    padding-left: 1.55rem;
   }
 
   .gh-spacer {
@@ -830,7 +834,7 @@ function statusTagClass(status: string): string {
 
   .gh-pill {
     font-size: 0.6rem;
-    padding: 1px 5px;
+    padding: 2px 6px;
   }
 
   .gh-delta,
@@ -843,23 +847,25 @@ function statusTagClass(status: string): string {
   }
 
   .gh-theme-btn {
-    width: 26px;
-    height: 26px;
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
   }
 
   .gh-arrow {
-    width: 22px;
-    height: 22px;
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
   }
 
   .ledger-body {
     padding-top: 8px;
-    gap: 8px;
+    gap: 10px;
   }
 
   .tb-btn {
     font-size: 0.72rem;
-    padding: 0.4em 0.85em;
+    padding: 0.45em 1em;
     min-height: 36px;
   }
 
@@ -868,34 +874,12 @@ function statusTagClass(status: string): string {
     margin: 6px 0;
   }
 
-  :deep(.fold--section > .fold__head) {
-    padding: 8px 10px 8px 12px;
-  }
-
-  :deep(.fold--section > .fold__head .fold__title) {
-    font-size: 0.9rem;
-  }
-
-  :deep(.fold--section > .fold__body) {
-    padding: 2px 10px 10px 12px;
-  }
-
-  :deep(.fold--entity > .fold__head) {
-    padding: 8px 10px;
-    font-size: 0.8rem;
-  }
-
-  :deep(.fold--entity > .fold__body) {
-    padding: 8px 10px;
-  }
-
-  :deep(.fold--sub > .fold__head) {
-    padding: 8px;
-  }
-
-  :deep(.fold__arrow) {
-    width: 32px;
-    height: 32px;
+  .factor-summary {
+    flex-basis: 100%;
+    white-space: normal;
+    overflow: visible;
+    text-overflow: unset;
+    overflow-wrap: anywhere;
   }
 }
 </style>

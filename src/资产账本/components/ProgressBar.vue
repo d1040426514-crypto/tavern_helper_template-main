@@ -50,6 +50,16 @@ const info = computed(() => parseProgressPct(props.attrs, props.extraText));
   overflow: hidden;
 }
 
+@media (max-width: 640px) {
+  .progress-bar {
+    height: 8px;
+  }
+
+  .progress-info {
+    font-size: 0.72rem;
+  }
+}
+
 .progress-fill {
   height: 100%;
   border-radius: 8px;

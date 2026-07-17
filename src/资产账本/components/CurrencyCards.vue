@@ -41,16 +41,23 @@ function detail(text: string): string {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
   margin: 8px 0;
+  min-width: 0;
+  max-width: 100%;
 }
 
 @media (max-width: 640px) {
   .currency-grid {
-    grid-template-columns: minmax(100%, 1fr);
+    grid-template-columns: minmax(0, 1fr);
     gap: 8px;
   }
 
   .currency-card {
     padding: 10px;
+    min-width: 0;
+
+    &:hover {
+      transform: none;
+    }
   }
 
   .cc-total {
@@ -66,6 +73,8 @@ function detail(text: string): string {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  min-width: 0;
+  max-width: 100%;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast);
 
   &:hover {

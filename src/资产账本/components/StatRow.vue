@@ -70,6 +70,7 @@ function soft(t: string): string {
 
 .stat-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 6px;
   padding: 4px 6px;
@@ -77,6 +78,8 @@ function soft(t: string): string {
   font-size: 0.78rem;
   line-height: 1.5;
   transition: background var(--transition-fast);
+  min-width: 0;
+  max-width: 100%;
 
   &:hover {
     background: rgba(176, 125, 68, 0.04);
@@ -98,12 +101,26 @@ function soft(t: string): string {
 .stat-value {
   color: var(--text-secondary);
   word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 0.72rem;
   min-width: 0;
+  flex: 1 1 auto;
 
   &.pre {
     white-space: pre-line;
     font-size: 0.78rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .stat-label {
+    white-space: normal;
+    max-width: 40%;
+    overflow-wrap: anywhere;
+  }
+
+  .stat-value {
+    flex: 1 1 55%;
   }
 }
 </style>

@@ -322,17 +322,71 @@ function toggle() {
 }
 
 @media (max-width: 640px) {
+  .fold__head {
+    align-items: flex-start;
+    gap: 4px 6px;
+  }
+
   .fold__arrow {
-    width: 32px;
-    height: 32px;
+    width: 36px;
+    height: 36px;
+  }
+
+  .fold__summary {
+    flex: 1 1 100%;
+    order: 10;
+    font-size: 0.72em;
+    line-height: 1.4;
+    padding-left: calc(36px + 6px);
+    overflow-wrap: anywhere;
+  }
+
+  .fold__badge {
+    margin-left: 0;
+    flex-shrink: 0;
+  }
+
+  .fold--section > .fold__head {
+    padding: 8px 10px 8px 12px;
   }
 
   .fold--section > .fold__head .fold__title {
     font-size: 0.9rem;
   }
 
+  .fold--section > .fold__body {
+    padding: 2px 10px 10px 12px;
+  }
+
+  .fold--entity > .fold__head {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+  }
+
+  .fold--entity > .fold__body {
+    padding: 8px 10px;
+  }
+
   .fold--sub > .fold__head {
-    min-height: 36px;
+    padding: 8px;
+    min-height: 40px;
+    align-items: center;
+  }
+
+  .fold--sub > .fold__head .fold__arrow {
+    width: 36px;
+    height: 36px;
+    font-size: 12px;
+    margin-top: 0;
+  }
+
+  .fold--sub > .fold__body {
+    padding: 0 8px 8px;
+  }
+
+  .fold--sub.fold--leaf > .fold__head {
+    min-height: 0;
+    padding: 4px 0;
   }
 }
 </style>
