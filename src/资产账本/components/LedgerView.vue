@@ -11,16 +11,28 @@
         <div class="gh-row gh-row--title">
           <span class="gh-icon" aria-hidden="true">📒</span>
           <span class="gh-main-title">资产账簿</span>
-          <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{ data.ledgerTime.timeLine }}</span>
+          <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{
+            formatHeaderTimeLine(data.ledgerTime.timeLine)
+          }}</span>
         </div>
         <div
           v-if="data.headline.duration || data.headline.status || data.headline.delta || data.cashTotal"
           class="gh-row gh-row--meta"
         >
-          <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
-          <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
-          <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
-          <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
+          <div
+            v-if="data.headline.duration || data.headline.status"
+            class="gh-meta-group gh-meta-group--left"
+          >
+            <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
+            <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
+          </div>
+          <div
+            v-if="data.headline.delta || data.cashTotal"
+            class="gh-meta-group gh-meta-group--right"
+          >
+            <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
+            <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
+          </div>
         </div>
       </div>
       <div class="gh-actions gh-actions--stack">
@@ -423,6 +435,12 @@ function oneLine(text: string): string {
     .slice(0, 72);
 }
 
+function formatHeaderTimeLine(timeLine: string): string {
+  return String(timeLine ?? '')
+    .replace(/^\[?账目结算时间\]?\s*[:：]\s*/, '')
+    .trim();
+}
+
 /** 有 name 才返回，避免与类型 tag 重复 */
 function factorName(f: NamedBlock): string {
   return (f.attrs.name || '').trim();
@@ -563,8 +581,28 @@ function statusTagClass(status: string): string {
 .gh-row--meta {
   flex-wrap: nowrap;
   align-items: center;
-  gap: 4px 6px;
+  justify-content: space-between;
+  gap: 6px;
   overflow: hidden;
+}
+
+.gh-meta-group {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: 4px;
+  min-width: 0;
+}
+
+.gh-meta-group--left {
+  flex-shrink: 0;
+}
+
+.gh-meta-group--right {
+  margin-left: auto;
+  flex-shrink: 1;
+  justify-content: flex-end;
+  min-width: 0;
 }
 
 .gh-icon {
