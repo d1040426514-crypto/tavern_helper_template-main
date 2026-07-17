@@ -147,6 +147,24 @@ export async function deleteManagedWorldbookEntries(
   return deleteOrphanManagedWorldbookEntries(bookNames, rules, new Map());
 }
 
+/**
+ * 删除全部世界书中的工作流助手托管条目（WorkflowHelper-）。
+ * 不碰聊天写入账本/快照，也不触发 reconcile 重放。
+ */
+export async function purgeAllManagedWorldbookEntries(): Promise<number> {
+  return withWorldbookWriteLock(async () => {
+    const rules = resolveEffectiveSettings(loadSettings()).chatWorldbookWriteRules ?? [];
+    let bookNames: string[];
+    try {
+      bookNames = getWorldbookNames();
+    } catch {
+      bookNames = collectTargetBookNames(rules);
+    }
+    if (!bookNames.length) return 0;
+    return deleteOrphanManagedWorldbookEntries(bookNames, rules, new Map());
+  });
+}
+
 let lastInitReconcileLedgerSize = 0;
 let initReconcileSucceeded = false;
 

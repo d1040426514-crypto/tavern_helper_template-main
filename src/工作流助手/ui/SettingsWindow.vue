@@ -98,6 +98,7 @@ import {
   migrateWorldbookWriteRuleTarget,
   resolveWriteTargetBookName,
 } from '../worldbook/write-book-migrate';
+import { purgeAllManagedWorldbookEntries } from '../worldbook/write-reconcile';
 import type { PlotWorldbookConfig, TaskContextConfig, ChatWorldbookWriteRule } from '../tasks/schema';
 import {
   ACU_PP_CHAT_SCOPE_CHANGED,
@@ -733,6 +734,29 @@ function removeChatWorldbookWriteRule(id: string): void {
   settings.value.chatWorldbookWriteRules = settings.value.chatWorldbookWriteRules.filter(r => r.id !== id);
   ruleBookTargetSnapshot.value.delete(id);
   ruleBookMigratingIds.value.delete(id);
+}
+
+const purgingManagedWorldbookEntries = ref(false);
+
+async function handlePurgeAllManagedWorldbookEntries(): Promise<void> {
+  if (purgingManagedWorldbookEntries.value) return;
+  if (
+    !(await acuConfirm({
+      message:
+        '将删除全部世界书中以 WorkflowHelper- 开头的托管条目。不会清空本聊天的写入账本/快照；若仍在本聊天并触发重算，仍会按账本重放。建议在切换聊天前使用。确定继续？',
+    }))
+  ) {
+    return;
+  }
+  purgingManagedWorldbookEntries.value = true;
+  try {
+    const deleted = await purgeAllManagedWorldbookEntries();
+    acuToast('success', deleted > 0 ? `已清理 ${deleted} 个托管世界书条目` : '没有可清理的托管条目');
+  } catch (e) {
+    acuToast('error', `清理失败: ${e instanceof Error ? e.message : String(e)}`);
+  } finally {
+    purgingManagedWorldbookEntries.value = false;
+  }
 }
 
 const ruleBookTargetSnapshot = ref(new Map<string, string | null>());
@@ -2862,7 +2886,7 @@ function saveRunLogTaskTags(taskId: string): void {
             <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
               请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
             </p>
-            <template v-else>
+            <template v-if="worldbookWriteTargetTagOptions.length">
               <div
                 v-for="rule in settings.chatWorldbookWriteRules ?? []"
                 :key="rule.id"
@@ -3012,10 +3036,25 @@ function saveRunLogTaskTags(taskId: string): void {
                   </div>
                 </div>
               </div>
-              <button type="button" class="acu-btn acu-btn--sm" @click="addChatWorldbookWriteRule">
+            </template>
+            <div class="acu-row acu-row--inline" style="gap: 8px">
+              <button
+                v-if="worldbookWriteTargetTagOptions.length"
+                type="button"
+                class="acu-btn acu-btn--sm"
+                @click="addChatWorldbookWriteRule"
+              >
                 添加规则
               </button>
-            </template>
+              <button
+                type="button"
+                class="acu-btn acu-btn--sm"
+                :disabled="purgingManagedWorldbookEntries"
+                @click="handlePurgeAllManagedWorldbookEntries"
+              >
+                清理全部世界书条目
+              </button>
+            </div>
           </div>
         </div>
 
