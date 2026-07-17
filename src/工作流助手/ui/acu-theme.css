@@ -621,17 +621,8 @@
   margin-top: 8px;
 }
 
-.acu-collapsible-subsection__header--with-help .acu-collapsible-subsection__summary {
-  flex: 1;
-  min-width: 0;
-}
-
-.acu-config-rules-section__status {
-  margin: 0 0 10px;
-  color: var(--acu-text-3);
-}
-
 .acu-config-rules-section__collapse {
+  margin-top: 8px;
   margin-bottom: 0;
 }
 
@@ -643,7 +634,7 @@
   display: flex;
   flex-direction: column;
   gap: 10px;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .acu-config-rules-list__add,

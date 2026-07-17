@@ -2875,7 +2875,6 @@ function saveRunLogTaskTags(taskId: string): void {
                 模板占位符同文末注入；模板内 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code> 不会触发变量解析。
               </p>
             </AcuHelpPanel>
-            <p class="acu-notes acu-notes--sm acu-config-rules-section__status">{{ chatBodyTagReplaceSummary }}</p>
             <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
               <button
                 type="button"
@@ -2884,7 +2883,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 @click="chatBodyTagReplaceExpanded = !chatBodyTagReplaceExpanded"
               >
                 <span class="acu-collapsible-subsection__title">规则列表</span>
-                <span class="acu-collapsible-subsection__summary" />
+                <span class="acu-collapsible-subsection__summary">{{ chatBodyTagReplaceSummary }}</span>
                 <i
                   class="fa-fw fa-solid acu-collapsible-subsection__chevron"
                   :class="chatBodyTagReplaceExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
@@ -2996,7 +2995,6 @@ function saveRunLogTaskTags(taskId: string): void {
                 条目名固定为默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。写入内容保留完整标签块。开启按属性拆分且实际写出属性条目时，会额外维护两条独立恒定条目 <code>{base}-包裹-上</code> / <code>{base}-包裹-下</code>（正文为可配置的开/闭标签，插入顺序分别为规则 order±1）。
               </p>
             </AcuHelpPanel>
-            <p class="acu-notes acu-notes--sm acu-config-rules-section__status">{{ chatWorldbookWriteSummary }}</p>
             <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
               <button
                 type="button"
@@ -3005,7 +3003,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 @click="chatWorldbookWriteExpanded = !chatWorldbookWriteExpanded"
               >
                 <span class="acu-collapsible-subsection__title">规则列表</span>
-                <span class="acu-collapsible-subsection__summary" />
+                <span class="acu-collapsible-subsection__summary">{{ chatWorldbookWriteSummary }}</span>
                 <i
                   class="fa-fw fa-solid acu-collapsible-subsection__chevron"
                   :class="chatWorldbookWriteExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
