@@ -2851,29 +2851,15 @@ function saveRunLogTaskTags(taskId: string): void {
             <textarea v-model="settings.finalInjectTemplate" class="acu-textarea" placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}" />
           </div>
 
-          <div class="acu-section">
-            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section">
-              <button
-                type="button"
-                class="acu-collapsible-subsection__header acu-collapsible-subsection__header--with-help"
-                :aria-expanded="chatBodyTagReplaceExpanded"
-                @click="chatBodyTagReplaceExpanded = !chatBodyTagReplaceExpanded"
-              >
-                <span class="acu-collapsible-subsection__title">聊天正文标签替换</span>
-                <span class="acu-collapsible-subsection__summary">{{ chatBodyTagReplaceSummary }}</span>
-                <AcuHelpIconBtn
-                  v-model:open="chatBodyTagReplaceHelpOpen"
-                  panel-id="chat-body-tag-replace-help"
-                  label="聊天正文标签替换说明"
-                  @click.stop
-                />
-                <i
-                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
-                  :class="chatBodyTagReplaceExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
-                  aria-hidden="true"
-                />
-              </button>
-              <div v-show="chatBodyTagReplaceExpanded" class="acu-collapsible-subsection__body">
+          <div class="acu-section acu-config-rules-section">
+            <div class="acu-heading-with-help">
+              <h4>聊天正文标签替换</h4>
+              <AcuHelpIconBtn
+                v-model:open="chatBodyTagReplaceHelpOpen"
+                panel-id="chat-body-tag-replace-help"
+                label="聊天正文标签替换说明"
+              />
+            </div>
             <AcuHelpPanel
               v-model:open="chatBodyTagReplaceHelpOpen"
               id="chat-body-tag-replace-help"
@@ -2889,6 +2875,23 @@ function saveRunLogTaskTags(taskId: string): void {
                 模板占位符同文末注入；模板内 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code> 不会触发变量解析。
               </p>
             </AcuHelpPanel>
+            <p class="acu-notes acu-notes--sm acu-config-rules-section__status">{{ chatBodyTagReplaceSummary }}</p>
+            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
+              <button
+                type="button"
+                class="acu-collapsible-subsection__header"
+                :aria-expanded="chatBodyTagReplaceExpanded"
+                @click="chatBodyTagReplaceExpanded = !chatBodyTagReplaceExpanded"
+              >
+                <span class="acu-collapsible-subsection__title">规则列表</span>
+                <span class="acu-collapsible-subsection__summary" />
+                <i
+                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                  :class="chatBodyTagReplaceExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <div v-show="chatBodyTagReplaceExpanded" class="acu-collapsible-subsection__body">
             <p v-if="!assistantChatExtractTags.length" class="acu-notes acu-notes--sm">
               请先在上方「聊天摘取标签」中配置 AI 输出摘取项。
             </p>
@@ -2960,29 +2963,15 @@ function saveRunLogTaskTags(taskId: string): void {
             </div>
           </div>
 
-          <div class="acu-section">
-            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section">
-              <button
-                type="button"
-                class="acu-collapsible-subsection__header acu-collapsible-subsection__header--with-help"
-                :aria-expanded="chatWorldbookWriteExpanded"
-                @click="chatWorldbookWriteExpanded = !chatWorldbookWriteExpanded"
-              >
-                <span class="acu-collapsible-subsection__title">世界书写入规则</span>
-                <span class="acu-collapsible-subsection__summary">{{ chatWorldbookWriteSummary }}</span>
-                <AcuHelpIconBtn
-                  v-model:open="chatWorldbookWriteHelpOpen"
-                  panel-id="chat-worldbook-write-help"
-                  label="世界书写入规则说明"
-                  @click.stop
-                />
-                <i
-                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
-                  :class="chatWorldbookWriteExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
-                  aria-hidden="true"
-                />
-              </button>
-              <div v-show="chatWorldbookWriteExpanded" class="acu-collapsible-subsection__body">
+          <div class="acu-section acu-config-rules-section">
+            <div class="acu-heading-with-help">
+              <h4>世界书写入规则</h4>
+              <AcuHelpIconBtn
+                v-model:open="chatWorldbookWriteHelpOpen"
+                panel-id="chat-worldbook-write-help"
+                label="世界书写入规则说明"
+              />
+            </div>
             <AcuHelpPanel
               v-model:open="chatWorldbookWriteHelpOpen"
               id="chat-worldbook-write-help"
@@ -3007,6 +2996,23 @@ function saveRunLogTaskTags(taskId: string): void {
                 条目名固定为默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。写入内容保留完整标签块。开启按属性拆分且实际写出属性条目时，会额外维护两条独立恒定条目 <code>{base}-包裹-上</code> / <code>{base}-包裹-下</code>（正文为可配置的开/闭标签，插入顺序分别为规则 order±1）。
               </p>
             </AcuHelpPanel>
+            <p class="acu-notes acu-notes--sm acu-config-rules-section__status">{{ chatWorldbookWriteSummary }}</p>
+            <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
+              <button
+                type="button"
+                class="acu-collapsible-subsection__header"
+                :aria-expanded="chatWorldbookWriteExpanded"
+                @click="chatWorldbookWriteExpanded = !chatWorldbookWriteExpanded"
+              >
+                <span class="acu-collapsible-subsection__title">规则列表</span>
+                <span class="acu-collapsible-subsection__summary" />
+                <i
+                  class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                  :class="chatWorldbookWriteExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                  aria-hidden="true"
+                />
+              </button>
+              <div v-show="chatWorldbookWriteExpanded" class="acu-collapsible-subsection__body">
             <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
               请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
             </p>

@@ -626,8 +626,16 @@
   min-width: 0;
 }
 
-.acu-config-rules-section .acu-collapsible-subsection__body > .acu-notes:first-child,
-.acu-config-rules-section .acu-collapsible-subsection__body > .acu-help-panel:first-child {
+.acu-config-rules-section__status {
+  margin: 0 0 10px;
+  color: var(--acu-text-3);
+}
+
+.acu-config-rules-section__collapse {
+  margin-bottom: 0;
+}
+
+.acu-config-rules-section .acu-collapsible-subsection__body > .acu-notes:first-child {
   margin-top: 10px;
 }
 
