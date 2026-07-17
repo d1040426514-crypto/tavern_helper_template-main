@@ -7,42 +7,32 @@
       :aria-label="bodyOpen ? '收起资产账簿' : '展开资产账簿'"
       @click="bodyOpen = !bodyOpen"
     >
-      <div class="gh-row gh-row--top">
-        <div class="gh-brand">
+      <div class="gh-body">
+        <div class="gh-row gh-row--title">
           <span class="gh-icon" aria-hidden="true">📒</span>
           <span class="gh-main-title">资产账簿</span>
+          <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{ data.ledgerTime.timeLine }}</span>
         </div>
-        <div class="gh-actions">
-          <button
-            type="button"
-            class="gh-theme-btn"
-            title="切换主题"
-            @click.stop="emit('toggle-theme')"
-          >
-            {{ themeDark ? '☀️' : '🌓' }}
-          </button>
-          <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
-        </div>
-      </div>
-      <p v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{ data.ledgerTime.timeLine }}</p>
-      <div
-        v-if="data.headline.duration || data.headline.status || data.headline.delta || data.cashTotal"
-        class="gh-row gh-row--meta"
-      >
         <div
-          v-if="data.headline.duration || data.headline.status"
-          class="gh-meta-group gh-meta-group--primary"
+          v-if="data.headline.duration || data.headline.status || data.headline.delta || data.cashTotal"
+          class="gh-row gh-row--meta"
         >
           <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
           <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
-        </div>
-        <div
-          v-if="data.headline.delta || data.cashTotal"
-          class="gh-meta-group gh-meta-group--secondary"
-        >
           <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
           <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
         </div>
+      </div>
+      <div class="gh-actions gh-actions--stack">
+        <button
+          type="button"
+          class="gh-theme-btn"
+          title="切换主题"
+          @click.stop="emit('toggle-theme')"
+        >
+          {{ themeDark ? '☀️' : '🌓' }}
+        </button>
+        <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
       </div>
     </header>
 
@@ -502,13 +492,13 @@ function statusTagClass(status: string): string {
 
 .ledger-global-header {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: stretch;
-  gap: 6px;
+  gap: 8px;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  padding: 8px 10px;
+  padding: 6px 8px 6px 10px;
   min-height: 0;
   line-height: 1.25;
   background: var(--bg-card);
@@ -533,6 +523,15 @@ function statusTagClass(status: string): string {
   }
 }
 
+.gh-body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
 .gh-row {
   display: flex;
   align-items: center;
@@ -541,18 +540,10 @@ function statusTagClass(status: string): string {
   width: 100%;
 }
 
-.gh-row--top {
-  justify-content: space-between;
+.gh-row--title {
   flex-wrap: nowrap;
-  gap: 8px;
-}
-
-.gh-brand {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-  flex: 1 1 auto;
+  gap: 5px;
+  overflow: hidden;
 }
 
 .gh-actions {
@@ -562,24 +553,18 @@ function statusTagClass(status: string): string {
   flex-shrink: 0;
 }
 
+.gh-actions--stack {
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  align-self: center;
+}
+
 .gh-row--meta {
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 6px 8px;
-}
-
-.gh-meta-group {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
   gap: 4px 6px;
-  min-width: 0;
-}
-
-.gh-meta-group--secondary {
-  margin-left: auto;
-  justify-content: flex-end;
+  overflow: hidden;
 }
 
 .gh-icon {
@@ -596,20 +581,21 @@ function statusTagClass(status: string): string {
   color: var(--text-primary);
   line-height: 1.2;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
+  flex-shrink: 0;
 }
 
 .gh-subtitle {
   margin: 0;
-  padding: 0 2px;
+  padding: 0;
   font-size: 0.68rem;
   font-weight: 500;
   color: var(--text-tertiary);
-  line-height: 1.4;
-  overflow-wrap: anywhere;
-  word-break: break-word;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .gh-pill {
@@ -640,7 +626,10 @@ function statusTagClass(status: string): string {
   font-weight: 700;
   color: var(--accent-teal, var(--accent-primary));
   white-space: nowrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .gh-arrow {
@@ -838,54 +827,46 @@ function statusTagClass(status: string): string {
 
 @media (max-width: 640px) {
   .ledger-global-header {
-    padding: 8px 10px;
+    padding: 6px 8px 6px 10px;
     gap: 6px;
   }
 
-  .gh-row--top {
-    align-items: center;
+  .gh-body {
+    gap: 2px;
   }
 
   .gh-main-title {
-    font-size: 0.86rem;
+    font-size: 0.84rem;
   }
 
   .gh-subtitle {
-    font-size: 0.64rem;
-    line-height: 1.45;
+    font-size: 0.6rem;
   }
 
   .gh-row--meta {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 4px;
-  }
-
-  .gh-meta-group--secondary {
-    margin-left: 0;
-    justify-content: flex-start;
+    gap: 3px 5px;
   }
 
   .gh-pill {
-    font-size: 0.6rem;
-    padding: 2px 6px;
+    font-size: 0.58rem;
+    padding: 1px 5px;
   }
 
   .gh-delta,
   .gh-cash {
-    font-size: 0.62rem;
+    font-size: 0.6rem;
   }
 
   .gh-theme-btn {
-    width: 32px;
-    height: 32px;
-    font-size: 14px;
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
   }
 
   .gh-arrow {
-    width: 32px;
-    height: 32px;
-    font-size: 12px;
+    width: 28px;
+    height: 28px;
+    font-size: 11px;
   }
 
   .ledger-body {
