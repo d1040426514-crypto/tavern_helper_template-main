@@ -3,7 +3,12 @@ import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
 import { redactScriptSettingsForShare } from '../settings-security';
-import type { PostProcessTask, ReplicaFamilyScheduleMode, TaskWorkflowPresetEntry } from '../tasks/schema';
+import type {
+  PostProcessTask,
+  ReplicaFamilyScheduleMode,
+  RunLogTaskResult,
+  TaskWorkflowPresetEntry,
+} from '../tasks/schema';
 import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
 import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
@@ -1741,6 +1746,36 @@ function downloadSettingsJson(data: unknown, filename: string): void {
   a.click();
 }
 
+function downloadTextFile(text: string, filename: string): void {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+}
+
+function sanitizeLogFilenamePart(name: string): string {
+  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/\s+/g, '_').trim();
+  return cleaned || 'task';
+}
+
+function exportAllRunLogs(): void {
+  const status = settings.value.lastRunStatus;
+  if (!status?.taskResults?.length) {
+    acuToast('warning', '暂无运行日志可导出');
+    return;
+  }
+  const mid = status.messageId ?? 'unknown';
+  downloadTextFile(formatAllRunLogsText(), `workflow-assistant-run-log-all-floor${mid}.txt`);
+  acuToast('success', '已导出全部运行日志');
+}
+
+function exportTaskRunLog(task: RunLogTaskResult): void {
+  const safeName = sanitizeLogFilenamePart(task.taskName || task.taskId);
+  downloadTextFile(formatRunLogTaskText(task), `workflow-assistant-run-log-${safeName}.txt`);
+  acuToast('success', `已导出任务「${task.taskName}」日志`);
+}
+
 function exportPresetJson() {
   downloadSettingsJson(
     redactScriptSettingsForShare(settings.value),
@@ -1840,6 +1875,91 @@ function runLogOtherTagEntries(r: { extractedTags?: Record<string, string> }): [
 
 const runLogTagDrafts = ref<Record<string, Record<string, string>>>({});
 const runLogTagEditMode = ref<Record<string, boolean>>({});
+
+function runLogTagExportValue(taskId: string, tag: string, fallback: string): string {
+  const draft = runLogTagDrafts.value[taskId]?.[tag];
+  return draft !== undefined ? draft : fallback;
+}
+
+function formatRunLogTaskText(task: RunLogTaskResult): string {
+  const lines: string[] = [];
+  lines.push(`任务：${task.taskName}`);
+
+  const metaParts: string[] = [];
+  if (task.stage != null) metaParts.push(`阶段 ${task.stage}`);
+  metaParts.push(runLogStatusText(task));
+  if (task.durationMs != null) metaParts.push(runLogDurationText(task.durationMs));
+  lines.push(metaParts.join(' · '));
+  lines.push('');
+
+  const writable = runLogWritableTagEntries(task);
+  if (writable.length) {
+    lines.push('## 摘取标签');
+    for (const [tag, value] of writable) {
+      lines.push(`### ${tag}`);
+      lines.push(runLogTagExportValue(task.taskId, tag, value));
+      lines.push('');
+    }
+  }
+
+  const other = runLogOtherTagEntries(task);
+  if (other.length) {
+    lines.push('## 其他摘取（不写入 post_process_tags）');
+    for (const [tag, value] of other) {
+      lines.push(`### ${tag}`);
+      lines.push(runLogTagExportValue(task.taskId, tag, value));
+      lines.push('');
+    }
+  }
+
+  if (task.promptMessages?.length) {
+    lines.push('## 请求提示词');
+    for (const msg of task.promptMessages) {
+      lines.push(`### ${runLogPromptSegmentTitle(msg)}`);
+      lines.push(msg.content ?? '');
+      lines.push('');
+    }
+  } else if (task.skipped || !task.success) {
+    lines.push('## 请求提示词');
+    lines.push('（本任务未发起 API 请求）');
+    lines.push('');
+  }
+
+  if (runLogHadApiRequest(task)) {
+    lines.push('## AI 输出');
+    lines.push(runLogAiOutputText(task) || '（无输出内容）');
+    lines.push('');
+  }
+
+  const reasoning = runLogAiReasoningText(task);
+  if (reasoning) {
+    lines.push('## 推理内容 (reasoning_content)');
+    lines.push(reasoning);
+    lines.push('');
+  }
+
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines.join('\n');
+}
+
+function formatAllRunLogsText(): string {
+  const status = settings.value.lastRunStatus;
+  const lines: string[] = ['运行日志'];
+  const metaParts: string[] = [];
+  if (status?.messageId != null) metaParts.push(`楼层 #${status.messageId}`);
+  if (status?.at) metaParts.push(formatRunLogTime(status.at));
+  if (metaParts.length) lines.push(metaParts.join(' · '));
+  lines.push('');
+
+  for (const task of status?.taskResults ?? []) {
+    lines.push('==========');
+    lines.push(formatRunLogTaskText(task));
+    lines.push('');
+  }
+
+  while (lines.length && lines[lines.length - 1] === '') lines.pop();
+  return lines.join('\n');
+}
 
 function initRunLogTagDrafts(): void {
   const drafts: Record<string, Record<string, string>> = {};
@@ -3215,7 +3335,21 @@ function saveRunLogTaskTags(taskId: string): void {
           </div>
 
           <div class="acu-section">
-            <h4>运行日志</h4>
+            <div class="acu-run-log-section__head">
+              <h4>运行日志</h4>
+              <div class="acu-run-log-section__toolbar">
+                <button
+                  type="button"
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  title="导出全部运行日志"
+                  aria-label="导出全部运行日志"
+                  :disabled="!settings.lastRunStatus.taskResults?.length"
+                  @click="exportAllRunLogs"
+                >
+                  <i class="fa-fw fa-solid fa-file-export" aria-hidden="true"></i>
+                </button>
+              </div>
+            </div>
             <div v-if="settings.lastRunStatus.taskResults?.length" class="acu-run-log-task-list">
               <details
                 v-for="r in settings.lastRunStatus.taskResults"
@@ -3232,6 +3366,15 @@ function saveRunLogTaskTags(taskId: string): void {
                     {{ runLogStatusText(r) }}
                   </span>
                   <span v-if="r.durationMs != null" class="acu-notes acu-run-log-task__meta">{{ runLogDurationText(r.durationMs) }}</span>
+                  <button
+                    type="button"
+                    class="acu-btn acu-btn--sm acu-icon-btn acu-run-log-task__export"
+                    title="导出该任务日志"
+                    aria-label="导出该任务日志"
+                    @click.stop="exportTaskRunLog(r)"
+                  >
+                    <i class="fa-fw fa-solid fa-file-export" aria-hidden="true"></i>
+                  </button>
                 </summary>
                 <div class="acu-run-log-task__body">
                   <template v-if="runLogWritableTagEntries(r).length">

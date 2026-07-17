@@ -1995,6 +1995,25 @@
   gap: 10px;
 }
 
+.acu-run-log-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.acu-run-log-section__head h4 {
+  margin: 0;
+}
+
+.acu-run-log-section__toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
 .acu-run-log-task {
   border: 1px solid var(--acu-border);
   border-radius: var(--acu-radius-md);
@@ -2052,6 +2071,15 @@
 
 .acu-run-log-task__status {
   margin-left: auto;
+}
+
+.acu-run-log-task__export {
+  flex-shrink: 0;
+  min-width: 32px;
+  padding-inline: 8px;
+  color: var(--acu-text-2);
+  border: 1px solid var(--acu-border);
+  background: var(--acu-bg-1);
 }
 
 .acu-run-log-task__body {
