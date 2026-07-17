@@ -13,7 +13,10 @@ export type EntityData = {
   materials: NamedBlock[];
   equipments: NamedBlock[];
   staffTotal: string;
+  staffOnDuty: string;
+  staffNote: string;
   roles: AttrMap[];
+  keyPersons: NamedBlock[];
 };
 
 export type OpsLine = NamedBlock & { attrs: AttrMap };

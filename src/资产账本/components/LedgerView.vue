@@ -204,18 +204,40 @@
           </FoldPanel>
 
           <FoldPanel
-            v-if="ent.roles.length || ent.staffTotal"
+            v-if="ent.roles.length || ent.keyPersons.length || ent.staffTotal"
             variant="sub"
             title="人员"
-            :summary="ent.staffTotal ? `共 ${ent.staffTotal}` : `${ent.roles.length} 职级`"
+            :summary="staffSummary(ent)"
             :default-open="false"
             :forced-open="forcedOpen"
           >
+            <p v-if="ent.staffNote" class="muted staff-note">{{ ent.staffNote }}</p>
             <div v-for="(r, ri) in ent.roles" :key="'r-' + ri" class="item-row">
               <strong>{{ r.role || '职级' }}</strong>
               <span v-if="r.count" class="muted"> ×{{ r.count }}</span>
-              <AttrChips :attrs="r" :hide="['role', 'count']" />
+              <span v-if="r.level" class="muted"> · {{ r.level }}</span>
+              <span v-if="r.status" class="tag" :class="statusTagClass(r.status)">{{ r.status }}</span>
+              <AttrChips :attrs="r" :hide="['role', 'count', 'status', 'level']" />
             </div>
+            <FoldPanel
+              v-for="(kp, ki) in ent.keyPersons"
+              :key="'kp-' + ki"
+              variant="sub"
+              :title="pick(kp.attrs, 'name') || '核心人物'"
+              :summary="keyPersonSummary(kp)"
+              :default-open="false"
+              :forced-open="forcedOpen"
+            >
+              <span
+                v-if="pick(kp.attrs, 'status')"
+                class="tag"
+                :class="statusTagClass(pick(kp.attrs, 'status'))"
+              >
+                {{ pick(kp.attrs, 'status') }}
+              </span>
+              <AttrChips :attrs="kp.attrs" :hide="['name', 'status']" />
+              <StatRow :text="kp.text" />
+            </FoldPanel>
           </FoldPanel>
         </FoldPanel>
       </FoldPanel>
@@ -451,12 +473,34 @@ function pick(attrs: Record<string, string>, key: string): string {
 }
 
 function entitySummary(ent: EntityData): string {
+  const staffLabel = ent.staffTotal
+    ? `人员${ent.staffTotal}`
+    : ent.keyPersons.length
+      ? `核心${ent.keyPersons.length}`
+      : '';
   const parts = [
     ent.facilities.length ? `设施${ent.facilities.length}` : '',
     ent.materials.length ? `物资${ent.materials.length}` : '',
-    ent.staffTotal ? `人员${ent.staffTotal}` : '',
+    staffLabel,
   ].filter(Boolean);
   return parts.join(' · ');
+}
+
+function staffSummary(ent: EntityData): string {
+  const parts = [
+    ent.staffTotal ? `共 ${ent.staffTotal}` : '',
+    ent.staffOnDuty ? `在岗 ${ent.staffOnDuty}` : '',
+    ent.roles.length ? `职级 ${ent.roles.length}` : '',
+    ent.keyPersons.length ? `核心 ${ent.keyPersons.length}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function keyPersonSummary(kp: NamedBlock): string {
+  const role = pick(kp.attrs, 'role');
+  const body = oneLine(kp.text);
+  if (role && body) return `${role} · ${body}`;
+  return role || body;
 }
 
 function moneySummary(total: string, period: string): string {
@@ -495,8 +539,25 @@ function runBadgeClass(run?: string): string {
 
 function statusTagClass(status: string): string {
   const s = status.toLowerCase();
-  if (s.includes('normal') || s.includes('正常')) return 'tag-green';
-  if (s.includes('damaged') || s.includes('idle') || s.includes('损') || s.includes('闲')) return 'tag-red';
+  if (
+    s.includes('normal') ||
+    s.includes('正常') ||
+    s.includes('满编') ||
+    s.includes('在岗')
+  ) {
+    return 'tag-green';
+  }
+  if (
+    s.includes('damaged') ||
+    s.includes('idle') ||
+    s.includes('损') ||
+    s.includes('闲') ||
+    s.includes('缺编') ||
+    s.includes('伤病') ||
+    s.includes('暂离')
+  ) {
+    return 'tag-red';
+  }
   return 'tag-primary';
 }
 </script>
@@ -806,6 +867,10 @@ function statusTagClass(status: string): string {
 .muted {
   color: var(--text-tertiary);
   font-size: 0.85em;
+}
+
+.staff-note {
+  margin: 0 0 0.4em;
 }
 
 .tag {

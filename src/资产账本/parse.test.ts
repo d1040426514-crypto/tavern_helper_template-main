@@ -88,6 +88,29 @@ test('parseLedger combines LedgerTime + body', () => {
   assert.equal(data.operations[0]?.projects[0]?.attrs.progress, '60%');
 });
 
+test('parse staff meta, roles and key persons', () => {
+  const body = parseLedgerBody(`
+<实体 name="北岸工坊">
+  <人员 total="12" 在岗="11" note="1人外派押运">
+    <职级 role="工匠" count="8" cost="2银/人/周" costType="薪饷" 变动="0" status="满编" level="熟练" />
+    <核心人物 name="老刘" role="执事" cost="5银/周" costType="薪饷" status="在岗">
+      忠诚:高 | 技能:督造精通 | 重点:扩仓督造 | 风险:汛期运输 | 本期:督建扩仓项目
+    </核心人物>
+  </人员>
+</实体>
+`);
+  const ent = body.entities[0];
+  assert.equal(ent?.staffTotal, '12');
+  assert.equal(ent?.staffOnDuty, '11');
+  assert.equal(ent?.staffNote, '1人外派押运');
+  assert.equal(ent?.roles[0]?.cost, '2银/人/周');
+  assert.equal(ent?.roles[0]?.level, '熟练');
+  assert.equal(ent?.roles[0]?.status, '满编');
+  assert.equal(ent?.keyPersons[0]?.attrs.name, '老刘');
+  assert.equal(ent?.keyPersons[0]?.attrs.role, '执事');
+  assert.match(ent?.keyPersons[0]?.text ?? '', /忠诚:高/);
+});
+
 test('findAllPairs self-closing', () => {
   const hits = findAllPairs('<设施 type="A" count="1" />', '设施');
   assert.equal(hits.length, 1);

@@ -16,7 +16,7 @@ function normalizeMarkup(text: string): string {
   return String(text ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(
-      /<(本期结算|外因|内因|流动资金|实体|经营|运营|基础设施|仓库|人员|收入|支出|产能|可交付|闭环校验|净值|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
+      /<(本期结算|外因|内因|流动资金|实体|经营|运营|基础设施|仓库|人员|收入|支出|产能|可交付|闭环校验|净值|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
       '<$1 $2',
     );
 }
@@ -174,6 +174,7 @@ function parseEntity(hit: TagHit): EntityData {
 
   const staff = findFirstPair(hit.inner, '人员');
   const roles = staff ? findAllSelfClosing(staff.inner, '职级') : [];
+  const keyPersons = staff ? namedFromHits(findAllPairs(staff.inner, '核心人物')) : [];
 
   return {
     name,
@@ -182,7 +183,10 @@ function parseEntity(hit: TagHit): EntityData {
     materials,
     equipments,
     staffTotal: staff ? pickAttr(staff.attrs, 'total') : '',
+    staffOnDuty: staff ? pickAttr(staff.attrs, '在岗') : '',
+    staffNote: staff ? pickAttr(staff.attrs, 'note') : '',
     roles,
+    keyPersons,
   };
 }
 
