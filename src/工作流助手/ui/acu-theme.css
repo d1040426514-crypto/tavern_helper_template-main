@@ -1367,6 +1367,8 @@
 .acu-wb-write-rule__field .acu-input,
 .acu-wb-write-rule__field .acu-textarea {
   width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .acu-wb-write-rule__field--tag {
@@ -1396,24 +1398,42 @@
   flex: 0 0 100px;
 }
 
+.acu-wb-write-rule__checks {
+  display: contents;
+}
+
 .acu-wb-write-rule__field--wrap {
   flex: 0 0 120px;
 }
 
 .acu-wb-write-rule__field--book {
-  flex: 0 0 110px;
+  flex: 1 1 110px;
+  min-width: 0;
 }
 
 .acu-wb-write-rule__field--book-name {
-  flex: 0 0 140px;
+  flex: 1 1 140px;
+  min-width: 0;
 }
 
 .acu-wb-write-rule__field--position {
-  flex: 0 0 130px;
+  flex: 1 1 130px;
+  min-width: 0;
 }
 
 .acu-wb-write-rule__field--num {
-  flex: 0 0 88px;
+  flex: 0 1 72px;
+  min-width: 0;
+}
+
+.acu-wb-write-rule__field--depth {
+  flex: 0 0 auto;
+  width: 4em;
+}
+
+.acu-wb-write-rule__field--depth .acu-input {
+  width: 100%;
+  max-width: 4em;
 }
 
 .acu-wb-write-rule__check {
@@ -2981,6 +3001,20 @@
   .acu-wb-write-rule__field--num {
     flex: 1 1 auto;
     width: 100%;
+    min-width: 0;
+  }
+
+  .acu-wb-write-rule__checks {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 10px;
+    width: 100%;
+  }
+
+  .acu-wb-write-rule__checks .acu-wb-write-rule__field--check {
+    flex: 1 1 0;
+    width: auto;
     min-width: 0;
   }
 

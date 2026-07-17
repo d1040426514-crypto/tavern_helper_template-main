@@ -624,6 +624,9 @@ function goToPage(page: number) {
   if (currentPage.value === 2 || currentPage.value === 3) {
     void refreshTaskView();
   }
+  if (currentPage.value === 3) {
+    refreshWorldbookNamesList();
+  }
 }
 
 const assistantChatExtractTags = computed(() =>
@@ -738,6 +741,18 @@ const ruleBookMigratingIds = ref(new Set<string>());
 function rememberRuleBookTargetSnapshot(rule: ChatWorldbookWriteRule): void {
   const resolved = resolveWriteTargetBookName(rule);
   if (resolved) ruleBookTargetSnapshot.value.set(rule.id, resolved);
+}
+
+function onManualBookNameFocus(rule: ChatWorldbookWriteRule): void {
+  refreshWorldbookNamesList();
+  rememberRuleBookTargetSnapshot(rule);
+}
+
+function onRuleBookSourceChanged(rule: ChatWorldbookWriteRule): void {
+  if (rule.bookSource === 'manual') {
+    refreshWorldbookNamesList();
+  }
+  void onRuleBookTargetChanged(rule);
 }
 
 function syncAllRuleBookTargetSnapshots(): void {
@@ -2888,12 +2903,21 @@ function saveRunLogTaskTags(taskId: string): void {
                         :disabled="rule.entryType !== 'keyword'"
                       />
                     </div>
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                      <label class="acu-label-with-help">按属性拆分</label>
-                      <label class="acu-checkbox-row acu-wb-write-rule__check">
-                        <input v-model="rule.splitByAttr" type="checkbox" />
-                        <span>启用</span>
-                      </label>
+                    <div class="acu-wb-write-rule__checks">
+                      <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                        <label class="acu-label-with-help">按属性拆分</label>
+                        <label class="acu-checkbox-row acu-wb-write-rule__check">
+                          <input v-model="rule.splitByAttr" type="checkbox" />
+                          <span>启用</span>
+                        </label>
+                      </div>
+                      <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                        <label class="acu-label-with-help">防止递归触发</label>
+                        <label class="acu-checkbox-row acu-wb-write-rule__check">
+                          <input v-model="rule.preventRecursion" type="checkbox" />
+                          <span>启用</span>
+                        </label>
+                      </div>
                     </div>
                     <div
                       v-if="rule.splitByAttr"
@@ -2906,13 +2930,6 @@ function saveRunLogTaskTags(taskId: string): void {
                         :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
                       />
                     </div>
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                      <label class="acu-label-with-help">防止递归触发</label>
-                      <label class="acu-checkbox-row acu-wb-write-rule__check">
-                        <input v-model="rule.preventRecursion" type="checkbox" />
-                        <span>启用</span>
-                      </label>
-                    </div>
                   </div>
                   <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
                     <div class="acu-wb-write-rule__field acu-wb-write-rule__field--book">
@@ -2922,7 +2939,7 @@ function saveRunLogTaskTags(taskId: string): void {
                         class="acu-input"
                         :disabled="isRuleBookTargetMigrating(rule.id)"
                         @focus="rememberRuleBookTargetSnapshot(rule)"
-                        @change="onRuleBookTargetChanged(rule)"
+                        @change="onRuleBookSourceChanged(rule)"
                       >
                         <option value="character">角色主世界书</option>
                         <option value="manual">手动指定</option>
@@ -2937,7 +2954,7 @@ function saveRunLogTaskTags(taskId: string): void {
                         v-model="rule.manualBookName"
                         class="acu-input"
                         :disabled="isRuleBookTargetMigrating(rule.id)"
-                        @focus="rememberRuleBookTargetSnapshot(rule)"
+                        @focus="onManualBookNameFocus(rule)"
                         @change="onRuleBookTargetChanged(rule)"
                       >
                         <option value="">请选择</option>
@@ -2961,7 +2978,7 @@ function saveRunLogTaskTags(taskId: string): void {
                     </div>
                     <div
                       v-if="isWorldbookWriteAtDepth(rule)"
-                      class="acu-wb-write-rule__field acu-wb-write-rule__field--num"
+                      class="acu-wb-write-rule__field acu-wb-write-rule__field--num acu-wb-write-rule__field--depth"
                     >
                       <label class="acu-label-with-help">插入深度</label>
                       <input
@@ -2995,14 +3012,9 @@ function saveRunLogTaskTags(taskId: string): void {
                   </div>
                 </div>
               </div>
-              <div class="acu-row acu-row--inline" style="gap: 8px">
-                <button type="button" class="acu-btn acu-btn--sm" @click="addChatWorldbookWriteRule">
-                  添加规则
-                </button>
-                <button type="button" class="acu-btn acu-btn--sm" @click="refreshWorldbookNamesList">
-                  刷新世界书列表
-                </button>
-              </div>
+              <button type="button" class="acu-btn acu-btn--sm" @click="addChatWorldbookWriteRule">
+                添加规则
+              </button>
             </template>
           </div>
         </div>
