@@ -8,6 +8,7 @@ export type NamedBlock = {
 
 export type EntityData = {
   name: string;
+  location: string;
   attrs: AttrMap;
   facilities: AttrMap[];
   materials: NamedBlock[];
@@ -27,6 +28,8 @@ export type BusinessData = {
   revenueTotal: string;
   revenuePeriod: string;
   revenueItems: NamedBlock[];
+  /** 无 <条目> 时的收入正文（如 原因:...） */
+  revenueNote: string;
   expenseTotal: string;
   expensePeriod: string;
   expenseItems: NamedBlock[];
@@ -46,6 +49,9 @@ export type ProjectData = {
 export type OperationsData = {
   name: string;
   attrs: AttrMap;
+  /** <主管>/<执事> 的 name 属性 */
+  managerName: string;
+  /** 标签内文（重点/风险等） */
   manager: string;
   projects: ProjectData[];
 };

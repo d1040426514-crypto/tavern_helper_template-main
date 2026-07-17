@@ -16,7 +16,7 @@ function normalizeMarkup(text: string): string {
   return String(text ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(
-      /<(本期结算|外因|内因|流动资金|实体|经营|运营|基础设施|仓库|人员|收入|支出|产能|可交付|闭环校验|净值|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
+      /<(本期结算|外因|内因|流动资金|实体|经营|运营|基础设施|仓库|人员|收入|支出|产能|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
       '<$1 $2',
     );
 }
@@ -28,7 +28,7 @@ function softTrim(text: string): string {
     .trim();
 }
 
-/** 解析开标签属性。支持中英属性名：name、合计金额 等。 */
+/** 解析开标签属性。支持中英属性名：name、total、合计金额 等。 */
 export function parseAttrs(openTag: string): AttrMap {
   const attrs: AttrMap = {};
   const mTag = openTag.match(/^<\s*([^\s/>]+)([\s\S]*?)\/?>$/);
@@ -178,6 +178,7 @@ function parseEntity(hit: TagHit): EntityData {
 
   return {
     name,
+    location: pickAttr(hit.attrs, 'location'),
     attrs: hit.attrs,
     facilities,
     materials,
@@ -206,13 +207,18 @@ function parseBusiness(hit: TagHit): BusinessData {
       }))
     : [];
 
+  const revenueItems = revenue ? namedFromHits(findAllPairs(revenue.inner, '条目')) : [];
+  const revenueNote =
+    revenue && revenueItems.length === 0 ? softTrim(revenue.inner) : '';
+
   return {
     name,
     attrs: hit.attrs,
-    revenueTotal: revenue ? pickAttr(revenue.attrs, '合计金额', '金额') : '',
+    revenueTotal: revenue ? pickAttr(revenue.attrs, 'total', '合计金额', '金额') : '',
     revenuePeriod: revenue ? pickAttr(revenue.attrs, '周期') : '',
-    revenueItems: revenue ? namedFromHits(findAllPairs(revenue.inner, '条目')) : [],
-    expenseTotal: expense ? pickAttr(expense.attrs, '合计金额', '金额') : '',
+    revenueItems,
+    revenueNote,
+    expenseTotal: expense ? pickAttr(expense.attrs, 'total', '合计金额', '金额') : '',
     expensePeriod: expense ? pickAttr(expense.attrs, '周期') : '',
     expenseItems: expense ? namedFromHits(findAllPairs(expense.inner, '条目')) : [],
     lines,
@@ -227,13 +233,15 @@ function parseBusiness(hit: TagHit): BusinessData {
 
 function parseOperations(hit: TagHit): OperationsData {
   const name = pickAttr(hit.attrs, 'name') || '未命名运营';
-  const manager = softTrim(findFirstPair(hit.inner, '执事')?.inner ?? '');
+  const managerHit = findFirstPair(hit.inner, '主管') ?? findFirstPair(hit.inner, '执事');
+  const managerName = managerHit ? pickAttr(managerHit.attrs, 'name') : '';
+  const manager = softTrim(managerHit?.inner ?? '');
   const projects: ProjectData[] = findAllPairs(hit.inner, '项目').map(h => ({
     name: pickAttr(h.attrs, 'name') || '未命名项目',
     attrs: h.attrs,
     text: softTrim(h.inner),
   }));
-  return { name, attrs: hit.attrs, manager, projects };
+  return { name, attrs: hit.attrs, managerName, manager, projects };
 }
 
 function factorChildren(parentTag: string, body: string, childTags: string[]): NamedBlock[] {

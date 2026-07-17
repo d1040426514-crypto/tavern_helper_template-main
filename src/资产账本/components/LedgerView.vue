@@ -153,6 +153,7 @@
           :default-open="false"
           :forced-open="forcedOpen"
         >
+          <p v-if="ent.location" class="muted staff-note">📍 {{ ent.location }}</p>
           <FoldPanel
             v-if="ent.facilities.length"
             variant="sub"
@@ -273,6 +274,7 @@
             :default-open="false"
             :forced-open="forcedOpen"
           >
+            <StatRow v-if="biz.revenueNote" :text="biz.revenueNote" />
             <FoldPanel
               v-for="(item, ii) in biz.revenueItems"
               :key="'ri-' + ii"
@@ -396,13 +398,14 @@
           variant="entity"
           :title="op.name"
           emoji="🧭"
-          :summary="oneLine(op.manager)"
+          :summary="opSummary(op)"
           :default-open="false"
           :forced-open="forcedOpen"
         >
-          <div v-if="op.manager" class="highlight-block">
-            <div class="hl-label">执事</div>
-            <StatRow :text="op.manager" />
+          <div v-if="op.managerName || op.manager" class="highlight-block">
+            <div class="hl-label">主管</div>
+            <p v-if="op.managerName" class="manager-name">{{ op.managerName }}</p>
+            <StatRow v-if="op.manager" :text="op.manager" />
           </div>
 
           <FoldPanel
@@ -434,7 +437,7 @@ import FoldPanel from './FoldPanel.vue';
 import PreLine from './PreLine.vue';
 import ProgressBar from './ProgressBar.vue';
 import StatRow from './StatRow.vue';
-import type { BusinessData, EntityData, LedgerData, NamedBlock } from '../types';
+import type { BusinessData, EntityData, LedgerData, NamedBlock, OperationsData } from '../types';
 
 defineProps<{
   data: LedgerData;
@@ -479,6 +482,7 @@ function entitySummary(ent: EntityData): string {
       ? `核心${ent.keyPersons.length}`
       : '';
   const parts = [
+    ent.location || '',
     ent.facilities.length ? `设施${ent.facilities.length}` : '',
     ent.materials.length ? `物资${ent.materials.length}` : '',
     staffLabel,
@@ -515,6 +519,11 @@ function bizSummary(biz: BusinessData): string {
     biz.expenseTotal ? `支 ${biz.expenseTotal}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
+}
+
+function opSummary(op: OperationsData): string {
+  if (op.managerName) return op.managerName;
+  return oneLine(op.manager);
 }
 
 function lineTitle(attrs: Record<string, string>): string {
@@ -871,6 +880,13 @@ function statusTagClass(status: string): string {
 
 .staff-note {
   margin: 0 0 0.4em;
+}
+
+.manager-name {
+  margin: 0 0 4px;
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--text-primary);
 }
 
 .tag {

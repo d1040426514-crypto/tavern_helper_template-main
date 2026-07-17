@@ -25,6 +25,11 @@ test('parseAttrs supports Chinese attr names', () => {
   assert.equal(attrs['周期'], '月');
 });
 
+test('parseAttrs supports total attr', () => {
+  const attrs = parseAttrs('<收入 total="50" 周期="周">');
+  assert.equal(attrs.total, '50');
+});
+
 test('parse warehouse and facilities tags', () => {
   const withEnt = parseLedgerBody(
     '<实体 name="商栈"><仓库><物资 name="粮">期初10</物资></仓库><基础设施><设施 type="锯木房" count="2" /></基础设施></实体>',
@@ -33,7 +38,7 @@ test('parse warehouse and facilities tags', () => {
   assert.equal(withEnt.entities[0]?.facilities[0]?.type, '锯木房');
 });
 
-test('parseLedger combines LedgerTime + body', () => {
+test('parseLedger combines LedgerTime + body (new template)', () => {
   const data = parseLedger(
     '[账目结算时间]: 第三纪元120年3月5日08:00\n门禁：通过',
     `
@@ -42,7 +47,7 @@ test('parseLedger combines LedgerTime + body', () => {
   损益: 盈利 (Δ +320 银盾)
 </本期结算>
 <外因>
-  <季节>初春 | 影响:谷物 ×1.1 | 供需:Loose</季节>
+  <季节 name="初春">初春回暖 | 影响:谷物 ×1.1 | 供需:Loose</季节>
 </外因>
 <流动资金 note="多币种">
   <币种 code="A" symbol="§">期初100 +流入20 -流出5 =期末115</币种>
@@ -51,27 +56,27 @@ test('parseLedger combines LedgerTime + body', () => {
     (Δ +15) → 存放:北商行账户
   </折合基准>
 </流动资金>
-<实体 name="北岸工坊">
+<实体 name="北岸工坊" location="北岸码头">
   <基础设施>
     <设施 type="锯木房" count="2" status="Normal" maintain="3银/周" />
   </基础设施>
   <人员 total="12">
-    <职级 role="工匠" count="8" pay="2银/周" churn="0" />
+    <职级 role="工匠" count="8" cost="2银/周" costType="薪饷" 变动="0" status="满编" />
   </人员>
 </实体>
 <经营 name="北岸工坊">
-  <收入 合计金额="50" 周期="周">
+  <收入 total="50" 周期="周">
     <条目 name="木板" amount="+50">单价:5 × 数量:10</条目>
   </收入>
-  <支出 合计金额="20" 周期="周">
+  <支出 total="20" 周期="周">
     <条目 name="薪饷" amount="-20" type="薪饷">计算:10×2</条目>
   </支出>
   <闭环校验 result="Pass">期初 +收入 -支出 =期末</闭环校验>
   <净值>+30 银盾/周</净值>
 </经营>
 <运营 name="北岸工坊">
-  <执事>老刘 | 重点:扩仓 | 风险:汛期</执事>
-  <项目 name="扩仓" progress="60%" bar="███░░░">阶段:砌墙</项目>
+  <主管 name="老刘">重点:扩仓 | 风险:汛期</主管>
+  <项目 name="扩仓" progress="60%">阶段:砌墙</项目>
 </运营>
 `,
   );
@@ -83,23 +88,60 @@ test('parseLedger combines LedgerTime + body', () => {
   assert.equal(data.currencies[0]?.symbol, '§');
   assert.equal(data.cashTotal, '115 §');
   assert.equal(data.entities[0]?.name, '北岸工坊');
+  assert.equal(data.entities[0]?.location, '北岸码头');
   assert.equal(data.entities[0]?.facilities[0]?.type, '锯木房');
+  assert.equal(data.businesses[0]?.revenueTotal, '50');
+  assert.equal(data.businesses[0]?.expenseTotal, '20');
   assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.name, '木板');
+  assert.equal(data.operations[0]?.managerName, '老刘');
+  assert.match(data.operations[0]?.manager ?? '', /重点:扩仓/);
   assert.equal(data.operations[0]?.projects[0]?.attrs.progress, '60%');
+});
+
+test('legacy 合计金额 and 执事 still parse', () => {
+  const body = parseLedgerBody(`
+<经营 name="旧坊">
+  <收入 合计金额="50" 周期="周">
+    <条目 name="木板" amount="+50">单价:5</条目>
+  </收入>
+  <支出 合计金额="20" 周期="周"></支出>
+</经营>
+<运营 name="旧坊">
+  <执事>老刘 | 重点:扩仓 | 风险:汛期</执事>
+</运营>
+`);
+  assert.equal(body.businesses[0]?.revenueTotal, '50');
+  assert.equal(body.businesses[0]?.expenseTotal, '20');
+  assert.equal(body.operations[0]?.managerName, '');
+  assert.match(body.operations[0]?.manager ?? '', /老刘/);
+});
+
+test('revenueNote when no 条目', () => {
+  const body = parseLedgerBody(`
+<经营 name="停工坊">
+  <收入 total="0" 周期="周">
+    原因:本周停工无销售
+  </收入>
+</经营>
+`);
+  assert.equal(body.businesses[0]?.revenueTotal, '0');
+  assert.equal(body.businesses[0]?.revenueItems.length, 0);
+  assert.match(body.businesses[0]?.revenueNote ?? '', /原因:本周停工无销售/);
 });
 
 test('parse staff meta, roles and key persons', () => {
   const body = parseLedgerBody(`
-<实体 name="北岸工坊">
+<实体 name="北岸工坊" location="北岸码头">
   <人员 total="12" 在岗="11" note="1人外派押运">
     <职级 role="工匠" count="8" cost="2银/人/周" costType="薪饷" 变动="0" status="满编" level="熟练" />
-    <核心人物 name="老刘" role="执事" cost="5银/周" costType="薪饷" status="在岗">
-      忠诚:高 | 技能:督造精通 | 重点:扩仓督造 | 风险:汛期运输 | 本期:督建扩仓项目
+    <核心人物 name="老刘" role="主管" cost="5银/周" costType="薪饷" status="在岗">
+      忠诚:高 | 技能:督造精通 | 本期:督建扩仓项目
     </核心人物>
   </人员>
 </实体>
 `);
   const ent = body.entities[0];
+  assert.equal(ent?.location, '北岸码头');
   assert.equal(ent?.staffTotal, '12');
   assert.equal(ent?.staffOnDuty, '11');
   assert.equal(ent?.staffNote, '1人外派押运');
@@ -107,8 +149,9 @@ test('parse staff meta, roles and key persons', () => {
   assert.equal(ent?.roles[0]?.level, '熟练');
   assert.equal(ent?.roles[0]?.status, '满编');
   assert.equal(ent?.keyPersons[0]?.attrs.name, '老刘');
-  assert.equal(ent?.keyPersons[0]?.attrs.role, '执事');
+  assert.equal(ent?.keyPersons[0]?.attrs.role, '主管');
   assert.match(ent?.keyPersons[0]?.text ?? '', /忠诚:高/);
+  assert.match(ent?.keyPersons[0]?.text ?? '', /本期:督建扩仓项目/);
 });
 
 test('findAllPairs self-closing', () => {
@@ -139,6 +182,9 @@ test('parseProgressPct from progress and bar', () => {
 
   const b = parseProgressPct({ bar: '████░░░░' });
   assert.equal(b.pct, 50);
+
+  const onlyProgress = parseProgressPct({ progress: '60%' });
+  assert.equal(onlyProgress.pct, 60);
 
   const w = parseProgressPct({ progress: '20%', run: 'Idle' }, 'Idle');
   assert.equal(w.tone, 'warn');
