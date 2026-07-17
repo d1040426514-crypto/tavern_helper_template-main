@@ -72,3 +72,85 @@ test('detectSecretsInImportRaw finds apiKey in nested object', () => {
   assert.equal(detectSecretsInImportRaw({ apiPresets: [{ apiConfig: { apiKey: 'x' } }] }), true);
   assert.equal(detectSecretsInImportRaw({ tasks: [{ id: 'a', name: 'n' }] }), false);
 });
+
+test('redactScriptSettingsForShare strips machine-local worldbook bindings', () => {
+  const settings = minimalSettings();
+  settings.plotWorldbookConfig = {
+    source: 'manual',
+    manualSelection: ['写卡'],
+    enabledEntries: { 写卡: [1, 2] },
+  };
+  settings.chatWorldbookWriteRules = [
+    {
+      id: 'r1',
+      targetTag: 'result',
+      template: '{{result}}',
+      entryName: '',
+      bookSource: 'manual',
+      manualBookName: '写卡',
+      entryType: 'constant',
+      keywords: '',
+      splitByAttr: false,
+      wrapTagName: '',
+      placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
+      preventRecursion: true,
+    },
+  ];
+  settings.tasks[0]!.plotWorldbookMode = 'custom';
+  settings.tasks[0]!.plotWorldbookConfig = {
+    source: 'manual',
+    manualSelection: ['写卡'],
+    enabledEntries: { 写卡: [9] },
+  };
+  settings.presets = [
+    {
+      name: '分享预设',
+      tasks: [],
+      finalInjectTemplate: '',
+      tagVariableInjectTemplate: '',
+      chatExtractTags: { user: [], assistant: [] },
+      chatBodyTagReplaceRules: [],
+      chatWorldbookWriteRules: [
+        {
+          id: 'r2',
+          targetTag: 'result',
+          template: '',
+          entryName: '',
+          bookSource: 'manual',
+          manualBookName: '写卡',
+          entryType: 'constant',
+          keywords: '',
+          splitByAttr: false,
+          wrapTagName: '',
+          placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
+          preventRecursion: true,
+        },
+      ],
+      contextTurnCount: 3,
+      contextExtractRules: [],
+      contextExcludeRules: [],
+      plotWorldbookConfig: {
+        source: 'manual',
+        manualSelection: ['写卡'],
+        enabledEntries: {},
+      },
+      taskPlotWorldbookOverridesEnabled: false,
+      taskContextOverridesEnabled: false,
+      memoryRecallRecentCount: 10,
+    },
+  ];
+
+  const redacted = redactScriptSettingsForShare(settings);
+  assert.equal(redacted.plotWorldbookConfig.source, 'character');
+  assert.deepEqual(redacted.plotWorldbookConfig.manualSelection, []);
+  assert.deepEqual(redacted.plotWorldbookConfig.enabledEntries, {});
+  assert.equal(redacted.chatWorldbookWriteRules[0]?.bookSource, 'character');
+  assert.equal(redacted.chatWorldbookWriteRules[0]?.manualBookName, '');
+  assert.equal(redacted.tasks[0]?.plotWorldbookConfig?.source, 'character');
+  assert.deepEqual(redacted.tasks[0]?.plotWorldbookConfig?.manualSelection, []);
+  assert.equal(redacted.presets[0]?.plotWorldbookConfig.source, 'character');
+  assert.equal(redacted.presets[0]?.chatWorldbookWriteRules[0]?.manualBookName, '');
+  // 本机设置未被原地修改
+  assert.equal(settings.plotWorldbookConfig.source, 'manual');
+  assert.equal(settings.chatWorldbookWriteRules[0]?.manualBookName, '写卡');
+});

@@ -1,4 +1,12 @@
-import type { ApiConfig, ScriptSettings } from './tasks/schema';
+import type {
+  ApiConfig,
+  ChatWorldbookWriteRule,
+  PlotWorldbookConfig,
+  PostProcessPreset,
+  PostProcessTask,
+  ScriptSettings,
+  TaskWorkflowPresetSnapshot,
+} from './tasks/schema';
 
 export function redactRequestHeaders(headers: string): string {
   return String(headers || '')
@@ -20,7 +28,59 @@ export function redactApiConfig(cfg: ApiConfig): ApiConfig {
   };
 }
 
-/** 分享导出 / 外部 API：剥离 API 凭据，保留 url/model/name 与任务 recommendedModel */
+/** 分享导出：本机世界书名对他人不可用，重置为角色卡绑定 */
+export function emptyPlotWorldbookConfigForShare(): PlotWorldbookConfig {
+  return { source: 'character', manualSelection: [], enabledEntries: {} };
+}
+
+export function sanitizePlotWorldbookConfigForShare(_config: PlotWorldbookConfig): PlotWorldbookConfig {
+  return emptyPlotWorldbookConfigForShare();
+}
+
+export function sanitizeChatWorldbookWriteRulesForShare(
+  rules: ChatWorldbookWriteRule[],
+): ChatWorldbookWriteRule[] {
+  return rules.map(rule => ({
+    ...rule,
+    bookSource: 'character' as const,
+    manualBookName: '',
+  }));
+}
+
+function sanitizeTaskWorkflowSnapshotForShare(
+  snapshot: TaskWorkflowPresetSnapshot,
+): TaskWorkflowPresetSnapshot {
+  if (!snapshot.plotWorldbookConfig) return snapshot;
+  return {
+    ...snapshot,
+    plotWorldbookConfig: sanitizePlotWorldbookConfigForShare(snapshot.plotWorldbookConfig),
+  };
+}
+
+function sanitizeTaskForShare(task: PostProcessTask): PostProcessTask {
+  const next: PostProcessTask = { ...task };
+  if (next.plotWorldbookConfig) {
+    next.plotWorldbookConfig = sanitizePlotWorldbookConfigForShare(next.plotWorldbookConfig);
+  }
+  if (next.taskWorkflowPresets?.length) {
+    next.taskWorkflowPresets = next.taskWorkflowPresets.map(entry => ({
+      ...entry,
+      snapshot: sanitizeTaskWorkflowSnapshotForShare(entry.snapshot),
+    }));
+  }
+  return next;
+}
+
+export function sanitizePresetWorldbookRefsForShare(preset: PostProcessPreset): PostProcessPreset {
+  return {
+    ...preset,
+    plotWorldbookConfig: sanitizePlotWorldbookConfigForShare(preset.plotWorldbookConfig),
+    chatWorldbookWriteRules: sanitizeChatWorldbookWriteRulesForShare(preset.chatWorldbookWriteRules ?? []),
+    tasks: (preset.tasks ?? []).map(sanitizeTaskForShare),
+  };
+}
+
+/** 分享导出 / 外部 API：剥离 API 凭据与本机世界书绑定，保留 url/model/name 与任务 recommendedModel */
 export function redactScriptSettingsForShare(settings: ScriptSettings): ScriptSettings {
   const cloned = _.cloneDeep(settings);
   cloned.apiConfig = redactApiConfig(cloned.apiConfig);
@@ -28,6 +88,14 @@ export function redactScriptSettingsForShare(settings: ScriptSettings): ScriptSe
     ...preset,
     apiConfig: redactApiConfig(preset.apiConfig),
   }));
+
+  cloned.plotWorldbookConfig = sanitizePlotWorldbookConfigForShare(cloned.plotWorldbookConfig);
+  cloned.chatWorldbookWriteRules = sanitizeChatWorldbookWriteRulesForShare(
+    cloned.chatWorldbookWriteRules ?? [],
+  );
+  cloned.tasks = (cloned.tasks ?? []).map(sanitizeTaskForShare);
+  cloned.presets = (cloned.presets ?? []).map(sanitizePresetWorldbookRefsForShare);
+
   return cloned;
 }
 

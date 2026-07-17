@@ -83,7 +83,7 @@ function toggleBook(name: string) {
   void refreshEntries({ manualSelection: list, source: 'manual' });
 }
 
-function entriesEqual(
+function enabledEntriesMapsEqual(
   a: Record<string, number[]>,
   b: Record<string, number[]>,
 ): boolean {
@@ -119,13 +119,19 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
     const enabledEntries = { ...cfg.value.enabledEntries };
     const initialEnabledEntries = { ...cfg.value.enabledEntries };
     for (const bookName of bookNames) {
-      const entries = await getWorldbook(bookName);
-      const selectableUids = selectablePlotWorldbookEntryUids(entries, rules);
+      let bookEntries: Awaited<ReturnType<typeof getWorldbook>>;
+      try {
+        bookEntries = await getWorldbook(bookName);
+      } catch {
+        console.warn('[工作流助手] 世界书不存在，已跳过条目加载:', bookName);
+        continue;
+      }
+      const selectableUids = selectablePlotWorldbookEntryUids(bookEntries, rules);
       if (enabledEntries[bookName] === undefined) {
         enabledEntries[bookName] = selectableUids;
       } else {
         const prev = enabledEntries[bookName] ?? [];
-        const sanitized = sanitizePlotWorldbookEnabledUids(entries, prev, rules);
+        const sanitized = sanitizePlotWorldbookEnabledUids(bookEntries, prev, rules);
         const prevKey = [...prev].sort((a, b) => a - b).join(',');
         const sanitizedKey = [...sanitized].sort((a, b) => a - b).join(',');
         if (prevKey !== sanitizedKey) {
@@ -133,17 +139,17 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
         }
       }
       const enabled = enabledEntries[bookName] ?? [];
-      const visible = entries
-        .filter(e => shouldShowEntryInUi({ name: e.name }, rules))
-        .map(e => ({
-          uid: e.uid,
-          label: e.name || `条目 ${e.uid}`,
-          checked: enabled.includes(e.uid),
-          disabled: !isPlotWorldbookEntrySelectable(e, rules),
+      const visible = bookEntries
+        .filter(entry => shouldShowEntryInUi({ name: entry.name }, rules))
+        .map(entry => ({
+          uid: entry.uid,
+          label: entry.name || `条目 ${entry.uid}`,
+          checked: enabled.includes(entry.uid),
+          disabled: !isPlotWorldbookEntrySelectable(entry, rules),
         }));
       if (visible.length) groups.push({ bookName, entries: visible });
     }
-    if (!entriesEqual(initialEnabledEntries, enabledEntries)) {
+    if (!enabledEntriesMapsEqual(initialEnabledEntries, enabledEntries)) {
       config.value = {
         ...config.value,
         source: preservedSource,
