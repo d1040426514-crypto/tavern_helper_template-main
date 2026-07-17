@@ -282,6 +282,24 @@
   flex-wrap: wrap;
 }
 
+.acu-heading-with-help--actions {
+  flex-wrap: nowrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.acu-heading-with-help--actions > h4 {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.acu-heading-with-help__action {
+  margin-left: auto;
+  flex: 0 0 auto;
+  max-width: none;
+  white-space: nowrap;
+}
+
 .acu-row.acu-row--inline.acu-heading-with-help {
   flex-wrap: wrap;
   align-items: flex-start;
@@ -637,7 +655,16 @@
   margin-top: 0;
 }
 
-.acu-config-rules-list__add,
+.acu-config-rules-list__add {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  margin-top: 10px;
+  min-height: 36px;
+  padding-block: 8px;
+}
+
 .acu-config-rules-list__actions {
   margin-top: 10px;
 }
@@ -3069,6 +3096,16 @@
   .acu-row.acu-row--inline.acu-heading-with-help .acu-toggle {
     width: 100%;
     max-width: 100%;
+  }
+
+  .acu-heading-with-help--actions {
+    flex-wrap: nowrap;
+  }
+
+  .acu-heading-with-help__action {
+    flex: 0 0 auto;
+    margin-left: auto;
+    white-space: nowrap;
   }
 
   .replica-cleanup-panel__controls {

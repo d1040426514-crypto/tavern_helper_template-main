@@ -3071,11 +3071,13 @@ function saveRunLogTaskTags(taskId: string): void {
               </div>
               <button
                 type="button"
-                class="acu-btn acu-btn--sm acu-config-rules-list__add"
+                class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
+                title="添加规则"
+                aria-label="添加规则"
                 :disabled="!availableChatBodyReplaceTags.length"
                 @click="addChatBodyTagReplaceRule"
               >
-                添加规则
+                <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
               </button>
             </template>
               </div>
@@ -3083,13 +3085,21 @@ function saveRunLogTaskTags(taskId: string): void {
           </div>
 
           <div class="acu-section acu-config-rules-section">
-            <div class="acu-heading-with-help">
+            <div class="acu-heading-with-help acu-heading-with-help--actions">
               <h4>世界书写入规则</h4>
               <AcuHelpIconBtn
                 v-model:open="chatWorldbookWriteHelpOpen"
                 panel-id="chat-worldbook-write-help"
                 label="世界书写入规则说明"
               />
+              <button
+                type="button"
+                class="acu-btn acu-btn--sm acu-heading-with-help__action"
+                :disabled="purgingManagedWorldbookEntries"
+                @click="handlePurgeAllManagedWorldbookEntries"
+              >
+                清理全部世界书条目
+              </button>
             </div>
             <AcuHelpPanel
               v-model:open="chatWorldbookWriteHelpOpen"
@@ -3300,24 +3310,16 @@ function saveRunLogTaskTags(taskId: string): void {
                 </details>
               </div>
             </template>
-            <div class="acu-row acu-row--inline acu-config-rules-list__actions" style="gap: 8px">
-              <button
-                v-if="worldbookWriteTargetTagOptions.length"
-                type="button"
-                class="acu-btn acu-btn--sm"
-                @click="addChatWorldbookWriteRule"
-              >
-                添加规则
-              </button>
-              <button
-                type="button"
-                class="acu-btn acu-btn--sm"
-                :disabled="purgingManagedWorldbookEntries"
-                @click="handlePurgeAllManagedWorldbookEntries"
-              >
-                清理全部世界书条目
-              </button>
-            </div>
+            <button
+              v-if="worldbookWriteTargetTagOptions.length"
+              type="button"
+              class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
+              title="添加规则"
+              aria-label="添加规则"
+              @click="addChatWorldbookWriteRule"
+            >
+              <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+            </button>
               </div>
             </div>
           </div>
