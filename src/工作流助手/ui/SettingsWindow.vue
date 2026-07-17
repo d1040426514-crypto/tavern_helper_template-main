@@ -729,8 +729,12 @@ function worldbookWriteWrapTagPlaceholder(rule: { targetTag?: string }): string 
   return `留空则 ${tagName}`;
 }
 
-function removeChatWorldbookWriteRule(id: string): void {
+async function removeChatWorldbookWriteRule(id: string): Promise<void> {
   ensureChatWorldbookWriteRules();
+  const rule = settings.value.chatWorldbookWriteRules.find(r => r.id === id);
+  if (!rule) return;
+  const label = rule.targetTag?.trim() || '未命名标签';
+  if (!(await acuConfirm({ message: `删除世界书写入规则「${label}」？` }))) return;
   settings.value.chatWorldbookWriteRules = settings.value.chatWorldbookWriteRules.filter(r => r.id !== id);
   ruleBookTargetSnapshot.value.delete(id);
   ruleBookMigratingIds.value.delete(id);
