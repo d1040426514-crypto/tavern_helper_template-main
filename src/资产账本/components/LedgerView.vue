@@ -347,7 +347,7 @@
             variant="sub"
             title="本期可交付"
             emoji="📦"
-            :summary="pick(biz.deliverAttrs, '口径') || `${biz.deliverables.length} 品项`"
+            :summary="`${biz.deliverables.length} 品项`"
             :default-open="false"
             :forced-open="forcedOpen"
           >
