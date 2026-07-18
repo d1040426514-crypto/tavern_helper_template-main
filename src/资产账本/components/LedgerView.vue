@@ -31,18 +31,15 @@
           class="gh-row gh-row--meta"
         >
           <div
-            v-if="data.headline.duration || data.headline.status"
+            v-if="data.headline.duration || data.headline.status || data.headline.delta"
             class="gh-meta-group gh-meta-group--left"
           >
             <span v-if="data.headline.duration" class="gh-pill">{{ data.headline.duration }}</span>
             <span v-if="data.headline.status" class="gh-pill">{{ data.headline.status }}</span>
-          </div>
-          <div
-            v-if="data.headline.delta || data.cashTotal"
-            class="gh-meta-group gh-meta-group--right"
-          >
             <span v-if="data.headline.delta" class="gh-delta">Δ {{ data.headline.delta }}</span>
-            <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
+          </div>
+          <div v-if="data.cashTotal" class="gh-meta-group gh-meta-group--right">
+            <span class="gh-cash">流动 {{ data.cashTotal }}</span>
           </div>
         </div>
       </div>
