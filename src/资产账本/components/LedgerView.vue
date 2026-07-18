@@ -157,7 +157,7 @@
           <FoldPanel
             v-if="ent.facilities.length"
             variant="sub"
-            title="基础设施"
+            title="基建"
             :summary="`${ent.facilities.length} 类`"
             :default-open="false"
             :forced-open="forcedOpen"
@@ -165,8 +165,9 @@
             <div v-for="(b, bi) in ent.facilities" :key="'f-' + bi" class="item-row">
               <strong>{{ b.type || '设施' }}</strong>
               <span v-if="b.count" class="muted"> ×{{ b.count }}</span>
+              <span v-if="b.quality" class="muted"> · 品质:{{ b.quality }}</span>
               <span v-if="b.status" class="tag" :class="statusTagClass(b.status)">{{ b.status }}</span>
-              <AttrChips :attrs="b" :hide="['type', 'count', 'status']" />
+              <AttrChips :attrs="b" :hide="['type', 'count', 'status', 'quality']" />
             </div>
           </FoldPanel>
 
@@ -182,24 +183,24 @@
               v-for="(m, mi) in ent.materials"
               :key="'m-' + mi"
               variant="sub"
-              :title="pick(m.attrs, 'name') || '物资'"
+              :title="whItemTitle(m.attrs, '物资')"
               :summary="oneLine(m.text)"
               :default-open="false"
               :forced-open="forcedOpen"
             >
-              <AttrChips :attrs="m.attrs" :hide="['name']" />
+              <AttrChips :attrs="m.attrs" :hide="['name', 'unit', 'quality']" />
               <StatRow :text="m.text" />
             </FoldPanel>
             <FoldPanel
               v-for="(e, eqi) in ent.equipments"
               :key="'eq-' + eqi"
               variant="sub"
-              :title="pick(e.attrs, 'name') || '装备'"
+              :title="whItemTitle(e.attrs, '装备')"
               :summary="oneLine(e.text)"
               :default-open="false"
               :forced-open="forcedOpen"
             >
-              <AttrChips :attrs="e.attrs" :hide="['name']" />
+              <AttrChips :attrs="e.attrs" :hide="['name', 'unit', 'quality']" />
               <StatRow :text="e.text" />
             </FoldPanel>
           </FoldPanel>
@@ -336,7 +337,7 @@
               :default-open="false"
               :forced-open="forcedOpen"
             >
-              <AttrChips :attrs="line.attrs" :hide="['building', 'count', 'run']" />
+              <AttrChips :attrs="line.attrs" :hide="['production', 'building', 'count', 'run']" />
               <StatRow :text="line.text" />
             </FoldPanel>
           </FoldPanel>
@@ -353,10 +354,11 @@
             <div v-for="(d, di) in biz.deliverables" :key="'d-' + di" class="item-row">
               <strong>{{ d.name || '品项' }}</strong>
               <span v-if="d.qty" class="muted"> {{ d.qty }}{{ d.unit || '' }}</span>
+              <span v-if="d.quality" class="muted"> · 品质:{{ d.quality }}</span>
               <span v-if="d.per" class="muted"> / {{ d.per }}</span>
               <span v-if="d.from" class="muted"> · 产出:{{ d.from }}</span>
               <span v-if="d.limit" class="muted"> · 瓶颈:{{ d.limit }}</span>
-              <AttrChips :attrs="d" :hide="['name', 'qty', 'unit', 'per', 'from', 'limit']" />
+              <AttrChips :attrs="d" :hide="['name', 'qty', 'unit', 'per', 'from', 'limit', 'quality']" />
             </div>
           </FoldPanel>
 
@@ -529,9 +531,16 @@ function opSummary(op: OperationsData): string {
 }
 
 function lineTitle(attrs: Record<string, string>): string {
-  const b = attrs.building || '产线';
+  const b = attrs.production || attrs.building || '产线';
   const n = attrs.count ? ` ×${attrs.count}` : '';
   return `${b}${n}`;
+}
+
+function whItemTitle(attrs: Record<string, string>, fallback: string): string {
+  const name = attrs.name || fallback;
+  const unit = attrs.unit ? ` (${attrs.unit})` : '';
+  const quality = attrs.quality ? ` · 品质:${attrs.quality}` : '';
+  return `${name}${unit}${quality}`;
 }
 
 function reconcileClass(attrs: Record<string, string>): string {

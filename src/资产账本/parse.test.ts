@@ -32,10 +32,13 @@ test('parseAttrs supports total attr', () => {
 
 test('parse warehouse and facilities tags', () => {
   const withEnt = parseLedgerBody(
-    '<实体 name="商栈"><仓库><物资 name="粮">期初10</物资></仓库><基础设施><设施 type="锯木房" count="2" /></基础设施></实体>',
+    '<实体 name="商栈"><仓库><物资 name="粮" unit="袋" quality="普通">期初10</物资></仓库><基建><设施 type="锯木房" count="2" quality="良" /></基建></实体>',
   );
   assert.equal(withEnt.entities[0]?.materials[0]?.attrs.name, '粮');
+  assert.equal(withEnt.entities[0]?.materials[0]?.attrs.unit, '袋');
+  assert.equal(withEnt.entities[0]?.materials[0]?.attrs.quality, '普通');
   assert.equal(withEnt.entities[0]?.facilities[0]?.type, '锯木房');
+  assert.equal(withEnt.entities[0]?.facilities[0]?.quality, '良');
 });
 
 test('parseLedger combines LedgerTime + body (new template)', () => {
@@ -60,9 +63,18 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   </折合基准>
 </产业流动资金>
 <实体 name="北岸工坊" location="北岸码头">
-  <基础设施>
-    <设施 type="锯木房" count="2" status="Normal" maintain="3银/周" />
-  </基础设施>
+  <基建>
+    <设施 type="锯木房" count="2" quality="良" status="Normal" maintain="3银/周" />
+  </基建>
+  <仓库>
+    <物资 name="原木" unit="根" quality="普通">
+      期初20 +流入5(来源:采购) +自然增0 -流出8(去向:产线) -损耗1 -自然减0 =期末16 (Δ -4)
+    </物资>
+    <装备 name="锯子" unit="把" quality="良">
+      期初4 +新增0 -报废0 -调出0 =期末4
+      (完好:90% | 折损:10%)
+    </装备>
+  </仓库>
   <人员 total="12">
     <职级 role="工匠" count="8" cost="2银/周" costType="薪饷" 变动="0" status="满编" />
   </人员>
@@ -74,8 +86,15 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   <支出 total="20" 周期="周">
     <条目 name="薪饷" amount="-20" type="薪饷">计算:10×2</条目>
   </支出>
+  <产能>
+    <产线 production="锯木" count="2" run="Full">
+      投入: 原木 8根/周
+      产出: 木板 10张/周
+      品质: 良 | 损耗:5% | 瓶颈:人力
+    </产线>
+  </产能>
   <本期可交付>
-    <品项 name="木板" qty="10" unit="张" per="周" from="锯木房" limit="人力" />
+    <品项 name="木板" qty="10" unit="张" quality="良" per="周" from="锯木房" limit="人力" />
   </本期可交付>
   <闭环校验 result="Pass">期初 +收入 -支出 =期末</闭环校验>
   <净值>+30 银盾/周</净值>
@@ -98,16 +117,40 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   assert.equal(data.entities[0]?.name, '北岸工坊');
   assert.equal(data.entities[0]?.location, '北岸码头');
   assert.equal(data.entities[0]?.facilities[0]?.type, '锯木房');
+  assert.equal(data.entities[0]?.facilities[0]?.quality, '良');
+  assert.equal(data.entities[0]?.materials[0]?.attrs.unit, '根');
+  assert.equal(data.entities[0]?.equipments[0]?.attrs.quality, '良');
   assert.equal(data.businesses[0]?.revenueTotal, '50');
   assert.equal(data.businesses[0]?.expenseTotal, '20');
   assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.name, '木板');
+  assert.equal(data.businesses[0]?.lines[0]?.attrs.production, '锯木');
+  assert.equal(data.businesses[0]?.lines[0]?.attrs.run, 'Full');
   assert.equal(data.businesses[0]?.deliverables[0]?.name, '木板');
   assert.equal(data.businesses[0]?.deliverables[0]?.qty, '10');
+  assert.equal(data.businesses[0]?.deliverables[0]?.quality, '良');
   assert.equal(data.businesses[0]?.deliverables[0]?.from, '锯木房');
   assert.equal(data.businesses[0]?.deliverables[0]?.limit, '人力');
   assert.equal(data.operations[0]?.managerName, '老刘');
   assert.match(data.operations[0]?.manager ?? '', /重点:扩仓/);
   assert.equal(data.operations[0]?.projects[0]?.attrs.progress, '60%');
+});
+
+test('legacy 基础设施 / building still parse', () => {
+  const body = parseLedgerBody(`
+<实体 name="旧坊">
+  <基础设施>
+    <设施 type="织机房" count="1" status="Normal" />
+  </基础设施>
+</实体>
+<经营 name="旧坊">
+  <产能>
+    <产线 building="织布" count="1" run="Idle">停工因由:缺纱</产线>
+  </产能>
+</经营>
+`);
+  assert.equal(body.entities[0]?.facilities[0]?.type, '织机房');
+  assert.equal(body.businesses[0]?.lines[0]?.attrs.building, '织布');
+  assert.match(body.businesses[0]?.lines[0]?.text ?? '', /缺纱/);
 });
 
 test('legacy short tags 流动资金 / 可交付 still parse', () => {
