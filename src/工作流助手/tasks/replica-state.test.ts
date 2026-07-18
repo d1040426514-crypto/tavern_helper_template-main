@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { PostProcessTask } from './schema';
 import {
+  applyLastEnumToReplicaSnapshot,
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
   mergeReplicaStateSnapshots,
@@ -110,6 +111,50 @@ test('normalizeReplicaStateSnapshot drops invalid entries', () => {
   });
   assert.ok(snap);
   assert.deepEqual(Object.keys(snap!), ['root']);
+});
+
+test('normalizeReplicaStateSnapshot keeps lastEnumAttrValues', () => {
+  const snap = normalizeReplicaStateSnapshot({
+    root: { attrValues: ['剑'], lastEnumAttrValues: ['剑', '盾'] },
+  });
+  assert.deepEqual(snap?.root?.lastEnumAttrValues, ['剑', '盾']);
+});
+
+test('mergeReplicaStateSnapshots preserves earlier lastEnum when later omits', () => {
+  const merged = mergeReplicaStateSnapshots([
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['剑'] } },
+    { root: { attrValues: ['剑', '盾'] } },
+  ]);
+  assert.deepEqual(merged.root?.attrValues, ['剑', '盾']);
+  assert.deepEqual(merged.root?.lastEnumAttrValues, ['剑']);
+});
+
+test('mergeReplicaStateSnapshots later lastEnum overrides earlier', () => {
+  const merged = mergeReplicaStateSnapshots([
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['剑'] } },
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['盾'] } },
+  ]);
+  assert.deepEqual(merged.root?.lastEnumAttrValues, ['盾']);
+});
+
+test('applyLastEnumToReplicaSnapshot prefers pending over existing', () => {
+  const out = applyLastEnumToReplicaSnapshot(
+    { root: { attrValues: ['剑', '盾'] } },
+    { root: ['剑'] },
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['盾'] } },
+    null,
+  );
+  assert.deepEqual(out.root?.lastEnumAttrValues, ['剑']);
+});
+
+test('applyLastEnumToReplicaSnapshot keeps existing when pending empty', () => {
+  const out = applyLastEnumToReplicaSnapshot(
+    { root: { attrValues: ['剑'] } },
+    {},
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['旧'] } },
+    null,
+  );
+  assert.deepEqual(out.root?.lastEnumAttrValues, ['旧']);
 });
 
 test('normalizeReplicaStateSnapshot returns null for non-object', () => {

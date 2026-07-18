@@ -3,6 +3,7 @@ import { resolveEffectiveSettings } from './effective-settings';
 import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
 import { isReplicaFamilyRootTemplate } from './replica-family';
 import {
+  applyLastEnumToReplicaSnapshot,
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
   mergeReplicaStateSnapshots,
@@ -10,6 +11,7 @@ import {
   POST_PROCESS_REPLICA_STATE_KEY,
   type ReplicaStateSnapshot,
 } from './replica-state';
+import { takePendingLastEnumAttrValues } from './replica-enum-pending';
 import type { PostProcessTask } from './schema';
 
 export {
@@ -30,7 +32,7 @@ let reconcileInFlight = false;
 let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingReconcile: { reason: string } | null = null;
 
-function readReplicaStateFromMessage(messageId: number): ReplicaStateSnapshot | null {
+export function readReplicaStateFromMessage(messageId: number): ReplicaStateSnapshot | null {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return null;
   const data = (msg.data ?? {}) as Record<string, unknown>;
@@ -44,7 +46,15 @@ export async function writeReplicaStateSnapshot(
 ): Promise<void> {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return;
-  const snapshot = buildReplicaStateFromTasks(tasks);
+  const pending = takePendingLastEnumAttrValues();
+  const existing = readReplicaStateFromMessage(messageId);
+  const fallback = collectReplicaStateFromChat({ maxMessageId: messageId });
+  const snapshot = applyLastEnumToReplicaSnapshot(
+    buildReplicaStateFromTasks(tasks),
+    pending,
+    existing,
+    fallback,
+  );
   const data = (msg.data ?? {}) as Record<string, unknown>;
   await setChatMessages(
     [

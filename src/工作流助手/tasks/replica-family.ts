@@ -11,6 +11,7 @@ import {
   parseExtractTagSpec,
 } from './tag-extract';
 import { collectEnumRegistryAttrValues } from './replica-enum-parse';
+import { recordPendingLastEnumAttrValues } from './replica-enum-pending';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
 import { PostProcessTaskSchema, type PostProcessTask, type ReplicaFamilyScheduleMode } from './schema';
@@ -555,6 +556,9 @@ export function prepareStageTasksWithReplicaSync(
       handledRoots.add(task.id);
       const root = updatedAll.find(t => t.id === task.id) ?? task;
       const attrValues = collectAttrValuesForReplicaRoot(root, relayMap);
+      if (attrValues.length) {
+        recordPendingLastEnumAttrValues(root.id, attrValues);
+      }
       const merged = mergeReplicaFamilyFromRelay(root, attrValues, updatedAll);
       updatedAll = merged.tasks;
       newlyCreatedReplicaIds.push(...merged.newlyCreatedIds);

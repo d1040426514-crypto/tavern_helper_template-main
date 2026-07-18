@@ -11,6 +11,8 @@ export const POST_PROCESS_REPLICA_STATE_KEY = '_post_process_replica_state';
 export type ReplicaRootState = {
   attrValues: string[];
   launchedAttrValues?: string[];
+  /** 最近一轮从 relay <ReplicaEnum> 同步到该原本的属性值（供宏侧重建 auto 过滤） */
+  lastEnumAttrValues?: string[];
 };
 
 export type ReplicaStateSnapshot = Record<string, ReplicaRootState>;
@@ -20,17 +22,24 @@ function isValidReplicaRootState(value: unknown): value is ReplicaRootState {
   return Array.isArray((value as ReplicaRootState).attrValues);
 }
 
+function copyOptionalStringList(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const list = value.map(v => String(v ?? '').trim()).filter(Boolean);
+  return list.length ? list : undefined;
+}
+
 /** 将 message.data 中的原始对象解析为规范化快照（丢弃非法项） */
 export function normalizeReplicaStateSnapshot(raw: unknown): ReplicaStateSnapshot | null {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const snapshot: ReplicaStateSnapshot = {};
   for (const [rootId, state] of Object.entries(raw as Record<string, unknown>)) {
     if (isValidReplicaRootState(state)) {
+      const launchedAttrValues = copyOptionalStringList(state.launchedAttrValues);
+      const lastEnumAttrValues = copyOptionalStringList(state.lastEnumAttrValues);
       snapshot[rootId] = {
         attrValues: [...state.attrValues],
-        launchedAttrValues: Array.isArray(state.launchedAttrValues)
-          ? [...state.launchedAttrValues]
-          : undefined,
+        ...(launchedAttrValues ? { launchedAttrValues } : {}),
+        ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
       };
     }
   }
@@ -59,18 +68,55 @@ export function buildReplicaStateFromTasks(tasks: PostProcessTask[]): ReplicaSta
   return snapshot;
 }
 
-/** 合并多楼快照：后者整包覆盖前者（同 worldbook ledger 语义） */
+/** 合并多楼快照：后者整包覆盖前者；lastEnum 若后者未带则保留前者 */
 export function mergeReplicaStateSnapshots(snapshots: ReplicaStateSnapshot[]): ReplicaStateSnapshot {
   const merged: ReplicaStateSnapshot = {};
   for (const snapshot of snapshots) {
     for (const [rootId, state] of Object.entries(snapshot)) {
+      const prev = merged[rootId];
+      const lastEnumAttrValues = state.lastEnumAttrValues?.length
+        ? [...state.lastEnumAttrValues]
+        : prev?.lastEnumAttrValues?.length
+          ? [...prev.lastEnumAttrValues]
+          : undefined;
       merged[rootId] = {
         attrValues: [...state.attrValues],
-        launchedAttrValues: state.launchedAttrValues ? [...state.launchedAttrValues] : undefined,
+        launchedAttrValues: state.launchedAttrValues?.length
+          ? [...state.launchedAttrValues]
+          : undefined,
+        ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
       };
     }
   }
   return merged;
+}
+
+/**
+ * 将本轮 pending enum 与已有快照中的 lastEnum 合并进由 tasks 构建的快照。
+ * pending 优先；否则保留 existing / fallback 中的 lastEnum，避免空跑冲掉。
+ */
+export function applyLastEnumToReplicaSnapshot(
+  base: ReplicaStateSnapshot,
+  pending: Record<string, string[]>,
+  existing?: ReplicaStateSnapshot | null,
+  fallback?: ReplicaStateSnapshot | null,
+): ReplicaStateSnapshot {
+  const out: ReplicaStateSnapshot = {};
+  for (const [rootId, state] of Object.entries(base)) {
+    const pendingValues = pending[rootId];
+    const lastEnumAttrValues = pendingValues?.length
+      ? [...pendingValues]
+      : existing?.[rootId]?.lastEnumAttrValues?.length
+        ? [...existing[rootId].lastEnumAttrValues!]
+        : fallback?.[rootId]?.lastEnumAttrValues?.length
+          ? [...fallback[rootId].lastEnumAttrValues!]
+          : undefined;
+    out[rootId] = {
+      ...state,
+      ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
+    };
+  }
+  return out;
 }
 
 /** 依据快照期望的 attrValue 列表，将 tasks 中副本成员重放为一致状态 */

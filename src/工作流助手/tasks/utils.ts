@@ -834,11 +834,11 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{total:标签@属性}}',
-    desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
+    desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。亦注册为酒馆助手宏（读楼层 post_process_tags）。',
   },
   {
     code: '{{total:launched:标签@属性}}',
-    desc: '展开对应副本族本轮可运行（已开启）副本的 tag@attr=* 复合实例正文；与 {{total:标签@属性}} 同形，但按调度过滤。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。',
+    desc: '展开对应副本族本轮可运行（已开启）副本的 tag@attr=* 复合实例正文；与 {{total:标签@属性}} 同形，但按调度过滤。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。亦注册为酒馆助手宏；宏侧 auto 过滤读楼层 _post_process_replica_state.lastEnumAttrValues（最近一次成功同步的 enum）。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {
@@ -847,9 +847,8 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{replica:launched:任务名}}',
-    desc: '解析为指定副本族原本在本轮可运行（已开启）副本的后缀名列表（replicaFamilyAttrValue），顿号连接，不含共有任务名前缀；支持任务名或任务 Id。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。',
-  },
-  {
+    desc: '解析为指定副本族原本在本轮可运行（已开启）副本的后缀名列表（replicaFamilyAttrValue），顿号连接，不含共有任务名前缀；支持任务名或任务 Id。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。亦注册为酒馆助手宏；宏侧 auto 过滤同 {{total:launched:…}}。',
+  },  {
     code: '{{char}} 等',
     desc: '未被脚本认领的 ASCII 占位符在 $ 与脚本 {{}} 替换后保留，再经 formatAsTavernRegexedString（酒馆正则 + ST 宏 + 全部 MacroLike）与 EJS 处理。任务提示词顺序：$ 变量 → 脚本 {{}} → 宏/EJS',
   },

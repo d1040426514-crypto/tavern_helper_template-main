@@ -371,11 +371,11 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         code: '{{total:标签@属性}}',
-        desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
+        desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。亦注册为酒馆助手宏。',
       },
       {
         code: '{{total:launched:标签@属性}}',
-        desc: '仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。',
+        desc: '仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。亦注册为酒馆助手宏；宏侧 auto 读楼层 lastEnumAttrValues。',
       },
       {
         code: '{{item@id=1}}',
@@ -425,6 +425,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
       '提示词可用 {{replica:launched:任务名}} 列出指定副本族原本在本轮已开启副本的后缀名（顿号连接，不含共有任务名前缀）。',
       '提示词可用 {{total:launched:标签@属性}} 展开对应副本族本轮已开启副本的复合实例正文（与 {{total:标签@属性}} 同形，但按 launched/enum 过滤）。',
+      '{{total:…}} / {{total:launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用；auto 的 launched 过滤依赖楼层 _post_process_replica_state.lastEnumAttrValues。',
     ],
     example:
       'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
