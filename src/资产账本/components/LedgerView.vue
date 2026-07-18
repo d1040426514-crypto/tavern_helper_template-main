@@ -218,18 +218,17 @@
               <strong>{{ r.role || '职级' }}</strong>
               <span v-if="r.count" class="muted"> ×{{ r.count }}</span>
               <span v-if="r.level" class="muted"> · {{ r.level }}</span>
+              <span v-if="r['变动']" class="muted"> · 变动:{{ r['变动'] }}</span>
               <span v-if="r.status" class="tag" :class="statusTagClass(r.status)">{{ r.status }}</span>
-              <AttrChips :attrs="r" :hide="['role', 'count', 'status', 'level']" />
+              <AttrChips :attrs="r" :hide="['role', 'count', 'level', '变动', 'status']" />
             </div>
-            <FoldPanel
-              v-for="(kp, ki) in ent.keyPersons"
-              :key="'kp-' + ki"
-              variant="sub"
-              :title="pick(kp.attrs, 'name') || '核心人物'"
-              :summary="keyPersonSummary(kp)"
-              :default-open="false"
-              :forced-open="forcedOpen"
-            >
+            <div v-for="(kp, ki) in ent.keyPersons" :key="'kp-' + ki" class="item-row">
+              <strong>{{ pick(kp.attrs, 'name') || '核心人物' }}</strong>
+              <span v-if="pick(kp.attrs, 'role')" class="muted"> · {{ pick(kp.attrs, 'role') }}</span>
+              <span v-if="pick(kp.attrs, 'level')" class="muted"> · {{ pick(kp.attrs, 'level') }}</span>
+              <span v-if="pick(kp.attrs, 'loyalty')" class="muted">
+                · 忠诚:{{ pick(kp.attrs, 'loyalty') }}</span
+              >
               <span
                 v-if="pick(kp.attrs, 'status')"
                 class="tag"
@@ -237,9 +236,11 @@
               >
                 {{ pick(kp.attrs, 'status') }}
               </span>
-              <AttrChips :attrs="kp.attrs" :hide="['name', 'status']" />
-              <StatRow :text="kp.text" />
-            </FoldPanel>
+              <AttrChips
+                :attrs="kp.attrs"
+                :hide="['name', 'role', 'level', 'loyalty', 'status']"
+              />
+            </div>
           </FoldPanel>
         </FoldPanel>
       </FoldPanel>
@@ -530,13 +531,6 @@ function staffSummary(ent: EntityData): string {
     ent.keyPersons.length ? `核心 ${ent.keyPersons.length}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
-}
-
-function keyPersonSummary(kp: NamedBlock): string {
-  const role = pick(kp.attrs, 'role');
-  const body = oneLine(kp.text);
-  if (role && body) return `${role} · ${body}`;
-  return role || body;
 }
 
 function moneySummary(total: string, period: string): string {

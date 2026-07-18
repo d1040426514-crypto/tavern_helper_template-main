@@ -88,7 +88,9 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
     </装备>
   </仓库>
   <人员 total="12">
-    <职级 role="工匠" count="8" cost="2银/周" costType="薪饷" 变动="0" status="满编" />
+    <职级 role="工匠" count="8" level="熟练"
+      cost="2银/周" costType="薪饷"
+      变动="0" status="满编" />
   </人员>
 </实体>
 <经营 name="北岸工坊" 周期="周">
@@ -254,10 +256,11 @@ test('parse staff meta, roles and key persons', () => {
   const body = parseLedgerBody(`
 <实体 name="北岸工坊" location="北岸码头">
   <人员 total="12" 在岗="11" note="1人外派押运">
-    <职级 role="工匠" count="8" cost="2银/人/周" costType="薪饷" 变动="0" status="满编" level="熟练" />
-    <核心人物 name="老刘" role="主管" cost="5银/周" costType="薪饷" status="在岗">
-      忠诚:高 | 技能:督造精通 | 本期:督建扩仓项目
-    </核心人物>
+    <职级 role="工匠" count="8" level="熟练"
+      cost="2银/人/周" costType="薪饷"
+      变动="0" status="满编" />
+    <核心人物 name="老刘" role="主管" level="老练" loyalty="高"
+      cost="5银/周" costType="薪饷" status="在岗" />
   </人员>
 </实体>
 `);
@@ -266,13 +269,19 @@ test('parse staff meta, roles and key persons', () => {
   assert.equal(ent?.staffTotal, '12');
   assert.equal(ent?.staffOnDuty, '11');
   assert.equal(ent?.staffNote, '1人外派押运');
-  assert.equal(ent?.roles[0]?.cost, '2银/人/周');
+  assert.equal(ent?.roles[0]?.role, '工匠');
+  assert.equal(ent?.roles[0]?.count, '8');
   assert.equal(ent?.roles[0]?.level, '熟练');
+  assert.equal(ent?.roles[0]?.cost, '2银/人/周');
+  assert.equal(ent?.roles[0]?.costType, '薪饷');
+  assert.equal(ent?.roles[0]?.['变动'], '0');
   assert.equal(ent?.roles[0]?.status, '满编');
   assert.equal(ent?.keyPersons[0]?.attrs.name, '老刘');
   assert.equal(ent?.keyPersons[0]?.attrs.role, '主管');
-  assert.match(ent?.keyPersons[0]?.text ?? '', /忠诚:高/);
-  assert.match(ent?.keyPersons[0]?.text ?? '', /本期:督建扩仓项目/);
+  assert.equal(ent?.keyPersons[0]?.attrs.loyalty, '高');
+  assert.equal(ent?.keyPersons[0]?.attrs.level, '老练');
+  assert.equal(ent?.keyPersons[0]?.attrs.status, '在岗');
+  assert.equal(ent?.keyPersons[0]?.text, '');
 });
 
 test('findAllPairs self-closing', () => {
