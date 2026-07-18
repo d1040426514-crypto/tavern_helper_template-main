@@ -184,7 +184,7 @@
               :key="'m-' + mi"
               variant="sub"
               :title="whItemTitle(m.attrs, '物资')"
-              :summary="oneLine(m.text)"
+              :summary="warehouseSummary(m.text)"
               :default-open="false"
               :forced-open="forcedOpen"
             >
@@ -196,7 +196,7 @@
               :key="'eq-' + eqi"
               variant="sub"
               :title="whItemTitle(e.attrs, '装备')"
-              :summary="oneLine(e.text)"
+              :summary="warehouseSummary(e.text)"
               :default-open="false"
               :forced-open="forcedOpen"
             >
@@ -441,6 +441,7 @@ import FoldPanel from './FoldPanel.vue';
 import PreLine from './PreLine.vue';
 import ProgressBar from './ProgressBar.vue';
 import StatRow from './StatRow.vue';
+import { parseCashMetrics } from '../parse';
 import type { BusinessData, EntityData, LedgerData, NamedBlock, OperationsData } from '../types';
 
 defineProps<{
@@ -541,6 +542,15 @@ function whItemTitle(attrs: Record<string, string>, fallback: string): string {
   const unit = attrs.unit ? ` (${attrs.unit})` : '';
   const quality = attrs.quality ? ` · 品质:${attrs.quality}` : '';
   return `${name}${unit}${quality}`;
+}
+
+/** 仓库折叠标题：仅显示期末与 Δ */
+function warehouseSummary(text: string): string {
+  const { total, change } = parseCashMetrics(text);
+  if (!total && !change) return '';
+  if (total && change) return `期末 ${total} (Δ ${change})`;
+  if (total) return `期末 ${total}`;
+  return `Δ ${change}`;
 }
 
 function reconcileClass(attrs: Record<string, string>): string {
