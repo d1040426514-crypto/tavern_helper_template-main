@@ -376,6 +376,142 @@ test('replica:launched resolves launched suffixes', () => {
   assert.equal(out, '开启：1');
 });
 
+test('total:launched expands only launched replica composites (manual)', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rep1 = {
+    ...root,
+    id: 'rep-1',
+    name: '副本族处理 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const rep2 = {
+    ...root,
+    id: 'rep-2',
+    name: '副本族处理 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '2',
+    replicaFamilyLaunched: false,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map(),
+    history,
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [root, rep1, rep2] },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('A'));
+  assert.ok(!out.includes('<item id="2">'));
+  assert.ok(!out.includes('B'));
+});
+
+test('total:launched expands only enum-registered replicas (auto)', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'auto' as const,
+  };
+  const rep1 = {
+    ...root,
+    id: 'rep-1',
+    name: '副本族处理 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+  };
+  const rep2 = {
+    ...root,
+    id: 'rep-2',
+    name: '副本族处理 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '2',
+  };
+  const relay: RelayTagMap = new Map([['item@id=1', [ENUM_REGISTRY_MARKER]]]);
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    relay,
+    history,
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [root, rep1, rep2] },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('A'));
+  assert.ok(!out.includes('<item id="2">'));
+});
+
+test('total:launched returns empty for unknown attr spec', () => {
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:npc@name}}',
+    new Map(),
+    new Map([['npc@name=1', ['X']]]),
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [] },
+  );
+  assert.equal(out, '');
+});
+
+test('total:item@id still expands all instances when total:launched exists', () => {
+  const map: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:item@id}}',
+    map,
+    new Map(),
+    new Set(['item@id']),
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('<item id="2">'));
+});
+
 if (process.exitCode) {
   process.exit(process.exitCode);
 }

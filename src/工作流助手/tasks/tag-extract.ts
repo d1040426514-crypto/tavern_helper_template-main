@@ -33,11 +33,24 @@ export function parseDynamicAttrPlaceholder(name: string): { tagName: string; at
   return { tagName, attrName };
 }
 
+export const TOTAL_LAUNCHED_PLACEHOLDER_PREFIX = 'total:launched:';
+
+/** {{total:launched:tag@attr}}：仅展开副本族本轮可运行副本的 tag@attr=* 实例 */
+export function parseTotalLaunchedPlaceholder(name: string): { tagName: string; attrName: string } | null {
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  const prefix = TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
+  if (!lower.startsWith(prefix)) return null;
+  return parseDynamicAttrPlaceholder(trimmed.slice(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.length).trim());
+}
+
 /** {{total:tag@attr}}：展开全部 tag@attr=* 实例 */
 export function parseTotalPlaceholder(name: string): { tagName: string; attrName: string } | null {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
   if (!lower.startsWith('total:')) return null;
+  // total:launched:… 由 parseTotalLaunchedPlaceholder 处理，此处不误解析
+  if (lower.startsWith(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase())) return null;
   return parseDynamicAttrPlaceholder(trimmed.slice('total:'.length).trim());
 }
 
@@ -361,6 +374,10 @@ export const EXTRACT_INJECT_TAGS_HELP = {
         desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
       },
       {
+        code: '{{total:launched:标签@属性}}',
+        desc: '仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。',
+      },
+      {
         code: '{{item@id=1}}',
         desc: '精确（带 = 值）：只展开单个实例，适合固定引用某一属性值。',
       },
@@ -407,6 +424,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '直接编辑副本会在下次镜像时被覆盖。',
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
       '提示词可用 {{replica:launched:任务名}} 列出指定副本族原本在本轮已开启副本的后缀名（顿号连接，不含共有任务名前缀）。',
+      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族本轮已开启副本的复合实例正文（与 {{total:标签@属性}} 同形，但按 launched/enum 过滤）。',
     ],
     example:
       'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',

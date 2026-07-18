@@ -1,5 +1,6 @@
 import {
   buildExtractSpecKey,
+  buildCompositeKey,
   compositePlaceholderToKey,
   extractInjectTagsFromResponse,
   formatAttrTagBlock,
@@ -10,13 +11,19 @@ import {
   parseCompositePlaceholder,
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  parseTotalLaunchedPlaceholder,
   parseTotalPlaceholder,
   sortAttrValues,
   storedTagValueToInner,
   findAllTagInstances,
 } from './tag-extract';
 import { isEnumRegistryMarker } from './replica-enum-parse';
-import { parseReplicaLaunchedPlaceholder, resolveReplicaLaunchedPlaceholder } from './replica-family';
+import {
+  findReplicaFamilyRootByAttrSpec,
+  listLaunchedReplicaSuffixes,
+  parseReplicaLaunchedPlaceholder,
+  resolveReplicaLaunchedPlaceholder,
+} from './replica-family';
 import type { PostProcessTask } from './schema';
 
 export type RelayTagMap = Map<string, string[]>;
@@ -30,6 +37,7 @@ export {
   parseCompositePlaceholder,
   parseDynamicAttrPlaceholder,
   parseExtractTagSpec,
+  parseTotalLaunchedPlaceholder,
   parseTotalPlaceholder,
   sortAttrValues,
   type ExtractTagSpec,
@@ -383,6 +391,27 @@ export function resolvePlaceholderForInject(
     return resolveReplicaLaunchedPlaceholder(launchedRef, options.allTasks, relayTagMap);
   }
 
+  const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
+  if (totalLaunchedSpec) {
+    if (!options?.allTasks?.length) return '';
+    const root = findReplicaFamilyRootByAttrSpec(totalLaunchedSpec, options.allTasks);
+    if (!root) return '';
+    const suffixes = listLaunchedReplicaSuffixes(root, options.allTasks, relayTagMap);
+    const parts: string[] = [];
+    for (const suffix of suffixes) {
+      const key = buildCompositeKey(totalLaunchedSpec.tagName, totalLaunchedSpec.attrName, suffix);
+      const part = resolvePlaceholderForInject(
+        key,
+        relayTagMap,
+        messageVarHistoryMap,
+        injectOnlyTags,
+        options,
+      );
+      if (part) parts.push(part);
+    }
+    return parts.join('\n\n');
+  }
+
   const totalSpec = parseTotalPlaceholder(placeholderName);
   if (totalSpec) {
     const dynName = `${totalSpec.tagName}@${totalSpec.attrName}`;
@@ -436,6 +465,14 @@ export function resolvePlaceholderForInject(
 export function isPlaceholderInjectAllowed(placeholderName: string, injectOnlyTags: Set<string>): boolean {
   const lower = placeholderName.toLowerCase();
   if (lower.startsWith('replica:')) return false;
+
+  const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
+  if (totalLaunchedSpec) {
+    return isPlaceholderInjectAllowed(
+      `${totalLaunchedSpec.tagName}@${totalLaunchedSpec.attrName}`,
+      injectOnlyTags,
+    );
+  }
 
   const totalSpec = parseTotalPlaceholder(placeholderName);
   if (totalSpec) {
@@ -720,6 +757,14 @@ export function expandWritableKeysFromPlaceholder(
   placeholderName: string,
   availableKeys: Iterable<string>,
 ): string[] {
+  const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
+  if (totalLaunchedSpec) {
+    return expandWritableKeysFromPlaceholder(
+      `${totalLaunchedSpec.tagName}@${totalLaunchedSpec.attrName}`,
+      availableKeys,
+    );
+  }
+
   const totalSpec = parseTotalPlaceholder(placeholderName);
   if (totalSpec) {
     return expandWritableKeysFromPlaceholder(
@@ -790,6 +835,10 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   {
     code: '{{total:标签@属性}}',
     desc: '在注入模板或提示词中批量展开全部该属性规格的复合实例，例如 {{total:item@id}} 展开全部 item@id=*。',
+  },
+  {
+    code: '{{total:launched:标签@属性}}',
+    desc: '展开对应副本族本轮可运行（已开启）副本的 tag@attr=* 复合实例正文；与 {{total:标签@属性}} 同形，但按调度过滤。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {

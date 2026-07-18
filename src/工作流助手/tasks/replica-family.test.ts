@@ -11,6 +11,7 @@ import {
 import {
   assertReplicaMemberPatchAllowed,
   expandEnabledTasksForRuntime,
+  findReplicaFamilyRootByAttrSpec,
   findReplicaFamilyRootByRef,
   isReplicaFamilyMember,
   isReplicaFamilyRootTemplate,
@@ -462,6 +463,42 @@ test('resolveReplicaLaunchedPlaceholder joins with dunhao', () => {
 
 test('resolveReplicaLaunchedPlaceholder returns empty for unknown root', () => {
   assert.equal(resolveReplicaLaunchedPlaceholder('不存在', [], new Map()), '');
+});
+
+test('findReplicaFamilyRootByAttrSpec matches enumSpec or spec', () => {
+  const root = baseTask({
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'item', attrName: 'id' }, [root])?.id, root.id);
+  assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'npc', attrName: 'name' }, [root]), undefined);
+});
+
+test('findReplicaFamilyRootByAttrSpec prefers enumSpec over spec', () => {
+  const root = baseTask({
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'npc@name',
+  });
+  assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'npc', attrName: 'name' }, [root])?.id, root.id);
+  assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'item', attrName: 'id' }, [root]), undefined);
+});
+
+test('listLaunchedReplicaSuffixes used by total:launched filters manual', () => {
+  const root = baseTask({
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyAttrValue === '1'
+      ? { ...t, replicaFamilyLaunched: true }
+      : t.replicaFamilyAttrValue === '2'
+        ? { ...t, replicaFamilyLaunched: false }
+        : t,
+  );
+  const syncedRoot = tasks.find(t => t.id === root.id)!;
+  assert.deepEqual(listLaunchedReplicaSuffixes(syncedRoot, tasks, new Map()), ['1']);
+  assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'item', attrName: 'id' }, tasks)?.id, root.id);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

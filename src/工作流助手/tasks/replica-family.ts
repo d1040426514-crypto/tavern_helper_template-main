@@ -482,6 +482,19 @@ export function findReplicaFamilyRootByRef(ref: string, allTasks: PostProcessTas
   );
 }
 
+/** 按 replicaFamilyEnumSpec / replicaFamilySpec 匹配副本族原本 */
+export function findReplicaFamilyRootByAttrSpec(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+): PostProcessTask | undefined {
+  const key = buildExtractSpecKey(spec.tagName, spec.attrName).toLowerCase();
+  return allTasks.find(t => {
+    if (!isReplicaFamilyRootTemplate(t)) return false;
+    const rootSpec = (t.replicaFamilyEnumSpec?.trim() || t.replicaFamilySpec?.trim() || '').toLowerCase();
+    return rootSpec === key;
+  });
+}
+
 export function listLaunchedReplicaSuffixes(
   root: PostProcessTask,
   allTasks: PostProcessTask[],
