@@ -14,6 +14,17 @@
           <span v-if="data.ledgerTime.timeLine" class="gh-subtitle">{{
             formatHeaderTimeLine(data.ledgerTime.timeLine)
           }}</span>
+          <div class="gh-actions">
+            <button
+              type="button"
+              class="gh-theme-btn"
+              title="切换主题"
+              @click.stop="emit('toggle-theme')"
+            >
+              {{ themeDark ? '☀️' : '🌓' }}
+            </button>
+            <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
+          </div>
         </div>
         <div
           v-if="data.headline.duration || data.headline.status || data.headline.delta || data.cashTotal"
@@ -34,17 +45,6 @@
             <span v-if="data.cashTotal" class="gh-cash">流动 {{ data.cashTotal }}</span>
           </div>
         </div>
-      </div>
-      <div class="gh-actions gh-actions--stack">
-        <button
-          type="button"
-          class="gh-theme-btn"
-          title="切换主题"
-          @click.stop="emit('toggle-theme')"
-        >
-          {{ themeDark ? '☀️' : '🌓' }}
-        </button>
-        <span class="gh-arrow" :class="{ open: bodyOpen }" aria-hidden="true">▾</span>
       </div>
     </header>
 
@@ -647,16 +647,11 @@ function statusTagClass(status: string): string {
 
 .gh-actions {
   display: flex;
+  flex-direction: row;
   align-items: center;
   gap: 4px;
   flex-shrink: 0;
-}
-
-.gh-actions--stack {
-  flex-direction: column;
-  justify-content: center;
-  gap: 4px;
-  align-self: center;
+  margin-left: auto;
 }
 
 .gh-row--meta {
