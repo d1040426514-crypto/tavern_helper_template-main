@@ -25,6 +25,12 @@ export type OpsLine = NamedBlock & { attrs: AttrMap };
 export type BusinessData = {
   name: string;
   attrs: AttrMap;
+  /** <经营 周期> */
+  period: string;
+  /** <订单>/<履约> */
+  fulfilledOrders: NamedBlock[];
+  /** <订单>/<在途> */
+  pendingOrders: NamedBlock[];
   revenueTotal: string;
   revenuePeriod: string;
   revenueItems: NamedBlock[];
@@ -34,8 +40,6 @@ export type BusinessData = {
   expensePeriod: string;
   expenseItems: NamedBlock[];
   lines: OpsLine[];
-  deliverables: AttrMap[];
-  deliverAttrs: AttrMap;
   reconcile: NamedBlock;
   netWorth: string;
 };

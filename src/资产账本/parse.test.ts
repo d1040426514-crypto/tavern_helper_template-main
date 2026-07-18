@@ -91,9 +91,19 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
     <职级 role="工匠" count="8" cost="2银/周" costType="薪饷" 变动="0" status="满编" />
   </人员>
 </实体>
-<经营 name="北岸工坊">
+<经营 name="北岸工坊" 周期="周">
+  <订单>
+    <履约 order="木板-北商行" party="北商行" item="木板" qty="10" unit="张" quality="良"
+      amount="+50" status="已结清">
+      单价:5 × 数量:10 = 50 | 交期:本周 | 出库:仓库 | 波动:无
+    </履约>
+    <在途 order="木箱-南栈" party="南栈" item="木箱" qty="4" unit="只"
+      amount="40" status="生产中">
+      已交:1/4 | 欠交:3 | 预计结清:下旬
+    </在途>
+  </订单>
   <收入 total="50" 周期="周">
-    <条目 name="木板" amount="+50">单价:5 × 数量:10</条目>
+    <条目 name="木板" amount="+50" order="木板-北商行">单价:5 × 数量:10 | 对方:北商行</条目>
   </收入>
   <支出 total="20" 周期="周">
     <条目 name="薪饷" amount="-20" type="薪饷">计算:10×2</条目>
@@ -103,11 +113,9 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
       投入: 原木 8根/周
       产出: 木板 10张/周
       品质: 良 | 损耗:5% | 瓶颈:人力
+      承接:木板-北商行,木箱-南栈
     </产线>
   </产能>
-  <本期可交付>
-    <品项 name="木板" qty="10" unit="张" quality="良" per="周" from="锯木房" limit="人力" />
-  </本期可交付>
   <闭环校验 result="Pass">期初 +收入 -支出 =期末</闭环校验>
   <净值>+30 银盾/周</净值>
 </经营>
@@ -132,16 +140,20 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   assert.equal(data.entities[0]?.facilities[0]?.attrs.quality, '良');
   assert.equal(data.entities[0]?.materials[0]?.attrs.unit, '根');
   assert.equal(data.entities[0]?.equipments[0]?.attrs.quality, '良');
+  assert.equal(data.businesses[0]?.period, '周');
   assert.equal(data.businesses[0]?.revenueTotal, '50');
   assert.equal(data.businesses[0]?.expenseTotal, '20');
   assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.name, '木板');
+  assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.order, '木板-北商行');
   assert.equal(data.businesses[0]?.lines[0]?.attrs.production, '锯木');
   assert.equal(data.businesses[0]?.lines[0]?.attrs.run, 'Full');
-  assert.equal(data.businesses[0]?.deliverables[0]?.name, '木板');
-  assert.equal(data.businesses[0]?.deliverables[0]?.qty, '10');
-  assert.equal(data.businesses[0]?.deliverables[0]?.quality, '良');
-  assert.equal(data.businesses[0]?.deliverables[0]?.from, '锯木房');
-  assert.equal(data.businesses[0]?.deliverables[0]?.limit, '人力');
+  assert.equal(data.businesses[0]?.fulfilledOrders[0]?.attrs.order, '木板-北商行');
+  assert.equal(data.businesses[0]?.fulfilledOrders[0]?.attrs.item, '木板');
+  assert.equal(data.businesses[0]?.fulfilledOrders[0]?.attrs.amount, '+50');
+  assert.match(data.businesses[0]?.fulfilledOrders[0]?.text ?? '', /单价:5/);
+  assert.equal(data.businesses[0]?.pendingOrders[0]?.attrs.order, '木箱-南栈');
+  assert.equal(data.businesses[0]?.pendingOrders[0]?.attrs.status, '生产中');
+  assert.match(data.businesses[0]?.pendingOrders[0]?.text ?? '', /欠交:3/);
   assert.equal(data.operations[0]?.managerName, '老刘');
   assert.match(data.operations[0]?.manager ?? '', /重点:扩仓/);
   assert.equal(data.operations[0]?.projects[0]?.attrs.progress, '60%');
@@ -165,7 +177,7 @@ test('legacy 基础设施 / building still parse', () => {
   assert.match(body.businesses[0]?.lines[0]?.text ?? '', /缺纱/);
 });
 
-test('legacy short tags 流动资金 / 可交付 still parse', () => {
+test('legacy short tags 流动资金 still parse; 可交付 ignored', () => {
   const body = parseLedgerBody(`
 <流动资金>
   <币种 code="B" symbol="¤">期初10 +流入0 -流出0 =期末10</币种>
@@ -179,8 +191,32 @@ test('legacy short tags 流动资金 / 可交付 still parse', () => {
 `);
   assert.equal(body.currencies[0]?.code, 'B');
   assert.equal(body.cashTotal, '10 ¤');
-  assert.equal(body.businesses[0]?.deliverables[0]?.name, '布');
-  assert.equal(body.businesses[0]?.deliverables[0]?.qty, '2');
+  assert.equal(body.businesses[0]?.fulfilledOrders.length, 0);
+  assert.equal(body.businesses[0]?.pendingOrders.length, 0);
+});
+
+test('parse orders fulfilled and pending', () => {
+  const body = parseLedgerBody(`
+<经营 name="商栈" 周期="旬">
+  <订单>
+    <履约 order="O1" party="甲" item="粮" qty="5" unit="袋" amount="+20" status="已结清">
+      单价:4 × 数量:5 = 20
+    </履约>
+    <在途 order="O2" party="乙" item="盐" qty="2" unit="袋" amount="8" status="待发">
+      已交:0/2 | 欠交:2 | 预计结清:下旬
+    </在途>
+  </订单>
+  <收入 total="20" 周期="旬">
+    <条目 name="粮" amount="+20" order="O1">对方:甲</条目>
+  </收入>
+</经营>
+`);
+  assert.equal(body.businesses[0]?.period, '旬');
+  assert.equal(body.businesses[0]?.fulfilledOrders.length, 1);
+  assert.equal(body.businesses[0]?.pendingOrders.length, 1);
+  assert.equal(body.businesses[0]?.fulfilledOrders[0]?.attrs.party, '甲');
+  assert.equal(body.businesses[0]?.pendingOrders[0]?.attrs.status, '待发');
+  assert.equal(body.businesses[0]?.revenueItems[0]?.attrs.order, 'O1');
 });
 
 test('legacy 合计金额 and 执事 still parse', () => {

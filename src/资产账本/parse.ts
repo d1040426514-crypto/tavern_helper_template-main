@@ -16,7 +16,7 @@ function normalizeMarkup(text: string): string {
   return String(text ?? '')
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(
-      /<(本期结算|外因|内因|产业流动资金|流动资金|实体|经营|运营|基建|基础设施|仓库|人员|收入|支出|产能|本期可交付|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
+      /<(本期结算|外因|内因|产业流动资金|流动资金|实体|经营|运营|基建|基础设施|仓库|人员|收入|支出|产能|订单|履约|在途|本期可交付|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
       '<$1 $2',
     );
 }
@@ -193,10 +193,13 @@ function parseEntity(hit: TagHit): EntityData {
 
 function parseBusiness(hit: TagHit): BusinessData {
   const name = pickAttr(hit.attrs, 'name') || '未命名经营';
+  const period = pickAttr(hit.attrs, '周期');
+  const orders = findFirstPair(hit.inner, '订单');
+  const fulfilledOrders = orders ? namedFromHits(findAllPairs(orders.inner, '履约')) : [];
+  const pendingOrders = orders ? namedFromHits(findAllPairs(orders.inner, '在途')) : [];
   const revenue = findFirstPair(hit.inner, '收入');
   const expense = findFirstPair(hit.inner, '支出');
   const capacity = findFirstPair(hit.inner, '产能');
-  const deliver = findFirstPair(hit.inner, '本期可交付') ?? findFirstPair(hit.inner, '可交付');
   const reconcile = findFirstPair(hit.inner, '闭环校验');
   const net = findFirstPair(hit.inner, '净值');
 
@@ -214,6 +217,9 @@ function parseBusiness(hit: TagHit): BusinessData {
   return {
     name,
     attrs: hit.attrs,
+    period,
+    fulfilledOrders,
+    pendingOrders,
     revenueTotal: revenue ? pickAttr(revenue.attrs, 'total', '合计金额', '金额') : '',
     revenuePeriod: revenue ? pickAttr(revenue.attrs, '周期') : '',
     revenueItems,
@@ -222,8 +228,6 @@ function parseBusiness(hit: TagHit): BusinessData {
     expensePeriod: expense ? pickAttr(expense.attrs, '周期') : '',
     expenseItems: expense ? namedFromHits(findAllPairs(expense.inner, '条目')) : [],
     lines,
-    deliverables: deliver ? findAllSelfClosing(deliver.inner, '品项') : [],
-    deliverAttrs: deliver?.attrs ?? {},
     reconcile: reconcile
       ? { attrs: reconcile.attrs, text: softTrim(reconcile.inner) }
       : { attrs: {}, text: '' },

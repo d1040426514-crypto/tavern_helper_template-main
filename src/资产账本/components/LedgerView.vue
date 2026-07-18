@@ -269,6 +269,53 @@
           :forced-open="forcedOpen"
         >
           <FoldPanel
+            v-if="biz.fulfilledOrders.length || biz.pendingOrders.length"
+            variant="sub"
+            title="订单"
+            emoji="🧾"
+            :summary="orderSummary(biz)"
+            :default-open="false"
+            :forced-open="forcedOpen"
+          >
+            <FoldPanel
+              v-for="(o, oi) in biz.fulfilledOrders"
+              :key="'fo-' + oi"
+              variant="sub"
+              :title="orderTitle(o, '履约')"
+              :summary="pick(o.attrs, 'amount') || pick(o.attrs, 'party')"
+              :badge="pick(o.attrs, 'status') || '已结清'"
+              badge-class="is-plus"
+              :default-open="false"
+              :forced-open="forcedOpen"
+            >
+              <AttrChips
+                :attrs="o.attrs"
+                :hide="['order', 'item', 'amount', 'status', 'party', 'qty', 'unit', 'quality']"
+              />
+              <div v-if="orderMeta(o)" class="muted staff-note">{{ orderMeta(o) }}</div>
+              <StatRow :text="o.text" />
+            </FoldPanel>
+            <FoldPanel
+              v-for="(o, oi) in biz.pendingOrders"
+              :key="'po-' + oi"
+              variant="sub"
+              :title="orderTitle(o, '在途')"
+              :summary="pick(o.attrs, 'amount') || pick(o.attrs, 'party')"
+              :badge="pick(o.attrs, 'status') || '在途'"
+              badge-class="is-minus"
+              :default-open="false"
+              :forced-open="forcedOpen"
+            >
+              <AttrChips
+                :attrs="o.attrs"
+                :hide="['order', 'item', 'amount', 'status', 'party', 'qty', 'unit', 'quality']"
+              />
+              <div v-if="orderMeta(o)" class="muted staff-note">{{ orderMeta(o) }}</div>
+              <StatRow :text="o.text" />
+            </FoldPanel>
+          </FoldPanel>
+
+          <FoldPanel
             variant="sub"
             title="收入"
             emoji="📈"
@@ -343,26 +390,6 @@
               <AttrChips :attrs="line.attrs" :hide="['production', 'building', 'count', 'run']" />
               <StatRow :text="line.text" />
             </FoldPanel>
-          </FoldPanel>
-
-          <FoldPanel
-            v-if="biz.deliverables.length"
-            variant="sub"
-            title="本期可交付"
-            emoji="📦"
-            :summary="`${biz.deliverables.length} 品项`"
-            :default-open="false"
-            :forced-open="forcedOpen"
-          >
-            <div v-for="(d, di) in biz.deliverables" :key="'d-' + di" class="item-row">
-              <strong>{{ d.name || '品项' }}</strong>
-              <span v-if="d.qty" class="muted"> {{ d.qty }}{{ d.unit || '' }}</span>
-              <span v-if="d.quality" class="muted"> · 品质:{{ d.quality }}</span>
-              <span v-if="d.per" class="muted"> / {{ d.per }}</span>
-              <span v-if="d.from" class="muted"> · 产出:{{ d.from }}</span>
-              <span v-if="d.limit" class="muted"> · 瓶颈:{{ d.limit }}</span>
-              <AttrChips :attrs="d" :hide="['name', 'qty', 'unit', 'per', 'from', 'limit', 'quality']" />
-            </div>
           </FoldPanel>
 
           <FoldPanel
@@ -522,9 +549,38 @@ function moneySummary(total: string, period: string): string {
 }
 
 function bizSummary(biz: BusinessData): string {
+  const orderCount = biz.fulfilledOrders.length + biz.pendingOrders.length;
   const parts = [
+    biz.period || biz.revenuePeriod || '',
+    orderCount ? `单 ${orderCount}` : '',
     biz.revenueTotal ? `入 ${biz.revenueTotal}` : '',
     biz.expenseTotal ? `支 ${biz.expenseTotal}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function orderSummary(biz: BusinessData): string {
+  const parts = [
+    biz.fulfilledOrders.length ? `履约 ${biz.fulfilledOrders.length}` : '',
+    biz.pendingOrders.length ? `在途 ${biz.pendingOrders.length}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function orderTitle(o: NamedBlock, fallback: string): string {
+  const item = pick(o.attrs, 'item');
+  const order = pick(o.attrs, 'order');
+  if (item && order) return `${item} · ${order}`;
+  return item || order || fallback;
+}
+
+function orderMeta(o: NamedBlock): string {
+  const parts = [
+    pick(o.attrs, 'party') ? `对方:${pick(o.attrs, 'party')}` : '',
+    pick(o.attrs, 'qty')
+      ? `${pick(o.attrs, 'qty')}${pick(o.attrs, 'unit') || ''}`
+      : '',
+    pick(o.attrs, 'quality') ? `品质:${pick(o.attrs, 'quality')}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
 }
