@@ -118,7 +118,7 @@
         <FoldPanel
           v-if="data.currencies.length || data.cashBase"
           variant="sub"
-          title="流动资金"
+          title="产业流动资金"
           emoji="💎"
           :summary="data.cashNote || `${data.currencies.length} 币种`"
           :default-open="false"
@@ -344,7 +344,7 @@
           <FoldPanel
             v-if="biz.deliverables.length"
             variant="sub"
-            title="可交付"
+            title="本期可交付"
             emoji="📦"
             :summary="pick(biz.deliverAttrs, '口径') || `${biz.deliverables.length} 品项`"
             :default-open="false"
@@ -354,7 +354,9 @@
               <strong>{{ d.name || '品项' }}</strong>
               <span v-if="d.qty" class="muted"> {{ d.qty }}{{ d.unit || '' }}</span>
               <span v-if="d.per" class="muted"> / {{ d.per }}</span>
-              <AttrChips :attrs="d" :hide="['name', 'qty', 'unit', 'per']" />
+              <span v-if="d.from" class="muted"> · 产出:{{ d.from }}</span>
+              <span v-if="d.limit" class="muted"> · 瓶颈:{{ d.limit }}</span>
+              <AttrChips :attrs="d" :hide="['name', 'qty', 'unit', 'per', 'from', 'limit']" />
             </div>
           </FoldPanel>
 

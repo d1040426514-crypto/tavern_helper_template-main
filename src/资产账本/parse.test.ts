@@ -49,13 +49,16 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
 <外因>
   <季节 name="初春">初春回暖 | 影响:谷物 ×1.1 | 供需:Loose</季节>
 </外因>
-<流动资金 note="多币种">
-  <币种 code="A" symbol="§">期初100 +流入20 -流出5 =期末115</币种>
+<产业流动资金 note="多币种">
+  <币种 code="A" symbol="§">
+    期初100 +流入20 -流出5 ±重估0 =期末115
+    (Δ +15 | 原因:售货)
+  </币种>
   <折合基准>
     ∑(期末货币 × 汇率) = 115 §
     (Δ +15) → 存放:北商行账户
   </折合基准>
-</流动资金>
+</产业流动资金>
 <实体 name="北岸工坊" location="北岸码头">
   <基础设施>
     <设施 type="锯木房" count="2" status="Normal" maintain="3银/周" />
@@ -71,6 +74,9 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   <支出 total="20" 周期="周">
     <条目 name="薪饷" amount="-20" type="薪饷">计算:10×2</条目>
   </支出>
+  <本期可交付>
+    <品项 name="木板" qty="10" unit="张" per="周" from="锯木房" limit="人力" />
+  </本期可交付>
   <闭环校验 result="Pass">期初 +收入 -支出 =期末</闭环校验>
   <净值>+30 银盾/周</净值>
 </经营>
@@ -86,6 +92,8 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   assert.match(data.headline.delta, /\+320/);
   assert.equal(data.externalFactors[0]?.attrs._tag, '季节');
   assert.equal(data.currencies[0]?.symbol, '§');
+  assert.match(data.currencies[0]?.text ?? '', /±重估/);
+  assert.match(data.currencies[0]?.text ?? '', /原因:售货/);
   assert.equal(data.cashTotal, '115 §');
   assert.equal(data.entities[0]?.name, '北岸工坊');
   assert.equal(data.entities[0]?.location, '北岸码头');
@@ -93,9 +101,31 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   assert.equal(data.businesses[0]?.revenueTotal, '50');
   assert.equal(data.businesses[0]?.expenseTotal, '20');
   assert.equal(data.businesses[0]?.revenueItems[0]?.attrs.name, '木板');
+  assert.equal(data.businesses[0]?.deliverables[0]?.name, '木板');
+  assert.equal(data.businesses[0]?.deliverables[0]?.qty, '10');
+  assert.equal(data.businesses[0]?.deliverables[0]?.from, '锯木房');
+  assert.equal(data.businesses[0]?.deliverables[0]?.limit, '人力');
   assert.equal(data.operations[0]?.managerName, '老刘');
   assert.match(data.operations[0]?.manager ?? '', /重点:扩仓/);
   assert.equal(data.operations[0]?.projects[0]?.attrs.progress, '60%');
+});
+
+test('legacy short tags 流动资金 / 可交付 still parse', () => {
+  const body = parseLedgerBody(`
+<流动资金>
+  <币种 code="B" symbol="¤">期初10 +流入0 -流出0 =期末10</币种>
+  <折合基准>∑(期末货币 × 汇率) = 10 ¤</折合基准>
+</流动资金>
+<经营 name="旧坊">
+  <可交付>
+    <品项 name="布" qty="2" unit="匹" per="周" />
+  </可交付>
+</经营>
+`);
+  assert.equal(body.currencies[0]?.code, 'B');
+  assert.equal(body.cashTotal, '10 ¤');
+  assert.equal(body.businesses[0]?.deliverables[0]?.name, '布');
+  assert.equal(body.businesses[0]?.deliverables[0]?.qty, '2');
 });
 
 test('legacy 合计金额 and 执事 still parse', () => {
@@ -161,7 +191,9 @@ test('findAllPairs self-closing', () => {
 });
 
 test('parseCashMetrics extracts total and delta', () => {
-  const m = parseCashMetrics('期初100 +流入20 -流出5 =期末115\n(Δ +15 | 原因:售货)');
+  const m = parseCashMetrics(
+    '期初100 +流入20 -流出5 ±重估0 =期末115\n(Δ +15 | 原因:售货)',
+  );
   assert.equal(m.total, '115');
   assert.equal(m.change, '+15');
   assert.equal(m.changeDir, 'up');
