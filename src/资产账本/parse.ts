@@ -164,8 +164,8 @@ function parseEntity(hit: TagHit): EntityData {
   const name = pickAttr(hit.attrs, 'name') || '未命名实体';
   const infra = findFirstPair(hit.inner, '基建') ?? findFirstPair(hit.inner, '基础设施');
   const facilities = infra
-    ? findAllSelfClosing(infra.inner, '设施')
-    : findAllSelfClosing(hit.inner, '设施');
+    ? namedFromHits(findAllPairs(infra.inner, '设施'))
+    : namedFromHits(findAllPairs(hit.inner, '设施'));
 
   const warehouse = findFirstPair(hit.inner, '仓库');
   const whInner = warehouse?.inner ?? '';

@@ -37,8 +37,20 @@ test('parse warehouse and facilities tags', () => {
   assert.equal(withEnt.entities[0]?.materials[0]?.attrs.name, '粮');
   assert.equal(withEnt.entities[0]?.materials[0]?.attrs.unit, '袋');
   assert.equal(withEnt.entities[0]?.materials[0]?.attrs.quality, '普通');
-  assert.equal(withEnt.entities[0]?.facilities[0]?.type, '锯木房');
-  assert.equal(withEnt.entities[0]?.facilities[0]?.quality, '良');
+  assert.equal(withEnt.entities[0]?.facilities[0]?.attrs.type, '锯木房');
+  assert.equal(withEnt.entities[0]?.facilities[0]?.attrs.quality, '良');
+  assert.equal(withEnt.entities[0]?.facilities[0]?.text, '');
+});
+
+test('parse facility paired tag with description', () => {
+  const body = parseLedgerBody(
+    '<实体 name="商栈"><基建><设施 type="锯木房" count="2" quality="良" status="Normal" maintain="3银/周">北岸码头旁双联木工棚，专司原木剖板</设施></基建></实体>',
+  );
+  const f = body.entities[0]?.facilities[0];
+  assert.equal(f?.attrs.type, '锯木房');
+  assert.equal(f?.attrs.count, '2');
+  assert.equal(f?.attrs.maintain, '3银/周');
+  assert.equal(f?.text, '北岸码头旁双联木工棚，专司原木剖板');
 });
 
 test('parseLedger combines LedgerTime + body (new template)', () => {
@@ -116,8 +128,8 @@ test('parseLedger combines LedgerTime + body (new template)', () => {
   assert.equal(data.cashTotal, '115 §');
   assert.equal(data.entities[0]?.name, '北岸工坊');
   assert.equal(data.entities[0]?.location, '北岸码头');
-  assert.equal(data.entities[0]?.facilities[0]?.type, '锯木房');
-  assert.equal(data.entities[0]?.facilities[0]?.quality, '良');
+  assert.equal(data.entities[0]?.facilities[0]?.attrs.type, '锯木房');
+  assert.equal(data.entities[0]?.facilities[0]?.attrs.quality, '良');
   assert.equal(data.entities[0]?.materials[0]?.attrs.unit, '根');
   assert.equal(data.entities[0]?.equipments[0]?.attrs.quality, '良');
   assert.equal(data.businesses[0]?.revenueTotal, '50');
@@ -148,7 +160,7 @@ test('legacy 基础设施 / building still parse', () => {
   </产能>
 </经营>
 `);
-  assert.equal(body.entities[0]?.facilities[0]?.type, '织机房');
+  assert.equal(body.entities[0]?.facilities[0]?.attrs.type, '织机房');
   assert.equal(body.businesses[0]?.lines[0]?.attrs.building, '织布');
   assert.match(body.businesses[0]?.lines[0]?.text ?? '', /缺纱/);
 });

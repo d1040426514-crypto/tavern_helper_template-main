@@ -163,11 +163,14 @@
             :forced-open="forcedOpen"
           >
             <div v-for="(b, bi) in ent.facilities" :key="'f-' + bi" class="item-row">
-              <strong>{{ b.type || '设施' }}</strong>
-              <span v-if="b.count" class="muted"> ×{{ b.count }}</span>
-              <span v-if="b.quality" class="muted"> · 品质:{{ b.quality }}</span>
-              <span v-if="b.status" class="tag" :class="statusTagClass(b.status)">{{ b.status }}</span>
-              <AttrChips :attrs="b" :hide="['type', 'count', 'status', 'quality']" />
+              <strong>{{ b.attrs.type || '设施' }}</strong>
+              <span v-if="b.attrs.count" class="muted"> ×{{ b.attrs.count }}</span>
+              <span v-if="b.attrs.quality" class="muted"> · 品质:{{ b.attrs.quality }}</span>
+              <span v-if="b.attrs.status" class="tag" :class="statusTagClass(b.attrs.status)">{{
+                b.attrs.status
+              }}</span>
+              <AttrChips :attrs="b.attrs" :hide="['type', 'count', 'status', 'quality']" />
+              <p v-if="b.text" class="muted staff-note">{{ b.text }}</p>
             </div>
           </FoldPanel>
 

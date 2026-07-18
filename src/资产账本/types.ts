@@ -10,7 +10,7 @@ export type EntityData = {
   name: string;
   location: string;
   attrs: AttrMap;
-  facilities: AttrMap[];
+  facilities: NamedBlock[];
   materials: NamedBlock[];
   equipments: NamedBlock[];
   staffTotal: string;
