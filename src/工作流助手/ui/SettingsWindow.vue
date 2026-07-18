@@ -10,6 +10,7 @@ import type {
   TaskWorkflowPresetEntry,
 } from '../tasks/schema';
 import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
+import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
 import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
   getPostProcessWritableTagNames,
@@ -2199,6 +2200,23 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
                 相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（单任务输出内裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例）；多任务/多阶段同名标签内文以换行合并为单段，供后续阶段的
                 <code v-pre>{{标签名}}</code> 占位符使用。多实例分别调用 API 的场景（副本族）见任务页「提取写入标签」说明。
+              </p>
+            </div>
+          </div>
+
+          <div class="acu-section">
+            <h4>已注册酒馆助手宏</h4>
+            <div class="acu-placeholder-legend acu-macro-legend">
+              <p class="acu-notes" style="margin-top: 0; margin-bottom: 8px">
+                脚本加载时通过 <code>registerMacroLike</code> 注册，可在主聊天提示词、世界书、正则与 EJS 宏阶段等走酒馆助手宏管线的文本中直接使用（无需再经工作流脚本
+                <code v-pre>{{}}</code> 替换）。任务提示词内仍优先由脚本阶段解析。
+              </p>
+              <div v-for="item in REGISTERED_MACRO_LEGEND" :key="item.code" class="acu-placeholder-item">
+                <code>{{ item.code }}</code> — {{ item.desc }}
+              </div>
+              <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
+                宏侧读当前（或上下文）楼层的 <code>post_process_tags</code> 与副本状态快照；无数据时替换为空。auto 的 launched 过滤依赖最近一次工作流写入的
+                <code>lastEnumAttrValues</code>，旧楼未跑过 enum 时可能为空。
               </p>
             </div>
           </div>

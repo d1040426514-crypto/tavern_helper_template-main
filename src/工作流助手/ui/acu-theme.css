@@ -1977,6 +1977,10 @@
   line-height: var(--acu-line-height-body);
 }
 
+.acu-macro-legend {
+  border-left-color: var(--acu-accent-2, var(--acu-accent));
+}
+
 .acu-placeholder-legend strong {
   display: block;
   font-size: var(--acu-font-size-body);

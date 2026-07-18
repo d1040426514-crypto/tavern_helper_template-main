@@ -126,3 +126,19 @@ export function registerPlaceholderMacros(): { stop(): void } {
     },
   };
 }
+
+/** 设置页「已注册酒馆助手宏」说明（与 registerPlaceholderMacros 保持同步） */
+export const REGISTERED_MACRO_LEGEND: { code: string; desc: string }[] = [
+  {
+    code: '{{total:标签@属性}}',
+    desc: '展开楼层 post_process_tags 中该规格的全部复合实例，例如 {{total:item@id}}。',
+  },
+  {
+    code: '{{total:launched:标签@属性}}',
+    desc: '仅展开本轮可运行副本的复合实例。manual 看 replicaFamilyLaunched；auto 看楼层 _post_process_replica_state.lastEnumAttrValues（需先跑过带 <ReplicaEnum> 的工作流）。',
+  },
+  {
+    code: '{{replica:launched:任务名}}',
+    desc: '输出可运行副本的属性值列表（顿号连接），支持任务名或 Id；过滤规则同 total:launched。',
+  },
+];
