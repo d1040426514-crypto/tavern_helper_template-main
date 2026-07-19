@@ -1,5 +1,6 @@
 import _ from 'lodash';
-import { intervalToMs, parseGameTimeToMs } from './parse-game-time';
+import { findLatestAssistantFloorId } from './message-floor';
+import { intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs } from './parse-game-time';
 import { extractLastTagContent } from './utils';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
 
@@ -38,7 +39,10 @@ export function countAssistantRounds(): number {
   }
 }
 
-function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): { raw: string | null; fail: boolean } {
+export function resolveTimeRaw(
+  task: PostProcessTask,
+  ctx: ScheduleContext,
+): { raw: string | null; fail: boolean } {
   const ti = task.schedule?.timeInterval;
   if (!ti) return { raw: null, fail: false };
   const src = ti.timeSource;
@@ -62,6 +66,88 @@ function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): { raw: str
   } catch {
     return { raw: null, fail: true };
   }
+}
+
+export type GameTimeProbeResult = {
+  ok: boolean;
+  stage: 'source' | 'parse';
+  raw?: string;
+  normalized?: string;
+  message: string;
+};
+
+/** 按当前任务时间来源读取并解析游戏时间（供设置页「测试时间解析」） */
+export function probeTaskGameTime(task: PostProcessTask): GameTimeProbeResult {
+  const ti = task.schedule?.timeInterval;
+  if (!ti) {
+    return { ok: false, stage: 'source', message: '未配置游戏时间间隔' };
+  }
+
+  const src = ti.timeSource;
+  let currentAiText = '';
+  let currentPairText = '';
+
+  if (src.type === 'message_tag') {
+    const floorId = findLatestAssistantFloorId();
+    if (floorId == null) {
+      return { ok: false, stage: 'source', message: '当前没有可访问的 AI 回复楼层' };
+    }
+    try {
+      const aiMsg = getChatMessages(floorId)[0];
+      currentAiText = aiMsg?.message ?? '';
+      const prev = getChatMessages(floorId - 1)[0];
+      const userText = prev?.role === 'user' ? (prev.message ?? '') : '';
+      currentPairText = [userText, currentAiText].filter(Boolean).join('\n');
+    } catch {
+      return { ok: false, stage: 'source', message: '读取聊天楼层失败' };
+    }
+  }
+
+  const ctx: ScheduleContext = {
+    currentRound: 0,
+    currentAiText,
+    currentPairText,
+    settings: { tasks: [] } as ScriptSettings,
+    bypassSchedule: false,
+  };
+
+  const { raw, fail } = resolveTimeRaw(task, ctx);
+  if (fail || raw == null) {
+    if (src.type === 'message_tag') {
+      const tags = src.tagNames.filter(Boolean).join('、') || '（未填写）';
+      return {
+        ok: false,
+        stage: 'source',
+        message: `未在正文中读到时间标签：${tags}`,
+      };
+    }
+    const path = src.path?.trim() || '（未填写路径）';
+    return {
+      ok: false,
+      stage: 'source',
+      message: `未读到楼层变量时间：${src.variableType} / ${path}`,
+    };
+  }
+
+  const normalized = normalizeGameTimeRaw(raw);
+  const ms = parseGameTimeToMs(raw, ti.parseFormat);
+  if (ms == null) {
+    return {
+      ok: false,
+      stage: 'parse',
+      raw,
+      normalized,
+      message: `已读到原文但格式无法解析：${normalized || raw}`,
+    };
+  }
+
+  return {
+    ok: true,
+    stage: 'parse',
+    raw,
+    normalized,
+    message: `解析成功：${normalized || raw}`,
+  };
 }
 
 export function shouldRunTask(

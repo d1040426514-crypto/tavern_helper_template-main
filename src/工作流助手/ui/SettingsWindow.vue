@@ -111,8 +111,8 @@ import {
   ACU_PP_TASKS_CHANGED,
   type TasksChangedPayload,
 } from '../tasks/events';
-import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
-import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
+import { probeTaskGameTime } from '../tasks/schedule';
+import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
 import { mergeTaskWorkflowPresetsOnTask } from '../tasks/task-workflow-preset';
 import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
 import { ensureAcuToastStyles } from './toast-styles';
@@ -592,6 +592,8 @@ const currentPage = ref(1);
 const messageVarRetentionHelpOpen = ref(false);
 const replicaCleanupHelpOpen = ref(false);
 const gameTimeFormatHelpOpen = ref(false);
+const gameTimeParseTestHint = ref('');
+const gameTimeParseTestHintClass = ref('');
 const chatExtractTagsHelpOpen = ref(false);
 const extractInjectTagsHelpOpen = ref(false);
 const structuredOutputHelpOpen = ref(false);
@@ -1184,6 +1186,27 @@ const timeOnParseFail = computed({
     task.schedule!.timeInterval!.onParseFail = v;
   },
 });
+
+function testGameTimeParse() {
+  const task = selectedTask.value;
+  if (!task) {
+    acuToast('warning', '请先选择任务');
+    return;
+  }
+  ensureTaskSchedule(task);
+  const result = probeTaskGameTime(task);
+  gameTimeParseTestHint.value = result.message;
+  if (result.ok) {
+    gameTimeParseTestHintClass.value = 'acu-game-time-probe__hint--ok';
+    acuToast('success', result.message, { timeOut: 4000 });
+  } else if (result.stage === 'source') {
+    gameTimeParseTestHintClass.value = 'acu-game-time-probe__hint--warn';
+    acuToast('warning', result.message, { timeOut: 4500 });
+  } else {
+    gameTimeParseTestHintClass.value = 'acu-game-time-probe__hint--err';
+    acuToast('error', result.message, { timeOut: 5000 });
+  }
+}
 
 function insertClonedTask(cloned: PostProcessTask, afterTaskId?: string): void {
   if (chatScopeActive.value) {
@@ -2716,6 +2739,21 @@ function saveRunLogTaskTags(taskId: string): void {
                       <option value="run">仍执行</option>
                       <option value="wall_clock">使用系统时间</option>
                     </select>
+                  </div>
+                  <div class="acu-row acu-row--inline acu-game-time-probe">
+                    <button
+                      class="acu-btn acu-btn--sm primary acu-game-time-probe__btn"
+                      type="button"
+                      @click="testGameTimeParse"
+                    >
+                      <i class="fa-fw fa-solid fa-clock" aria-hidden="true"></i>
+                      测试时间解析
+                    </button>
+                    <span
+                      v-if="gameTimeParseTestHint"
+                      class="acu-notes acu-notes--sm acu-game-time-probe__hint"
+                      :class="gameTimeParseTestHintClass"
+                    >{{ gameTimeParseTestHint }}</span>
                   </div>
                   <div class="acu-heading-with-help">
                     <span class="acu-collapsible-help__inline-title">支持的时间格式</span>
