@@ -68,7 +68,9 @@ test('mvu to addon replaces auto group name', () => {
   assert.equal(task.structuredOutputRules?.mvu, 'mvu-custom');
   assert.match(task.promptGroups[1]!.content, /"analysis"/);
   assert.match(task.promptGroups[1]!.content, /"patch"/);
+  assert.match(task.promptGroups[1]!.content, /addon_data/);
   assert.ok(!/addon_json_patch_v1/.test(task.promptGroups[1]!.content));
+  assert.ok(!/位面/.test(task.promptGroups[1]!.content));
 });
 
 test('renamed auto group is not removed on sync', () => {

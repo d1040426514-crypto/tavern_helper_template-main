@@ -41,20 +41,21 @@ export function buildAddonJsonPatchPromptGroupContent(): string {
 
 ## 业务约束
 - patch 使用 JSON Patch (RFC 6902) 风格，但支持扩展操作：replace、delta、insert、remove、move
-- path 相对 addon_data 根路径（如 \`/位面/某世界/...\`，不要写 \`/addon_data/...\`）
-- boolean 字段必须是 JSON true/false，不能是字符串
-- 禁止更新以 \`_\` 开头的只读字段
-- 禁止更新 path 含「降临」或「平行演化」的字段（前端保留）
-- 叙事指导.细节层 每回合由 addon-mvu 脚本自动刷新；优先更新宏观层/发展层与事件字段
-- analysis 须为英文，不超过 80 词，说明：时间流逝、是否允许大幅变动、基于当前上下文的 addon 变量分析
+- insert 到数组末尾时 path 使用 \`-\` 作为索引
+- path 相对 addon_data 根路径（如 \`/模块/字段\`，不要写 \`/addon_data/...\`）
+- 禁止更新以 \`_\` 开头的只读字段（如 \`_变量\`）
+- analysis 须为英文，不超过 80 词，说明：时间流逝、是否允许大幅变动、基于当前上下文的变量变更分析
 
 ## 根对象结构
 {
   "analysis": "Time passed: ... Dramatic updates allowed: yes/no. Changed: ...",
   "patch": [
-    { "op": "replace", "path": "/位面/某世界/字段", "value": "new_value" },
-    { "op": "insert", "path": "/位面/某世界/new_key", "value": "new_value" },
-    { "op": "remove", "path": "/位面/某世界/key" }
+    { "op": "replace", "path": "/path/to/variable", "value": "new_value" },
+    { "op": "delta", "path": "/path/to/number", "value": -10 },
+    { "op": "insert", "path": "/path/to/object/new_key", "value": "new_value" },
+    { "op": "insert", "path": "/path/to/array/-", "value": "new_item" },
+    { "op": "remove", "path": "/path/to/key" },
+    { "op": "move", "from": "/path/from", "to": "/path/to" }
   ]
 }`;
 }
