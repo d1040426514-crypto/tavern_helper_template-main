@@ -74,6 +74,7 @@ const 已完结转折点事件影响条目Schema = z
     起止日期: looseString,
     最终结局: looseString,
     事件脉络: looseString,
+    时代影响: looseString,
   })
   .prefault({});
 
@@ -84,18 +85,10 @@ const 核心人物Schema = z
   })
   .prefault({});
 
-const 当前世界状态Schema = z
-  .object({
-    人理层: looseString,
-    天道层: looseString,
-    世界状态摘要: looseString,
-  })
-  .prefault({});
-
 const 特异点Schema = z
   .object({
-    分歧源头: looseString,
     降临: strictBoolean,
+    分歧源头: looseString,
     事件记录: z.record(z.string(), 分歧纪段条目Schema).prefault({}),
   })
   .prefault({});
@@ -115,6 +108,7 @@ const 史诗传奇条目Schema = z
     基本类型: looseString,
     核心母题关键词: looseString,
     史实真相: looseString,
+    流变历程: looseString,
     传世轶闻: z.record(z.string(), 传世轶闻条目Schema).prefault({}),
   })
   .prefault({});
@@ -143,49 +137,64 @@ const 时代关键转折点条目Schema = z
   })
   .prefault({});
 
-const 位面条目Schema = z
+const 世界时代阶段Schema = z
   .object({
-    降临: strictBoolean,
-    平行演化: strictBoolean,
-    当前世界状态: 当前世界状态Schema,
-    岁月史书: z
-      .object({
-        正史: z.record(z.string(), 正史演变条目Schema).prefault({}),
-        特异点: z.record(z.string(), 特异点Schema).prefault({}),
-      })
-      .prefault({}),
-    史诗传奇: z.record(z.string(), 史诗传奇条目Schema).prefault({}),
+    时代阶段: looseString,
+    核心社会组织形式: looseString,
+    主流世界观与思潮: looseString,
+    主要经济模式: looseString,
+    技术特征: looseString,
+    主导性能源与动力: looseString,
+    关键材料标志: looseString,
+    社会阶级结构: looseString,
+    生产力与生产关系矛盾: looseString,
+    世界秩序格局: looseString,
+  })
+  .prefault({});
+
+const 世界时局演进动态Schema = z
+  .object({
+    演进驱动力: looseString,
+    时代差格局: looseString,
     潜在时代演化: z.record(z.string(), 潜在时代演化条目Schema).prefault({}),
     时代关键转折点: z.record(z.string(), 时代关键转折点条目Schema).prefault({}),
   })
   .prefault({});
 
-const 位面Record = z.record(z.string(), 位面条目Schema);
+const 岁月史书Schema = z
+  .object({
+    正史: z.record(z.string(), 正史演变条目Schema).prefault({}),
+    特异点: z.record(z.string(), 特异点Schema).prefault({}),
+  })
+  .prefault({});
 
-const 事件条目Schema = z
+const 时代快讯Schema = z
+  .object({
+    世界时代阶段: 世界时代阶段Schema,
+    世界时局演进动态: 世界时局演进动态Schema,
+    岁月史书: 岁月史书Schema,
+    史诗传奇: z.record(z.string(), 史诗传奇条目Schema).prefault({}),
+  })
+  .prefault({});
+
+const 剧情事件条目Schema = z
   .object({
     叙事指导: 叙事指导Schema,
-    开始日期: looseString,
-    预计结算日期: looseString,
     参与角色: looseString,
     牵涉团体: looseString,
-    描述: looseString,
-    进展: looseString,
+    事件脉络: z.record(z.string(), looseString).prefault({}),
+    结算条件: looseString,
   })
   .prefault({});
 
-const 事件Schema = z
+const 传闻流变节点Schema = z
   .object({
-    世界背景事件: z.record(z.string(), 事件条目Schema).prefault({}),
-    当前区域事件: z.record(z.string(), 事件条目Schema).prefault({}),
-  })
-  .prefault({});
-
-const 秘闻条目Schema = z
-  .object({
-    时效: looseString,
-    知情者名单: looseString,
-    描述: looseString,
+    流变日期: looseString,
+    预计时效: looseString,
+    真相: looseString,
+    传闻描述: looseString,
+    事实偏差: looseString,
+    流变诱因: looseString,
   })
   .prefault({});
 
@@ -193,8 +202,15 @@ const 传闻条目Schema = z
   .object({
     影响力: looseString,
     流传范围: looseString,
-    真相: looseString,
-    描述: looseString,
+    流变历程: z.record(z.string(), 传闻流变节点Schema).prefault({}),
+  })
+  .prefault({});
+
+const 时局动态Schema = z
+  .object({
+    世界背景事件: z.record(z.string(), 剧情事件条目Schema).prefault({}),
+    当前区域事件: z.record(z.string(), 剧情事件条目Schema).prefault({}),
+    传闻: z.record(z.string(), 传闻条目Schema).prefault({}),
   })
   .prefault({});
 
@@ -203,30 +219,193 @@ const 团体条目Schema = z
     声誉: 声誉Schema,
     外交关系: z.record(z.string(), looseString).prefault({}),
     权力支柱: 权力支柱Record,
+    活跃区域: looseString,
     内政概况: looseString,
     发展态势: looseString,
     当前动态: looseString,
-    世界影响: looseString,
     核心人物: z.record(z.string(), 核心人物Schema).prefault({}),
   })
   .prefault({});
 
-const 团体Schema = z
+const 团体动态Schema = z
   .object({
     世界背景团体: z.record(z.string(), 团体条目Schema).prefault({}),
     当前区域团体: z.record(z.string(), 团体条目Schema).prefault({}),
   })
   .prefault({});
 
-const 因果回响条目Schema = z
+const 世界剧情态势Schema = z
   .object({
-    时效: looseString,
-    引入契机: looseString,
-    描述: looseString,
+    时局动态: 时局动态Schema,
+    团体动态: 团体动态Schema,
   })
   .prefault({});
 
-const 因果回响Record = z.record(z.string(), 因果回响条目Schema);
+const 贸易区状态Schema = z
+  .object({
+    状态: looseString,
+    主导产业: looseString,
+    需求品类: looseString,
+  })
+  .prefault({});
+
+const 世界经济气候Schema = z
+  .object({
+    整体周期相位: looseString,
+    主要贸易区状态: z.record(z.string(), 贸易区状态Schema).prefault({}),
+  })
+  .prefault({});
+
+const 粮食市场Schema = z
+  .object({
+    供需: looseString,
+    主要影响因素: looseString,
+    价格趋势: looseString,
+  })
+  .prefault({});
+
+const 矿产市场Schema = z
+  .object({
+    供需: looseString,
+    重点品种: looseString,
+    价格趋势: looseString,
+  })
+  .prefault({});
+
+const 能源市场Schema = z
+  .object({
+    供需: looseString,
+    类型: looseString,
+    价格趋势: looseString,
+  })
+  .prefault({});
+
+const 大宗商品市场Schema = z
+  .object({
+    粮食: 粮食市场Schema,
+    矿产: 矿产市场Schema,
+    能源: 能源市场Schema,
+  })
+  .prefault({});
+
+const 汇率Schema = z
+  .object({
+    本期: looseString,
+    上期: looseString,
+    涨跌: looseString,
+  })
+  .prefault({});
+
+const 流通货币条目Schema = z
+  .object({
+    汇率: 汇率Schema,
+    市场情绪: looseString,
+    驱动因素: looseString,
+  })
+  .prefault({});
+
+const 汇率波动指数Schema = z
+  .object({
+    综合汇率波动率: looseString,
+    主要影响因素: looseString,
+  })
+  .prefault({});
+
+const 信贷环境Schema = z
+  .object({
+    状态: looseString,
+    金融机构风险: looseString,
+  })
+  .prefault({});
+
+const 货币与金融Schema = z
+  .object({
+    基准计价单位: looseString,
+    流通货币: z.record(z.string(), 流通货币条目Schema).prefault({}),
+    汇率波动指数: 汇率波动指数Schema,
+    信贷环境: 信贷环境Schema,
+  })
+  .prefault({});
+
+const 投机标的条目Schema = z
+  .object({
+    类型: looseString,
+    当前价格: looseString,
+    上期价格: looseString,
+    涨跌: looseString,
+    交易热度: looseString,
+    量能: looseString,
+    驱动事件: looseString,
+  })
+  .prefault({});
+
+const 期货合约条目Schema = z
+  .object({
+    近月价格: looseString,
+    远月价格: looseString,
+    基差: looseString,
+  })
+  .prefault({});
+
+const 投机指数Schema = z
+  .object({
+    报: looseString,
+    周涨跌: looseString,
+  })
+  .prefault({});
+
+const 投机市场Schema = z
+  .object({
+    市场整体情绪: looseString,
+    主要交易标的: z.record(z.string(), 投机标的条目Schema).prefault({}),
+    期货合约: z.record(z.string(), 期货合约条目Schema).prefault({}),
+    投机指数: 投机指数Schema,
+  })
+  .prefault({});
+
+const 商路条目Schema = z
+  .object({
+    状态: looseString,
+    原因: looseString,
+  })
+  .prefault({});
+
+const 贸易格局Schema = z
+  .object({
+    主要商路: z.record(z.string(), 商路条目Schema).prefault({}),
+    贸易政策: z.record(z.string(), looseString).prefault({}),
+  })
+  .prefault({});
+
+const 经济事件条目Schema = z
+  .object({
+    描述: looseString,
+    影响维度: looseString,
+    当前态势: looseString,
+  })
+  .prefault({});
+
+const 世界经济简报Schema = z
+  .object({
+    世界经济气候: 世界经济气候Schema,
+    大宗商品市场: 大宗商品市场Schema,
+    货币与金融: 货币与金融Schema,
+    投机市场: 投机市场Schema,
+    贸易格局: 贸易格局Schema,
+    经济事件: z.record(z.string(), 经济事件条目Schema).prefault({}),
+  })
+  .prefault({});
+
+const 世界条目Schema = z
+  .object({
+    降临: strictBoolean,
+    平行演化: strictBoolean,
+    刊报日期: looseString,
+    时代快讯: 时代快讯Schema,
+    世界剧情态势: 世界剧情态势Schema,
+    世界经济简报: 世界经济简报Schema,
+  })
+  .prefault({});
 
 /** 深度剔除非法布尔值, 避免整对象 parse 失败 */
 export function stripInvalidStrictBooleans(value: unknown): unknown {
@@ -258,12 +437,7 @@ export function stripInvalidStrictBooleans(value: unknown): unknown {
  * - 构建时自动生成 `schema.json` (export 名 `Schema` 供 dump_schema 使用)
  */
 const addonSchemaShape = {
-  位面: 位面Record.prefault({}),
-  事件: 事件Schema,
-  秘闻: z.record(z.string(), 秘闻条目Schema).prefault({}),
-  传闻: z.record(z.string(), 传闻条目Schema).prefault({}),
-  团体: 团体Schema,
-  因果回响: 因果回响Record.prefault({}),
+  世界时局与经济简报: z.record(z.string(), 世界条目Schema).prefault({}),
 };
 
 export const AddonSchema = z.object(addonSchemaShape).prefault({});

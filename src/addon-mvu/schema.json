@@ -3,7 +3,7 @@
   "default": {},
   "type": "object",
   "properties": {
-    "位面": {
+    "世界时局与经济简报": {
       "default": {},
       "type": "object",
       "propertyNames": {
@@ -19,57 +19,276 @@
           "平行演化": {
             "$ref": "#/$defs/__schema0"
           },
-          "当前世界状态": {
-            "default": {},
-            "type": "object",
-            "properties": {
-              "人理层": {
-                "$ref": "#/$defs/__schema1"
-              },
-              "天道层": {
-                "$ref": "#/$defs/__schema1"
-              },
-              "世界状态摘要": {
-                "$ref": "#/$defs/__schema1"
-              }
-            }
+          "刊报日期": {
+            "$ref": "#/$defs/__schema1"
           },
-          "岁月史书": {
+          "时代快讯": {
             "default": {},
             "type": "object",
             "properties": {
-              "正史": {
+              "世界时代阶段": {
                 "default": {},
                 "type": "object",
-                "propertyNames": {
-                  "type": "string"
-                },
-                "additionalProperties": {
-                  "default": {},
-                  "type": "object",
-                  "properties": {
-                    "前时代称谓": {
-                      "$ref": "#/$defs/__schema1"
+                "properties": {
+                  "时代阶段": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "核心社会组织形式": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "主流世界观与思潮": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "主要经济模式": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "技术特征": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "主导性能源与动力": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "关键材料标志": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "社会阶级结构": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "生产力与生产关系矛盾": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "世界秩序格局": {
+                    "$ref": "#/$defs/__schema1"
+                  }
+                }
+              },
+              "世界时局演进动态": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "演进驱动力": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "时代差格局": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "潜在时代演化": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
                     },
-                    "后时代称谓": {
-                      "$ref": "#/$defs/__schema1"
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "开始日期": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "进度": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "状态": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "推动因子": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "抑止因子": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "描述": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "已完结转折点事件影响": {
+                          "default": {},
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "default": {},
+                            "type": "object",
+                            "properties": {
+                              "起止日期": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "最终结局": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "事件脉络": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "时代影响": {
+                                "$ref": "#/$defs/__schema1"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  "时代关键转折点": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
                     },
-                    "演变起止": {
-                      "$ref": "#/$defs/__schema1"
-                    },
-                    "描述": {
-                      "$ref": "#/$defs/__schema1"
-                    },
-                    "历史影响": {
-                      "$ref": "#/$defs/__schema1"
-                    },
-                    "关键转折": {
-                      "$ref": "#/$defs/__schema1"
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "临界事件": {
+                          "$ref": "#/$defs/__schema0"
+                        },
+                        "进度": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "干预态势": {
+                          "default": {},
+                          "type": "object",
+                          "properties": {
+                            "推动力": {
+                              "$ref": "#/$defs/__schema1"
+                            },
+                            "抑止力": {
+                              "$ref": "#/$defs/__schema1"
+                            }
+                          }
+                        },
+                        "关联潜在时代": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "描述": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "总体影响": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "事件脉络": {
+                          "default": {},
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "default": {},
+                            "type": "object",
+                            "properties": {
+                              "开始日期": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "结束日期": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "干预方向": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "干预强度": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "描述": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "影响": {
+                                "$ref": "#/$defs/__schema1"
+                              }
+                            }
+                          }
+                        }
+                      }
                     }
                   }
                 }
               },
-              "特异点": {
+              "岁月史书": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "正史": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "前时代称谓": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "后时代称谓": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "演变起止": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "描述": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "历史影响": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "关键转折": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  },
+                  "特异点": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "降临": {
+                          "$ref": "#/$defs/__schema0"
+                        },
+                        "分歧源头": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "事件记录": {
+                          "default": {},
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "default": {},
+                            "type": "object",
+                            "properties": {
+                              "前时代称谓": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "后时代称谓": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "纪段起止": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "描述": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "历史影响": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "关键转折": {
+                                "$ref": "#/$defs/__schema1"
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "史诗传奇": {
                 "default": {},
                 "type": "object",
                 "propertyNames": {
@@ -79,13 +298,19 @@
                   "default": {},
                   "type": "object",
                   "properties": {
-                    "分歧源头": {
+                    "基本类型": {
                       "$ref": "#/$defs/__schema1"
                     },
-                    "降临": {
-                      "$ref": "#/$defs/__schema0"
+                    "核心母题关键词": {
+                      "$ref": "#/$defs/__schema1"
                     },
-                    "事件记录": {
+                    "史实真相": {
+                      "$ref": "#/$defs/__schema1"
+                    },
+                    "流变历程": {
+                      "$ref": "#/$defs/__schema1"
+                    },
+                    "传世轶闻": {
                       "default": {},
                       "type": "object",
                       "propertyNames": {
@@ -95,22 +320,19 @@
                         "default": {},
                         "type": "object",
                         "properties": {
-                          "前时代称谓": {
+                          "原典": {
+                            "$ref": "#/$defs/__schema0"
+                          },
+                          "关键要素": {
                             "$ref": "#/$defs/__schema1"
                           },
-                          "后时代称谓": {
+                          "版本流传范围": {
                             "$ref": "#/$defs/__schema1"
                           },
-                          "纪段起止": {
+                          "版本成型时代": {
                             "$ref": "#/$defs/__schema1"
                           },
-                          "描述": {
-                            "$ref": "#/$defs/__schema1"
-                          },
-                          "历史影响": {
-                            "$ref": "#/$defs/__schema1"
-                          },
-                          "关键转折": {
+                          "内容梗概": {
                             "$ref": "#/$defs/__schema1"
                           }
                         }
@@ -121,300 +343,402 @@
               }
             }
           },
-          "史诗传奇": {
+          "世界剧情态势": {
             "default": {},
             "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {
-              "default": {},
-              "type": "object",
-              "properties": {
-                "基本类型": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "核心母题关键词": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "史实真相": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "传世轶闻": {
-                  "default": {},
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
+            "properties": {
+              "时局动态": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "世界背景事件": {
                     "default": {},
                     "type": "object",
-                    "properties": {
-                      "原典": {
-                        "$ref": "#/$defs/__schema0"
-                      },
-                      "关键要素": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "版本流传范围": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "版本成型时代": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "内容梗概": {
-                        "$ref": "#/$defs/__schema1"
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema2"
+                    }
+                  },
+                  "当前区域事件": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema2"
+                    }
+                  },
+                  "传闻": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "影响力": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "流传范围": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "流变历程": {
+                          "default": {},
+                          "type": "object",
+                          "propertyNames": {
+                            "type": "string"
+                          },
+                          "additionalProperties": {
+                            "default": {},
+                            "type": "object",
+                            "properties": {
+                              "流变日期": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "预计时效": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "真相": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "传闻描述": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "事实偏差": {
+                                "$ref": "#/$defs/__schema1"
+                              },
+                              "流变诱因": {
+                                "$ref": "#/$defs/__schema1"
+                              }
+                            }
+                          }
+                        }
                       }
+                    }
+                  }
+                }
+              },
+              "团体动态": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "世界背景团体": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema3"
+                    }
+                  },
+                  "当前区域团体": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema3"
                     }
                   }
                 }
               }
             }
           },
-          "潜在时代演化": {
+          "世界经济简报": {
             "default": {},
             "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {
-              "default": {},
-              "type": "object",
-              "properties": {
-                "开始日期": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "进度": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "状态": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "推动因子": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "抑止因子": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "描述": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "已完结转折点事件影响": {
-                  "default": {},
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
+            "properties": {
+              "世界经济气候": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "整体周期相位": {
+                    "$ref": "#/$defs/__schema1"
                   },
-                  "additionalProperties": {
+                  "主要贸易区状态": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "状态": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "主导产业": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "需求品类": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  }
+                }
+              },
+              "大宗商品市场": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "粮食": {
                     "default": {},
                     "type": "object",
                     "properties": {
-                      "起止日期": {
+                      "供需": {
                         "$ref": "#/$defs/__schema1"
                       },
-                      "最终结局": {
+                      "主要影响因素": {
                         "$ref": "#/$defs/__schema1"
                       },
-                      "事件脉络": {
+                      "价格趋势": {
+                        "$ref": "#/$defs/__schema1"
+                      }
+                    }
+                  },
+                  "矿产": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "供需": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "重点品种": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "价格趋势": {
+                        "$ref": "#/$defs/__schema1"
+                      }
+                    }
+                  },
+                  "能源": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "供需": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "类型": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "价格趋势": {
                         "$ref": "#/$defs/__schema1"
                       }
                     }
                   }
                 }
-              }
-            }
-          },
-          "时代关键转折点": {
-            "default": {},
-            "type": "object",
-            "propertyNames": {
-              "type": "string"
-            },
-            "additionalProperties": {
-              "default": {},
-              "type": "object",
-              "properties": {
-                "临界事件": {
-                  "$ref": "#/$defs/__schema0"
+              },
+              "货币与金融": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "基准计价单位": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "流通货币": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "汇率": {
+                          "default": {},
+                          "type": "object",
+                          "properties": {
+                            "本期": {
+                              "$ref": "#/$defs/__schema1"
+                            },
+                            "上期": {
+                              "$ref": "#/$defs/__schema1"
+                            },
+                            "涨跌": {
+                              "$ref": "#/$defs/__schema1"
+                            }
+                          }
+                        },
+                        "市场情绪": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "驱动因素": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  },
+                  "汇率波动指数": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "综合汇率波动率": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "主要影响因素": {
+                        "$ref": "#/$defs/__schema1"
+                      }
+                    }
+                  },
+                  "信贷环境": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "状态": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "金融机构风险": {
+                        "$ref": "#/$defs/__schema1"
+                      }
+                    }
+                  }
+                }
+              },
+              "投机市场": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "市场整体情绪": {
+                    "$ref": "#/$defs/__schema1"
+                  },
+                  "主要交易标的": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "类型": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "当前价格": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "上期价格": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "涨跌": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "交易热度": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "量能": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "驱动事件": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  },
+                  "期货合约": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "近月价格": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "远月价格": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "基差": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  },
+                  "投机指数": {
+                    "default": {},
+                    "type": "object",
+                    "properties": {
+                      "报": {
+                        "$ref": "#/$defs/__schema1"
+                      },
+                      "周涨跌": {
+                        "$ref": "#/$defs/__schema1"
+                      }
+                    }
+                  }
+                }
+              },
+              "贸易格局": {
+                "default": {},
+                "type": "object",
+                "properties": {
+                  "主要商路": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "default": {},
+                      "type": "object",
+                      "properties": {
+                        "状态": {
+                          "$ref": "#/$defs/__schema1"
+                        },
+                        "原因": {
+                          "$ref": "#/$defs/__schema1"
+                        }
+                      }
+                    }
+                  },
+                  "贸易政策": {
+                    "default": {},
+                    "type": "object",
+                    "propertyNames": {
+                      "type": "string"
+                    },
+                    "additionalProperties": {
+                      "$ref": "#/$defs/__schema1"
+                    }
+                  }
+                }
+              },
+              "经济事件": {
+                "default": {},
+                "type": "object",
+                "propertyNames": {
+                  "type": "string"
                 },
-                "进度": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "干预态势": {
+                "additionalProperties": {
                   "default": {},
                   "type": "object",
                   "properties": {
-                    "推动力": {
+                    "描述": {
                       "$ref": "#/$defs/__schema1"
                     },
-                    "抑止力": {
+                    "影响维度": {
                       "$ref": "#/$defs/__schema1"
-                    }
-                  }
-                },
-                "关联潜在时代": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "描述": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "总体影响": {
-                  "$ref": "#/$defs/__schema1"
-                },
-                "事件脉络": {
-                  "default": {},
-                  "type": "object",
-                  "propertyNames": {
-                    "type": "string"
-                  },
-                  "additionalProperties": {
-                    "default": {},
-                    "type": "object",
-                    "properties": {
-                      "开始日期": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "结束日期": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "干预方向": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "干预强度": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "描述": {
-                        "$ref": "#/$defs/__schema1"
-                      },
-                      "影响": {
-                        "$ref": "#/$defs/__schema1"
-                      }
+                    },
+                    "当前态势": {
+                      "$ref": "#/$defs/__schema1"
                     }
                   }
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "事件": {
-      "default": {},
-      "type": "object",
-      "properties": {
-        "世界背景事件": {
-          "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/__schema2"
-          }
-        },
-        "当前区域事件": {
-          "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/__schema2"
-          }
-        }
-      }
-    },
-    "秘闻": {
-      "default": {},
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "default": {},
-        "type": "object",
-        "properties": {
-          "时效": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "知情者名单": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "描述": {
-            "$ref": "#/$defs/__schema1"
-          }
-        }
-      }
-    },
-    "传闻": {
-      "default": {},
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "default": {},
-        "type": "object",
-        "properties": {
-          "影响力": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "流传范围": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "真相": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "描述": {
-            "$ref": "#/$defs/__schema1"
-          }
-        }
-      }
-    },
-    "团体": {
-      "default": {},
-      "type": "object",
-      "properties": {
-        "世界背景团体": {
-          "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/__schema3"
-          }
-        },
-        "当前区域团体": {
-          "default": {},
-          "type": "object",
-          "propertyNames": {
-            "type": "string"
-          },
-          "additionalProperties": {
-            "$ref": "#/$defs/__schema3"
-          }
-        }
-      }
-    },
-    "因果回响": {
-      "default": {},
-      "type": "object",
-      "propertyNames": {
-        "type": "string"
-      },
-      "additionalProperties": {
-        "default": {},
-        "type": "object",
-        "properties": {
-          "时效": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "引入契机": {
-            "$ref": "#/$defs/__schema1"
-          },
-          "描述": {
-            "$ref": "#/$defs/__schema1"
           }
         }
       }
@@ -448,22 +772,23 @@
             }
           }
         },
-        "开始日期": {
-          "$ref": "#/$defs/__schema1"
-        },
-        "预计结算日期": {
-          "$ref": "#/$defs/__schema1"
-        },
         "参与角色": {
           "$ref": "#/$defs/__schema1"
         },
         "牵涉团体": {
           "$ref": "#/$defs/__schema1"
         },
-        "描述": {
-          "$ref": "#/$defs/__schema1"
+        "事件脉络": {
+          "default": {},
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {
+            "$ref": "#/$defs/__schema1"
+          }
         },
-        "进展": {
+        "结算条件": {
           "$ref": "#/$defs/__schema1"
         }
       }
@@ -503,6 +828,9 @@
         "权力支柱": {
           "$ref": "#/$defs/__schema4"
         },
+        "活跃区域": {
+          "$ref": "#/$defs/__schema1"
+        },
         "内政概况": {
           "$ref": "#/$defs/__schema1"
         },
@@ -510,9 +838,6 @@
           "$ref": "#/$defs/__schema1"
         },
         "当前动态": {
-          "$ref": "#/$defs/__schema1"
-        },
-        "世界影响": {
           "$ref": "#/$defs/__schema1"
         },
         "核心人物": {

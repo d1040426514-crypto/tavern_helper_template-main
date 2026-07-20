@@ -15,9 +15,11 @@ function stripHiddenOnRecord(record: Record<string, unknown> | undefined): void 
     for (const key of ADDON_HIDDEN_FROM_PROMPT_KEYS) {
       delete obj[key];
     }
-    const singularityPoints = (obj.岁月史书 as Record<string, unknown> | undefined)?.特异点;
-    if (singularityPoints && typeof singularityPoints === 'object' && !Array.isArray(singularityPoints)) {
-      for (const sp of Object.values(singularityPoints)) {
+    const eraNews = obj.时代快讯 as Record<string, unknown> | undefined;
+    const historyBook = eraNews?.岁月史书 as Record<string, unknown> | undefined;
+    const points = historyBook?.特异点;
+    if (points && typeof points === 'object' && !Array.isArray(points)) {
+      for (const sp of Object.values(points)) {
         if (sp && typeof sp === 'object' && !Array.isArray(sp)) {
           for (const key of ADDON_HIDDEN_FROM_PROMPT_KEYS) {
             delete (sp as Record<string, unknown>)[key];
@@ -34,6 +36,6 @@ export function stripAddonHiddenFieldsForDisplay(data: unknown): AddonData | unk
     return data;
   }
   const copy = _.cloneDeep(data) as Record<string, unknown>;
-  stripHiddenOnRecord(copy.位面 as Record<string, unknown> | undefined);
+  stripHiddenOnRecord(copy.世界时局与经济简报 as Record<string, unknown> | undefined);
   return copy;
 }

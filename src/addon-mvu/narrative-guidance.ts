@@ -98,20 +98,25 @@ export function refreshNarrativeGuidanceDetails(addon: AddonData): AddonData {
   const next = _.cloneDeep(addon);
   let touched = false;
 
-  for (const category of EVENT_CATEGORIES) {
-    const events = next.事件?.[category];
-    if (!events) {
+  for (const world of Object.values(next.世界时局与经济简报 ?? {})) {
+    if (!world) {
       continue;
     }
-    for (const event of Object.values(events)) {
-      if (!event) {
+    for (const category of EVENT_CATEGORIES) {
+      const events = world.世界剧情态势?.时局动态?.[category];
+      if (!events) {
         continue;
       }
-      if (!event.叙事指导) {
-        event.叙事指导 = { 宏观层: '', 发展层: '', 细节层: '' };
+      for (const event of Object.values(events)) {
+        if (!event) {
+          continue;
+        }
+        if (!event.叙事指导) {
+          event.叙事指导 = { 宏观层: '', 发展层: '', 细节层: '' };
+        }
+        event.叙事指导.细节层 = randomMinorTitle();
+        touched = true;
       }
-      event.叙事指导.细节层 = randomMinorTitle();
-      touched = true;
     }
   }
 
