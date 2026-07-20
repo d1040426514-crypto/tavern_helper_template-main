@@ -3,9 +3,6 @@ import type { ApiConfig } from './schema';
 export type StructuredOutputMode = 'off' | 'mvu_json_patch' | 'addon_json_patch';
 export type ActiveStructuredOutputMode = Exclude<StructuredOutputMode, 'off'>;
 
-const MVU_FORMAT = 'mvu_json_patch_v1';
-const ADDON_FORMAT = 'addon_json_patch_v1';
-
 const JSON_PATCH_RE = /<JSONPatch>\s*[\s\S]*?\s*<\/JSONPatch>/i;
 const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*[\s\S]*?\s*<\/AddonJSONPatch>/i;
 
@@ -60,13 +57,12 @@ export function enrichApiConfigForStructuredTask(
   return next;
 }
 
-export function buildStrictJsonPromptSuffix(mode: ActiveStructuredOutputMode): string {
-  const formatKey = mode === 'mvu_json_patch' ? MVU_FORMAT : ADDON_FORMAT;
+export function buildStrictJsonPromptSuffix(_mode: ActiveStructuredOutputMode): string {
   return `[严格 JSON 输出]
 你必须仅输出一个合法的 JSON 对象（不要使用 markdown 代码围栏，不要添加任何自然语言前缀或后缀）。本提示已包含 json 关键字以满足模型约束。
 
 根对象结构：
-{"format":"${formatKey}","analysis":"英文分析，不超过 80 词","patch":[...]}
+{"analysis":"英文分析，不超过 80 词","patch":[...]}
 
 其中 patch 必须是 JSON Patch (RFC 6902) 操作数组。禁止输出 XML、HTML 或 <JSONPatch>/<AddonJSONPatch> 标签。`;
 }
@@ -113,11 +109,6 @@ export function extractStrictVariableResponse(
     const parsed = tryParseJsonObject(text);
     if (!isPlainObject(parsed)) throw new Error('回复 JSON 根节点必须是对象。');
 
-    const expectedFormat = mode === 'mvu_json_patch' ? MVU_FORMAT : ADDON_FORMAT;
-    if (parsed.format !== expectedFormat) {
-      throw new Error(`format 必须是 ${expectedFormat}。`);
-    }
-
     const analysis = parsed.analysis;
     if (typeof analysis !== 'string' || !analysis.trim()) {
       throw new Error('analysis 必须是非空字符串。');
@@ -155,12 +146,12 @@ export const STRUCTURED_OUTPUT_MODE_HELP = {
     {
       value: 'mvu_json_patch',
       title: 'MVU JSON Patch',
-      desc: '要求 {"format":"mvu_json_patch_v1","analysis":"...","patch":[...]}，归一化为 <UpdateVariable><Analysis><JSONPatch>。',
+      desc: '要求 {"analysis":"...","patch":[...]}，归一化为 <UpdateVariable><Analysis><JSONPatch>。',
     },
     {
       value: 'addon_json_patch',
       title: 'Addon JSON Patch',
-      desc: '要求 {"format":"addon_json_patch_v1","analysis":"...","patch":[...]}，归一化为 <UpdateVariable><Analysis><AddonJSONPatch>。',
+      desc: '要求 {"analysis":"...","patch":[...]}，归一化为 <UpdateVariable><Analysis><AddonJSONPatch>。',
     },
   ],
   retry: 'JSON 解析失败会计入最大重试次数；若 raw 已含完整 XML 内层标签则回退走现有提取。',

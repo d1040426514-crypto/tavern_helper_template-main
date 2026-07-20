@@ -23,8 +23,8 @@ function test(name: string, fn: () => void): void {
 }
 
 test('stripCodeFence removes markdown fence', () => {
-  const raw = '```json\n{"format":"mvu_json_patch_v1"}\n```';
-  assert.equal(stripCodeFence(raw), '{"format":"mvu_json_patch_v1"}');
+  const raw = '```json\n{"analysis":"x","patch":[]}\n```';
+  assert.equal(stripCodeFence(raw), '{"analysis":"x","patch":[]}');
 });
 
 test('tryParseJsonObject extracts object from noise', () => {
@@ -34,7 +34,6 @@ test('tryParseJsonObject extracts object from noise', () => {
 
 test('mvu strict JSON normalizes to UpdateVariable + JSONPatch', () => {
   const json = JSON.stringify({
-    format: 'mvu_json_patch_v1',
     analysis: 'Time passed 1 day.',
     patch: [{ op: 'replace', path: '/x', value: 1 }],
   });
@@ -48,7 +47,6 @@ test('mvu strict JSON normalizes to UpdateVariable + JSONPatch', () => {
 
 test('addon strict JSON normalizes to UpdateVariable + AddonJSONPatch', () => {
   const json = JSON.stringify({
-    format: 'addon_json_patch_v1',
     analysis: 'Minor updates only.',
     patch: [{ op: 'replace', path: '/位面/x', value: 'y' }],
   });
@@ -60,14 +58,33 @@ test('addon strict JSON normalizes to UpdateVariable + AddonJSONPatch', () => {
   assert.ok(!/<UpdateAddonVariable>/i.test(result.normalizedXml!));
 });
 
-test('wrong format fails validation', () => {
+test('legacy format field is ignored when present', () => {
   const json = JSON.stringify({
     format: 'addon_json_patch_v1',
-    analysis: 'x',
+    analysis: 'Legacy reply with format.',
+    patch: [{ op: 'replace', path: '/x', value: 1 }],
+  });
+  const result = extractStrictVariableResponse(json, 'mvu_json_patch');
+  assert.ok(result.ok);
+  assert.match(result.normalizedXml!, /<JSONPatch>/);
+});
+
+test('missing analysis fails validation', () => {
+  const json = JSON.stringify({
     patch: [],
   });
   const result = extractStrictVariableResponse(json, 'mvu_json_patch');
   assert.equal(result.ok, false);
+  assert.match(result.error!, /analysis/);
+});
+
+test('missing patch fails validation', () => {
+  const json = JSON.stringify({
+    analysis: 'ok',
+  });
+  const result = extractStrictVariableResponse(json, 'mvu_json_patch');
+  assert.equal(result.ok, false);
+  assert.match(result.error!, /patch/);
 });
 
 test('enrichApiConfig injects json_object only when missing', () => {

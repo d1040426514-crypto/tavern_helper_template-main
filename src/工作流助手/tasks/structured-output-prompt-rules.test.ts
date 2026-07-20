@@ -34,7 +34,9 @@ test('sync adds MVU auto prompt group with default content', () => {
   const auto = task.promptGroups[1]!;
   assert.equal(auto.name, MVU_JSON_PATCH_PROMPT_GROUP_NAME);
   assert.equal(auto.role, 'system');
-  assert.match(auto.content, /mvu_json_patch_v1/);
+  assert.match(auto.content, /"analysis"/);
+  assert.match(auto.content, /"patch"/);
+  assert.ok(!/mvu_json_patch_v1/.test(auto.content));
 });
 
 test('sync off removes auto groups but keeps cache', () => {
@@ -64,7 +66,9 @@ test('mvu to addon replaces auto group name', () => {
   assert.equal(task.promptGroups.length, 2);
   assert.equal(task.promptGroups[1]!.name, ADDON_JSON_PATCH_PROMPT_GROUP_NAME);
   assert.equal(task.structuredOutputRules?.mvu, 'mvu-custom');
-  assert.match(task.promptGroups[1]!.content, /addon_json_patch_v1/);
+  assert.match(task.promptGroups[1]!.content, /"analysis"/);
+  assert.match(task.promptGroups[1]!.content, /"patch"/);
+  assert.ok(!/addon_json_patch_v1/.test(task.promptGroups[1]!.content));
 });
 
 test('renamed auto group is not removed on sync', () => {

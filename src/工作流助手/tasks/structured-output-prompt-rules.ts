@@ -21,9 +21,8 @@ export function buildMvuJsonPatchPromptGroupContent(): string {
 - 禁止更新以 \`_\` 开头的只读字段（如 \`_变量\`）
 - analysis 须为英文，不超过 80 词，说明：时间流逝、是否允许大幅变动、基于当前上下文的变量变更分析
 
-## 根对象结构（format 必须为 mvu_json_patch_v1）
+## 根对象结构
 {
-  "format": "mvu_json_patch_v1",
   "analysis": "Time passed: ... Dramatic updates allowed: yes/no. Changed: ...",
   "patch": [
     { "op": "replace", "path": "/path/to/variable", "value": "new_value" },
@@ -49,9 +48,8 @@ export function buildAddonJsonPatchPromptGroupContent(): string {
 - 叙事指导.细节层 每回合由 addon-mvu 脚本自动刷新；优先更新宏观层/发展层与事件字段
 - analysis 须为英文，不超过 80 词，说明：时间流逝、是否允许大幅变动、基于当前上下文的 addon 变量分析
 
-## 根对象结构（format 必须为 addon_json_patch_v1）
+## 根对象结构
 {
-  "format": "addon_json_patch_v1",
   "analysis": "Time passed: ... Dramatic updates allowed: yes/no. Changed: ...",
   "patch": [
     { "op": "replace", "path": "/位面/某世界/字段", "value": "new_value" },
