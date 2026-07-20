@@ -4,9 +4,8 @@ function stripAddonForDisplay(data) {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
   const copy = _.cloneDeep(data);
   const hidden = new Set(['降临', '平行演化']);
-  const worlds = copy.世界时局与经济简报;
-  if (worlds && typeof worlds === 'object' && !Array.isArray(worlds)) {
-    for (const world of Object.values(worlds)) {
+  if (copy && typeof copy === 'object' && !Array.isArray(copy)) {
+    for (const world of Object.values(copy)) {
       if (!world || typeof world !== 'object' || Array.isArray(world)) continue;
       for (const key of hidden) delete world[key];
       const points = world.时代快讯?.岁月史书?.特异点;

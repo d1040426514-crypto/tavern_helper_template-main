@@ -48,7 +48,7 @@ test('mvu strict JSON normalizes to UpdateVariable + JSONPatch', () => {
 test('addon strict JSON normalizes to UpdateVariable + AddonJSONPatch', () => {
   const json = JSON.stringify({
     analysis: 'Minor updates only.',
-    patch: [{ op: 'replace', path: '/世界时局与经济简报/x', value: 'y' }],
+    patch: [{ op: 'replace', path: '/x', value: 'y' }],
   });
   const result = extractStrictVariableResponse(json, 'addon_json_patch');
   assert.ok(result.ok);

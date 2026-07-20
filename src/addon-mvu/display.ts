@@ -36,6 +36,6 @@ export function stripAddonHiddenFieldsForDisplay(data: unknown): AddonData | unk
     return data;
   }
   const copy = _.cloneDeep(data) as Record<string, unknown>;
-  stripHiddenOnRecord(copy.世界时局与经济简报 as Record<string, unknown> | undefined);
+  stripHiddenOnRecord(copy);
   return copy;
 }

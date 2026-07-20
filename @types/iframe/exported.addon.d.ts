@@ -241,9 +241,7 @@ declare namespace Addon {
     };
   };
 
-  type AddonData = {
-    世界时局与经济简报?: Record<string, 世界条目>;
-  };
+  type AddonData = Record<string, 世界条目>;
 
   type AddonWrapper = {
     addon_data: AddonData;

@@ -432,15 +432,12 @@ export function stripInvalidStrictBooleans(value: unknown): unknown {
 /**
  * addon 变量结构 (对齐 MVU stat_data 的 zod 用法).
  *
+ * - 根即为世界 map: addon_data[世界名] = 世界条目
  * - 字符串占位选项: 宽松 z.string().prefault(''), 约束写在世界书变量更新规则
  * - 布尔字段: 严格 z.boolean().prefault(false)
  * - 构建时自动生成 `schema.json` (export 名 `Schema` 供 dump_schema 使用)
  */
-const addonSchemaShape = {
-  世界时局与经济简报: z.record(z.string(), 世界条目Schema).prefault({}),
-};
-
-export const AddonSchema = z.object(addonSchemaShape).prefault({});
+export const AddonSchema = z.record(z.string(), 世界条目Schema).prefault({});
 
 /** 与 MVU 角色卡一致, 供 dump_schema 生成 schema.json */
 export const Schema = AddonSchema;

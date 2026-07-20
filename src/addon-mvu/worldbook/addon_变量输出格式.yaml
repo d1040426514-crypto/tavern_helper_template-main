@@ -8,7 +8,7 @@ addon变量输出格式:
       - insert: insert new items into an object or array (using `-` as array index intends appending to the end)
       - remove
       - move
-    - paths are relative to addon_data root (e.g. `/世界时局与经济简报/某世界/时代快讯/岁月史书/正史/某演变纪名/描述`, not `/addon_data/世界时局与经济简报/...`)
+    - paths are relative to addon_data root (e.g. `/某世界/时代快讯/岁月史书/正史/某演变纪名/描述`, not `/addon_data/...`)
     - boolean fields must be JSON true/false, never strings like "true" or "false"
     - don't update field names starts with `_` as they are readonly
     - do not update paths containing 降临 or 平行演化 (frontend-controlled, reserved for UI)

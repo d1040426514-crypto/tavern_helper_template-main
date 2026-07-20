@@ -98,7 +98,7 @@ export function refreshNarrativeGuidanceDetails(addon: AddonData): AddonData {
   const next = _.cloneDeep(addon);
   let touched = false;
 
-  for (const world of Object.values(next.世界时局与经济简报 ?? {})) {
+  for (const world of Object.values(next ?? {})) {
     if (!world) {
       continue;
     }
