@@ -1,0 +1,10 @@
+---
+<%_
+function stripAddonForDisplay(data) {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
+  return _.cloneDeep(data);
+}
+_%>
+<addon_status_current_variable>
+<%- YAML.stringify(stripAddonForDisplay(getvar('addon_data')), { blockQuote: 'literal' }) %>
+</addon_status_current_variable>

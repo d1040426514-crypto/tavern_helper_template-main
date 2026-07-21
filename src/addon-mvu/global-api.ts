@@ -31,7 +31,7 @@ export const Addon = {
     return wrapAddonData(addon_data);
   },
 
-  /** 供提示词/世界书使用：隐藏 降临、平行演化 等前端控制字段 */
+  /** 供提示词/世界书使用的 addon 快照 */
   getDisplayAddonData(options: AddonMessageOption): AddonWrapper {
     if (!hasChatMessages()) {
       return wrapAddonData(DEFAULT_ADDON_DATA);

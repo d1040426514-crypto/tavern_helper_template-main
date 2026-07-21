@@ -289,7 +289,7 @@ declare const Addon: {
   getAddonData: (options: Extract<VariableOption, { type: 'message' }>) => Addon.AddonWrapper;
 
   /**
-   * 获取供提示词/世界书使用的 addon 快照（隐藏 降临、平行演化 等前端控制字段）
+   * 获取供提示词/世界书使用的 addon 快照
    *
    * @example
    * const { addon_data } = Addon.getDisplayAddonData({ type: 'message', message_id: 'latest' });
