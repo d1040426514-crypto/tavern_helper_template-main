@@ -882,9 +882,6 @@ watch(
   (mode, oldMode) => {
     const task = selectedTask.value;
     if (!task || mode == null || mode === oldMode || oldMode === undefined) return;
-    // #region agent log
-    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f99cec'},body:JSON.stringify({sessionId:'f99cec',runId:'post-fix',hypothesisId:'D',location:'SettingsWindow.vue:watch structuredOutputMode',message:'mode watch firing sync',data:{mode,oldMode,taskId:task.id},timestamp:Date.now()})}).catch(()=>{});
-    // #endregion
     syncStructuredOutputPromptGroup(task, mode);
   },
 );
