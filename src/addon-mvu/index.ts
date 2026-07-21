@@ -7,6 +7,7 @@ import { applyAddonUpdateFromMessage, backfillChatAddonData, processFloor } from
 export { randomMinorTitle, refreshNarrativeGuidanceDetails } from './narrative-guidance';
 export { ADDON_HIDDEN_FROM_PROMPT_KEYS, stripAddonHiddenFieldsForDisplay } from './display';
 export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
+export { coerceAddonData, LOOSE_NUMERIC_STRING_KEYS, STRICT_BOOLEAN_KEYS } from './coerce';
 export type { AddonData } from './schema';
 export { AddonEvent } from './events';
 export { applyMvuLikePatch, extractAddonJsonPatchOps, extractAddonJsonPatchOpsWithIssues, parseJsonPatchOps } from './patch';

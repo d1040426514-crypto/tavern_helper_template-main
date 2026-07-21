@@ -1,3 +1,9 @@
+import { z } from 'zod';
+
+import { coerceAddonData, STRICT_BOOLEAN_KEYS } from './coerce';
+
+export { STRICT_BOOLEAN_KEYS };
+
 /** 消息楼层变量中 addon 数据的顶层键名 */
 export const ADDON_KEY = 'addon_data';
 
@@ -6,9 +12,6 @@ const strictBoolean = z.boolean().prefault(false);
 
 /** 宽松字符串: 占位符选项在变量更新规则中约束, 不在 Zod 层 enum */
 const looseString = z.string().prefault('');
-
-/** 需严格校验的布尔字段名 (深度遍历时剔除非法值) */
-export const STRICT_BOOLEAN_KEYS = new Set(['降临', '平行演化', '原典', '临界事件']);
 
 const 叙事指导Schema = z
   .object({
@@ -446,8 +449,9 @@ export type AddonData = z.infer<typeof AddonSchema>;
 
 export const DEFAULT_ADDON_DATA: AddonData = AddonSchema.parse({});
 
-/** 预处理非法布尔 + prefault 补全完整结构 */
+/** 预处理非法布尔 + 字段 coerce + prefault 补全完整结构 */
 export function normalizeAddonData(raw?: unknown): AddonData {
-  const cleaned = stripInvalidStrictBooleans(raw ?? {});
+  const coerced = coerceAddonData(raw ?? {});
+  const cleaned = stripInvalidStrictBooleans(coerced);
   return AddonSchema.parse(cleaned);
 }

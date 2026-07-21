@@ -2,6 +2,7 @@ import { prettifyErrorWithInput } from '@util/common';
 
 import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
 import { stripInvalidStrictBooleans } from './schema';
+import { coerceAddonData } from './coerce';
 import { updateAddonFromMessage } from './update';
 import { ADDON_KEY, AddonData, AddonSchema, normalizeAddonData } from './schema';
 
@@ -45,7 +46,8 @@ export function getAddonData(message_id: number): AddonData | undefined {
   if (raw === undefined || raw === null) {
     return undefined;
   }
-  const result = AddonSchema.safeParse(stripInvalidStrictBooleans(raw));
+  const coerced = coerceAddonData(raw);
+  const result = AddonSchema.safeParse(stripInvalidStrictBooleans(coerced));
   if (result.success) {
     const normalized = normalizeAddonData(result.data);
     if (!_.isEqual(raw, normalized)) {
