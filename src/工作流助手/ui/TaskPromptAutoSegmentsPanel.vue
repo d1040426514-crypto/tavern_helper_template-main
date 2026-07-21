@@ -5,7 +5,6 @@ import {
   appendPromptAutoSegment,
   appendPromptAutoSlot,
   countInsertedPromptAutoSegments,
-  movePromptAutoSegmentInSlot,
   removePromptAutoSegmentAt,
   removePromptAutoSlotAt,
   sortSegmentsInSlot,
@@ -49,29 +48,6 @@ function togglePanel() {
 
 function segmentsForSlot(slotId: string) {
   return sortSegmentsInSlot(segments.value, slotId);
-}
-
-function selectedSegmentSortIndex(slotId: string): number {
-  const segId = resolveSelectedSegmentId(slotId);
-  if (!segId) return -1;
-  return segmentsForSlot(slotId).findIndex(s => s.id === segId);
-}
-
-function moveSegmentInSlot(slotId: string, delta: -1 | 1) {
-  if (props.readonly) return;
-  ensureArrays();
-  const segId = resolveSelectedSegmentId(slotId);
-  if (!segId) return;
-  try {
-    props.task.promptAutoSegments = movePromptAutoSegmentInSlot(
-      props.task.promptAutoSegments ?? [],
-      slotId,
-      segId,
-      delta,
-    );
-  } catch {
-    // 边界移动忽略
-  }
 }
 
 function segmentIndex(segId: string) {
@@ -292,28 +268,6 @@ function slotIndexById(slotId: string) {
         <div v-if="!readonly" class="acu-auto-segment-slot__actions">
           <button class="acu-btn acu-btn--sm acu-auto-segment-slot__add" type="button" @click="addSegment(slot.id)">
             + 自动段
-          </button>
-          <button
-            class="acu-btn acu-btn--sm acu-icon-btn"
-            type="button"
-            title="左移选中的自动段"
-            :disabled="!segmentsForSlot(slot.id).length || selectedSegmentSortIndex(slot.id) <= 0"
-            @click="moveSegmentInSlot(slot.id, -1)"
-          >
-            ◀
-          </button>
-          <button
-            class="acu-btn acu-btn--sm acu-icon-btn"
-            type="button"
-            title="右移选中的自动段"
-            :disabled="
-              !segmentsForSlot(slot.id).length ||
-              selectedSegmentSortIndex(slot.id) < 0 ||
-              selectedSegmentSortIndex(slot.id) >= segmentsForSlot(slot.id).length - 1
-            "
-            @click="moveSegmentInSlot(slot.id, 1)"
-          >
-            ▶
           </button>
           <button
             class="acu-btn acu-btn--sm acu-icon-btn"

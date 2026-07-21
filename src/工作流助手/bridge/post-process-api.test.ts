@@ -29,7 +29,6 @@ const expectedMethods = [
   'addPromptAutoSegment',
   'removePromptAutoSegment',
   'updatePromptAutoSegment',
-  'movePromptAutoSegment',
   'setTaskEnabled',
   'renameTask',
   'duplicateTask',

@@ -58,7 +58,6 @@ import {
 import {
   appendPromptAutoSegment,
   appendPromptAutoSlot,
-  movePromptAutoSegmentInSlot,
   removePromptAutoSegmentAt,
   removePromptAutoSlotAt,
 } from './prompt-auto-segment-ops';
@@ -680,23 +679,6 @@ export async function updatePromptAutoSegment(
     slotId: current.slotId,
   });
   return updateTask(id, { promptAutoSegments: segments }, source);
-}
-
-export async function movePromptAutoSegment(
-  id: string,
-  slotId: string,
-  segmentId: string,
-  delta: -1 | 1,
-  source: TaskWriteSource = 'api',
-): Promise<PostProcessTask> {
-  const task = getTask(id);
-  if (!task) throw new Error(`任务不存在: ${id}`);
-  const segments = task.promptAutoSegments ?? [];
-  if (!segments.some(s => s.id === segmentId)) {
-    throw new Error(`自动段不存在: ${segmentId}`);
-  }
-  const next = movePromptAutoSegmentInSlot(segments, slotId, segmentId, delta);
-  return updateTask(id, { promptAutoSegments: next }, source);
 }
 
 export function getEffectiveSettings(): ScriptSettings {

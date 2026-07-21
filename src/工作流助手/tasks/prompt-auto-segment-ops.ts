@@ -111,32 +111,6 @@ export function removePromptAutoSegmentAt(segments: PromptAutoSegment[], index: 
   return renumberSortOrderInSlot(next, removed.slotId);
 }
 
-export function movePromptAutoSegmentInSlot(
-  segments: PromptAutoSegment[],
-  slotId: string,
-  segId: string,
-  delta: -1 | 1,
-): PromptAutoSegment[] {
-  const inSlot = sortSegmentsInSlot(segments, slotId);
-  const index = inSlot.findIndex(s => s.id === segId);
-  if (index < 0) {
-    throw new Error(`自动段不存在: ${segId}`);
-  }
-  const target = index + delta;
-  if (target < 0 || target >= inSlot.length) {
-    throw new Error(`自动段无法移动: 索引 ${index} 方向 ${delta}`);
-  }
-  const next = _.cloneDeep(segments);
-  const ordered = sortSegmentsInSlot(next, slotId);
-  const [item] = ordered.splice(index, 1);
-  ordered.splice(target, 0, item);
-  const orderById = new Map(ordered.map((seg, i) => [seg.id, i]));
-  return next.map(seg => {
-    if (seg.slotId !== slotId) return seg;
-    return { ...seg, sortOrder: orderById.get(seg.id) ?? seg.sortOrder ?? 0 };
-  });
-}
-
 export function countInsertedPromptAutoSegments(segments: PromptAutoSegment[]): number {
   return segments.filter(s => s.inserted).length;
 }

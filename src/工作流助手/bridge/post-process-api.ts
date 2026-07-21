@@ -15,7 +15,6 @@ import {
   listReplicaFamilyMembers,
   listTasks,
   movePromptGroup,
-  movePromptAutoSegment,
   moveTask,
   moveTaskToIndex,
   promoteChatScopeToPreset,
@@ -124,12 +123,6 @@ export interface AcuPostProcessTaskAPI {
     segmentId: string,
     patch: PromptAutoSegmentPatch,
   ): Promise<PostProcessTask>;
-  movePromptAutoSegment(
-    taskId: string,
-    slotId: string,
-    segmentId: string,
-    delta: -1 | 1,
-  ): Promise<PostProcessTask>;
   setTaskEnabled(taskId: string, enabled: boolean): Promise<PostProcessTask>;
   renameTask(taskId: string, name: string): Promise<PostProcessTask>;
   duplicateTask(taskId: string, options?: { afterTaskId?: string }): Promise<PostProcessTask>;
@@ -221,8 +214,6 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => removePromptAutoSegment(taskId, segmentId, 'api')) as Promise<PostProcessTask>,
   updatePromptAutoSegment: (taskId, segmentId, patch) =>
     apiCall(() => updatePromptAutoSegment(taskId, segmentId, patch, 'api')) as Promise<PostProcessTask>,
-  movePromptAutoSegment: (taskId, slotId, segmentId, delta) =>
-    apiCall(() => movePromptAutoSegment(taskId, slotId, segmentId, delta, 'api')) as Promise<PostProcessTask>,
   setTaskEnabled: (taskId, enabled) =>
     apiCall(() => setTaskEnabled(taskId, enabled, 'api')) as Promise<PostProcessTask>,
   renameTask: (taskId, name) => apiCall(() => renameTask(taskId, name, 'api')) as Promise<PostProcessTask>,
