@@ -94,14 +94,14 @@ WorldPaper_Update_Format: |-
   ## analysis
   - 语言：中文
   - 必须完整执行 `<analysis_format>` 思维步骤，不得删减
-  - Step 0 须检查 `<上期世界状态>`：若目标世界不存在，在 Step 8 规划 `insert /世界名` 为 patch 第一条，并列出本批需预置的父级 map
+  - Step 0 须检查 `<上期世界状态>`：若目标世界不存在，在 Step 9 规划 `insert /世界名` 为 patch 第一条，并列出本批需预置的父级 map
   - 允许较长文本；换行用 \n；引号按 JSON 转义
   
   ## 根对象结构
   
   冷启动示例（`<上期世界状态>` 为空或缺少目标世界时）：
   {
-    "analysis": "首先30字……\nStep 0: ……\n……\nStep 8: 首条 insert /某世界 带骨架与初始值……",
+    "analysis": "身份确认……\nStep 0: ……\n……\nStep 8: 首条 insert /某世界 带骨架与初始值……",
     "patch": [
       {
         "op": "insert",
@@ -169,7 +169,7 @@ WorldPaper_Update_Format: |-
   
   常规更新示例（目标世界已存在时）：
   {
-    "analysis": "首先30字……\nStep 0: ……\n……\nStep 8: ……",
+    "analysis": "身份确认……\nStep 0: ……\n……\nStep 8: ……",
     "patch": [
       { "op": "replace", "path": "/某世界/刊报日期", "value": "纪元-YYYY年-MM月-DD日" },
       { "op": "replace", "path": "/某世界/降临", "value": true },
