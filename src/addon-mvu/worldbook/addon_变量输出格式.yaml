@@ -1,21 +1,25 @@
----
-addon变量输出格式:
-  rule:
-    - 仅输出一个合法 JSON 对象（不要 markdown 代码围栏，不要 XML，不要自然语言前后缀）
-    - patch 使用 JSON Patch (RFC 6902) 风格，支持：replace、delta、insert、remove、move
-    - insert 到数组末尾时 path 使用 `-` 作为索引；本结构以对象为主，新增键用 insert
-    - path 相对当前变量树根，第一段必须是世界名（如 `/某世界/刊报日期`）
-    - 禁止更新以 `_` 开头的只读字段
-    - 布尔字段必须是 JSON true/false，不能是 "true"/"false" 字符串
-    - analysis 使用中文，说明：时间流逝、是否允许大幅变动、按更新规则 check 的变更分析
-  format: |-
-    {
-      "analysis": "（中文）时间流逝：...。是否允许大幅变动：是/否。变更分析：...",
-      "patch": [
-        { "op": "replace", "path": "/某世界/刊报日期", "value": "纪元-YYYY年-MM月-DD日" },
-        { "op": "replace", "path": "/某世界/降临", "value": true },
-        { "op": "insert", "path": "/某世界/世界剧情态势/时局动态/世界背景事件/新事件", "value": { "叙事指导": { "宏观层": "", "发展层": "", "细节层": "" }, "参与角色": "", "牵涉团体": "", "事件脉络": {}, "结算条件": "" } },
-        { "op": "remove", "path": "/某世界/世界剧情态势/时局动态/传闻/过期传闻" },
-        { "op": "move", "from": "/某世界/path/from", "to": "/某世界/path/to" }
-      ]
-    }
+[变量输出规则]
+你必须仅输出一个合法 JSON 对象（不要 markdown 围栏，不要 XML，不要自然语言前后缀）。
+
+## 业务约束
+- patch 为 JSON Patch (RFC 6902) 风格数组，支持：replace、delta、insert、remove、move
+- 新增对象键（事件名、传闻名、团体名等）用 insert，path 末段写新键名
+- path 相对当前变量树根，第一段必须是世界名（如 `/某世界/刊报日期`）
+- 禁止更新以 `_` 开头的只读字段
+- 布尔字段必须是 JSON true/false，不能是 "true"/"false" 字符串
+
+## analysis
+- 语言：中文
+- 必须完整执行 <analysis_format> 思维步骤，不得删减
+- 允许较长文本；换行用 \n；引号按 JSON 转义
+
+## 根对象结构
+{
+  "analysis": "首先30字……\nStep 0: ……\n……\nStep 8: ……",
+  "patch": [
+    { "op": "replace", "path": "/某世界/刊报日期", "value": "纪元-YYYY年-MM月-DD日" },
+    { "op": "replace", "path": "/某世界/降临", "value": true },
+    { "op": "insert", "path": "/某世界/世界剧情态势/时局动态/世界背景事件/新事件", "value": { "叙事指导": { "宏观层": "", "发展层": "", "细节层": "" }, "参与角色": "", "牵涉团体": "", "事件脉络": {}, "结算条件": "" } },
+    { "op": "move", "from": "/某世界/path/from", "to": "/某世界/path/to" }
+  ]
+}
