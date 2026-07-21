@@ -28,7 +28,6 @@ import {
   replicaEnumResultToRegistryTags,
 } from './replica-enum-parse';
 import {
-  appendStrictJsonPromptToMessages,
   extractStrictVariableResponse,
   hasCompleteVariableXml,
   type ActiveStructuredOutputMode,
@@ -199,7 +198,10 @@ async function runSingleTask(
     ? options?.routePoolRegistry?.getOrCreate(poolKey, presetChain, routeLimits)
     : null;
   const structuredMode = getStructuredOutputMode(task);
-  const apiMessages = structuredMode ? appendStrictJsonPromptToMessages(messages, structuredMode) : messages;
+  const apiMessages = messages;
+  // #region agent log
+  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f99cec'},body:JSON.stringify({sessionId:'f99cec',runId:'post-fix',hypothesisId:'E',location:'runtime.ts:runSingleTask',message:'structured mode message build',data:{taskId:task.id,structuredMode,rawMsgCount:messages.length,apiMsgCount:apiMessages.length,runtimeSuffixAppended:false,lastHasStrictSuffix:/\u4e25\u683c JSON \u8f93\u51fa/.test(String(apiMessages.at(-1)?.content??'')),promptGroupNames:task.promptGroups.map(p=>p.name)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   const maxRetries = task.maxRetries ?? 3;
   let rawResponse = '';
   let reasoningContent: string | undefined;

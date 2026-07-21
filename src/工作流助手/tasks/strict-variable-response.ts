@@ -67,16 +67,12 @@ export function buildStrictJsonPromptSuffix(_mode: ActiveStructuredOutputMode): 
 其中 patch 必须是 JSON Patch (RFC 6902) 操作数组。禁止输出 XML、HTML 或 <JSONPatch>/<AddonJSONPatch> 标签。`;
 }
 
+/** @deprecated 结构化输出格式由提示词段承担，运行时不再向最后一条消息追加后缀。 */
 export function appendStrictJsonPromptToMessages<T extends { role: string; content: string; name?: string }>(
   messages: T[],
-  mode: ActiveStructuredOutputMode,
+  _mode: ActiveStructuredOutputMode,
 ): T[] {
-  if (!messages.length) return messages;
-  const suffix = buildStrictJsonPromptSuffix(mode);
-  const copy = messages.map(m => ({ ...m }));
-  const last = copy[copy.length - 1]!;
-  last.content = `${last.content}\n\n${suffix}`;
-  return copy;
+  return messages.map(m => ({ ...m }));
 }
 
 export interface StrictVariableExtractionResult {
@@ -138,7 +134,7 @@ export function apiConfigRequiresChatCompletionPath(apiConfig: ApiConfig): boole
 
 export const STRUCTURED_OUTPUT_MODE_HELP = {
   intro:
-    'DeepSeek 等模型易输出 markdown/思维链导致 MVU/addon 变量 XML 提取失败。开启后任务会追加严格 JSON 提示词，解析 AI 纯 JSON 并归一化为 <UpdateVariable> 包裹的 <JSONPatch> 或 <AddonJSONPatch>，再走现有注入链路。',
+    'DeepSeek 等模型易输出 markdown/思维链导致 MVU/addon 变量 XML 提取失败。开启后通过「变量输出规则」提示词段约束 JSON 格式，解析 AI 纯 JSON 并归一化为 <UpdateVariable> 包裹的 <JSONPatch> 或 <AddonJSONPatch>，再走现有注入链路。',
   apiPreset:
     '建议 API 预设使用「DeepSeek 结构化输出」模板（response_format: json_object、custom_prompt_post_processing: strict）。任务开启本模式时若 preset 无 response_format 会自动注入 json_object。',
   modes: [

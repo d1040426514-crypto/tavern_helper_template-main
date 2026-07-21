@@ -103,6 +103,9 @@ function removeAutoPromptGroups(task: PostProcessTask): void {
 }
 
 export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: StructuredOutputMode): void {
+  // #region agent log
+  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f99cec'},body:JSON.stringify({sessionId:'f99cec',hypothesisId:'B',location:'structured-output-prompt-rules.ts:syncStructuredOutputPromptGroup',message:'sync called',data:{mode,taskId:task.id,beforeNames:task.promptGroups.map(p=>p.name)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
   captureStructuredOutputRulesFromTask(task);
   removeAutoPromptGroups(task);
   if (mode === 'off') return;
@@ -116,4 +119,7 @@ export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: Str
     content,
     enabled: true,
   });
+  // #region agent log
+  fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782',{method:'POST',headers:{'Content-Type':'application/json','X-Debug-Session-Id':'f99cec'},body:JSON.stringify({sessionId:'f99cec',hypothesisId:'B',location:'structured-output-prompt-rules.ts:syncStructuredOutputPromptGroup:after',message:'sync pushed auto group to end',data:{mode,afterNames:task.promptGroups.map(p=>p.name),contentHead:String(content).slice(0,80)},timestamp:Date.now()})}).catch(()=>{});
+  // #endregion
 }
