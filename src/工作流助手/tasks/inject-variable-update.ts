@@ -108,11 +108,22 @@ export async function applyInjectVariableUpdates(
   aiBlock: string,
   options?: { isRerun?: boolean },
 ): Promise<void> {
-  const needMvu = hasMvuJsonPatch(aiBlock);
-  const needAddon = hasAddonJsonPatch(aiBlock);
+  let needMvu = hasMvuJsonPatch(aiBlock);
+  let needAddon = hasAddonJsonPatch(aiBlock);
   if (!needMvu && !needAddon) return;
 
   try {
+    // 必须先 waitGlobalInitialized，再访问 Mvu/Addon（含 baseline 读写）
+    if (needMvu && !(await ensureMvuReady())) {
+      console.warn('[工作流助手] MVU 未就绪，已跳过注入块 <JSONPatch> 解析');
+      needMvu = false;
+    }
+    if (needAddon && !(await ensureAddonReady())) {
+      console.warn('[工作流助手] Addon 未就绪，已跳过注入块 <AddonJSONPatch> 解析');
+      needAddon = false;
+    }
+    if (!needMvu && !needAddon) return;
+
     let baseline = readBaseline(messageId);
 
     if (options?.isRerun && baseline) {
