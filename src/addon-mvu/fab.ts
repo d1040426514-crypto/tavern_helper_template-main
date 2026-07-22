@@ -11,6 +11,24 @@ const HOST_ATTR = 'data-addon-console-host';
 const FAB_POS_KEY = 'addon-console-fab-pos';
 const DRAG_THRESHOLD = 6;
 
+/** 2:1 世界剪影，供陆地 mask（风格对齐 DlSNlGHT/World 悬浮球） */
+const WORLDMAP_MASK =
+  'data:image/svg+xml,' +
+  encodeURIComponent(
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 100" preserveAspectRatio="none">' +
+      '<path fill="#000" d="' +
+      'M18 32c2-10 14-16 24-12 7 3 9 12 6 19-2 5-7 8-6 13 1 6-5 11-12 10-8-1-14-8-15-16-1-5 1-10 3-14z' +
+      'M36 58c3 2 4 10-1 15-4 4-11 3-14-1-3-5 0-12 5-14 3-1 7-1 10 0z' +
+      'M62 30c6-8 18-8 24 0 5 6 5 16-1 22-5 5-14 5-19 0-6-6-8-15-4-22z' +
+      'M68 54c5 1 9 8 6 14-3 6-12 7-16 2-4-5-2-13 4-15 2-1 4-1 6-1z' +
+      'M98 26c10-8 26-6 32 5 5 9 2 20-7 25-8 5-20 3-26-4-7-8-6-18 1-26z' +
+      'M118 56c6-1 12 3 13 9 1 6-4 12-10 12-7 0-12-5-12-11 0-5 4-9 9-10z' +
+      'M148 34c5-3 12-1 14 5 2 5 0 11-5 13-5 2-11 0-13-5-2-5 0-10 4-13z' +
+      'M158 58c4 0 7 3 7 7s-3 7-7 7-7-3-7-7 3-7 7-7z' +
+      '"/>' +
+      '</svg>',
+  );
+
 type HostApi = {
   open: () => void;
   close: () => void;
@@ -53,46 +71,95 @@ function readConsoleUrl(): string {
 
 function ensureStyles(): void {
   const doc = hostDoc();
-  if (doc.getElementById(STYLE_ID)) return;
-  const style = doc.createElement('style');
-  style.id = STYLE_ID;
-  style.setAttribute(HOST_ATTR, '1');
+  let style = doc.getElementById(STYLE_ID) as HTMLStyleElement | null;
+  if (!style) {
+    style = doc.createElement('style');
+    style.id = STYLE_ID;
+    style.setAttribute(HOST_ATTR, '1');
+    doc.head.appendChild(style);
+  }
   style.textContent = `
 #${FAB_ID}{
+  --ac-fab-size:40px;
+  --ac-fab-ocean:#163039;
+  --ac-fab-land:#5a9387;
+  --ac-fab-orbit:rgba(120,170,180,.38);
   position:fixed;
   z-index:9990;
-  width:48px;height:48px;
+  width:var(--ac-fab-size);
+  height:var(--ac-fab-size);
+  padding:0;
+  margin:0;
+  border:0;
   border-radius:50%;
-  border:1.5px solid rgba(217,184,107,.75);
-  background:
-    radial-gradient(circle at 30% 28%, rgba(232,213,176,.35), transparent 45%),
-    linear-gradient(145deg,#1a2740 0%,#253d5e 55%,#1e3050 100%);
-  color:#f5ecd7;
-  font-size:16px;font-weight:700;
-  letter-spacing:.06em;
-  box-shadow:
-    0 0 0 1px rgba(26,39,64,.35),
-    0 6px 18px rgba(20,16,8,.32),
-    inset 0 1px 0 rgba(255,255,255,.12);
+  background:transparent;
   cursor:grab;
-  display:flex;align-items:center;justify-content:center;
+  display:block;
   user-select:none;
+  -webkit-tap-highlight-color:transparent;
   touch-action:none;
-  transition:box-shadow .18s ease, transform .15s ease;
+  overflow:visible;
+  filter:drop-shadow(0 4px 12px rgba(8,18,24,.55));
+  transition:filter .2s ease, transform .15s ease;
 }
-#${FAB_ID}:hover{
-  box-shadow:
-    0 0 0 1px rgba(200,164,92,.45),
-    0 8px 22px rgba(20,16,8,.4),
-    inset 0 1px 0 rgba(255,255,255,.16);
+#${FAB_ID}:hover{transform:scale(1.06)}
+#${FAB_ID}.dragging{
+  cursor:grabbing;
+  transform:scale(1.1);
+  transition:none;
 }
-#${FAB_ID}.dragging{cursor:grabbing;transform:scale(1.05)}
-#${FAB_ID} .ac-fab-ring{
-  position:absolute;inset:4px;border-radius:50%;
-  border:1px solid rgba(200,164,92,.28);
+#${FAB_ID} > span{
+  position:absolute;
+  inset:0;
   pointer-events:none;
 }
-#${FAB_ID} .ac-fab-glyph{position:relative;z-index:1;line-height:1}
+#${FAB_ID} .ac-fab-orbit{
+  inset:-7px;
+  border-radius:50%;
+  border:1px dashed var(--ac-fab-orbit);
+  z-index:0;
+}
+#${FAB_ID} .ac-fab-globe{
+  border-radius:50%;
+  overflow:hidden;
+  background:var(--ac-fab-ocean);
+  border:1px solid rgba(229,240,237,.14);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1);
+  z-index:1;
+}
+#${FAB_ID} .ac-fab-globe::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  background:var(--ac-fab-land);
+  -webkit-mask:url("${WORLDMAP_MASK}") 0 center / 200% 100% repeat-x;
+  mask:url("${WORLDMAP_MASK}") 0 center / 200% 100% repeat-x;
+  animation:ac-fab-map-scroll 28s linear infinite;
+}
+#${FAB_ID}:hover .ac-fab-orbit{
+  border-color:rgba(88,184,169,.55);
+  animation:ac-fab-orbit-spin 12s linear infinite;
+}
+@keyframes ac-fab-map-scroll{
+  from{-webkit-mask-position:0 center;mask-position:0 center}
+  to{-webkit-mask-position:-200% center;mask-position:-200% center}
+}
+@keyframes ac-fab-orbit-spin{to{transform:rotate(360deg)}}
+@media (max-width:640px){
+  #${FAB_ID}{--ac-fab-size:36px}
+}
+@media (max-width:380px){
+  #${FAB_ID}{--ac-fab-size:32px}
+}
+@media (prefers-reduced-motion:reduce){
+  #${FAB_ID} .ac-fab-globe::before,
+  #${FAB_ID}:hover .ac-fab-orbit{animation:none}
+  #${FAB_ID}{transition:none}
+}
+@media (hover:none){
+  #${FAB_ID}:hover{transform:none}
+  #${FAB_ID}:hover .ac-fab-orbit{animation:none;border-color:var(--ac-fab-orbit)}
+}
 
 #${SHELL_ID}{
   position:fixed;inset:0;z-index:9995;pointer-events:none;
@@ -158,8 +225,11 @@ function ensureStyles(): void {
   }
 }
 `;
-  doc.head.appendChild(style);
 }
+
+const FAB_MARKUP =
+  '<span class="ac-fab-orbit" aria-hidden="true"></span>' +
+  '<span class="ac-fab-globe" aria-hidden="true"></span>';
 
 function readSafeAreaInsets(): { top: number; right: number; bottom: number; left: number } {
   const doc = hostDoc();
@@ -182,21 +252,34 @@ function readSafeAreaInsets(): { top: number; right: number; bottom: number; lef
   return insets;
 }
 
-function clampFabPosition(left: number, top: number, size = 48): { left: number; top: number } {
+function getFabSize(fab?: HTMLElement | null): number {
+  const el = fab ?? (hostDoc().getElementById(FAB_ID) as HTMLElement | null);
+  if (el) {
+    const w = el.getBoundingClientRect().width;
+    if (w > 0) return w;
+  }
+  const vw = hostWin().visualViewport?.width ?? hostDoc().documentElement.clientWidth;
+  if (vw <= 380) return 32;
+  if (vw <= 640) return 36;
+  return 40;
+}
+
+function clampFabPosition(left: number, top: number, size?: number): { left: number; top: number } {
   const doc = hostDoc();
   const vv = hostWin().visualViewport;
   const vw = vv?.width ?? doc.documentElement.clientWidth;
   const vh = vv?.height ?? doc.documentElement.clientHeight;
+  const fabSize = size ?? getFabSize();
   const pad = 8;
   const safe = readSafeAreaInsets();
   return {
-    left: Math.min(Math.max(pad + safe.left, left), Math.max(pad + safe.left, vw - size - pad - safe.right)),
-    top: Math.min(Math.max(pad + safe.top, top), Math.max(pad + safe.top, vh - size - pad - safe.bottom)),
+    left: Math.min(Math.max(pad + safe.left, left), Math.max(pad + safe.left, vw - fabSize - pad - safe.right)),
+    top: Math.min(Math.max(pad + safe.top, top), Math.max(pad + safe.top, vh - fabSize - pad - safe.bottom)),
   };
 }
 
 function applyFabPosition(fab: HTMLElement, left: number, top: number): void {
-  const pos = clampFabPosition(left, top);
+  const pos = clampFabPosition(left, top, getFabSize(fab));
   fab.style.left = `${pos.left}px`;
   fab.style.top = `${pos.top}px`;
   fab.style.right = 'auto';
@@ -220,7 +303,8 @@ function loadFabPosition(fab: HTMLElement): void {
   const vv = hostWin().visualViewport;
   const vw = vv?.width ?? doc.documentElement.clientWidth;
   const vh = vv?.height ?? doc.documentElement.clientHeight;
-  applyFabPosition(fab, vw - 48 - 12, vh - 48 - 12);
+  const size = getFabSize(fab);
+  applyFabPosition(fab, vw - size - 12, vh - size - 12);
 }
 
 function saveFabPosition(left: number, top: number): void {
@@ -432,7 +516,11 @@ export function injectAddonConsoleFab(): void {
   ensureStyles();
   exposeHostApi();
   const doc = hostDoc();
-  if (doc.getElementById(FAB_ID)) return;
+  const existing = doc.getElementById(FAB_ID) as HTMLButtonElement | null;
+  if (existing) {
+    existing.innerHTML = FAB_MARKUP;
+    return;
+  }
 
   const fab = doc.createElement('button');
   fab.id = FAB_ID;
@@ -440,7 +528,7 @@ export function injectAddonConsoleFab(): void {
   fab.setAttribute(HOST_ATTR, '1');
   fab.setAttribute('aria-label', '打开世界简报');
   fab.title = '世界简报（可拖动）';
-  fab.innerHTML = '<span class="ac-fab-ring" aria-hidden="true"></span><span class="ac-fab-glyph">界</span>';
+  fab.innerHTML = FAB_MARKUP;
   loadFabPosition(fab);
   bindFabDrag(fab);
   hostBody().appendChild(fab);
