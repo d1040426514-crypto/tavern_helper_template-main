@@ -19,7 +19,7 @@ import {
   setWorldParallel,
 } from './control';
 import { stripAddonHiddenFieldsForDisplay } from './display';
-import { applyMvuLikePatch, isForbiddenParallelEvolutionPath } from './patch';
+import { applyMvuLikePatch, isForbiddenParallelEvolutionPath, isForbiddenWorldRootPath } from './patch';
 import { normalizeAddonData, type AddonData } from './schema';
 
 function test(name: string, fn: () => void): void {
@@ -174,6 +174,30 @@ test('patch rejects world parallel evolution', () => {
   assert.equal(_.get(data, '某世界.平行演化'), false);
   assert.equal(_.get(data, '某世界.降临'), true);
   assert.ok(issues.some(i => i.message.includes('平行演化')));
+});
+
+test('patch rejects world root create', () => {
+  assert.equal(isForbiddenWorldRootPath(['新世界']), true);
+  assert.equal(isForbiddenWorldRootPath(['某世界', '刊报日期']), false);
+
+  const base = normalizeAddonData({ 某世界: { 降临: false } });
+  const { data, issues } = applyMvuLikePatch(_.cloneDeep(base) as Record<string, unknown>, [
+    { op: 'insert', path: '/新世界', value: { 降临: true } },
+    {
+      op: 'insert',
+      path: '/某世界/世界剧情态势/时局动态/世界背景事件/新事件',
+      value: {
+        叙事指导: { 宏观层: '', 发展层: '', 细节层: '' },
+        参与角色: '',
+        牵涉团体: '',
+        事件脉络: {},
+        结算条件: '',
+      },
+    },
+  ]);
+  assert.equal(data['新世界'], undefined);
+  assert.ok(_.get(data, '某世界.世界剧情态势.时局动态.世界背景事件.新事件'));
+  assert.ok(issues.some(i => i.message.includes('世界键')));
 });
 
 test('patch allows singularity descent', () => {

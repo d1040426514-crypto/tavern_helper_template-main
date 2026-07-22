@@ -42,7 +42,15 @@ export function isForbiddenParallelEvolutionPath(segments: string[]): boolean {
   return segments.length === 2 && segments[1] === '平行演化';
 }
 
+/** 拒绝仅一段的世界根 path（`/{世界名}`）；世界键仅前端可创建/改名/删除 */
+export function isForbiddenWorldRootPath(segments: string[]): boolean {
+  return segments.length === 1;
+}
+
 function assertWritablePath(segments: string[]): void {
+  if (isForbiddenWorldRootPath(segments)) {
+    throw new Error('世界键仅允许前端创建，已跳过 AI patch');
+  }
   if (isForbiddenParallelEvolutionPath(segments)) {
     throw new Error('平行演化仅允许前端写入，已跳过 AI patch');
   }

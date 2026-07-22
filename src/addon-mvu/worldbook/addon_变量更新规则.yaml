@@ -4,7 +4,6 @@ WorldPaper_Update_Rules:
     {
       [世界名称: string]: {
         降临: boolean;
-        平行演化: boolean;
         刊报日期: string;
         时代快讯: {
           世界时代阶段: 世界时代阶段条目;
@@ -36,22 +35,15 @@ WorldPaper_Update_Rules:
     }
   check:
     - 仅在后台世界演化、世界切换或跨世界事件推进时更新
-    - 同一轮回复避免同时大量新增多个世界
-    - 冷启动：addon_data 为空或缺少目标世界键时，必须先 insert /{世界名}，禁止直接 replace 深层路径
-    - 同批次深层 insert 前，父级 map 须已在 insert 世界条目的 value 中预置
-    - 新增 map 子键用 insert；已存在键用 replace
+    - 禁止 Weaver 创建新世界键（禁止 insert/replace/remove/move 作用在 /{世界名}）
+    - 目标世界不存在于<上期世界状态>时，不要对该世界写任何 patch
+    - 深层 insert 前父级 map 须已存在；新增 map 子键用 insert；已存在键用 replace
     - 百分比、价格、汇率、投机指数等 schema 字段均为 string，禁止 JSON number
   ${世界名称}:
     降临:
       type: boolean
       check:
         - 世界是否为 <user> 降临/身处的世界；值必须为 JSON 布尔
-    平行演化:
-      type: boolean
-      check:
-        - 是否启用平行演化观测；值必须为 JSON 布尔
-        - 【前端专用】仅控制台可写；AI 不可见、不可 patch `/{世界}/平行演化`
-        - 特异点.降临 仍可由 AI 写入
     刊报日期:
       format: 纪元/年号-YYYY年-MM月-DD日
       check:
@@ -167,7 +159,7 @@ WorldPaper_Update_Rules:
               check:
                 - 引发该时代与正史产生分歧的时代关键转折点事件
             check:
-              - 平行线上的演变型纪段，记录同一潜在时代的非主线结果；同一潜在时代可有多条平行分歧纪段
+              - 平行线上的演变型纪段，记录同一潜在时代的非主线结果；同一正史可有多条平行分歧纪段
       史诗传奇.${核心母题}:
         基本类型:
           check:

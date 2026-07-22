@@ -18,7 +18,7 @@ function stripAddonForDisplay(data) {
 const addonData = getvar('addon_data');
 _%>
 <%_ if (!addonData || Object.keys(addonData || {}).length === 0) { _%>
-[addon 变量状态] 当前 addon_data 为空，首次更新须 insert /{世界名} 创建世界条目，见 [变量输出规则]。
+[addon 变量状态] 当前 addon_data 为空，请先在 addon 控制台新建世界；AI 不会创建世界键。
 <%_ } _%>
 <WorldPaper>
 <%- YAML.stringify(stripAddonForDisplay(addonData), { blockQuote: 'literal' }) %>
