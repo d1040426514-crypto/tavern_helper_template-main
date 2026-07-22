@@ -125,8 +125,11 @@ const briefPages = [
   { id: 'econ' as const, label: '世界经济简报', icon: '💰' },
 ];
 
+type AddonConsoleWindow = Window & { __addonConsoleRefresh?: () => void };
+
 let api: AddonConsoleApi | null = null;
 const eventStops: Array<{ stop: () => void }> = [];
+let refreshHook: (() => void) | null = null;
 
 const worldNames = computed(() => Object.keys(worlds.value));
 
@@ -252,6 +255,10 @@ onMounted(async () => {
   try {
     api = await waitAddon();
     bindAutoReload();
+    refreshHook = () => {
+      void reload();
+    };
+    (window as AddonConsoleWindow).__addonConsoleRefresh = refreshHook;
     await reload();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
@@ -269,5 +276,10 @@ onUnmounted(() => {
     }
   }
   eventStops.length = 0;
+  const w = window as AddonConsoleWindow;
+  if (refreshHook && w.__addonConsoleRefresh === refreshHook) {
+    delete w.__addonConsoleRefresh;
+  }
+  refreshHook = null;
 });
 </script>

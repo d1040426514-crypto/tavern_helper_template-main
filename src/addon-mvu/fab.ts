@@ -37,6 +37,8 @@ type HostApi = {
   toggle: () => void;
 };
 
+type AddonConsoleRefreshWindow = Window & { __addonConsoleRefresh?: () => void };
+
 let vueApp: VueApp | null = null;
 let styleDestroy: (() => void) | null = null;
 let bodyOverflowBackup: string | null = null;
@@ -647,6 +649,28 @@ function exposeHostApi(): void {
   }
 }
 
+/** 打开面板时读一次最新 addon_data / addon_ui（关闭后 Vue 仍挂载，需主动刷） */
+function requestConsoleRefresh(): void {
+  // Vue 挂在脚本 window（常为 iframe），勿只查 hostWin/父页
+  try {
+    (window as AddonConsoleRefreshWindow).__addonConsoleRefresh?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    (hostWin() as AddonConsoleRefreshWindow).__addonConsoleRefresh?.();
+  } catch {
+    /* ignore */
+  }
+  try {
+    const iframe = hostDoc().querySelector(`#${SHELL_ID} .ac-panel-body iframe`) as HTMLIFrameElement | null;
+    const cw = iframe?.contentWindow as AddonConsoleRefreshWindow | null | undefined;
+    cw?.__addonConsoleRefresh?.();
+  } catch {
+    /* ignore */
+  }
+}
+
 export function openAddonConsole(): void {
   ensureStyles();
   ensureShell();
@@ -657,6 +681,7 @@ export function openAddonConsole(): void {
   }
   setOpen(true);
   exposeHostApi();
+  requestConsoleRefresh();
 }
 
 export function closeAddonConsole(): void {
