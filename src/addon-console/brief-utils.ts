@@ -90,3 +90,18 @@ export function isCriticalStatus(status: unknown): boolean {
 export function isCompletedOutcome(outcome: unknown): boolean {
   return /成功|定鼎/i.test(textOf(outcome));
 }
+
+/** 传闻影响力 → tag class */
+export function getInfluenceClass(influence: unknown): StatusClass {
+  const s = textOf(influence).trim();
+  if (!s) return '';
+  if (/文化烙印|全民热议/i.test(s)) return 'status-critical';
+  if (/局部焦点|圈内谈资/i.test(s)) return 'status-developing';
+  if (/零星耳闻/i.test(s)) return 'status-embryo';
+  return '';
+}
+
+/** 事件脉络 entries 按键名粗排序（保持插入序兜底） */
+export function timelineEntries(map: unknown): [string, any][] {
+  return entriesOf(map);
+}

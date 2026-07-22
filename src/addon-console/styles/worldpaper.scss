@@ -1151,6 +1151,249 @@
   margin-bottom: 6px;
 }
 
+/* —— 剧情态势页：事件 / 传闻 / 团体 —— */
+.addon-console .ac-plot-card-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.addon-console .ac-plot-card,
+.addon-console .ac-faction-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  border: 1.5px solid var(--currency-card-border);
+  background: var(--currency-card-bg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow-sm);
+  transition: box-shadow 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-plot-card::after,
+.addon-console .ac-faction-card::after {
+  content: '';
+  position: absolute;
+  top: -20px;
+  right: -20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: rgba(200, 165, 90, 0.05);
+  pointer-events: none;
+}
+
+.addon-console .ac-plot-card:hover,
+.addon-console .ac-faction-card:hover {
+  box-shadow: var(--shadow-gold);
+  border-color: var(--gold-pale);
+  transform: translateY(-2px);
+}
+
+.addon-console .ac-plot-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.addon-console .ac-plot-card-title {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--spec-title-color);
+  letter-spacing: 0.02em;
+}
+
+.addon-console .ac-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.addon-console .ac-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--divider);
+  background: rgba(200, 165, 90, 0.08);
+  color: var(--ink-mid);
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.addon-console .ac-plot-settle {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  align-items: baseline;
+  padding: 8px 12px;
+  margin-bottom: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--base-highlight-border);
+  background: var(--base-highlight-bg);
+}
+
+.addon-console .ac-plot-settle-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--base-highlight-sub);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.addon-console .ac-plot-settle-value {
+  color: var(--base-highlight-text);
+  font-weight: 650;
+  word-break: break-word;
+  flex: 1 1 10em;
+  min-width: 0;
+}
+
+.addon-console .ac-oracle-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.addon-console .ac-oracle-cell {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--sub-block-border);
+  background: var(--sub-block-bg);
+  min-width: 0;
+}
+
+.addon-console .ac-oracle-label {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  margin-bottom: 6px;
+}
+
+.addon-console .ac-oracle-value {
+  font-family: var(--font-serif);
+  font-size: 0.95rem;
+  font-weight: 650;
+  color: var(--sub-block-title-color);
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.addon-console .ac-plot-timeline {
+  margin-top: 4px;
+}
+
+.addon-console .ac-faction-block {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--divider);
+}
+
+.addon-console .ac-faction-block:first-of-type {
+  border-top: none;
+  padding-top: 0;
+}
+
+.addon-console .ac-faction-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--divider);
+}
+
+.addon-console .ac-faction-panel {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--region-card-border);
+  background: var(--region-card-bg);
+  min-width: 0;
+}
+
+.addon-console .ac-faction-panel .ac-kv-key {
+  margin-bottom: 6px;
+}
+
+.addon-console .ac-reputation-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.addon-console .ac-reputation-cell {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--region-card-border);
+  background: var(--region-card-bg);
+  min-width: 0;
+}
+
+.addon-console .ac-reputation-label {
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-light);
+  margin-bottom: 2px;
+}
+
+.addon-console .ac-reputation-value {
+  font-size: 0.82rem;
+  color: var(--region-name-color);
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.addon-console .ac-people-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 200px), 1fr));
+  gap: 8px;
+  margin-top: 6px;
+  justify-content: start;
+}
+
+.addon-console .ac-person-card {
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--subcard-border);
+  background: #fdfaf4;
+  min-width: 0;
+  max-width: 280px;
+  width: 100%;
+}
+
+.addon-console[data-theme='dark'] .ac-person-card {
+  background: rgba(18, 26, 50, 0.55);
+}
+
+.addon-console .ac-person-name {
+  font-weight: 700;
+  color: var(--subcard-title);
+  font-family: var(--font-serif);
+  margin-bottom: 2px;
+}
+
+.addon-console .ac-person-role {
+  font-size: 0.78rem;
+  color: var(--ink-mid);
+  margin-bottom: 4px;
+}
+
+.addon-console .ac-person-pillars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
 @keyframes ac-fade-up {
   from {
     opacity: 0;
@@ -1218,7 +1461,20 @@
   }
 
   .addon-console .ac-currency-card:hover,
-  .addon-console .ac-spec-card:hover {
+  .addon-console .ac-spec-card:hover,
+  .addon-console .ac-plot-card:hover,
+  .addon-console .ac-faction-card:hover {
     transform: none;
+  }
+
+  .addon-console .ac-oracle-grid,
+  .addon-console .ac-reputation-grid,
+  .addon-console .ac-people-grid,
+  .addon-console .ac-faction-split {
+    grid-template-columns: 1fr;
+  }
+
+  .addon-console .ac-person-card {
+    max-width: none;
   }
 }
