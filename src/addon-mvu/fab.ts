@@ -77,6 +77,8 @@ function ensureStyles(): void {
     style.id = STYLE_ID;
     style.setAttribute(HOST_ATTR, '1');
     doc.head.appendChild(style);
+  } else if (style.textContent && style.textContent.includes(`#${FAB_ID}`)) {
+    return;
   }
   style.textContent = `
 #${FAB_ID}{
@@ -316,6 +318,13 @@ function saveFabPosition(left: number, top: number): void {
 }
 
 function bindFabDrag(fab: HTMLElement): void {
+  type HostWithAbort = Window & { __acFabDragAbort?: AbortController };
+  const win = hostWin() as HostWithAbort;
+  win.__acFabDragAbort?.abort();
+  const ac = new AbortController();
+  win.__acFabDragAbort = ac;
+  const { signal } = ac;
+
   let dragging = false;
   let moved = false;
   let startX = 0;
@@ -352,22 +361,26 @@ function bindFabDrag(fab: HTMLElement): void {
     }
   };
 
-  fab.addEventListener('pointerdown', e => {
-    if (e.button !== 0) return;
-    dragging = true;
-    moved = false;
-    pointerId = e.pointerId;
-    startX = e.clientX;
-    startY = e.clientY;
-    const rect = fab.getBoundingClientRect();
-    origLeft = rect.left;
-    origTop = rect.top;
-    fab.setPointerCapture?.(e.pointerId);
-    hostDoc().addEventListener('pointermove', onMove);
-    hostDoc().addEventListener('pointerup', onUp);
-    hostDoc().addEventListener('pointercancel', onUp);
-    e.preventDefault();
-  });
+  fab.addEventListener(
+    'pointerdown',
+    e => {
+      if (e.button !== 0) return;
+      dragging = true;
+      moved = false;
+      pointerId = e.pointerId;
+      startX = e.clientX;
+      startY = e.clientY;
+      const rect = fab.getBoundingClientRect();
+      origLeft = rect.left;
+      origTop = rect.top;
+      fab.setPointerCapture?.(e.pointerId);
+      hostDoc().addEventListener('pointermove', onMove, { signal });
+      hostDoc().addEventListener('pointerup', onUp, { signal });
+      hostDoc().addEventListener('pointercancel', onUp, { signal });
+      e.preventDefault();
+    },
+    { signal },
+  );
 }
 
 function unmountConsole(): void {
@@ -518,7 +531,8 @@ export function injectAddonConsoleFab(): void {
   const doc = hostDoc();
   const existing = doc.getElementById(FAB_ID) as HTMLButtonElement | null;
   if (existing) {
-    existing.innerHTML = FAB_MARKUP;
+    // 脚本 iframe 热重载时保留父页悬浮球 DOM，仅重绑事件，避免闪没
+    bindFabDrag(existing);
     return;
   }
 
@@ -540,17 +554,29 @@ export function injectAddonConsoleFab(): void {
   });
 }
 
-export function destroyAddonConsoleHost(): void {
+/**
+ * 脚本 iframe 卸载时的软清理：卸下面板，但保留父页悬浮球与样式，
+ * 避免 CHAT_CHANGED / HMR 重载脚本时悬浮球闪没再出现。
+ */
+export function softTeardownAddonConsoleHost(): void {
   unmountConsole();
   setOpen(false);
+  hostDoc().getElementById(SHELL_ID)?.remove();
+  hostDoc().getElementById('addon-console-drawer')?.remove();
+}
+
+export function destroyAddonConsoleHost(): void {
+  softTeardownAddonConsoleHost();
   const doc = hostDoc();
   doc.getElementById(FAB_ID)?.remove();
-  doc.getElementById(SHELL_ID)?.remove();
   doc.getElementById(STYLE_ID)?.remove();
-  // legacy id cleanup
-  doc.getElementById('addon-console-drawer')?.remove();
   try {
     delete (hostWin() as Window & { __addonConsoleHost?: HostApi }).__addonConsoleHost;
+  } catch {
+    /* ignore */
+  }
+  try {
+    delete (hostWin() as Window & { __acFabDragAbort?: AbortController }).__acFabDragAbort;
   } catch {
     /* ignore */
   }

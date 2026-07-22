@@ -1,7 +1,7 @@
 import { waitUntil } from 'async-wait-until';
 import { reloadOnChatChange } from '@util/script';
 
-import { destroyAddonConsoleHost, injectAddonConsoleFab } from './fab';
+import { injectAddonConsoleFab, softTeardownAddonConsoleHost } from './fab';
 import { Addon } from './global-api';
 import { backfillChatAddonData, processFloor } from './store';
 
@@ -87,7 +87,7 @@ function initAddonMvu(): void {
   errorCatched(injectAddonConsoleFab)();
 
   $(window).on('pagehide', () => {
-    errorCatched(destroyAddonConsoleHost)();
+    errorCatched(softTeardownAddonConsoleHost)();
   });
 
   console.info('[addon-mvu] 已加载: addon_data / archive / ui、控制台悬浮球与 Addon API 已启用');
