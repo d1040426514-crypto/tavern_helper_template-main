@@ -36,7 +36,7 @@ export function parseChangeTone(raw: unknown): ChangeTone {
   if (!s) return 'unknown';
   if (/[+\u2191\u2197]|涨|升|上/.test(s) && !/跌|降|下|-\d/.test(s.replace(/^\s*[-−]/, ''))) return 'up';
   if (/[-−\u2193\u2198]|跌|降|下/.test(s)) return 'down';
-  if (/平|持平|0%|\+0/.test(s)) return 'flat';
+  if (/平|持平|0%|\+0|\u2192|→/.test(s)) return 'flat';
   if (/^\s*\+/.test(s)) return 'up';
   if (/^\s*-/.test(s)) return 'down';
   return 'unknown';
@@ -98,6 +98,33 @@ export function getInfluenceClass(influence: unknown): StatusClass {
   if (/文化烙印|全民热议/i.test(s)) return 'status-critical';
   if (/局部焦点|圈内谈资/i.test(s)) return 'status-developing';
   if (/零星耳闻/i.test(s)) return 'status-embryo';
+  return '';
+}
+
+export type HeatTone = 'heat-high' | 'heat-mid' | 'heat-low' | '';
+
+/** 投机标的交易热度：高 | 中 | 低 */
+export function parseHeatTone(value: unknown): HeatTone {
+  const s = textOf(value).trim();
+  if (!s) return '';
+  if (/^高$|沸腾|火热|极高|很热/i.test(s)) return 'heat-high';
+  if (/^低$|冷清|冰点|极低|清淡/i.test(s)) return 'heat-low';
+  if (/^中$|平稳|一般|正常/i.test(s)) return 'heat-mid';
+  if (/高/.test(s)) return 'heat-high';
+  if (/低/.test(s)) return 'heat-low';
+  if (/中/.test(s)) return 'heat-mid';
+  return '';
+}
+
+export type SupplyTone = 'supply-tight' | 'supply-surplus' | 'supply-steady' | '';
+
+/** 大宗商品供需：紧缺 | 过剩 | 平稳 */
+export function parseSupplyTone(value: unknown): SupplyTone {
+  const s = textOf(value).trim();
+  if (!s) return '';
+  if (/紧缺|短缺|供不应求|紧张/i.test(s)) return 'supply-tight';
+  if (/过剩|充裕|供过于求|宽松/i.test(s)) return 'supply-surplus';
+  if (/平稳|平衡|正常|均衡/i.test(s)) return 'supply-steady';
   return '';
 }
 

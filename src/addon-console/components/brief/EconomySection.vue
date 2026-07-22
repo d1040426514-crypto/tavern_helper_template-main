@@ -18,19 +18,30 @@
 
     <div v-if="commodityVisible" class="ac-sub-stack">
       <h4 class="ac-brief-subh">📦 大宗商品市场</h4>
-      <div class="ac-card-grid">
-        <div v-if="hasCommodity('粮食')" class="ac-region-card">
-          <div class="ac-region-name">🌾 粮食</div>
-          <KvGrid :data="econ?.大宗商品市场?.粮食" :labels="['供需', '主要影响因素', '价格趋势']" :cols="1" />
-        </div>
-        <div v-if="hasCommodity('矿产')" class="ac-region-card">
-          <div class="ac-region-name">⛏️ 矿产</div>
-          <KvGrid :data="econ?.大宗商品市场?.矿产" :labels="['供需', '重点品种', '价格趋势']" :cols="1" />
-        </div>
-        <div v-if="hasCommodity('能源')" class="ac-region-card">
-          <div class="ac-region-name">⚡ 能源</div>
-          <KvGrid :data="econ?.大宗商品市场?.能源" :labels="['供需', '类型', '价格趋势']" :cols="1" />
-        </div>
+      <div class="ac-commodity-grid">
+        <article
+          v-for="item in commodityCards"
+          :key="item.key"
+          class="ac-commodity-card"
+          :class="item.tone"
+        >
+          <header class="ac-commodity-head">
+            <span class="ac-commodity-icon" aria-hidden="true">{{ item.icon }}</span>
+            <h5 class="ac-commodity-name">{{ item.key }}</h5>
+            <span
+              v-if="item.supply"
+              class="ac-supply-badge"
+              :class="parseSupplyTone(item.supply)"
+            >
+              {{ item.supply }}
+            </span>
+            <ChangeBadge :value="item.trend" />
+          </header>
+          <p v-if="item.detail" class="ac-commodity-detail">
+            <span class="ac-commodity-detail-label">{{ item.detailLabel }}</span>
+            {{ item.detail }}
+          </p>
+        </article>
       </div>
     </div>
 
@@ -42,25 +53,21 @@
       <div v-if="currencies.length" class="ac-currency-grid">
         <div v-for="[name, c] in currencies" :key="name" class="ac-currency-card">
           <div class="ac-currency-name">{{ name }}</div>
-          <div class="ac-currency-rate">{{ textOf(c?.汇率?.本期) || '—' }}</div>
+          <div class="ac-currency-rate-row">
+            <div class="ac-currency-rate">{{ textOf(c?.汇率?.本期) || '—' }}</div>
+            <ChangeBadge :value="c?.汇率?.涨跌" />
+          </div>
           <div class="ac-currency-prev">上期 {{ textOf(c?.汇率?.上期) || '—' }}</div>
-          <ChangeBadge :value="c?.汇率?.涨跌" />
           <div v-if="textOf(c?.市场情绪)" class="ac-currency-meta">情绪：{{ textOf(c?.市场情绪) }}</div>
           <div v-if="textOf(c?.驱动因素)" class="ac-currency-meta">驱动：{{ textOf(c?.驱动因素) }}</div>
         </div>
       </div>
-      <KvGrid
-        v-if="econ?.货币与金融?.汇率波动指数"
-        :data="econ.货币与金融.汇率波动指数"
-        :labels="['综合汇率波动率', '主要影响因素']"
-        :cols="1"
-      />
-      <KvGrid
-        v-if="econ?.货币与金融?.信贷环境"
-        :data="econ.货币与金融.信贷环境"
-        :labels="['状态', '系统性风险']"
-        :cols="2"
-      />
+      <div v-if="moneyMetrics.length" class="ac-econ-metrics">
+        <div v-for="m in moneyMetrics" :key="m.label" class="ac-econ-metric">
+          <div class="ac-econ-metric-label">{{ m.label }}</div>
+          <div class="ac-econ-metric-value">{{ m.value }}</div>
+        </div>
+      </div>
     </div>
 
     <div v-if="specVisible" class="ac-sub-stack">
@@ -79,24 +86,52 @@
       </div>
       <div v-if="specAssets.length" class="ac-spec-grid">
         <div v-for="[name, node] in specAssets" :key="name" class="ac-spec-card">
-          <div class="ac-spec-title">{{ name }}</div>
-          <div class="ac-currency-rate" style="font-size: 1.15rem">
-            {{ textOf(node?.当前价格) || '—' }}
+          <header class="ac-spec-head">
+            <div class="ac-spec-title">{{ name }}</div>
+            <span
+              v-if="textOf(node?.交易热度)"
+              class="ac-heat-badge"
+              :class="parseHeatTone(node?.交易热度)"
+              :title="'交易热度 ' + textOf(node?.交易热度)"
+            >
+              {{ textOf(node?.交易热度) }}
+            </span>
+          </header>
+          <div class="ac-currency-rate-row">
+            <div class="ac-spec-price">{{ textOf(node?.当前价格) || '—' }}</div>
+            <ChangeBadge :value="node?.涨跌" />
           </div>
           <div class="ac-currency-prev">上期 {{ textOf(node?.上期价格) || '—' }}</div>
-          <ChangeBadge :value="node?.涨跌" />
-          <div class="ac-spec-meta">{{ textOf(node?.类型) }}</div>
-          <div v-if="textOf(node?.交易热度)" class="ac-spec-meta">热度：{{ textOf(node?.交易热度) }}</div>
-          <div v-if="textOf(node?.量能)" class="ac-spec-meta">量能：{{ textOf(node?.量能) }}</div>
+          <div class="ac-spec-chips">
+            <span v-if="textOf(node?.类型)" class="ac-spec-chip">{{ textOf(node?.类型) }}</span>
+            <span v-if="textOf(node?.量能)" class="ac-spec-chip">量能 {{ textOf(node?.量能) }}</span>
+          </div>
           <div v-if="textOf(node?.驱动事件)" class="ac-spec-meta">驱动：{{ textOf(node?.驱动事件) }}</div>
         </div>
       </div>
-      <div v-if="futures.length" class="ac-spec-grid">
-        <div v-for="[name, node] in futures" :key="'f-' + name" class="ac-spec-card">
-          <div class="ac-spec-title">期货 · {{ name }}</div>
-          <div class="ac-spec-meta">近月 {{ textOf(node?.近月价格) || '—' }}</div>
-          <div class="ac-spec-meta">远月 {{ textOf(node?.远月价格) || '—' }}</div>
-          <div class="ac-spec-meta">基差 {{ textOf(node?.基差) || '—' }}</div>
+      <div v-if="futures.length" class="ac-futures-block">
+        <div class="ac-futures-label">期货合约</div>
+        <div class="ac-futures-grid">
+          <article v-for="[name, node] in futures" :key="'f-' + name" class="ac-futures-card">
+            <header class="ac-futures-head">
+              <span class="ac-futures-badge" aria-hidden="true">期</span>
+              <h5 class="ac-futures-name">{{ name }}</h5>
+            </header>
+            <div class="ac-futures-metrics">
+              <div class="ac-futures-metric">
+                <span class="ac-futures-metric-label">近月</span>
+                <span class="ac-futures-metric-value">{{ textOf(node?.近月价格) || '—' }}</span>
+              </div>
+              <div class="ac-futures-metric">
+                <span class="ac-futures-metric-label">远月</span>
+                <span class="ac-futures-metric-value">{{ textOf(node?.远月价格) || '—' }}</span>
+              </div>
+              <div class="ac-futures-metric">
+                <span class="ac-futures-metric-label">基差</span>
+                <span class="ac-futures-metric-value">{{ textOf(node?.基差) || '—' }}</span>
+              </div>
+            </div>
+          </article>
         </div>
       </div>
     </div>
@@ -140,9 +175,8 @@
 </template>
 
 <script setup lang="ts">
-import { entriesOf, hasAnyText, isNonEmptyText, textOf } from '../../brief-utils';
+import { entriesOf, hasAnyText, isNonEmptyText, parseHeatTone, parseSupplyTone, textOf } from '../../brief-utils';
 import ChangeBadge from './ChangeBadge.vue';
-import KvGrid from './KvGrid.vue';
 import StatusTag from './StatusTag.vue';
 
 const props = defineProps<{ world: Record<string, any> | null }>();
@@ -152,24 +186,64 @@ const phase = computed(() => textOf(econ.value?.世界经济气候?.整体周期
 const zones = computed(() => entriesOf(econ.value?.世界经济气候?.主要贸易区状态));
 const climateVisible = computed(() => isNonEmptyText(phase.value) || zones.value.length > 0);
 
-function hasCommodity(key: '粮食' | '矿产' | '能源'): boolean {
+type CommodityKey = '粮食' | '矿产' | '能源';
+
+const COMMODITY_META: Record<
+  CommodityKey,
+  { icon: string; tone: string; detailKey: string; detailLabel: string }
+> = {
+  粮食: { icon: '🌾', tone: 'is-grain', detailKey: '主要影响因素', detailLabel: '因素' },
+  矿产: { icon: '⛏️', tone: 'is-ore', detailKey: '重点品种', detailLabel: '品种' },
+  能源: { icon: '⚡', tone: 'is-energy', detailKey: '类型', detailLabel: '类型' },
+};
+
+function hasCommodity(key: CommodityKey): boolean {
   const block = econ.value?.大宗商品市场?.[key];
-  if (key === '粮食') return hasAnyText(block, ['供需', '主要影响因素', '价格趋势']);
-  if (key === '矿产') return hasAnyText(block, ['供需', '重点品种', '价格趋势']);
-  return hasAnyText(block, ['供需', '类型', '价格趋势']);
+  const detailKey = COMMODITY_META[key].detailKey;
+  return hasAnyText(block, ['供需', detailKey, '价格趋势']);
 }
-const commodityVisible = computed(
-  () => hasCommodity('粮食') || hasCommodity('矿产') || hasCommodity('能源'),
+
+const commodityCards = computed(() =>
+  (Object.keys(COMMODITY_META) as CommodityKey[])
+    .filter(hasCommodity)
+    .map(key => {
+      const block = econ.value?.大宗商品市场?.[key] as Record<string, unknown> | undefined;
+      const meta = COMMODITY_META[key];
+      return {
+        key,
+        icon: meta.icon,
+        tone: meta.tone,
+        supply: textOf(block?.供需).trim(),
+        trend: block?.价格趋势,
+        detailLabel: meta.detailLabel,
+        detail: textOf(block?.[meta.detailKey]).trim(),
+      };
+    }),
 );
+
+const commodityVisible = computed(() => commodityCards.value.length > 0);
 
 const baseUnit = computed(() => textOf(econ.value?.货币与金融?.基准计价单位).trim());
 const currencies = computed(() => entriesOf(econ.value?.货币与金融?.流通货币));
+const moneyMetrics = computed(() => {
+  const items: { label: string; value: string }[] = [];
+  const fx = econ.value?.货币与金融?.汇率波动指数;
+  const credit = econ.value?.货币与金融?.信贷环境;
+  const fxRate = textOf(fx?.综合汇率波动率).trim();
+  const fxFactor = textOf(fx?.主要影响因素).trim();
+  const creditStatus = textOf(credit?.状态).trim();
+  const creditRisk = textOf(credit?.系统性风险).trim();
+  if (fxRate) items.push({ label: '综合汇率波动率', value: fxRate });
+  if (fxFactor) items.push({ label: '主要影响因素', value: fxFactor });
+  if (creditStatus) items.push({ label: '信贷状态', value: creditStatus });
+  if (creditRisk) items.push({ label: '系统性风险', value: creditRisk });
+  return items;
+});
 const moneyVisible = computed(
   () =>
     isNonEmptyText(baseUnit.value) ||
     currencies.value.length > 0 ||
-    hasAnyText(econ.value?.货币与金融?.汇率波动指数, ['综合汇率波动率', '主要影响因素']) ||
-    hasAnyText(econ.value?.货币与金融?.信贷环境, ['状态', '系统性风险']),
+    moneyMetrics.value.length > 0,
 );
 
 const specMood = computed(() => textOf(econ.value?.投机市场?.市场整体情绪).trim());
