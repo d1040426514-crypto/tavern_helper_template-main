@@ -37,6 +37,17 @@ function isReadonlyPath(segments: string[]): boolean {
   return segments.some(segment => segment.startsWith('_'));
 }
 
+/** 拒绝世界级 `/{世界}/平行演化`；特异点.降临等其它路径不受影响 */
+export function isForbiddenParallelEvolutionPath(segments: string[]): boolean {
+  return segments.length === 2 && segments[1] === '平行演化';
+}
+
+function assertWritablePath(segments: string[]): void {
+  if (isForbiddenParallelEvolutionPath(segments)) {
+    throw new Error('平行演化仅允许前端写入，已跳过 AI patch');
+  }
+}
+
 function getAtPath(root: unknown, segments: string[]): unknown {
   let current = root;
   for (const segment of segments) {
@@ -136,6 +147,7 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       if (isReadonlyPath(segments)) {
         return;
       }
+      assertWritablePath(segments);
       setAtPath(root, segments, op.value);
       return;
     }
@@ -144,6 +156,7 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       if (isReadonlyPath(segments)) {
         return;
       }
+      assertWritablePath(segments);
       const current = getAtPath(root, segments);
       setAtPath(root, segments, coerceNumber(current) + coerceNumber(op.value));
       return;
@@ -153,6 +166,7 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       if (isReadonlyPath(segments)) {
         return;
       }
+      assertWritablePath(segments);
       const { parent, key } = resolveParent(root, segments);
       if (Array.isArray(parent)) {
         if (key === '-') {
@@ -171,6 +185,7 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       if (isReadonlyPath(segments)) {
         return;
       }
+      assertWritablePath(segments);
       removeAtPath(root, segments);
       return;
     }
@@ -180,6 +195,8 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       if (isReadonlyPath(fromSegments) || isReadonlyPath(toSegments)) {
         return;
       }
+      assertWritablePath(fromSegments);
+      assertWritablePath(toSegments);
       const value = getAtPath(root, fromSegments);
       removeAtPath(root, fromSegments);
       setAtPath(root, toSegments, value);

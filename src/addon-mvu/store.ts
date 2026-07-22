@@ -1,8 +1,10 @@
 import { prettifyErrorWithInput } from '@util/common';
 
+import { ensureAddonArchive, inheritAddonArchive } from './archive';
 import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
 import { stripInvalidStrictBooleans } from './schema';
 import { coerceAddonData } from './coerce';
+import { ensureAddonUi, inheritAddonUi } from './ui-state';
 import { updateAddonFromMessage } from './update';
 import { ADDON_KEY, AddonData, AddonSchema, normalizeAddonData } from './schema';
 
@@ -80,6 +82,8 @@ export function inheritAddon(message_id: number): AddonData {
   const previous = message_id > 0 ? getAddonData(message_id - 1) : undefined;
   const inherited = normalizeAddonData(previous);
   writeAddonData(message_id, inherited);
+  inheritAddonArchive(message_id);
+  inheritAddonUi(message_id);
   return inherited;
 }
 
@@ -114,6 +118,7 @@ export async function processFloor(message_id: number): Promise<void> {
   const result = await updateAddonFromMessage(chat_message.message, inherited, {
     emitEvents: true,
     message_content: chat_message.message,
+    message_id,
   });
 
   let data = inherited;
@@ -136,6 +141,9 @@ export function backfillChatAddonData(): void {
   for (let message_id = 0; message_id <= last_message_id; message_id++) {
     if (getAddonData(message_id) === undefined) {
       inheritAddon(message_id);
+    } else {
+      ensureAddonArchive(message_id);
+      ensureAddonUi(message_id);
     }
   }
 }
@@ -152,6 +160,7 @@ export async function applyAddonUpdateFromMessage(
   const result = await updateAddonFromMessage(message, base, {
     emitEvents: true,
     message_content: message,
+    message_id,
   });
 
   const data = result !== undefined ? result.data : base;

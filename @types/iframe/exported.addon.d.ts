@@ -321,6 +321,66 @@ declare const Addon: {
 
   /** 确保楼层存在 addon_data, 缺失时 inherit */
   ensureAddonData: (message_id: number) => Addon.AddonData;
+
+  /** 特异点存档状态 */
+  getArchive: (options?: Extract<VariableOption, { type: 'message' }>) => {
+    activeKey: string | null;
+    snapshots: Record<string, Addon.AddonData>;
+  };
+
+  getUiState: (options?: Extract<VariableOption, { type: 'message' }>) => {
+    位面交汇: boolean;
+    theme?: 'light' | 'dark';
+  };
+
+  setUiState: (
+    patch: { 位面交汇?: boolean; theme?: 'light' | 'dark' },
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => { 位面交汇: boolean; theme?: 'light' | 'dark' };
+
+  setTheme: (
+    theme: 'light' | 'dark',
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => { 位面交汇: boolean; theme?: 'light' | 'dark' };
+
+  setPlaneMerge: (
+    value: boolean,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => { 位面交汇: boolean; theme?: 'light' | 'dark' };
+
+  setSingularityDescent: (
+    world: string,
+    name: string,
+    value: boolean,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<{ data: Addon.AddonData; archive: { activeKey: string | null; snapshots: Record<string, Addon.AddonData> }; warnings: string[] }>;
+
+  setWorldDescent: (
+    world: string,
+    value: boolean,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<{ data: Addon.AddonData; archive: { activeKey: string | null; snapshots: Record<string, Addon.AddonData> }; warnings: string[] }>;
+
+  setWorldParallel: (
+    world: string,
+    value: boolean,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<{ data: Addon.AddonData; archive: { activeKey: string | null; snapshots: Record<string, Addon.AddonData> }; warnings: string[] }>;
+
+  createWorld: (
+    name: string,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<{ data: Addon.AddonData; archive: { activeKey: string | null; snapshots: Record<string, Addon.AddonData> }; warnings: string[] }>;
+
+  renameWorld: (
+    oldName: string,
+    newName: string,
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<{ data: Addon.AddonData; archive: { activeKey: string | null; snapshots: Record<string, Addon.AddonData> }; warnings: string[] }>;
+
+  syncReplicaLaunched: (
+    options?: Extract<VariableOption, { type: 'message' }>,
+  ) => Promise<string[]>;
 };
 
 interface ListenerType {

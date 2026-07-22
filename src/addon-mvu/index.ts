@@ -1,8 +1,9 @@
 import { waitUntil } from 'async-wait-until';
 import { reloadOnChatChange } from '@util/script';
 
+import { destroyAddonConsoleHost, injectAddonConsoleFab } from './fab';
 import { Addon } from './global-api';
-import { applyAddonUpdateFromMessage, backfillChatAddonData, processFloor } from './store';
+import { backfillChatAddonData, processFloor } from './store';
 
 export { randomMinorTitle, refreshNarrativeGuidanceDetails } from './narrative-guidance';
 export { ADDON_HIDDEN_FROM_PROMPT_KEYS, stripAddonHiddenFieldsForDisplay } from './display';
@@ -29,6 +30,18 @@ export {
   resolveMessageId,
   writeAddonData,
 } from './store';
+export { getAddonArchive, writeAddonArchive, normalizeAddonArchive, ADDON_ARCHIVE_KEY } from './archive';
+export { getAddonUi, writeAddonUi, normalizeAddonUi, ADDON_UI_KEY } from './ui-state';
+export {
+  activateSingularity,
+  deactivateSingularity,
+  reconcileSingularityAfterPatch,
+  setWorldDescent,
+  setWorldParallel,
+  createWorld,
+  renameWorld,
+} from './control';
+export { injectAddonConsoleFab, openAddonConsole, closeAddonConsole, toggleAddonConsole } from './fab';
 
 export const REPROCESS_ADDON_BUTTON_NAME = '重新处理addon变量';
 
@@ -37,6 +50,14 @@ function parentHasSillyTavern(): boolean {
     return !!_.get(window.parent, 'SillyTavern');
   } catch {
     return false;
+  }
+}
+
+function exposeAddonOnParent(): void {
+  try {
+    (window.parent as Window & { Addon?: typeof Addon }).Addon = Addon;
+  } catch {
+    /* cross-origin */
   }
 }
 
@@ -62,8 +83,14 @@ function initAddonMvu(): void {
 
   reloadOnChatChange();
   initializeGlobal('Addon', Addon);
+  exposeAddonOnParent();
+  errorCatched(injectAddonConsoleFab)();
 
-  console.info('[addon-mvu] 已加载: addon_data 继承、<AddonJSONPatch> 解析与 Addon 全局 API 已启用');
+  $(window).on('pagehide', () => {
+    errorCatched(destroyAddonConsoleHost)();
+  });
+
+  console.info('[addon-mvu] 已加载: addon_data / archive / ui、控制台悬浮球与 Addon API 已启用');
 }
 
 $(async () => {

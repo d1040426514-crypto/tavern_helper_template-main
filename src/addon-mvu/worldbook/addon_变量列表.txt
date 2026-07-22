@@ -2,7 +2,18 @@
 <%_
 function stripAddonForDisplay(data) {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
-  return _.cloneDeep(data);
+  const HIDDEN = new Set(['平行演化']);
+  function stripDeep(value) {
+    if (value == null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(stripDeep);
+    const next = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (HIDDEN.has(k)) continue;
+      next[k] = stripDeep(v);
+    }
+    return next;
+  }
+  return stripDeep(_.cloneDeep(data));
 }
 const addonData = getvar('addon_data');
 _%>

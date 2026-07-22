@@ -50,6 +50,8 @@ WorldPaper_Update_Rules:
       type: boolean
       check:
         - 是否启用平行演化观测；值必须为 JSON 布尔
+        - 【前端专用】仅控制台可写；AI 不可见、不可 patch `/{世界}/平行演化`
+        - 特异点.降临 仍可由 AI 写入
     刊报日期:
       format: 纪元/年号-YYYY年-MM月-DD日
       check:
@@ -145,6 +147,7 @@ WorldPaper_Update_Rules:
             type: boolean
             check:
               - 该特异点是否降临；值必须为 JSON 布尔
+              - AI 可写；同时只允许一个特异点降临（脚本状态机会互斥并管理 addon_archive 快照）
           分歧源头:
             check:
               - 填写引发分歧的正史演变纪名
