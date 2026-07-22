@@ -389,17 +389,27 @@
 
 @media (max-width: 640px) {
   .addon-console .ac-header {
-    padding: 10px 12px;
-    gap: 6px 8px;
+    padding: 8px 10px;
+    gap: 4px 8px;
   }
 
-  .addon-console .ac-header-icon-main {
-    font-size: 22px;
+  .addon-console .ac-header-icon-wrap {
+    display: none;
+  }
+
+  .addon-console .ac-header-brand {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .addon-console .ac-header-main-title,
   .addon-console .ac-header h1 {
-    font-size: 15px;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+  }
+
+  .addon-console .ac-header-sub {
+    font-size: 10px;
   }
 
   .addon-console .ac-header-sub-en {
@@ -408,13 +418,28 @@
 
   .addon-console .ac-header-datetime {
     font-size: 10px;
-    padding: 3px 8px;
+    padding: 2px 8px;
+    order: 3;
+  }
+
+  .addon-console .ac-tabs {
+    order: 4;
   }
 
   .addon-console .ac-header-actions {
-    width: 100%;
-    margin-left: 0;
-    justify-content: flex-end;
+    order: 5;
+    margin-left: auto;
+    gap: 4px;
+  }
+
+  .addon-console .ac-world-bar {
+    padding: 6px 10px;
+    gap: 4px;
+  }
+
+  .addon-console .ac-brief-page-tabs {
+    padding: 6px 10px;
+    gap: 6px;
   }
 
   .addon-console .ac-main-scroll {
@@ -424,6 +449,29 @@
   .addon-console .ac-tab,
   .addon-console .ac-chip,
   .addon-console .ac-btn {
-    min-height: 44px;
+    min-height: 40px;
+    padding: 5px 10px;
+  }
+
+  .addon-console .ac-theme-btn {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .addon-console .ac-switch {
+    width: 48px;
+    height: 28px;
+  }
+
+  .addon-console .ac-switch span::after {
+    width: 22px;
+    height: 22px;
+    left: 3px;
+    top: 3px;
+  }
+
+  .addon-console .ac-switch input:checked + span::after {
+    transform: translateX(20px);
   }
 }

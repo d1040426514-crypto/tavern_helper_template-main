@@ -194,6 +194,15 @@
   box-shadow: var(--shadow-lg), 0 0 0 1px rgba(200, 165, 90, 0.25) inset, 0 0 0 4px var(--paper-inset) inset;
 }
 
+/* 全屏宿主已对 shell 做 safe-area；此处兜底（非全屏嵌入时） */
+@media (max-width: 640px) {
+  .addon-console {
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
 .addon-console[data-theme='dark'] {
   background-image:
     radial-gradient(ellipse at 20% 10%, rgba(30, 20, 70, 0.7) 0%, transparent 55%),

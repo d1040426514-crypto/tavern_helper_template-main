@@ -138,10 +138,20 @@ function ensureStyles(): void {
 }
 @media (max-width:640px){
   #${SHELL_ID}{
-    padding:0;align-items:stretch;justify-content:stretch;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-right:env(safe-area-inset-right,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    padding-left:env(safe-area-inset-left,0px);
+    align-items:stretch;
+    justify-content:stretch;
+    box-sizing:border-box;
   }
   #${SHELL_ID} .ac-panel{
-    width:100%;height:100%;
+    width:auto;
+    height:auto;
+    flex:1;
+    align-self:stretch;
+    min-height:0;
     max-height:none;
     border-radius:0;
     border:0;
@@ -151,16 +161,37 @@ function ensureStyles(): void {
   doc.head.appendChild(style);
 }
 
+function readSafeAreaInsets(): { top: number; right: number; bottom: number; left: number } {
+  const doc = hostDoc();
+  const probe = doc.createElement('div');
+  probe.style.cssText =
+    'position:fixed;visibility:hidden;pointer-events:none;' +
+    'padding-top:env(safe-area-inset-top,0px);' +
+    'padding-right:env(safe-area-inset-right,0px);' +
+    'padding-bottom:env(safe-area-inset-bottom,0px);' +
+    'padding-left:env(safe-area-inset-left,0px)';
+  doc.body.appendChild(probe);
+  const cs = hostWin().getComputedStyle(probe);
+  const insets = {
+    top: Number.parseFloat(cs.paddingTop) || 0,
+    right: Number.parseFloat(cs.paddingRight) || 0,
+    bottom: Number.parseFloat(cs.paddingBottom) || 0,
+    left: Number.parseFloat(cs.paddingLeft) || 0,
+  };
+  probe.remove();
+  return insets;
+}
+
 function clampFabPosition(left: number, top: number, size = 48): { left: number; top: number } {
   const doc = hostDoc();
   const vv = hostWin().visualViewport;
   const vw = vv?.width ?? doc.documentElement.clientWidth;
   const vh = vv?.height ?? doc.documentElement.clientHeight;
   const pad = 8;
-  const safeBottom = 0;
+  const safe = readSafeAreaInsets();
   return {
-    left: Math.min(Math.max(pad, left), Math.max(pad, vw - size - pad)),
-    top: Math.min(Math.max(pad, top), Math.max(pad, vh - size - pad - safeBottom)),
+    left: Math.min(Math.max(pad + safe.left, left), Math.max(pad + safe.left, vw - size - pad - safe.right)),
+    top: Math.min(Math.max(pad + safe.top, top), Math.max(pad + safe.top, vh - size - pad - safe.bottom)),
   };
 }
 

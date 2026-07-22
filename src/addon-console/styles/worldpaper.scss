@@ -794,7 +794,6 @@
 .addon-console .ac-spec-card:hover {
   box-shadow: var(--shadow-gold);
   border-color: var(--gold-pale);
-  transform: translateY(-2px);
 }
 
 .addon-console .ac-currency-card:hover::after,
@@ -1188,7 +1187,6 @@
 .addon-console .ac-faction-card:hover {
   box-shadow: var(--shadow-gold);
   border-color: var(--gold-pale);
-  transform: translateY(-2px);
 }
 
 .addon-console .ac-plot-card-head {
@@ -1464,6 +1462,26 @@
   }
 }
 
+@media (hover: hover) and (pointer: fine) {
+  .addon-console .ac-currency-card:hover,
+  .addon-console .ac-spec-card:hover,
+  .addon-console .ac-plot-card:hover,
+  .addon-console .ac-faction-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+@media (max-width: 900px) {
+  .addon-console .ac-oracle-grid,
+  .addon-console .ac-faction-split {
+    grid-template-columns: 1fr;
+  }
+
+  .addon-console .ac-reputation-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
 @media (max-width: 640px) {
   .addon-console .ac-kv-grid {
     grid-template-columns: 1fr;
@@ -1496,25 +1514,22 @@
 
   .addon-console .ac-brief-nav-chip,
   .addon-console .ac-brief-page-tab {
-    min-height: 44px;
+    min-height: 40px;
   }
 
   .addon-console .ac-brief-page-tab {
     flex: 0 0 auto;
     font-size: 12px;
-    padding: 8px 12px;
+    padding: 6px 12px;
+  }
+
+  .addon-console .ac-brief-page-tab-icon {
+    display: none;
   }
 
   .addon-console .ac-timeline-row {
     grid-template-columns: 1fr;
     gap: 2px;
-  }
-
-  .addon-console .ac-currency-card:hover,
-  .addon-console .ac-spec-card:hover,
-  .addon-console .ac-plot-card:hover,
-  .addon-console .ac-faction-card:hover {
-    transform: none;
   }
 
   .addon-console .ac-oracle-grid,
