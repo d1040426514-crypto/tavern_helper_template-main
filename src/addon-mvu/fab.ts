@@ -90,11 +90,11 @@ function ensureStyles(): void {
   }
   style.textContent = `
 #${FAB_ID}{
-  --ac-fab-size:40px;
+  --ac-fab-size:28px;
   --ac-fab-ocean:#163039;
   --ac-fab-land:#5a9387;
   --ac-fab-orbit:rgba(120,170,180,.38);
-  --ac-fab-orbit-pad:7px;
+  --ac-fab-orbit-pad:4px;
   position:fixed;
   z-index:9990;
   width:var(--ac-fab-size);
@@ -110,7 +110,7 @@ function ensureStyles(): void {
   -webkit-tap-highlight-color:transparent;
   touch-action:none;
   overflow:visible;
-  filter:drop-shadow(0 4px 12px rgba(8,18,24,.55));
+  filter:drop-shadow(0 3px 8px rgba(8,18,24,.5));
   transition:filter .2s ease, transform .15s ease;
 }
 #${FAB_ID}:hover{transform:scale(1.06)}
@@ -130,20 +130,55 @@ function ensureStyles(): void {
   border:1px dashed var(--ac-fab-orbit);
   z-index:0;
 }
-#${FAB_ID}[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit{
-  animation:ac-fab-orbit-spin 18s linear infinite;
+#${FAB_ID} .ac-fab-orbit--0{
+  --ac-fab-orbit-pad:3px;
+  --ac-fab-orbit:rgba(120,170,180,.42);
+  border-style:dotted;
+}
+#${FAB_ID} .ac-fab-orbit--1{
+  --ac-fab-orbit-pad:6px;
+  --ac-fab-orbit:rgba(120,170,180,.34);
+  border-style:dashed;
+}
+#${FAB_ID} .ac-fab-orbit--2{
+  --ac-fab-orbit-pad:9px;
+  --ac-fab-orbit:rgba(120,170,180,.26);
+  border-style:dashed;
+  border-width:1px;
+  opacity:.95;
+}
+#${FAB_ID}[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--0{
+  animation:ac-fab-orbit-spin 14s linear infinite;
+}
+#${FAB_ID}[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--1{
+  animation:ac-fab-orbit-spin-rev 20s linear infinite;
+}
+#${FAB_ID}[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--2{
+  animation:ac-fab-orbit-spin 26s linear infinite;
 }
 #${FAB_ID}:hover .ac-fab-orbit{
   border-color:rgba(88,184,169,.55);
 }
-#${FAB_ID}:hover[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit{
-  animation-duration:12s;
+#${FAB_ID}:hover[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--0{
+  animation-duration:10s;
 }
-#${FAB_ID}:hover[data-worlds="0"] .ac-fab-orbit{
+#${FAB_ID}:hover[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--1{
+  animation-duration:14s;
+}
+#${FAB_ID}:hover[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit--2{
+  animation-duration:18s;
+}
+#${FAB_ID}:hover[data-worlds="0"] .ac-fab-orbit--0{
   animation:ac-fab-orbit-spin 12s linear infinite;
 }
+#${FAB_ID}:hover[data-worlds="0"] .ac-fab-orbit--1{
+  animation:ac-fab-orbit-spin-rev 16s linear infinite;
+}
+#${FAB_ID}:hover[data-worlds="0"] .ac-fab-orbit--2{
+  animation:ac-fab-orbit-spin 20s linear infinite;
+}
 #${FAB_ID} .ac-fab-moon{
-  --ac-fab-moon-size:6px;
+  --ac-fab-moon-size:4.5px;
   position:absolute;
   left:50%;
   top:50%;
@@ -152,17 +187,80 @@ function ensureStyles(): void {
   margin:calc(var(--ac-fab-moon-size) / -2);
   border-radius:50%;
   z-index:2;
-  background:
-    radial-gradient(circle at 30% 28%, rgba(255,255,255,.55), transparent 42%),
-    radial-gradient(circle at 50% 50%, hsl(var(--ac-fab-moon-hue,168) 42% 58%), hsl(var(--ac-fab-moon-hue,168) 38% 32%));
-  box-shadow:
-    0 0 0 1px rgba(229,240,237,.22),
-    0 1px 2px rgba(8,18,24,.35);
+  box-sizing:border-box;
   transform:rotate(calc(var(--i, 0) * 360deg / var(--n, 1)))
     translateY(calc(var(--ac-fab-size) / -2 - var(--ac-fab-orbit-pad)));
 }
+/* 0 潮汐青：类主球海洋 */
+#${FAB_ID} .ac-fab-moon--0{
+  background:
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,.65), transparent 45%),
+    radial-gradient(circle at 62% 68%, #2a6b62 0 28%, transparent 30%),
+    radial-gradient(circle at 50% 50%, #5a9387, #163039);
+  box-shadow:0 0 0 1px rgba(90,147,135,.45), 0 1px 2px rgba(8,18,24,.4);
+}
+/* 1 赤焰：火星质感 */
+#${FAB_ID} .ac-fab-moon--1{
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255,220,180,.5), transparent 42%),
+    radial-gradient(circle at 70% 60%, #8a3a28 0 22%, transparent 24%),
+    radial-gradient(circle at 50% 50%, #d4784a, #6b2418);
+  box-shadow:0 0 0 1px rgba(212,120,74,.5), 0 0 4px rgba(180,60,30,.35);
+}
+/* 2 琥珀环：气态巨星 + 细环 */
+#${FAB_ID} .ac-fab-moon--2{
+  --ac-fab-moon-size:4px;
+  background:
+    radial-gradient(circle at 35% 30%, rgba(255,245,200,.55), transparent 40%),
+    linear-gradient(115deg, #c9a227 0 28%, #e8c85a 28% 48%, #a67c1a 48% 72%, #d4b84a 72%);
+  box-shadow:
+    0 0 0 1px rgba(232,200,90,.15),
+    0 0 0 2px rgba(200,165,90,.55),
+    0 1px 2px rgba(8,18,24,.35);
+}
+/* 3 霜晶：冰蓝冰行星 */
+#${FAB_ID} .ac-fab-moon--3{
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,.8), transparent 40%),
+    radial-gradient(circle at 55% 55%, #9fd4e8, #3a6f8a);
+  box-shadow:0 0 0 1px rgba(159,212,232,.55), inset 0 -1px 1px rgba(40,80,110,.35);
+}
+/* 4 紫雾：星云紫 */
+#${FAB_ID} .ac-fab-moon--4{
+  background:
+    radial-gradient(circle at 30% 28%, rgba(230,210,255,.55), transparent 42%),
+    radial-gradient(circle at 68% 62%, #6b3d9e 0 26%, transparent 28%),
+    radial-gradient(circle at 50% 50%, #a878d4, #3d2460);
+  box-shadow:0 0 0 1px rgba(168,120,212,.45), 0 0 5px rgba(120,70,180,.4);
+}
+/* 5 翠屿：森绿陆地感 */
+#${FAB_ID} .ac-fab-moon--5{
+  background:
+    radial-gradient(circle at 32% 28%, rgba(220,255,220,.45), transparent 42%),
+    radial-gradient(circle at 40% 55%, #2f6b3a 0 30%, transparent 32%),
+    radial-gradient(circle at 70% 40%, #1a4a4a 0 18%, transparent 20%),
+    radial-gradient(circle at 50% 50%, #4caf7a, #1a3d2e);
+  box-shadow:0 0 0 1px rgba(76,175,122,.45), 0 1px 2px rgba(8,18,24,.4);
+}
+/* 6 蔷薇：暖粉岩 */
+#${FAB_ID} .ac-fab-moon--6{
+  background:
+    radial-gradient(circle at 30% 26%, rgba(255,240,245,.6), transparent 42%),
+    radial-gradient(circle at 60% 65%, #b04a6a 0 24%, transparent 26%),
+    radial-gradient(circle at 50% 50%, #e89ab0, #8a3050);
+  box-shadow:0 0 0 1px rgba(232,154,176,.5), 0 1px 2px rgba(8,18,24,.35);
+}
+/* 7 银晖：灰白月岩 + 陨坑 */
+#${FAB_ID} .ac-fab-moon--7{
+  background:
+    radial-gradient(circle at 28% 24%, rgba(255,255,255,.7), transparent 38%),
+    radial-gradient(circle at 62% 58%, #6a6e78 0 20%, transparent 22%),
+    radial-gradient(circle at 42% 70%, #5a5e66 0 14%, transparent 16%),
+    radial-gradient(circle at 50% 50%, #c8ccd4, #5e646e);
+  box-shadow:0 0 0 1px rgba(200,204,212,.5), inset 0 0 2px rgba(255,255,255,.25);
+}
 #${FAB_ID}[data-many-moons="1"] .ac-fab-moon{
-  --ac-fab-moon-size:5px;
+  --ac-fab-moon-size:3.5px;
 }
 #${FAB_ID} .ac-fab-globe{
   border-radius:50%;
@@ -186,11 +284,12 @@ function ensureStyles(): void {
   to{-webkit-mask-position:-200% center;mask-position:-200% center}
 }
 @keyframes ac-fab-orbit-spin{to{transform:rotate(360deg)}}
+@keyframes ac-fab-orbit-spin-rev{to{transform:rotate(-360deg)}}
 @media (max-width:640px){
-  #${FAB_ID}{--ac-fab-size:36px}
+  #${FAB_ID}{--ac-fab-size:26px}
 }
 @media (max-width:380px){
-  #${FAB_ID}{--ac-fab-size:32px}
+  #${FAB_ID}{--ac-fab-size:24px}
 }
 @media (prefers-reduced-motion:reduce){
   #${FAB_ID} .ac-fab-globe::before,
@@ -272,8 +371,12 @@ function ensureStyles(): void {
 `;
 }
 
+const ORBIT_RING_COUNT = 3;
+
 const FAB_MARKUP =
-  '<span class="ac-fab-orbit" aria-hidden="true"></span>' +
+  '<span class="ac-fab-orbit ac-fab-orbit--0" aria-hidden="true"></span>' +
+  '<span class="ac-fab-orbit ac-fab-orbit--1" aria-hidden="true"></span>' +
+  '<span class="ac-fab-orbit ac-fab-orbit--2" aria-hidden="true"></span>' +
   '<span class="ac-fab-globe" aria-hidden="true"></span>';
 
 function readSafeAreaInsets(): { top: number; right: number; bottom: number; left: number } {
@@ -304,9 +407,9 @@ function getFabSize(fab?: HTMLElement | null): number {
     if (w > 0) return w;
   }
   const vw = hostWin().visualViewport?.width ?? hostDoc().documentElement.clientWidth;
-  if (vw <= 380) return 32;
-  if (vw <= 640) return 36;
-  return 40;
+  if (vw <= 380) return 24;
+  if (vw <= 640) return 26;
+  return 28;
 }
 
 function clampFabPosition(left: number, top: number, size?: number): { left: number; top: number } {
@@ -579,37 +682,72 @@ function countWorlds(): number {
   }
 }
 
-/** 按 addon_data 世界数刷新轨道小星球 */
+/** 八种小星球样式，按世界序号循环 */
+const MOON_STYLE_COUNT = 8;
+
+function moonStyleClass(index: number): string {
+  return `ac-fab-moon ac-fab-moon--${index % MOON_STYLE_COUNT}`;
+}
+
+function ensureOrbitRings(fab: HTMLElement): HTMLElement[] {
+  const doc = hostDoc();
+  let orbits = [...fab.querySelectorAll(':scope > .ac-fab-orbit')] as HTMLElement[];
+  if (orbits.length === ORBIT_RING_COUNT && orbits.every((el, i) => el.classList.contains(`ac-fab-orbit--${i}`))) {
+    return orbits;
+  }
+  orbits.forEach(el => el.remove());
+  const globe = fab.querySelector(':scope > .ac-fab-globe');
+  const created: HTMLElement[] = [];
+  for (let r = 0; r < ORBIT_RING_COUNT; r++) {
+    const span = doc.createElement('span');
+    span.className = `ac-fab-orbit ac-fab-orbit--${r}`;
+    span.setAttribute('aria-hidden', 'true');
+    if (globe) fab.insertBefore(span, globe);
+    else fab.appendChild(span);
+    created.push(span);
+  }
+  return created;
+}
+
+/** 按 addon_data 世界数刷新轨道小星球（轮询分配到三层轨道） */
 export function syncFabOrbitPlanets(): void {
   const fab = hostDoc().getElementById(FAB_ID) as HTMLElement | null;
   if (!fab) return;
-  const orbit = fab.querySelector('.ac-fab-orbit') as HTMLElement | null;
-  if (!orbit) return;
+  const orbits = ensureOrbitRings(fab);
 
   const n = countWorlds();
   fab.setAttribute('data-worlds', String(n));
   if (n > 8) fab.setAttribute('data-many-moons', '1');
   else fab.removeAttribute('data-many-moons');
-  orbit.style.setProperty('--n', String(Math.max(n, 1)));
 
-  const existing = orbit.querySelectorAll('.ac-fab-moon');
-  if (existing.length === n) {
-    existing.forEach((el, i) => {
-      (el as HTMLElement).style.setProperty('--i', String(i));
-    });
-    return;
-  }
-
-  orbit.querySelectorAll('.ac-fab-moon').forEach(el => el.remove());
+  const byRing: number[][] = Array.from({ length: ORBIT_RING_COUNT }, () => []);
   for (let i = 0; i < n; i++) {
-    const moon = hostDoc().createElement('span');
-    moon.className = 'ac-fab-moon';
-    moon.setAttribute('aria-hidden', 'true');
-    moon.style.setProperty('--i', String(i));
-    // 色相围绕青绿海洋色微调，避免全部同色
-    moon.style.setProperty('--ac-fab-moon-hue', String(155 + ((i * 37) % 80)));
-    orbit.appendChild(moon);
+    byRing[i % ORBIT_RING_COUNT]!.push(i);
   }
+
+  orbits.forEach((orbit, ring) => {
+    const worldIndexes = byRing[ring] ?? [];
+    orbit.style.setProperty('--n', String(Math.max(worldIndexes.length, 1)));
+
+    const existing = [...orbit.querySelectorAll(':scope > .ac-fab-moon')] as HTMLElement[];
+    if (existing.length === worldIndexes.length) {
+      existing.forEach((moon, slot) => {
+        const worldIndex = worldIndexes[slot]!;
+        moon.className = moonStyleClass(worldIndex);
+        moon.style.setProperty('--i', String(slot));
+      });
+      return;
+    }
+
+    existing.forEach(el => el.remove());
+    worldIndexes.forEach((worldIndex, slot) => {
+      const moon = hostDoc().createElement('span');
+      moon.className = moonStyleClass(worldIndex);
+      moon.setAttribute('aria-hidden', 'true');
+      moon.style.setProperty('--i', String(slot));
+      orbit.appendChild(moon);
+    });
+  });
 }
 
 function bindOrbitSyncListeners(): void {

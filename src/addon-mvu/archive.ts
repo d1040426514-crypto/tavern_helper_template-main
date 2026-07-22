@@ -107,3 +107,20 @@ export function remapArchiveWorldKeys(archive: AddonArchive, oldWorld: string, n
   }
   return next;
 }
+
+/** 删除世界时清理 archive 的 activeKey 与 snapshot keys */
+export function removeArchiveWorldKeys(archive: AddonArchive, world: string): AddonArchive {
+  const next: AddonArchive = {
+    activeKey: archive.activeKey?.startsWith(`${world}/`) ? null : archive.activeKey,
+    snapshots: {},
+  };
+  for (const [key, snap] of Object.entries(archive.snapshots)) {
+    if (key.startsWith(`${world}/`)) continue;
+    const remappedSnap = _.cloneDeep(snap);
+    if (world in remappedSnap) {
+      delete remappedSnap[world];
+    }
+    next.snapshots[key] = remappedSnap;
+  }
+  return next;
+}

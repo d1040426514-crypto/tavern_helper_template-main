@@ -1,6 +1,7 @@
 import { getAddonArchive } from './archive';
 import {
   applyCreateWorld,
+  applyDeleteWorld,
   applyRenameWorld,
   applySetSingularityDescent,
   applySetWorldDescent,
@@ -152,6 +153,13 @@ export const Addon = {
   ) {
     const message_id = resolveAddonMessageId(options);
     const result = await applyRenameWorld(message_id, oldName, newName, requireFloorData, writeAddonData);
+    syncFabOrbitPlanets();
+    return result;
+  },
+
+  async deleteWorld(name: string, options: AddonMessageOption = { type: 'message', message_id: 'latest' }) {
+    const message_id = resolveAddonMessageId(options);
+    const result = await applyDeleteWorld(message_id, name, requireFloorData, writeAddonData);
     syncFabOrbitPlanets();
     return result;
   },

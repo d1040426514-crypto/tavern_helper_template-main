@@ -33,6 +33,10 @@ export type AddonConsoleApi = {
     newName: string,
     options?: { type: 'message'; message_id: number | 'latest' },
   ) => Promise<{ data: Record<string, any>; warnings?: string[] }>;
+  deleteWorld: (
+    name: string,
+    options?: { type: 'message'; message_id: number | 'latest' },
+  ) => Promise<{ data: Record<string, any>; warnings?: string[] }>;
   setSingularityDescent: (
     world: string,
     name: string,

@@ -190,3 +190,32 @@ export async function renameReplicaWorldAttr(oldWorld: string, newWorld: string)
   }
   return warnings;
 }
+
+/** 删除世界时移除对应副本族成员 */
+export async function removeReplicaWorldMember(world: string): Promise<string[]> {
+  const warnings: string[] = [];
+  const trimmed = world.trim();
+  if (!trimmed) return warnings;
+  const api = getReplicaApi();
+  if (!api) {
+    warnings.push('AcuPostProcessAPI 未就绪，跳过副本族删除');
+    return warnings;
+  }
+  const root = findWorldReplicaRoot(api);
+  if (!root) return warnings;
+
+  const all = api.listTasks() as Array<Record<string, unknown>>;
+  const next = all.filter(
+    t => !(t.replicaFamilyRootId === root.id && t.replicaFamilyAttrValue === trimmed),
+  );
+  if (next.length === all.length) {
+    warnings.push(`未找到世界副本: ${trimmed}`);
+    return warnings;
+  }
+  try {
+    await api.replaceTasks(next);
+  } catch (e) {
+    warnings.push(`副本族删除失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
+  return warnings;
+}

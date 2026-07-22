@@ -203,6 +203,110 @@
   border-color: transparent;
 }
 
+.addon-console .ac-btn.danger {
+  background: color-mix(in srgb, var(--danger, #b42318) 88%, #1a1208);
+  border-color: color-mix(in srgb, var(--danger, #b42318) 70%, transparent);
+  color: #fff8f6;
+  font-weight: 600;
+}
+
+.addon-console .ac-btn.danger:hover {
+  background: var(--danger, #b42318);
+}
+
+.addon-console .ac-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.addon-console .ac-world-rename-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.addon-console .ac-world-rename-row .ac-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.addon-console .ac-icon-btn {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  min-height: 32px;
+  padding: 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(232, 213, 176, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.addon-console .ac-icon-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.addon-console .ac-icon-btn.danger {
+  color: var(--danger, #d45a4a);
+  border-color: color-mix(in srgb, var(--danger, #d45a4a) 35%, transparent);
+}
+
+.addon-console .ac-icon-btn.danger:hover {
+  background: color-mix(in srgb, var(--danger, #d45a4a) 16%, transparent);
+  border-color: color-mix(in srgb, var(--danger, #d45a4a) 55%, transparent);
+  color: #f09080;
+}
+
+.addon-console .ac-confirm-mask {
+  position: absolute;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(12, 16, 28, 0.55);
+  backdrop-filter: blur(2px);
+}
+
+.addon-console .ac-confirm-dialog {
+  width: min(360px, 100%);
+  padding: 16px 16px 14px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(200, 164, 92, 0.28);
+  background: var(--surface-raised, #1a2030);
+  box-shadow: 0 12px 32px rgba(8, 12, 24, 0.45);
+}
+
+.addon-console .ac-confirm-title {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--section-header-color, inherit);
+}
+
+.addon-console .ac-confirm-body {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-light, #a8a090);
+  word-break: break-word;
+}
+
+.addon-console .ac-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .addon-console .ac-theme-btn {
   width: 36px;
   height: 36px;

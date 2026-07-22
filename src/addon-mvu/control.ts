@@ -4,6 +4,7 @@ import {
   getAddonArchive,
   makeSingularityKey,
   remapArchiveWorldKeys,
+  removeArchiveWorldKeys,
   writeAddonArchive,
   type AddonArchive,
 } from './archive';
@@ -13,7 +14,12 @@ import {
   findNewlyActivatedSingularity,
   setSingularityFlag,
 } from './singularity';
-import { syncReplicaLaunched, renameReplicaWorldAttr, ensureWorldReplicaMember } from './replica-sync';
+import {
+  syncReplicaLaunched,
+  renameReplicaWorldAttr,
+  removeReplicaWorldMember,
+  ensureWorldReplicaMember,
+} from './replica-sync';
 
 export type ControlResult = {
   data: AddonData;
@@ -187,6 +193,17 @@ export function renameWorld(
   return { data: normalizeAddonData(nextData), archive: nextArchive, warnings: [] };
 }
 
+export function deleteWorld(data: AddonData, archive: AddonArchive, name: string): ControlResult {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('世界名不能为空');
+  if (!(trimmed in data)) throw new Error(`世界不存在: ${trimmed}`);
+
+  const nextData = _.cloneDeep(data);
+  delete nextData[trimmed];
+  const nextArchive = removeArchiveWorldKeys(archive, trimmed);
+  return { data: normalizeAddonData(nextData), archive: nextArchive, warnings: [] };
+}
+
 /** 将控制结果写回楼层，并同步副本族 */
 export async function commitControlResult(
   message_id: number,
@@ -269,4 +286,18 @@ export async function applyRenameWorld(
   const renameWarnings = await renameReplicaWorldAttr(oldName.trim(), newName.trim());
   const syncWarnings = await syncReplicaLaunched(result.data);
   return { ...result, warnings: [...result.warnings, ...renameWarnings, ...syncWarnings] };
+}
+
+export async function applyDeleteWorld(
+  message_id: number,
+  name: string,
+  getData: (id: number) => AddonData,
+  writeData: (id: number, data: AddonData) => void,
+): Promise<ControlResult> {
+  const result = deleteWorld(getData(message_id), getAddonArchive(message_id), name);
+  writeData(message_id, result.data);
+  writeAddonArchive(message_id, result.archive);
+  const removeWarnings = await removeReplicaWorldMember(name.trim());
+  const syncWarnings = await syncReplicaLaunched(result.data);
+  return { ...result, warnings: [...result.warnings, ...removeWarnings, ...syncWarnings] };
 }

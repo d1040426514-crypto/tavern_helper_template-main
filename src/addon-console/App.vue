@@ -89,6 +89,7 @@
               @set-parallel="onWorldParallel"
               @create="onCreateWorld"
               @rename="onRenameWorld"
+              @delete="onDeleteWorld"
             />
           </div>
           <SingularityPanel :items="singularities" @toggle="onSingularity" />
@@ -214,6 +215,11 @@ async function onCreateWorld(name: string) {
 async function onRenameWorld(oldName: string, newName: string) {
   if (!api) return;
   applyResult(await api.renameWorld(oldName, newName, latestOpts()), newName);
+}
+
+async function onDeleteWorld(name: string) {
+  if (!api) return;
+  applyResult(await api.deleteWorld(name, latestOpts()));
 }
 
 async function onSingularity(name: string, value: boolean) {

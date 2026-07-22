@@ -7,12 +7,14 @@ import {
   makeSingularityKey,
   normalizeAddonArchive,
   remapArchiveWorldKeys,
+  removeArchiveWorldKeys,
   type AddonArchive,
 } from './archive';
 import {
   activateSingularity,
   createWorld,
   deactivateSingularity,
+  deleteWorld,
   reconcileSingularityAfterPatch,
   renameWorld,
   setWorldDescent,
@@ -135,6 +137,46 @@ test('createWorld and renameWorld', () => {
   assert.equal(renamed.data['新世界'], undefined);
   assert.equal(renamed.archive.activeKey, '改名世界/点');
   assert.ok(renamed.archive.snapshots['改名世界/点']);
+});
+
+test('deleteWorld removes data key and archive entries', () => {
+  let data = normalizeAddonData({
+    甲: { 刊报日期: '1' },
+    乙: { 刊报日期: '2' },
+  });
+  const archive: AddonArchive = {
+    activeKey: '甲/特异点',
+    snapshots: {
+      '甲/特异点': _.cloneDeep(data),
+      '乙/另一点': normalizeAddonData({ 甲: { 刊报日期: 'x' }, 乙: { 刊报日期: 'y' } }),
+    },
+  };
+  const deleted = deleteWorld(data, archive, '甲');
+  assert.equal(deleted.data['甲'], undefined);
+  assert.ok(deleted.data['乙']);
+  assert.equal(deleted.archive.activeKey, null);
+  assert.equal(deleted.archive.snapshots['甲/特异点'], undefined);
+  assert.ok(deleted.archive.snapshots['乙/另一点']);
+  assert.equal(deleted.archive.snapshots['乙/另一点']?.['甲'], undefined);
+  assert.ok(deleted.archive.snapshots['乙/另一点']?.['乙']);
+
+  assert.throws(() => deleteWorld(data, archive, '不存在'), /世界不存在/);
+  assert.throws(() => deleteWorld(data, archive, '  '), /世界名不能为空/);
+});
+
+test('removeArchiveWorldKeys', () => {
+  const archive: AddonArchive = {
+    activeKey: '旧/甲',
+    snapshots: {
+      '旧/甲': normalizeAddonData({ 旧: { 刊报日期: '1' }, 他: {} }),
+      '他/乙': normalizeAddonData({ 旧: { 刊报日期: '2' }, 他: {} }),
+    },
+  };
+  const next = removeArchiveWorldKeys(archive, '旧');
+  assert.equal(next.activeKey, null);
+  assert.equal(next.snapshots['旧/甲'], undefined);
+  assert.ok(next.snapshots['他/乙']);
+  assert.equal(next.snapshots['他/乙']?.['旧'], undefined);
 });
 
 test('remapArchiveWorldKeys', () => {

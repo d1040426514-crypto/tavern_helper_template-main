@@ -40,6 +40,7 @@ export {
   setWorldParallel,
   createWorld,
   renameWorld,
+  deleteWorld,
 } from './control';
 export { injectAddonConsoleFab, openAddonConsole, closeAddonConsole, toggleAddonConsole, syncFabOrbitPlanets } from './fab';
 
