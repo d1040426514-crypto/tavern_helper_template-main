@@ -16,15 +16,38 @@
     <div v-if="hasOracle" class="ac-oracle-grid">
       <div v-if="macro" class="ac-oracle-cell">
         <div class="ac-oracle-label">宏观层</div>
-        <div class="ac-oracle-value">{{ macro }}</div>
+        <div class="ac-oracle-value">{{ macroName || macro }}</div>
+        <div v-if="macroSymbol" class="ac-hexagram-row">
+          <span class="ac-hexagram" aria-hidden="true">{{ macroSymbol }}</span>
+        </div>
       </div>
       <div v-if="develop" class="ac-oracle-cell">
         <div class="ac-oracle-label">发展层</div>
         <div class="ac-oracle-value">{{ develop }}</div>
+        <div v-if="developCards.length" class="ac-tarot-row">
+          <figure
+            v-for="(c, i) in developCards"
+            :key="'d-' + c.name + i"
+            class="ac-tarot-card"
+            :class="{ 'is-reversed': c.reversed }"
+          >
+            <img v-if="tarotSrc(c.name)" :src="tarotSrc(c.name)" :alt="c.name" />
+          </figure>
+        </div>
       </div>
       <div v-if="detail" class="ac-oracle-cell">
         <div class="ac-oracle-label">细节层</div>
         <div class="ac-oracle-value">{{ detail }}</div>
+        <div v-if="detailCards.length" class="ac-tarot-row">
+          <figure
+            v-for="(c, i) in detailCards"
+            :key="'t-' + c.name + i"
+            class="ac-tarot-card"
+            :class="{ 'is-reversed': c.reversed }"
+          >
+            <img v-if="tarotSrc(c.name)" :src="tarotSrc(c.name)" :alt="c.name" />
+          </figure>
+        </div>
       </div>
     </div>
 
@@ -42,6 +65,7 @@
 
 <script setup lang="ts">
 import { isNonEmptyText, textOf, timelineEntries } from '../../brief-utils';
+import { parseTarotList, tarotSrc } from '../../tarot';
 
 const props = defineProps<{
   name: string;
@@ -55,6 +79,23 @@ const guidance = computed(() => props.node?.叙事指导 as Record<string, any> 
 const macro = computed(() => textOf(guidance.value?.宏观层).trim());
 const develop = computed(() => textOf(guidance.value?.发展层).trim());
 const detail = computed(() => textOf(guidance.value?.细节层).trim());
+
+/** 解析 `䷽·小过` / `䷽小过` → 卦象符号 + 卦名 */
+function parseHexagram(raw: string): { symbol: string; name: string } {
+  const text = raw.trim();
+  if (!text) return { symbol: '', name: '' };
+  const dotted = text.match(/^([\u4DC0-\u4DFF])\s*[·•‧.\-—–]\s*(.+)$/u);
+  if (dotted) return { symbol: dotted[1]!, name: dotted[2]!.trim() };
+  const glued = text.match(/^([\u4DC0-\u4DFF])\s*(.*)$/u);
+  if (glued) return { symbol: glued[1]!, name: glued[2]!.trim() };
+  return { symbol: '', name: text };
+}
+
+const macroParsed = computed(() => parseHexagram(macro.value));
+const macroSymbol = computed(() => macroParsed.value.symbol);
+const macroName = computed(() => macroParsed.value.name);
+const developCards = computed(() => parseTarotList(develop.value).filter(c => tarotSrc(c.name)));
+const detailCards = computed(() => parseTarotList(detail.value).filter(c => tarotSrc(c.name)));
 const hasOracle = computed(
   () => isNonEmptyText(macro.value) || isNonEmptyText(develop.value) || isNonEmptyText(detail.value),
 );
