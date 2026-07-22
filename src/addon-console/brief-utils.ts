@@ -103,17 +103,28 @@ export function getInfluenceClass(influence: unknown): StatusClass {
 
 export type HeatTone = 'heat-high' | 'heat-mid' | 'heat-low' | '';
 
-/** 投机标的交易热度：高 | 中 | 低 */
+/** 投机标的交易热度：高 | 中 | 低（及展示文案 抢手/平稳/冷门） */
 export function parseHeatTone(value: unknown): HeatTone {
   const s = textOf(value).trim();
   if (!s) return '';
-  if (/^高$|沸腾|火热|极高|很热/i.test(s)) return 'heat-high';
-  if (/^低$|冷清|冰点|极低|清淡/i.test(s)) return 'heat-low';
-  if (/^中$|平稳|一般|正常/i.test(s)) return 'heat-mid';
-  if (/高/.test(s)) return 'heat-high';
-  if (/低/.test(s)) return 'heat-low';
-  if (/中/.test(s)) return 'heat-mid';
+  if (/^高$|^抢手$|沸腾|火热|极高|很热/i.test(s)) return 'heat-high';
+  if (/^低$|^冷门$|冷清|冰点|极低|清淡/i.test(s)) return 'heat-low';
+  if (/^中$|^平稳$|一般|正常/i.test(s)) return 'heat-mid';
+  if (/高|抢手/.test(s)) return 'heat-high';
+  if (/低|冷门/.test(s)) return 'heat-low';
+  if (/中|平稳/.test(s)) return 'heat-mid';
   return '';
+}
+
+/** 交易热度展示：高→抢手，中→平稳，低→冷门 */
+export function formatHeatLabel(value: unknown): string {
+  const raw = textOf(value).trim();
+  if (!raw) return '';
+  const tone = parseHeatTone(raw);
+  if (tone === 'heat-high') return '抢手';
+  if (tone === 'heat-mid') return '平稳';
+  if (tone === 'heat-low') return '冷门';
+  return raw;
 }
 
 export type SupplyTone = 'supply-tight' | 'supply-surplus' | 'supply-steady' | '';

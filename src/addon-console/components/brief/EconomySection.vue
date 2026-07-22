@@ -103,7 +103,8 @@
               :class="parseHeatTone(node?.交易热度)"
               :title="'交易热度 ' + textOf(node?.交易热度)"
             >
-              {{ textOf(node?.交易热度) }}
+              <span class="ac-heat-badge-mark" aria-hidden="true" />
+              {{ formatHeatLabel(node?.交易热度) }}
             </span>
           </header>
           <div class="ac-currency-rate-row">
@@ -194,7 +195,7 @@
 </template>
 
 <script setup lang="ts">
-import { entriesOf, hasAnyText, isNonEmptyText, parseHeatTone, parseSupplyTone, textOf } from '../../brief-utils';
+import { entriesOf, formatHeatLabel, hasAnyText, isNonEmptyText, parseHeatTone, parseSupplyTone, textOf } from '../../brief-utils';
 import ChangeBadge from './ChangeBadge.vue';
 import StatusTag from './StatusTag.vue';
 
