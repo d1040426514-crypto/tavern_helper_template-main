@@ -1,29 +1,45 @@
 <template>
   <div class="ac-brief">
-    <nav v-if="world" class="ac-brief-nav" aria-label="简报分区">
-      <button
-        v-for="item in navItems"
-        :key="item.id"
-        type="button"
-        class="ac-brief-nav-chip"
-        @click="scrollTo(item.id)"
-      >
-        {{ item.label }}
-      </button>
-    </nav>
-
-    <div v-if="!world" class="ac-hint">请选择世界以查看简报</div>
-    <div v-else class="ac-brief-scroll">
+    <template v-if="!world">
+      <div class="ac-hint">📜 请选择世界以查看简报</div>
+    </template>
+    <template v-else>
       <BriefMasthead :world-name="worldName" :world="world" />
-      <EraStageSection :world="world" />
-      <EraDynamicsSection :world="world" />
-      <ChronicleSection :world="world" />
-      <EpicSection :world="world" />
-      <PlotEventsSection :world="world" />
-      <FactionsSection :world="world" />
-      <EconomySection :world="world" />
-      <p class="ac-brief-foot ac-muted">空字段区块已自动隐藏 · 点击分区标题展开详情</p>
-    </div>
+
+      <nav class="ac-brief-page-tabs" aria-label="简报子页">
+        <button
+          v-for="item in pages"
+          :key="item.id"
+          type="button"
+          class="ac-brief-page-tab"
+          :class="{ active: briefPage === item.id }"
+          @click="briefPage = item.id"
+        >
+          <span class="ac-brief-page-tab-icon" aria-hidden="true">{{ item.icon }}</span>
+          <span>{{ item.label }}</span>
+        </button>
+      </nav>
+
+      <div class="ac-brief-scroll">
+        <div v-show="briefPage === 'era'" class="ac-brief-page">
+          <EraStageSection :world="world" />
+          <EraDynamicsSection :world="world" />
+          <ChronicleSection :world="world" />
+          <EpicSection :world="world" />
+        </div>
+
+        <div v-show="briefPage === 'plot'" class="ac-brief-page">
+          <PlotEventsSection :world="world" />
+          <FactionsSection :world="world" />
+        </div>
+
+        <div v-show="briefPage === 'econ'" class="ac-brief-page">
+          <EconomySection :world="world" />
+        </div>
+
+        <p class="ac-brief-foot">✧ 星穹档案馆编撰 · 帝国天文台印制 ✧</p>
+      </div>
+    </template>
   </div>
 </template>
 
@@ -37,23 +53,18 @@ import EraStageSection from './brief/EraStageSection.vue';
 import FactionsSection from './brief/FactionsSection.vue';
 import PlotEventsSection from './brief/PlotEventsSection.vue';
 
-const props = defineProps<{
+defineProps<{
   world: Record<string, any> | null;
   worldName: string;
 }>();
 
-const navItems = [
-  { id: 'brief-masthead', label: '刊头' },
-  { id: 'brief-era', label: '时代' },
-  { id: 'brief-dynamics', label: '演进' },
-  { id: 'brief-chronicle', label: '史书' },
-  { id: 'brief-epic', label: '史诗' },
-  { id: 'brief-plot', label: '剧情' },
-  { id: 'brief-factions', label: '团体' },
-  { id: 'brief-econ', label: '经济' },
-];
+type BriefPage = 'era' | 'plot' | 'econ';
 
-function scrollTo(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-}
+const briefPage = ref<BriefPage>('era');
+
+const pages: Array<{ id: BriefPage; label: string; icon: string }> = [
+  { id: 'era', label: '时代快讯', icon: '🕰️' },
+  { id: 'plot', label: '世界剧情态势', icon: '⚔️' },
+  { id: 'econ', label: '世界经济简报', icon: '💰' },
+];
 </script>

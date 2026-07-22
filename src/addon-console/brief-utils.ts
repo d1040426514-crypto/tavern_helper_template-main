@@ -50,3 +50,43 @@ export function kvPairs(obj: unknown, labels?: string[]): { key: string; value: 
     .filter(k => isNonEmptyText(o[k]) && typeof o[k] !== 'object')
     .map(k => ({ key: k, value: textOf(o[k]) }));
 }
+
+/** 时代阶段字段 → 正则同款图标 */
+export const ERA_FIELD_ICONS: Record<string, string> = {
+  核心社会组织形式: '🏛️',
+  主流世界观与思潮: '💭',
+  '主流世界观/思潮': '💭',
+  主要经济模式: '⚙️',
+  技术特征: '🔧',
+  主导性能源与动力: '⚡',
+  '主导性能源/动力': '⚡',
+  关键材料标志: '🔩',
+  社会阶级结构: '👥',
+  生产力与生产关系矛盾: '⚖️',
+  '生产力-生产关系矛盾': '⚖️',
+  世界秩序格局: '🗺️',
+};
+
+export function eraFieldIcon(label: string): string {
+  return ERA_FIELD_ICONS[label] || '📌';
+}
+
+export type StatusClass = '' | 'status-embryo' | 'status-developing' | 'status-critical';
+
+/** 与正则 getStatusClass 对齐 */
+export function getStatusClass(status: unknown): StatusClass {
+  const s = textOf(status).trim();
+  if (!s) return '';
+  if (/萌芽|胚胎|embryo/i.test(s)) return 'status-embryo';
+  if (/发展|developing|进行/i.test(s)) return 'status-developing';
+  if (/临界|critical|变革|前夜/i.test(s)) return 'status-critical';
+  return '';
+}
+
+export function isCriticalStatus(status: unknown): boolean {
+  return getStatusClass(status) === 'status-critical';
+}
+
+export function isCompletedOutcome(outcome: unknown): boolean {
+  return /成功|定鼎/i.test(textOf(outcome));
+}

@@ -1,6 +1,6 @@
 <template>
   <section class="ac-section">
-    <h2 class="ac-section-title">世界控制</h2>
+    <h2 class="ac-section-title">🌐 世界控制</h2>
     <div class="ac-section-body">
       <div class="ac-world-tabs">
         <button

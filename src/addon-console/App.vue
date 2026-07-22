@@ -1,10 +1,17 @@
 <template>
   <div class="addon-console" :data-theme="theme">
     <header class="ac-header">
-      <div class="ac-header-brand">
-        <h1>世界时局与经济简报</h1>
-        <p class="ac-header-sub">{{ headerDate || '等待刊报' }}</p>
+      <div class="ac-header-icon-wrap" aria-hidden="true">
+        <span class="ac-header-icon-main">🌍</span>
+        <span class="ac-header-icon-accent">✦</span>
       </div>
+      <div class="ac-header-brand">
+        <h1 class="ac-header-main-title">世界时局与经济简报</h1>
+        <p class="ac-header-sub">
+          <span class="ac-header-sub-en">Imperial Astronomical Archives · </span>星穹档案馆
+        </p>
+      </div>
+      <div v-if="headerDate" class="ac-header-datetime">⏳ {{ headerDate }}</div>
       <div class="ac-tabs">
         <button type="button" class="ac-tab" :class="{ active: tab === 'brief' }" @click="tab = 'brief'">
           简报
@@ -14,7 +21,14 @@
         </button>
       </div>
       <div class="ac-header-actions">
-        <button type="button" class="ac-btn" @click="toggleTheme">{{ theme === 'dark' ? '亮色' : '暗色' }}</button>
+        <button
+          type="button"
+          class="ac-btn ac-theme-btn"
+          :title="theme === 'dark' ? '切换浅色' : '切换深色'"
+          @click="toggleTheme"
+        >
+          {{ theme === 'dark' ? '☀️' : '🌙' }}
+        </button>
         <button type="button" class="ac-btn" @click="reload">刷新</button>
         <button type="button" class="ac-btn ghost" @click="closeHost">关闭</button>
       </div>
@@ -35,7 +49,7 @@
       </button>
     </div>
 
-    <div v-if="loading" class="ac-hint">连接 Addon API…</div>
+    <div v-if="loading" class="ac-hint">⏳ 连接 Addon API…</div>
     <div v-else-if="error" class="ac-hint ac-warn">{{ error }}</div>
     <div v-else class="ac-main">
       <div v-if="warnings.length" class="ac-warn" style="margin: 10px 14px 0">
@@ -69,6 +83,8 @@
 
 <script setup lang="ts">
 import './styles/tokens.scss';
+import './styles/shell.scss';
+import './styles/worldpaper.scss';
 import { latestOpts, waitAddon, type AddonConsoleApi } from './bridge';
 import PlaneMergeToggle from './components/PlaneMergeToggle.vue';
 import SingularityPanel from './components/SingularityPanel.vue';

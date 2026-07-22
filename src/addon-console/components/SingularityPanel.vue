@@ -1,6 +1,6 @@
 <template>
   <section class="ac-section">
-    <h2 class="ac-section-title">特异点</h2>
+    <h2 class="ac-section-title">✦ 特异点</h2>
     <div class="ac-section-body">
       <div v-if="!items.length" class="ac-muted">当前世界暂无特异点条目</div>
       <div v-for="item in items" :key="item.name" class="ac-row">

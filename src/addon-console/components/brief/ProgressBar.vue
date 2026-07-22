@@ -5,7 +5,7 @@
       <span>{{ display }}</span>
     </div>
     <div class="ac-progress-track">
-      <div class="ac-progress-fill" :style="{ width: `${pct}%` }" />
+      <div class="ac-progress-fill" :class="{ critical }" :style="{ width: `${pct}%` }" />
     </div>
   </div>
 </template>
@@ -18,8 +18,9 @@ const props = withDefaults(
     value?: unknown;
     label?: string;
     showZero?: boolean;
+    critical?: boolean;
   }>(),
-  { value: '', label: '进度', showZero: false },
+  { value: '', label: '进度', showZero: false, critical: false },
 );
 
 const pct = computed(() => parseProgressPct(props.value));

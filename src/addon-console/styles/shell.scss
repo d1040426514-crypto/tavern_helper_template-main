@@ -1,0 +1,414 @@
+/* App chrome: header, tabs, world bar, controls */
+
+.addon-console .ac-header {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 12px;
+  padding: 12px 16px;
+  background: var(--header-bg);
+  color: var(--header-text);
+  border-bottom: 2px solid var(--gold);
+  position: relative;
+  z-index: 3;
+}
+
+.addon-console .ac-header-icon-wrap {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.3));
+}
+
+.addon-console .ac-header-icon-main {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.addon-console .ac-header-icon-accent {
+  font-size: 12px;
+  color: var(--gold-bright);
+  opacity: 0.9;
+  animation: ac-star-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes ac-star-pulse {
+  0%,
+  100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.25);
+  }
+}
+
+.addon-console .ac-header-brand {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 10em;
+}
+
+.addon-console .ac-header h1,
+.addon-console .ac-header-main-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  font-family: var(--font-display);
+  color: var(--gold-pale);
+  line-height: 1.25;
+}
+
+.addon-console .ac-header-sub {
+  margin: 0;
+  font-size: 11px;
+  opacity: 0.78;
+  letter-spacing: 0.04em;
+  font-family: var(--font-serif);
+}
+
+.addon-console .ac-header-datetime {
+  flex-shrink: 0;
+  font-size: 11px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(232, 213, 176, 0.35);
+  background: rgba(0, 0, 0, 0.22);
+  color: var(--gold-pale);
+  white-space: nowrap;
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+  align-items: center;
+}
+
+.addon-console .ac-tabs {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.addon-console .ac-tab {
+  border: 1px solid rgba(232, 213, 176, 0.28);
+  background: rgba(255, 255, 255, 0.06);
+  color: inherit;
+  border-radius: 999px;
+  padding: 6px 14px;
+  min-height: 36px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.addon-console .ac-tab.active {
+  background: var(--gold);
+  border-color: var(--gold-bright);
+  color: #1a1208;
+  font-weight: 650;
+}
+
+.addon-console .ac-world-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 6px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--divider);
+  background: rgba(255, 254, 251, 0.45);
+  -webkit-overflow-scrolling: touch;
+}
+
+.addon-console[data-theme='dark'] .ac-world-bar {
+  background: rgba(12, 18, 36, 0.55);
+}
+
+.addon-console .ac-chip {
+  border: 1px solid var(--divider);
+  background: var(--cream-dark);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  min-height: 36px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.addon-console .ac-chip.active {
+  background: var(--deep-navy);
+  border-color: var(--gold);
+  color: var(--gold-pale);
+}
+
+.addon-console .ac-btn {
+  border: 1px solid rgba(232, 213, 176, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+  color: inherit;
+  border-radius: var(--radius-sm);
+  padding: 6px 12px;
+  min-height: 36px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.addon-console .ac-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+
+.addon-console .ac-btn:active {
+  transform: scale(0.97);
+}
+
+.addon-console .ac-btn.primary {
+  background: var(--gold);
+  border-color: var(--gold-bright);
+  color: #1a1208;
+  font-weight: 600;
+}
+
+.addon-console .ac-btn.ghost {
+  border-color: transparent;
+}
+
+.addon-console .ac-theme-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.addon-console .ac-main {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: ac-fade-up 0.28s ease both;
+}
+
+.addon-console .ac-main-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 14px 16px 20px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.addon-console .ac-control-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  align-items: start;
+}
+
+.addon-console .ac-section {
+  background: var(--surface-raised);
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  position: relative;
+}
+
+.addon-console .ac-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--gold), var(--gold-bright), var(--gold), transparent);
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+.addon-console .ac-section-title {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--section-header-color);
+  border-bottom: 1px solid var(--divider);
+  background: var(--section-header-bg);
+  font-family: var(--font-display);
+}
+
+.addon-console .ac-section-body {
+  padding: 10px 12px;
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 28px 12px;
+  text-align: center;
+  font-family: var(--font-serif);
+}
+
+.addon-console .ac-warn {
+  color: var(--rust);
+  font-size: 12px;
+  padding: 6px 10px;
+  background: rgba(160, 82, 75, 0.08);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 1px dashed var(--divider);
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-row:last-child {
+  border-bottom: none;
+}
+
+.addon-console .ac-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.addon-console .ac-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.addon-console .ac-switch {
+  position: relative;
+  width: 40px;
+  height: 22px;
+  flex-shrink: 0;
+}
+
+.addon-console .ac-switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.addon-console .ac-switch span {
+  position: absolute;
+  inset: 0;
+  background: var(--slate);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.addon-console .ac-switch span::after {
+  content: '';
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  left: 3px;
+  top: 3px;
+  background: #fff;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+}
+
+.addon-console .ac-switch input:checked + span {
+  background: var(--toggle-on);
+}
+
+.addon-console .ac-switch input:checked + span::after {
+  transform: translateX(18px);
+}
+
+.addon-console .ac-input {
+  width: 100%;
+  border: 1px solid var(--divider);
+  border-radius: var(--radius-sm);
+  background: var(--cream-bg);
+  color: var(--text);
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: var(--font-body);
+  min-height: 40px;
+}
+
+.addon-console .ac-world-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+@media (max-width: 720px) {
+  .addon-console .ac-control-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .addon-console .ac-header {
+    padding: 10px 12px;
+    gap: 6px 8px;
+  }
+
+  .addon-console .ac-header-icon-main {
+    font-size: 22px;
+  }
+
+  .addon-console .ac-header-main-title,
+  .addon-console .ac-header h1 {
+    font-size: 15px;
+  }
+
+  .addon-console .ac-header-sub-en {
+    display: none;
+  }
+
+  .addon-console .ac-header-datetime {
+    font-size: 10px;
+    padding: 3px 8px;
+  }
+
+  .addon-console .ac-header-actions {
+    width: 100%;
+    margin-left: 0;
+    justify-content: flex-end;
+  }
+
+  .addon-console .ac-main-scroll {
+    padding: 10px 12px 16px;
+  }
+
+  .addon-console .ac-tab,
+  .addon-console .ac-chip,
+  .addon-console .ac-btn {
+    min-height: 44px;
+  }
+}

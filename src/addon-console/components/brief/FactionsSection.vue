@@ -1,21 +1,20 @@
 <template>
-  <section v-if="visible" class="ac-brief-section" id="brief-factions">
-    <h3 class="ac-brief-h">团体动态</h3>
-
+  <BriefSection v-if="visible" id="brief-factions" icon="🏛️" title="团体动态">
     <div v-if="worldFactions.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">世界背景团体</h4>
+      <h4 class="ac-brief-subh">🌐 世界背景团体</h4>
       <FactionCard v-for="[name, node] in worldFactions" :key="name" :name="name" :node="node" />
     </div>
 
     <div v-if="regionFactions.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">当前区域团体</h4>
+      <h4 class="ac-brief-subh">📍 当前区域团体</h4>
       <FactionCard v-for="[name, node] in regionFactions" :key="name" :name="name" :node="node" />
     </div>
-  </section>
+  </BriefSection>
 </template>
 
 <script setup lang="ts">
 import { entriesOf, textOf } from '../../brief-utils';
+import BriefSection from './BriefSection.vue';
 import FoldBlock from './FoldBlock.vue';
 import KvGrid from './KvGrid.vue';
 
@@ -59,8 +58,8 @@ const FactionCard = defineComponent({
               ? h('div', { class: 'ac-nested' }, [
                   h('div', { class: 'ac-kv-key' }, '权力支柱'),
                   ...pillars.map(([k, v]) =>
-                    h('div', { class: 'ac-timeline-row', key: k }, [
-                      h('strong', null, k),
+                    h('div', { class: 'ac-timeline-node', key: k }, [
+                      h('strong', null, k + ' · '),
                       h('span', null, textOf(v)),
                     ]),
                   ),
@@ -70,8 +69,8 @@ const FactionCard = defineComponent({
               ? h('div', { class: 'ac-nested' }, [
                   h('div', { class: 'ac-kv-key' }, '外交关系'),
                   ...diplomacy.map(([k, v]) =>
-                    h('div', { class: 'ac-timeline-row', key: k }, [
-                      h('strong', null, k),
+                    h('div', { class: 'ac-timeline-node', key: k }, [
+                      h('strong', null, k + ' · '),
                       h('span', null, textOf(v)),
                     ]),
                   ),
@@ -99,8 +98,8 @@ const FactionCard = defineComponent({
                             ? h('div', { class: 'ac-nested' }, [
                                 h('div', { class: 'ac-kv-key' }, '权力支柱'),
                                 ...entriesOf((pbody as any)?.权力支柱).map(([k, v]) =>
-                                  h('div', { class: 'ac-timeline-row', key: k }, [
-                                    h('strong', null, k),
+                                  h('div', { class: 'ac-timeline-node', key: k }, [
+                                    h('strong', null, k + ' · '),
                                     h('span', null, textOf(v)),
                                   ]),
                                 ),

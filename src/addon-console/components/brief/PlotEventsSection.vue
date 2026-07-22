@@ -1,9 +1,7 @@
 <template>
-  <section v-if="visible" class="ac-brief-section" id="brief-plot">
-    <h3 class="ac-brief-h">时局动态</h3>
-
+  <BriefSection v-if="visible" id="brief-plot" icon="⚔️" title="时局动态">
     <div v-if="worldEvents.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">世界背景事件</h4>
+      <h4 class="ac-brief-subh">🌐 世界背景事件</h4>
       <FoldBlock
         v-for="[name, node] in worldEvents"
         :key="name"
@@ -15,7 +13,7 @@
     </div>
 
     <div v-if="regionEvents.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">当前区域事件</h4>
+      <h4 class="ac-brief-subh">📍 当前区域事件</h4>
       <FoldBlock
         v-for="[name, node] in regionEvents"
         :key="name"
@@ -27,7 +25,7 @@
     </div>
 
     <div v-if="rumors.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">传闻</h4>
+      <h4 class="ac-brief-subh">💬 传闻</h4>
       <FoldBlock
         v-for="[name, node] in rumors"
         :key="name"
@@ -53,11 +51,12 @@
         </div>
       </FoldBlock>
     </div>
-  </section>
+  </BriefSection>
 </template>
 
 <script setup lang="ts">
 import { entriesOf, textOf } from '../../brief-utils';
+import BriefSection from './BriefSection.vue';
 import FoldBlock from './FoldBlock.vue';
 import KvGrid from './KvGrid.vue';
 
@@ -89,8 +88,8 @@ const EventBody = defineComponent({
           ? h('div', { class: 'ac-nested' }, [
               h('div', { class: 'ac-kv-key' }, '事件脉络'),
               ...timeline.map(([k, v]) =>
-                h('div', { class: 'ac-timeline-row', key: k }, [
-                  h('strong', null, k),
+                h('div', { class: 'ac-timeline-node', key: k }, [
+                  h('strong', null, k + ' · '),
                   h('span', null, textOf(v)),
                 ]),
               ),
