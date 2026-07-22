@@ -3,6 +3,8 @@ import { createPinia } from 'pinia';
 import { teleportStyle } from '@util/script';
 
 import ConsoleApp from '../addon-console/App.vue';
+import { AddonEvent } from './events';
+import { getAddonData, hasChatMessages } from './store';
 
 const FAB_ID = 'addon-console-fab';
 const SHELL_ID = 'addon-console-shell';
@@ -39,6 +41,14 @@ let vueApp: VueApp | null = null;
 let styleDestroy: (() => void) | null = null;
 let bodyOverflowBackup: string | null = null;
 let escHandler: ((e: KeyboardEvent) => void) | null = null;
+let orbitSyncBound = false;
+
+const onChatChangedForOrbit = () => {
+  syncFabOrbitPlanets();
+};
+const onVariableUpdateEndedForOrbit = () => {
+  syncFabOrbitPlanets();
+};
 
 function hostDoc(): Document {
   try {
@@ -77,8 +87,6 @@ function ensureStyles(): void {
     style.id = STYLE_ID;
     style.setAttribute(HOST_ATTR, '1');
     doc.head.appendChild(style);
-  } else if (style.textContent && style.textContent.includes(`#${FAB_ID}`)) {
-    return;
   }
   style.textContent = `
 #${FAB_ID}{
@@ -86,6 +94,7 @@ function ensureStyles(): void {
   --ac-fab-ocean:#163039;
   --ac-fab-land:#5a9387;
   --ac-fab-orbit:rgba(120,170,180,.38);
+  --ac-fab-orbit-pad:7px;
   position:fixed;
   z-index:9990;
   width:var(--ac-fab-size);
@@ -116,10 +125,44 @@ function ensureStyles(): void {
   pointer-events:none;
 }
 #${FAB_ID} .ac-fab-orbit{
-  inset:-7px;
+  inset:calc(var(--ac-fab-orbit-pad) * -1);
   border-radius:50%;
   border:1px dashed var(--ac-fab-orbit);
   z-index:0;
+}
+#${FAB_ID}[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit{
+  animation:ac-fab-orbit-spin 18s linear infinite;
+}
+#${FAB_ID}:hover .ac-fab-orbit{
+  border-color:rgba(88,184,169,.55);
+}
+#${FAB_ID}:hover[data-worlds]:not([data-worlds="0"]) .ac-fab-orbit{
+  animation-duration:12s;
+}
+#${FAB_ID}:hover[data-worlds="0"] .ac-fab-orbit{
+  animation:ac-fab-orbit-spin 12s linear infinite;
+}
+#${FAB_ID} .ac-fab-moon{
+  --ac-fab-moon-size:6px;
+  position:absolute;
+  left:50%;
+  top:50%;
+  width:var(--ac-fab-moon-size);
+  height:var(--ac-fab-moon-size);
+  margin:calc(var(--ac-fab-moon-size) / -2);
+  border-radius:50%;
+  z-index:2;
+  background:
+    radial-gradient(circle at 30% 28%, rgba(255,255,255,.55), transparent 42%),
+    radial-gradient(circle at 50% 50%, hsl(var(--ac-fab-moon-hue,168) 42% 58%), hsl(var(--ac-fab-moon-hue,168) 38% 32%));
+  box-shadow:
+    0 0 0 1px rgba(229,240,237,.22),
+    0 1px 2px rgba(8,18,24,.35);
+  transform:rotate(calc(var(--i, 0) * 360deg / var(--n, 1)))
+    translateY(calc(var(--ac-fab-size) / -2 - var(--ac-fab-orbit-pad)));
+}
+#${FAB_ID}[data-many-moons="1"] .ac-fab-moon{
+  --ac-fab-moon-size:5px;
 }
 #${FAB_ID} .ac-fab-globe{
   border-radius:50%;
@@ -138,10 +181,6 @@ function ensureStyles(): void {
   mask:url("${WORLDMAP_MASK}") 0 center / 200% 100% repeat-x;
   animation:ac-fab-map-scroll 28s linear infinite;
 }
-#${FAB_ID}:hover .ac-fab-orbit{
-  border-color:rgba(88,184,169,.55);
-  animation:ac-fab-orbit-spin 12s linear infinite;
-}
 @keyframes ac-fab-map-scroll{
   from{-webkit-mask-position:0 center;mask-position:0 center}
   to{-webkit-mask-position:-200% center;mask-position:-200% center}
@@ -155,12 +194,16 @@ function ensureStyles(): void {
 }
 @media (prefers-reduced-motion:reduce){
   #${FAB_ID} .ac-fab-globe::before,
+  #${FAB_ID} .ac-fab-orbit,
   #${FAB_ID}:hover .ac-fab-orbit{animation:none}
   #${FAB_ID}{transition:none}
 }
 @media (hover:none){
   #${FAB_ID}:hover{transform:none}
-  #${FAB_ID}:hover .ac-fab-orbit{animation:none;border-color:var(--ac-fab-orbit)}
+  #${FAB_ID} .ac-fab-orbit{
+    animation:none;
+    border-color:var(--ac-fab-orbit);
+  }
 }
 
 #${SHELL_ID}{
@@ -525,14 +568,82 @@ export function toggleAddonConsole(): void {
   else openAddonConsole();
 }
 
+function countWorlds(): number {
+  try {
+    if (!hasChatMessages()) return 0;
+    const message_id = getLastMessageId();
+    const data = getAddonData(message_id);
+    return Object.keys(data ?? {}).length;
+  } catch {
+    return 0;
+  }
+}
+
+/** 按 addon_data 世界数刷新轨道小星球 */
+export function syncFabOrbitPlanets(): void {
+  const fab = hostDoc().getElementById(FAB_ID) as HTMLElement | null;
+  if (!fab) return;
+  const orbit = fab.querySelector('.ac-fab-orbit') as HTMLElement | null;
+  if (!orbit) return;
+
+  const n = countWorlds();
+  fab.setAttribute('data-worlds', String(n));
+  if (n > 8) fab.setAttribute('data-many-moons', '1');
+  else fab.removeAttribute('data-many-moons');
+  orbit.style.setProperty('--n', String(Math.max(n, 1)));
+
+  const existing = orbit.querySelectorAll('.ac-fab-moon');
+  if (existing.length === n) {
+    existing.forEach((el, i) => {
+      (el as HTMLElement).style.setProperty('--i', String(i));
+    });
+    return;
+  }
+
+  orbit.querySelectorAll('.ac-fab-moon').forEach(el => el.remove());
+  for (let i = 0; i < n; i++) {
+    const moon = hostDoc().createElement('span');
+    moon.className = 'ac-fab-moon';
+    moon.setAttribute('aria-hidden', 'true');
+    moon.style.setProperty('--i', String(i));
+    // 色相围绕青绿海洋色微调，避免全部同色
+    moon.style.setProperty('--ac-fab-moon-hue', String(155 + ((i * 37) % 80)));
+    orbit.appendChild(moon);
+  }
+}
+
+function bindOrbitSyncListeners(): void {
+  if (orbitSyncBound) return;
+  orbitSyncBound = true;
+  eventOn(tavern_events.CHAT_CHANGED, onChatChangedForOrbit);
+  eventOn(AddonEvent.VARIABLE_UPDATE_ENDED, onVariableUpdateEndedForOrbit);
+}
+
+function unbindOrbitSyncListeners(): void {
+  if (!orbitSyncBound) return;
+  orbitSyncBound = false;
+  try {
+    eventRemoveListener(tavern_events.CHAT_CHANGED, onChatChangedForOrbit);
+  } catch {
+    /* ignore */
+  }
+  try {
+    eventRemoveListener(AddonEvent.VARIABLE_UPDATE_ENDED, onVariableUpdateEndedForOrbit);
+  } catch {
+    /* ignore */
+  }
+}
+
 export function injectAddonConsoleFab(): void {
   ensureStyles();
   exposeHostApi();
+  bindOrbitSyncListeners();
   const doc = hostDoc();
   const existing = doc.getElementById(FAB_ID) as HTMLButtonElement | null;
   if (existing) {
     // 脚本 iframe 热重载时保留父页悬浮球 DOM，仅重绑事件，避免闪没
     bindFabDrag(existing);
+    syncFabOrbitPlanets();
     return;
   }
 
@@ -546,6 +657,7 @@ export function injectAddonConsoleFab(): void {
   loadFabPosition(fab);
   bindFabDrag(fab);
   hostBody().appendChild(fab);
+  syncFabOrbitPlanets();
 
   hostWin().addEventListener('resize', () => {
     const left = parseFloat(fab.style.left || '0');
@@ -566,6 +678,7 @@ export function softTeardownAddonConsoleHost(): void {
 }
 
 export function destroyAddonConsoleHost(): void {
+  unbindOrbitSyncListeners();
   softTeardownAddonConsoleHost();
   const doc = hostDoc();
   doc.getElementById(FAB_ID)?.remove();

@@ -41,7 +41,7 @@ export {
   createWorld,
   renameWorld,
 } from './control';
-export { injectAddonConsoleFab, openAddonConsole, closeAddonConsole, toggleAddonConsole } from './fab';
+export { injectAddonConsoleFab, openAddonConsole, closeAddonConsole, toggleAddonConsole, syncFabOrbitPlanets } from './fab';
 
 export const REPROCESS_ADDON_BUTTON_NAME = '重新处理addon变量';
 

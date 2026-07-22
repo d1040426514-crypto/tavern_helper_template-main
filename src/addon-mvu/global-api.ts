@@ -7,6 +7,7 @@ import {
   applySetWorldParallel,
 } from './control';
 import { AddonEvent } from './events';
+import { syncFabOrbitPlanets } from './fab';
 import {
   applyAddonUpdateFromMessage,
   ensureAddonData,
@@ -139,7 +140,9 @@ export const Addon = {
 
   async createWorld(name: string, options: AddonMessageOption = { type: 'message', message_id: 'latest' }) {
     const message_id = resolveAddonMessageId(options);
-    return applyCreateWorld(message_id, name, requireFloorData, writeAddonData);
+    const result = await applyCreateWorld(message_id, name, requireFloorData, writeAddonData);
+    syncFabOrbitPlanets();
+    return result;
   },
 
   async renameWorld(
@@ -148,7 +151,9 @@ export const Addon = {
     options: AddonMessageOption = { type: 'message', message_id: 'latest' },
   ) {
     const message_id = resolveAddonMessageId(options);
-    return applyRenameWorld(message_id, oldName, newName, requireFloorData, writeAddonData);
+    const result = await applyRenameWorld(message_id, oldName, newName, requireFloorData, writeAddonData);
+    syncFabOrbitPlanets();
+    return result;
   },
 
   async syncReplicaLaunched(options: AddonMessageOption = { type: 'message', message_id: 'latest' }) {
