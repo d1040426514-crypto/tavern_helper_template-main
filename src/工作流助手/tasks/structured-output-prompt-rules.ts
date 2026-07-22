@@ -103,6 +103,7 @@ function removeAutoPromptGroups(task: PostProcessTask): void {
 }
 
 export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: StructuredOutputMode): void {
+  const existingIndex = task.promptGroups.findIndex(pg => isStructuredOutputRulesPromptGroup(pg.name));
   captureStructuredOutputRulesFromTask(task);
   removeAutoPromptGroups(task);
   if (mode === 'off') return;
@@ -110,10 +111,14 @@ export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: Str
   const name =
     mode === 'mvu_json_patch' ? MVU_JSON_PATCH_PROMPT_GROUP_NAME : ADDON_JSON_PATCH_PROMPT_GROUP_NAME;
   const content = resolveStructuredOutputRulesContent(task, mode);
-  task.promptGroups.push({
+  const group = {
     name,
-    role: 'system',
+    role: 'system' as const,
     content,
     enabled: true,
-  });
+  };
+  // 已存在时插回原位，避免手动排序后被 push 到末尾
+  const insertAt =
+    existingIndex >= 0 ? Math.min(existingIndex, task.promptGroups.length) : task.promptGroups.length;
+  task.promptGroups.splice(insertAt, 0, group);
 }

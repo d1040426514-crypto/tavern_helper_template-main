@@ -73,6 +73,39 @@ test('mvu to addon replaces auto group name', () => {
   assert.ok(!/位面/.test(task.promptGroups[1]!.content));
 });
 
+test('sync preserves existing auto group index', () => {
+  const task = makeTask({
+    promptGroups: [
+      { name: 'a', role: 'user', content: '1', enabled: true },
+      { name: 'b', role: 'user', content: '2', enabled: true },
+      { name: 'c', role: 'user', content: '3', enabled: true },
+    ],
+  });
+  syncStructuredOutputPromptGroup(task, 'mvu_json_patch');
+  // 移到中间
+  const auto = task.promptGroups.pop()!;
+  task.promptGroups.splice(1, 0, auto);
+  assert.equal(task.promptGroups[1]!.name, MVU_JSON_PATCH_PROMPT_GROUP_NAME);
+  syncStructuredOutputPromptGroup(task, 'mvu_json_patch');
+  assert.equal(task.promptGroups[1]!.name, MVU_JSON_PATCH_PROMPT_GROUP_NAME);
+  assert.equal(task.promptGroups.map(p => p.name).join(','), `a,${MVU_JSON_PATCH_PROMPT_GROUP_NAME},b,c`);
+});
+
+test('mvu to addon preserves custom index', () => {
+  const task = makeTask({
+    promptGroups: [
+      { name: 'a', role: 'user', content: '1', enabled: true },
+      { name: 'b', role: 'user', content: '2', enabled: true },
+    ],
+  });
+  syncStructuredOutputPromptGroup(task, 'mvu_json_patch');
+  const auto = task.promptGroups.pop()!;
+  task.promptGroups.splice(0, 0, auto);
+  syncStructuredOutputPromptGroup(task, 'addon_json_patch');
+  assert.equal(task.promptGroups[0]!.name, ADDON_JSON_PATCH_PROMPT_GROUP_NAME);
+  assert.equal(task.promptGroups.map(p => p.name).join(','), `${ADDON_JSON_PATCH_PROMPT_GROUP_NAME},a,b`);
+});
+
 test('renamed auto group is not removed on sync', () => {
   const task = makeTask();
   syncStructuredOutputPromptGroup(task, 'mvu_json_patch');

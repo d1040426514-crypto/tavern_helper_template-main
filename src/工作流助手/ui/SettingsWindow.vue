@@ -878,11 +878,17 @@ function syncWorldbookWritePlacement(rule: { placement?: { position?: string; de
 }
 
 watch(
-  () => selectedTask.value?.structuredOutputMode,
-  (mode, oldMode) => {
+  () => ({
+    id: selectedTask.value?.id,
+    mode: selectedTask.value?.structuredOutputMode,
+  }),
+  (curr, prev) => {
     const task = selectedTask.value;
-    if (!task || mode == null || mode === oldMode || oldMode === undefined) return;
-    syncStructuredOutputPromptGroup(task, mode);
+    // 仅同一任务上用户主动改模式时 sync；切任务导致的 mode 变化不重排提示词段
+    if (!task || curr?.mode == null || prev?.mode === undefined) return;
+    if (curr.id !== prev.id) return;
+    if (curr.mode === prev.mode) return;
+    syncStructuredOutputPromptGroup(task, curr.mode);
   },
 );
 
