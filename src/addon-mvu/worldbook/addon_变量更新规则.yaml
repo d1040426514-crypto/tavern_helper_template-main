@@ -146,8 +146,8 @@ WorldPaper_Update_Rules:
           降临:
             type: boolean
             check:
-              - 该特异点是否降临；值必须为 JSON 布尔
-              - AI 可写；同时只允许一个特异点降临（脚本状态机会互斥并管理 addon_archive 快照）
+              - <user>是否降临该特异点；值必须为 JSON 布尔
+              - 同时只允许降临一个特异点
           分歧源头:
             check:
               - 填写引发分歧的正史演变纪名
@@ -386,7 +386,7 @@ WorldPaper_Update_Rules:
           format: 狂热 | 乐观 | 谨慎 | 恐慌 | 萧条等
         主要交易标的.${标的名称}:
           类型:
-            format: 股票 | 期货 | 期权 | 份额等
+            format: 股票 | 期权 | 份额等；不含期货
           当前价格:
             format: ${X.XX} ${基准计价单位符号}
           上期价格:
