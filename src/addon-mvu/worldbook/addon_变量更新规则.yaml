@@ -88,6 +88,26 @@ WorldPaper_Update_Rules:
         时代差格局:
           check:
             - 描述主要文明区域所处的不同时代阶段及其互动基调，如：核心区已迈入XX时代，周边区域仍处于XX时代，彼此关系以和平贸易/军事征服/文化输出为主
+        潜在时代演化:
+          type: |-
+            {
+              [时代名称: string]: {
+                开始日期: string;
+                进度: string;
+                状态: string;
+                推动因子: string;
+                抑止因子: string;
+                描述: string;
+                已完结转折点事件影响: {
+                  [关联事件名: string]: {
+                    起止日期: string;
+                    最终结局: string;
+                    事件脉络: string;
+                    时代影响: string;
+                  }
+                };
+              }
+            }
         潜在时代演化.${时代名称}:
           开始日期:
             format: 纪元/年号-YYYY年-MM月-DD日
@@ -118,6 +138,28 @@ WorldPaper_Update_Rules:
                 - 总结该已完结转折点事件的总体时代影响
           check:
             - 进行中、未入正史的潜在格局演化；进度完结后主线写入正史演变纪，平行分歧写入特异点分歧纪段
+        时代关键转折点:
+          type: |-
+            {
+              [转折点事件名: string]: {
+                临界事件: boolean;
+                进度: string;
+                干预态势: { 推动力: string; 抑止力: string };
+                关联潜在时代: string;
+                描述: string;
+                总体影响: string;
+                事件脉络: {
+                  [事件节点编号: string]: {
+                    开始日期: string;
+                    结束日期: string;
+                    干预方向: string;
+                    干预强度: string;
+                    描述: string;
+                    影响: string;
+                  }
+                };
+              }
+            }
         时代关键转折点.${转折点事件名}:
           临界事件:
             type: boolean
@@ -149,24 +191,29 @@ WorldPaper_Update_Rules:
             干预强度:
               format: 高 | 中 | 低
             描述:
-              check: 该节点事件进展与走向
+              check:
+                - 该节点事件进展与走向
             影响:
-              check: 该节点事件的影响概述
+              check:
+                - 该节点事件的影响概述
             check:
-              - 转折点事件链出现新节点或节点进展变化时更新
+              - 转折点事件脉络出现新节点或节点进展变化时更新
           check:
             - 时代级大事件推进时更新，完结后可移入潜在时代的已完结影响
       岁月史书:
-        正史.${演变纪名}:
+        正史:
           type: |-
             {
-              前时代称谓: string;
-              后时代称谓: string;
-              演变起止: string;
-              描述: string;
-              历史影响: string;
-              关键转折: string;
+              [演变纪名: string]: {
+                前时代称谓: string;
+                后时代称谓: string;
+                演变起止: string;
+                描述: string;
+                历史影响: string;
+                关键转折: string;
+              }
             }
+        正史.${演变纪名}:
           前时代称谓:
             check:
               - 该演变纪发生时所处的旧时代阶段称谓
@@ -175,11 +222,35 @@ WorldPaper_Update_Rules:
               - 该演变纪结束后进入的新时代阶段称谓
           演变起止:
             format: 纪元/年号-YYYY年-MM月-DD日 ~ 纪元/年号-YYYY年-MM月-DD日
+          描述:
+            check:
+              - 该演变纪的过程概述
+          历史影响:
+            check:
+              - 该演变对后世格局的长期影响
           关键转折:
             check:
               - 关联的临界事件或关键转折点事件
           check:
             - 仅当对应潜在时代演化进度完结后 insert，记录从A到B的关键演化定稿，非静态朝代编年
+        特异点:
+          type: |-
+            {
+              [特异点名称: string]: {
+                降临: boolean;
+                分歧源头: string;
+                事件记录: {
+                  [分歧纪段名: string]: {
+                    前时代称谓: string;
+                    后时代称谓: string;
+                    纪段起止: string;
+                    描述: string;
+                    历史影响: string;
+                    关键转折: string;
+                  }
+                };
+              }
+            }
         特异点.${特异点名称}:
           降临:
             type: boolean
@@ -190,22 +261,44 @@ WorldPaper_Update_Rules:
             check:
               - 引发分歧的正史演变纪名
           事件记录.${分歧纪段名}:
-            type: |-
-              {
-                前时代称谓: string;
-                后时代称谓: string;
-                纪段起止: string;
-                描述: string;
-                历史影响: string;
-                关键转折: string;
-              }
+            前时代称谓:
+              check:
+                - 该分歧纪段发生时所处的旧时代阶段称谓
+            后时代称谓:
+              check:
+                - 该分歧纪段结束后进入的新时代阶段称谓
             纪段起止:
               format: 纪元/年号-YYYY年-MM月-DD日 ~ 纪元/年号-YYYY年-MM月-DD日
+            描述:
+              check:
+                - 该分歧纪段的过程概述
+            历史影响:
+              check:
+                - 该剪定结果对平行支线的长期影响
             关键转折:
               check:
                 - 引发该特异点与正史产生分歧的时代关键转折点事件
             check:
               - 结果被判定为剪定事象的演变纪段，记录同一潜在时代的被剪定结果
+      史诗传奇:
+        type: |-
+          {
+            [核心母题: string]: {
+              基本类型: string;
+              核心母题关键词: string;
+              史实真相: string;
+              流变历程: string;
+              传世轶闻: {
+                [流传版本名称: string]: {
+                  原典: boolean;
+                  关键要素: string;
+                  版本流传范围: string;
+                  版本成型时代: string;
+                  内容梗概: string;
+                }
+              };
+            }
+          }
       史诗传奇.${核心母题}:
         基本类型:
           check:
@@ -257,16 +350,6 @@ WorldPaper_Update_Rules:
             - 维护总数 ≤ 5；不足 2 时可派生；超出则移除价值最低者
             - 事件来源：依据世界时局演进动态派生的当前世界时局事件；依据岁月史书，从已完结的历史演变中产生的历史回响 等
         当前区域事件:
-          type: |-
-            {
-              [事件名: string]: {
-                叙事指导: { 宏观层: string; 发展层: string; 细节层: string };
-                参与角色: string;
-                牵涉团体: string;
-                事件脉络: { [日期: string]: string };
-                结算条件: string;
-              }
-            }
           check:
             - <user>可感知或参与的当前区域事件推进时更新，结算后 remove
             - 维护总数 ≤ 3；不足 2 时可派生；超出则移除价值最低者
@@ -299,6 +382,28 @@ WorldPaper_Update_Rules:
           结算条件:
             check:
               - 1至3条该事件完成/关闭的条件
+        传闻:
+          type: |-
+            {
+              [传闻名: string]: {
+                影响力: string;
+                流传范围: string;
+                流变历程: {
+                  [流变节点编号: string]: {
+                    流变日期: string;
+                    预计时效: string;
+                    真相: string;
+                    传闻描述: string;
+                    事实偏差: string;
+                    流变诱因: string;
+                  }
+                };
+              }
+            }
+          check:
+            - 公开流通的信息，传闻发酵或认知变化时更新流变节点
+            - 维护总数 ≤ 5；不足 2 时可派生；超出则移除价值最低者
+            - 影响力达文化烙印时可总结至史诗传奇后 remove
         传闻.${传闻名}:
           影响力:
             format: 零星耳闻 | 圈内谈资 | 局部焦点 | 全民热议 | 文化烙印
@@ -308,8 +413,12 @@ WorldPaper_Update_Rules:
           流变历程.${流变节点编号}:
             流变日期:
               format: 纪元/年号-YYYY年-MM月-DD日
+              check:
+                - 该流变历程节点传闻形成的日期
             预计时效:
               format: 纪元/年号-YYYY年-MM月-DD日
+              check:
+                - 该流变历程节点传闻预计在传播意义上有效的最后日期
             真相:
               check:
                 - 该阶段传闻背后的客观真相
@@ -322,12 +431,26 @@ WorldPaper_Update_Rules:
             流变诱因:
               check:
                 - 推动该阶段认知变化的事件与具体流变过程
-          check:
-            - 公开流通的信息，传闻发酵或认知变化时更新流变节点
-            - 维护总数 ≤ 5；不足 2 时可派生；超出则移除价值最低者
-            - 影响力达文化烙印时可总结至史诗传奇后 remove
       团体动态:
         世界背景团体:
+          type: |-
+            {
+              [团体名: string]: {
+                声誉: { 官方: string; 民间: string; 暗域: string; 业界: string };
+                外交关系: { [团体名称: string]: string };
+                权力支柱: { [权力支柱名: string]: string };
+                活跃区域: string;
+                内政概况: string;
+                发展态势: string;
+                当前动态: string;
+                核心人物: {
+                  [姓名: string]: {
+                    身份职务: string;
+                    权力支柱: { [权力支柱名: string]: string };
+                  }
+                };
+              }
+            }
           check:
             - 宏观势力格局变化时更新
             - 维护总数 ≤ 5；超出则移除关联性/活跃度最低者
@@ -339,7 +462,7 @@ WorldPaper_Update_Rules:
           声誉.${官方|民间|暗域|业界}:
             format: 天怒人怨 | 声名狼藉 | 默默无闻 | 受人尊敬 | 万众敬仰
             check:
-              - 该渠道对该团体的声誉评价，重大舆论事件后更新
+              - 该渠道对该团体的声誉评价，重大舆论事件后更新/传闻同步更新
           外交关系.${团体名称}:
             check:
               - 与该团体的外交关系描述
@@ -441,6 +564,8 @@ WorldPaper_Update_Rules:
             format: 宽松 | 紧缩等
           金融机构风险:
             format: 稳定 | 局部危机 | 系统性风险等
+            check:
+              - 键名必须为「金融机构风险」（勿写作「系统性风险」）；format 取值可含「系统性风险」等级文案
       投机市场:
         市场整体情绪:
           format: 狂热 | 乐观 | 谨慎 | 恐慌 | 萧条等
@@ -482,6 +607,18 @@ WorldPaper_Update_Rules:
         贸易政策.${势力名}:
           check:
             - 降低关税/禁运/补贴等
+      经济事件:
+        type: |-
+          {
+            [事件名: string]: {
+              描述: string;
+              影响维度: string;
+              当前态势: string;
+            }
+          }
+        check:
+          - 事件结束或影响消退后 remove
+          - 活跃经济事件上限不超过 5 个
       经济事件.${事件名}:
         描述:
           check:

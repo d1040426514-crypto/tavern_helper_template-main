@@ -44,8 +44,6 @@ WorldPaper_Update_Format: |-
     "analysis": "身份确认……\nStep 0: ……\n……\nStep 8: ……",
     "patch": [
       { "op": "replace", "path": "/某世界/刊报日期", "value": "纪元-YYYY年-MM月-DD日" },
-      { "op": "replace", "path": "/某世界/降临", "value": true },
-      { "op": "replace", "path": "/某世界/时代快讯/岁月史书/特异点/某特异点/降临", "value": true },
       { "op": "replace", "path": "/某世界/世界剧情态势/团体动态/世界背景团体/某商会/核心人物/某会长/权力支柱", "value": { "贸易许可": "控制货物进出权" } },
       { "op": "insert", "path": "/某世界/世界剧情态势/时局动态/世界背景事件/新事件", "value": { "叙事指导": { "宏观层": "", "发展层": "", "细节层": "" }, "参与角色": "", "牵涉团体": "", "事件脉络": {}, "结算条件": "" } },
       { "op": "move", "from": "/某世界/path/from", "to": "/某世界/path/to" }

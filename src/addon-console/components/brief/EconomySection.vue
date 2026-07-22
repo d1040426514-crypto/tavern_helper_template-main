@@ -252,12 +252,12 @@ const moneyMetrics = computed(() => {
   const fxRate = textOf(fx?.综合汇率波动率).trim();
   const fxFactor = textOf(fx?.主要影响因素).trim();
   const creditStatus = textOf(credit?.状态).trim();
-  const creditRisk = textOf(credit?.系统性风险).trim();
+  const creditRisk = textOf(credit?.金融机构风险).trim();
   if (baseUnit.value) items.push({ label: '基准计价单位', value: baseUnit.value });
   if (fxRate) items.push({ label: '综合汇率波动率', value: fxRate });
   if (fxFactor) items.push({ label: '主要影响因素', value: fxFactor });
   if (creditStatus) items.push({ label: '信贷状态', value: creditStatus });
-  if (creditRisk) items.push({ label: '系统性风险', value: creditRisk });
+  if (creditRisk) items.push({ label: '金融机构风险', value: creditRisk });
   return items;
 });
 const moneyVisible = computed(
