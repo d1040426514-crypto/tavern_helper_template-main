@@ -213,6 +213,9 @@ WorldPaper_Update_Rules:
                 关键转折: string;
               }
             }
+          check:
+            - 仅当对应潜在时代演化进度完结后 insert，记录从A到B的关键时代演化定稿，非静态朝代编年
+            - 演变纪命名规范:
         正史.${演变纪名}:
           前时代称谓:
             check:
@@ -231,8 +234,6 @@ WorldPaper_Update_Rules:
           关键转折:
             check:
               - 关联的临界事件或关键转折点事件
-          check:
-            - 仅当对应潜在时代演化进度完结后 insert，记录从A到B的关键演化定稿，非静态朝代编年
         特异点:
           type: |-
             {
