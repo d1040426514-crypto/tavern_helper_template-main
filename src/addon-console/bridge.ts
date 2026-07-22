@@ -1,4 +1,12 @@
+/** 与 addon-mvu AddonEvent 对齐 */
+export type AddonConsoleEvents = {
+  VARIABLE_UPDATE_STARTED: string;
+  PATCH_PARSED: string;
+  VARIABLE_UPDATE_ENDED: string;
+};
+
 export type AddonConsoleApi = {
+  events: AddonConsoleEvents;
   getAddonData: (options: { type: 'message'; message_id: number | 'latest' }) => { addon_data: Record<string, any> };
   getUiState: (options?: { type: 'message'; message_id: number | 'latest' }) => {
     位面交汇: boolean;

@@ -29,7 +29,6 @@
         >
           {{ theme === 'dark' ? '☀️' : '🌙' }}
         </button>
-        <button type="button" class="ac-btn" @click="reload">刷新</button>
         <button type="button" class="ac-btn ghost" @click="closeHost">关闭</button>
       </div>
     </header>
@@ -126,6 +125,7 @@ const briefPages = [
 ];
 
 let api: AddonConsoleApi | null = null;
+const eventStops: Array<{ stop: () => void }> = [];
 
 const worldNames = computed(() => Object.keys(worlds.value));
 
@@ -221,14 +221,47 @@ async function onSingularity(name: string, value: boolean) {
   applyResult(await api.setSingularityDescent(selectedWorld.value, name, value, latestOpts()), selectedWorld.value);
 }
 
+/** VARIABLE_UPDATE_ENDED 早于 writeAddonData，延后到同步链结束后再读 */
+function scheduleReload() {
+  queueMicrotask(() => {
+    void reload();
+  });
+}
+
+function bindAutoReload() {
+  if (!api?.events?.VARIABLE_UPDATE_ENDED) return;
+  eventStops.push(
+    eventOn(api.events.VARIABLE_UPDATE_ENDED, () => {
+      scheduleReload();
+    }),
+  );
+  eventStops.push(
+    eventOn(tavern_events.CHAT_CHANGED, () => {
+      void reload();
+    }),
+  );
+}
+
 onMounted(async () => {
   try {
     api = await waitAddon();
+    bindAutoReload();
     await reload();
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
   } finally {
     loading.value = false;
   }
+});
+
+onUnmounted(() => {
+  for (const h of eventStops) {
+    try {
+      h.stop();
+    } catch {
+      /* ignore */
+    }
+  }
+  eventStops.length = 0;
 });
 </script>
