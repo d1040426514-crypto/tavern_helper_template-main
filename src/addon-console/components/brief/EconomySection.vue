@@ -1,7 +1,10 @@
 <template>
   <div v-if="visible" id="brief-econ" class="ac-econ-page">
-    <div v-if="climateVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">🌡️ 世界经济气候</h4>
+    <section v-if="climateVisible" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">🌡️</span>
+        <span>世界经济气候</span>
+      </h4>
       <div v-if="phase" class="ac-econ-summary">
         <span class="ac-econ-summary-label">整体周期相位</span>
         <span class="ac-econ-summary-value">{{ phase }}</span>
@@ -14,10 +17,13 @@
           <div class="ac-region-industry">需求：{{ textOf(st?.需求品类) || '—' }}</div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div v-if="commodityVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">📦 大宗商品市场</h4>
+    <section v-if="commodityVisible" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">📦</span>
+        <span>大宗商品市场</span>
+      </h4>
       <div class="ac-commodity-grid">
         <article
           v-for="item in commodityCards"
@@ -43,13 +49,19 @@
           </p>
         </article>
       </div>
-    </div>
+    </section>
 
-    <div v-if="moneyVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">
-        💱 货币与金融
-        <span v-if="baseUnit" class="ac-econ-inline">基准 · {{ baseUnit }}</span>
+    <section v-if="moneyVisible" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">💱</span>
+        <span>货币与金融</span>
       </h4>
+      <div v-if="moneyMetrics.length" class="ac-econ-metrics">
+        <div v-for="m in moneyMetrics" :key="m.label" class="ac-econ-metric">
+          <div class="ac-econ-metric-label">{{ m.label }}</div>
+          <div class="ac-econ-metric-value">{{ m.value }}</div>
+        </div>
+      </div>
       <div v-if="currencies.length" class="ac-currency-grid">
         <div v-for="[name, c] in currencies" :key="name" class="ac-currency-card">
           <div class="ac-currency-name">{{ name }}</div>
@@ -62,16 +74,13 @@
           <div v-if="textOf(c?.驱动因素)" class="ac-currency-meta">驱动：{{ textOf(c?.驱动因素) }}</div>
         </div>
       </div>
-      <div v-if="moneyMetrics.length" class="ac-econ-metrics">
-        <div v-for="m in moneyMetrics" :key="m.label" class="ac-econ-metric">
-          <div class="ac-econ-metric-label">{{ m.label }}</div>
-          <div class="ac-econ-metric-value">{{ m.value }}</div>
-        </div>
-      </div>
-    </div>
+    </section>
 
-    <div v-if="specVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">📈 投机市场</h4>
+    <section v-if="specVisible" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">📈</span>
+        <span>投机市场</span>
+      </h4>
       <div v-if="specMood || hasSpecIndex" class="ac-econ-summary">
         <template v-if="specMood">
           <span class="ac-econ-summary-label">市场情绪</span>
@@ -134,35 +143,45 @@
           </article>
         </div>
       </div>
-    </div>
+    </section>
 
-    <div v-if="tradeVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">🚢 贸易格局</h4>
-      <div v-if="routes.length" class="ac-trade-regions-grid">
+    <section v-if="routes.length" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">🚢</span>
+        <span>贸易格局</span>
+      </h4>
+      <div class="ac-trade-regions-grid">
         <div v-for="[name, st] in routes" :key="name" class="ac-region-card">
           <div class="ac-region-name">{{ name }}</div>
           <div class="ac-region-status">{{ textOf(st?.状态) }}</div>
           <div class="ac-region-industry">{{ textOf(st?.原因) }}</div>
         </div>
       </div>
-      <div v-if="policies.length" class="ac-sub-stack" style="margin-top: 8px">
-        <h4 class="ac-brief-subh">📜 贸易政策</h4>
-        <div v-for="[k, v] in policies" :key="k" class="ac-timeline-node">
-          <strong>{{ k }} · </strong>
-          <span>{{ textOf(v) }}</span>
-        </div>
-      </div>
-    </div>
+    </section>
 
-    <div v-if="econEvents.length" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">📰 经济事件</h4>
+    <section v-if="policies.length" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">📜</span>
+        <span>贸易政策</span>
+      </h4>
+      <div v-for="[k, v] in policies" :key="k" class="ac-timeline-node">
+        <strong>{{ k }} · </strong>
+        <span>{{ textOf(v) }}</span>
+      </div>
+    </section>
+
+    <section v-if="econEvents.length" class="ac-econ-block">
+      <h4 class="ac-econ-block-title">
+        <span class="ac-econ-block-icon" aria-hidden="true">📰</span>
+        <span>经济事件</span>
+      </h4>
       <div
         v-for="[name, node] in econEvents"
         :key="name"
         class="ac-timeline-node"
       >
         <div class="ac-timeline-node-head">
-          <strong>📰 {{ name }}</strong>
+          <strong>{{ name }}</strong>
         </div>
         <div v-if="textOf(node?.描述)" class="ac-timeline-node-line">{{ textOf(node?.描述) }}</div>
         <div class="ac-econ-event-tags">
@@ -170,7 +189,7 @@
           <StatusTag v-if="textOf(node?.当前态势)" :value="node?.当前态势" />
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -233,6 +252,7 @@ const moneyMetrics = computed(() => {
   const fxFactor = textOf(fx?.主要影响因素).trim();
   const creditStatus = textOf(credit?.状态).trim();
   const creditRisk = textOf(credit?.系统性风险).trim();
+  if (baseUnit.value) items.push({ label: '基准计价单位', value: baseUnit.value });
   if (fxRate) items.push({ label: '综合汇率波动率', value: fxRate });
   if (fxFactor) items.push({ label: '主要影响因素', value: fxFactor });
   if (creditStatus) items.push({ label: '信贷状态', value: creditStatus });
@@ -240,10 +260,7 @@ const moneyMetrics = computed(() => {
   return items;
 });
 const moneyVisible = computed(
-  () =>
-    isNonEmptyText(baseUnit.value) ||
-    currencies.value.length > 0 ||
-    moneyMetrics.value.length > 0,
+  () => currencies.value.length > 0 || moneyMetrics.value.length > 0,
 );
 
 const specMood = computed(() => textOf(econ.value?.投机市场?.市场整体情绪).trim());
@@ -260,7 +277,6 @@ const specVisible = computed(
 
 const routes = computed(() => entriesOf(econ.value?.贸易格局?.主要商路));
 const policies = computed(() => entriesOf(econ.value?.贸易格局?.贸易政策));
-const tradeVisible = computed(() => routes.value.length > 0 || policies.value.length > 0);
 
 const econEvents = computed(() => entriesOf(econ.value?.经济事件));
 
@@ -270,7 +286,8 @@ const visible = computed(
     commodityVisible.value ||
     moneyVisible.value ||
     specVisible.value ||
-    tradeVisible.value ||
+    routes.value.length > 0 ||
+    policies.value.length > 0 ||
     econEvents.value.length > 0,
 );
 </script>
