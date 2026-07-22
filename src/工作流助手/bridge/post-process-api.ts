@@ -41,6 +41,7 @@ import {
   updateTaskStage,
   updateReplicaFamilyScheduleMode,
   updateReplicaMemberSchedule,
+  ensureReplicaFamilyMember,
   listReplicaFamilySchedule,
   getReplicaFamilyCleanupConfigFromStore,
   updateReplicaFamilyCleanupConfigInStore,
@@ -142,6 +143,11 @@ export interface AcuPostProcessTaskAPI {
     memberId: string,
     patch: { launched?: boolean },
   ): Promise<PostProcessTask>;
+  ensureReplicaFamilyMember(
+    rootId: string,
+    attrValue: string,
+    options?: { launched?: boolean },
+  ): Promise<PostProcessTask>;
   listReplicaFamilySchedule(rootId: string): ReturnType<typeof listReplicaFamilySchedule>;
   getReplicaFamilyCleanupConfig(): ReturnType<typeof getReplicaFamilyCleanupConfigFromStore>;
   updateReplicaFamilyCleanupConfig(
@@ -239,6 +245,8 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => updateReplicaFamilyScheduleMode(rootId, mode, 'api')) as Promise<PostProcessTask>,
   updateReplicaMemberSchedule: (memberId, patch) =>
     apiCall(() => updateReplicaMemberSchedule(memberId, patch, 'api')) as Promise<PostProcessTask>,
+  ensureReplicaFamilyMember: (rootId, attrValue, options) =>
+    apiCall(() => ensureReplicaFamilyMember(rootId, attrValue, options, 'api')) as Promise<PostProcessTask>,
   listReplicaFamilySchedule: (rootId: string) => listReplicaFamilySchedule(rootId),
   getReplicaFamilyCleanupConfig: () => getReplicaFamilyCleanupConfigFromStore(),
   updateReplicaFamilyCleanupConfig: patch =>

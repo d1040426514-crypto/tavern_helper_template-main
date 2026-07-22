@@ -13,7 +13,7 @@ import {
   findNewlyActivatedSingularity,
   setSingularityFlag,
 } from './singularity';
-import { syncReplicaLaunched, renameReplicaWorldAttr } from './replica-sync';
+import { syncReplicaLaunched, renameReplicaWorldAttr, ensureWorldReplicaMember } from './replica-sync';
 
 export type ControlResult = {
   data: AddonData;
@@ -247,7 +247,13 @@ export async function applyCreateWorld(
 ): Promise<ControlResult> {
   const data = createWorld(getData(message_id), name);
   const archive = getAddonArchive(message_id);
-  return commitControlResult(message_id, { data, archive, warnings: [] }, writeData);
+  writeData(message_id, data);
+  writeAddonArchive(message_id, archive);
+  const world = data[name.trim()];
+  const launched = world?.降临 === true || world?.平行演化 === true;
+  const ensureWarnings = await ensureWorldReplicaMember(name.trim(), launched);
+  const syncWarnings = await syncReplicaLaunched(data);
+  return { data, archive, warnings: [...ensureWarnings, ...syncWarnings] };
 }
 
 export async function applyRenameWorld(

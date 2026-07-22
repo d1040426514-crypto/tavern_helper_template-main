@@ -25,8 +25,10 @@ import {
 import { newTaskId, cloneTaskForInsert } from './task-clone';
 import {
   assertReplicaMemberPatchAllowed,
+  buildReplicaFromRoot,
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
+  getReplicaFamilyBaseNameFromTask,
   getReplicaTasks,
   isReplicaFamilyMember,
   listReplicaFamilyScheduleEntries,
@@ -805,6 +807,55 @@ export async function updateReplicaMemberSchedule(
   const next: Partial<PostProcessTask> = {};
   if (patch.launched !== undefined) next.replicaFamilyLaunched = patch.launched;
   return updateTask(memberId, next, source);
+}
+
+/**
+ * 确保副本族存在指定 attrValue 的成员；已存在则按需更新 launched。
+ * 新建时通过 buildReplicaFromRoot 显式传入 launched，覆盖 manual 默认 true。
+ */
+export async function ensureReplicaFamilyMember(
+  rootId: string,
+  attrValue: string,
+  options: { launched?: boolean } = {},
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const trimmed = String(attrValue ?? '').trim();
+  if (!trimmed) throw new Error('副本属性值不能为空');
+
+  const root = getTask(rootId);
+  if (!root) throw new Error(`任务不存在: ${rootId}`);
+  if (root.replicaFamilyRootId) throw new Error('任务不是副本族根模板');
+
+  const all = listTasks();
+  const existing = getReplicaTasks(rootId, all).find(m => (m.replicaFamilyAttrValue ?? '').trim() === trimmed);
+  if (existing) {
+    if (options.launched !== undefined && existing.replicaFamilyLaunched !== options.launched) {
+      return updateReplicaMemberSchedule(existing.id, { launched: options.launched }, source);
+    }
+    return existing;
+  }
+
+  const baseName = getReplicaFamilyBaseNameFromTask(root);
+  const created = buildReplicaFromRoot(
+    { ...root, syncAsReplicaFamily: true },
+    trimmed,
+    baseName,
+    all,
+    { launched: options.launched ?? false },
+  );
+
+  const rootIdx = all.findIndex(t => t.id === rootId);
+  if (rootIdx === -1) throw new Error(`任务不存在: ${rootId}`);
+  const memberCount = getReplicaTasks(rootId, all).length;
+  const next = all.map(t => (t.id === rootId ? { ...t, syncAsReplicaFamily: true } : t));
+  next.splice(rootIdx + 1 + memberCount, 0, created);
+  await replaceTasks(next, source);
+
+  const saved =
+    getTask(created.id) ??
+    listTasks().find(t => t.replicaFamilyRootId === rootId && (t.replicaFamilyAttrValue ?? '') === trimmed);
+  if (!saved) throw new Error(`创建副本成员失败: ${trimmed}`);
+  return saved;
 }
 
 export function getReplicaFamilyCleanupConfigFromStore() {

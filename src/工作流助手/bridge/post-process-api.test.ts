@@ -45,6 +45,7 @@ const expectedMethods = [
   'listReplicaFamilyMembers',
   'updateReplicaFamilyScheduleMode',
   'updateReplicaMemberSchedule',
+  'ensureReplicaFamilyMember',
   'listReplicaFamilySchedule',
   'getReplicaFamilyCleanupConfig',
   'updateReplicaFamilyCleanupConfig',

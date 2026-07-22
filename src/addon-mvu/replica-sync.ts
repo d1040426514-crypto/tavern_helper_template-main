@@ -23,6 +23,11 @@ type ReplicaApi = {
   }>;
   updateReplicaFamilyScheduleMode: (rootId: string, mode: 'auto' | 'manual') => Promise<unknown>;
   updateReplicaMemberSchedule: (memberId: string, patch: { launched?: boolean }) => Promise<unknown>;
+  ensureReplicaFamilyMember: (
+    rootId: string,
+    attrValue: string,
+    options?: { launched?: boolean },
+  ) => Promise<unknown>;
   replaceTasks: (tasks: unknown[]) => Promise<void>;
 };
 
@@ -101,6 +106,50 @@ export async function syncReplicaLaunched(data: AddonData): Promise<string[]> {
     }
   }
 
+  return warnings;
+}
+
+/**
+ * 确保世界对应的副本族成员存在（手动创建世界时调用）。
+ * 会切到 manual，并按 launched 写入。
+ */
+export async function ensureWorldReplicaMember(worldName: string, launched: boolean): Promise<string[]> {
+  const warnings: string[] = [];
+  const name = worldName.trim();
+  if (!name) {
+    warnings.push('世界名不能为空，跳过副本创建');
+    return warnings;
+  }
+
+  const api = getReplicaApi();
+  if (!api) {
+    warnings.push('AcuPostProcessAPI 未就绪，跳过副本创建');
+    return warnings;
+  }
+  if (typeof api.ensureReplicaFamilyMember !== 'function') {
+    warnings.push('AcuPostProcessAPI 不支持 ensureReplicaFamilyMember，请更新工作流助手');
+    return warnings;
+  }
+
+  const root = findWorldReplicaRoot(api);
+  if (!root) {
+    warnings.push('未找到规格为 世界锚定@world 的世界副本族，跳过副本创建');
+    return warnings;
+  }
+
+  if (root.replicaFamilyScheduleMode !== 'manual') {
+    try {
+      await api.updateReplicaFamilyScheduleMode(root.id, 'manual');
+    } catch (e) {
+      warnings.push(`切换副本族为 manual 失败: ${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  try {
+    await api.ensureReplicaFamilyMember(root.id, name, { launched });
+  } catch (e) {
+    warnings.push(`创建世界副本失败: ${e instanceof Error ? e.message : String(e)}`);
+  }
   return warnings;
 }
 
