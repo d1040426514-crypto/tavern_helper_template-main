@@ -32,11 +32,7 @@ const addonData = getvar('addon_data');
 const isEmpty = !addonData || Object.keys(addonData || {}).length === 0;
 const displayData = isEmpty ? null : filterDescentWorlds(addonData);
 _%>
-<%_ if (isEmpty) { _%>
-[addon 变量状态] 当前 addon_data 为空，请先在 addon 控制台新建世界；AI 不会创建世界键。
-<%_ } else if (!displayData || Object.keys(displayData).length === 0) { _%>
-[addon 变量状态] 当前没有「降临」为 true 的世界；主聊天仅展示已降临世界。
-<%_ } else { _%>
+<%_ if (displayData && Object.keys(displayData).length > 0) { _%>
 <WorldPaper>
 <%- YAML.stringify(displayData, { blockQuote: 'literal' }) %>
 </WorldPaper>
