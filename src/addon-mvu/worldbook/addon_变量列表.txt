@@ -15,11 +15,29 @@ function stripAddonForDisplay(data) {
   }
   return stripDeep(_.cloneDeep(data));
 }
+
+function filterDescentWorlds(data) {
+  const stripped = stripAddonForDisplay(data);
+  if (stripped == null || typeof stripped !== 'object' || Array.isArray(stripped)) return {};
+  const out = {};
+  for (const [name, world] of Object.entries(stripped)) {
+    if (world && typeof world === 'object' && !Array.isArray(world) && world.降临 === true) {
+      out[name] = world;
+    }
+  }
+  return out;
+}
+
 const addonData = getvar('addon_data');
+const isEmpty = !addonData || Object.keys(addonData || {}).length === 0;
+const displayData = isEmpty ? null : filterDescentWorlds(addonData);
 _%>
-<%_ if (!addonData || Object.keys(addonData || {}).length === 0) { _%>
+<%_ if (isEmpty) { _%>
 [addon 变量状态] 当前 addon_data 为空，请先在 addon 控制台新建世界；AI 不会创建世界键。
-<%_ } _%>
+<%_ } else if (!displayData || Object.keys(displayData).length === 0) { _%>
+[addon 变量状态] 当前没有「降临」为 true 的世界；主聊天仅展示已降临世界。
+<%_ } else { _%>
 <WorldPaper>
-<%- YAML.stringify(stripAddonForDisplay(addonData), { blockQuote: 'literal' }) %>
+<%- YAML.stringify(displayData, { blockQuote: 'literal' }) %>
 </WorldPaper>
+<%_ } _%>

@@ -1,0 +1,54 @@
+---
+<%_
+function stripAddonForDisplay(data) {
+  if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
+  const HIDDEN = new Set(['平行演化']);
+  function stripDeep(value) {
+    if (value == null || typeof value !== 'object') return value;
+    if (Array.isArray(value)) return value.map(stripDeep);
+    const next = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (HIDDEN.has(k)) continue;
+      next[k] = stripDeep(v);
+    }
+    return next;
+  }
+  return stripDeep(_.cloneDeep(data));
+}
+
+const addonData = getvar('addon_data');
+const addonUi = getvar('addon_ui') || {};
+const planeMerge = addonUi.位面交汇 === true;
+const replicaKey = String(`{{replica:val}}`).trim();
+const isEmpty = !addonData || Object.keys(addonData || {}).length === 0;
+
+let displayData = null;
+let statusNote = '';
+
+if (isEmpty) {
+  statusNote = '[addon 变量状态] 当前 addon_data 为空，请先在 addon 控制台新建世界；AI 不会创建世界键。';
+} else if (planeMerge) {
+  displayData = stripAddonForDisplay(addonData);
+} else if (!replicaKey) {
+  statusNote = '[addon 变量状态] 副本变量列表缺少 {{replica:val}}（世界名），无法定位负责世界。';
+} else {
+  const stripped = stripAddonForDisplay(addonData);
+  const world = stripped && typeof stripped === 'object' ? stripped[replicaKey] : undefined;
+  if (world == null) {
+    statusNote = `[addon 变量状态] 未找到世界「${replicaKey}」。`;
+    displayData = {};
+  } else {
+    displayData = { [replicaKey]: world };
+  }
+}
+_%>
+<%_ if (statusNote && (displayData == null || Object.keys(displayData).length === 0)) { _%>
+<%= statusNote %>
+<%_ } else { _%>
+<%_ if (statusNote) { _%>
+<%= statusNote %>
+<%_ } _%>
+<WorldPaper>
+<%- YAML.stringify(displayData, { blockQuote: 'literal' }) %>
+</WorldPaper>
+<%_ } _%>
