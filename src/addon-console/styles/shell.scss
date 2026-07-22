@@ -136,6 +136,21 @@
   background: rgba(12, 18, 36, 0.55);
 }
 
+.addon-console .ac-brief-page-tabs {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding: 8px 12px;
+  overflow-x: auto;
+  border-bottom: 1px solid var(--divider);
+  background: rgba(255, 254, 251, 0.72);
+  -webkit-overflow-scrolling: touch;
+}
+
+.addon-console[data-theme='dark'] .ac-brief-page-tabs {
+  background: rgba(12, 18, 36, 0.72);
+}
+
 .addon-console .ac-chip {
   border: 1px solid var(--divider);
   background: var(--cream-dark);

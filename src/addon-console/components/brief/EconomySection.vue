@@ -1,10 +1,10 @@
 <template>
-  <BriefSection v-if="visible" id="brief-econ" icon="💰" title="世界经济简报">
+  <div v-if="visible" id="brief-econ" class="ac-econ-page">
     <div v-if="climateVisible" class="ac-sub-stack">
       <h4 class="ac-brief-subh">🌡️ 世界经济气候</h4>
-      <div v-if="phase" class="ac-climate-wrap">
-        <div class="ac-kv-key">整体周期相位</div>
-        <div class="ac-prose">{{ phase }}</div>
+      <div v-if="phase" class="ac-econ-summary">
+        <span class="ac-econ-summary-label">整体周期相位</span>
+        <span class="ac-econ-summary-value">{{ phase }}</span>
       </div>
       <div v-if="zones.length" class="ac-trade-regions-grid">
         <div v-for="[name, st] in zones" :key="name" class="ac-region-card">
@@ -35,11 +35,10 @@
     </div>
 
     <div v-if="moneyVisible" class="ac-sub-stack">
-      <h4 class="ac-brief-subh">💱 货币与金融</h4>
-      <div v-if="baseUnit" class="ac-base-highlight">
-        <div class="ac-base-highlight-label">基准计价单位</div>
-        <div class="ac-base-highlight-value">{{ baseUnit }}</div>
-      </div>
+      <h4 class="ac-brief-subh">
+        💱 货币与金融
+        <span v-if="baseUnit" class="ac-econ-inline">基准 · {{ baseUnit }}</span>
+      </h4>
       <div v-if="currencies.length" class="ac-currency-grid">
         <div v-for="[name, c] in currencies" :key="name" class="ac-currency-card">
           <div class="ac-currency-name">{{ name }}</div>
@@ -66,14 +65,19 @@
 
     <div v-if="specVisible" class="ac-sub-stack">
       <h4 class="ac-brief-subh">📈 投机市场</h4>
-      <div v-if="specMood" class="ac-climate-wrap">
-        <div class="ac-kv-key">市场整体情绪</div>
-        <div class="ac-prose">{{ specMood }}</div>
+      <div v-if="specMood || hasSpecIndex" class="ac-econ-summary">
+        <template v-if="specMood">
+          <span class="ac-econ-summary-label">市场情绪</span>
+          <span class="ac-econ-summary-value">{{ specMood }}</span>
+        </template>
+        <span v-if="specMood && hasSpecIndex" class="ac-econ-summary-sep" aria-hidden="true">·</span>
+        <template v-if="hasSpecIndex">
+          <span class="ac-econ-summary-label">报</span>
+          <span class="ac-econ-summary-value">{{ textOf(econ?.投机市场?.投机指数?.报) || '—' }}</span>
+          <ChangeBadge :value="econ?.投机市场?.投机指数?.周涨跌" />
+        </template>
       </div>
-      <div v-if="hasAnyText(econ?.投机市场?.投机指数, ['报', '周涨跌'])" class="ac-spec-index">
-        <KvGrid :data="econ!.投机市场.投机指数" :labels="['报', '周涨跌']" :cols="2" />
-      </div>
-      <div class="ac-spec-grid">
+      <div v-if="specAssets.length" class="ac-spec-grid">
         <div v-for="[name, node] in specAssets" :key="name" class="ac-spec-card">
           <div class="ac-spec-title">{{ name }}</div>
           <div class="ac-currency-rate" style="font-size: 1.15rem">
@@ -87,14 +91,14 @@
           <div v-if="textOf(node?.驱动事件)" class="ac-spec-meta">驱动：{{ textOf(node?.驱动事件) }}</div>
         </div>
       </div>
-      <FoldBlock
-        v-for="[name, node] in futures"
-        :key="'f-' + name"
-        :title="'期货 · ' + name"
-        :summary="`近月 ${textOf(node?.近月价格)} / 远月 ${textOf(node?.远月价格)}`"
-      >
-        <KvGrid :data="node" :labels="['近月价格', '远月价格', '基差']" :cols="3" />
-      </FoldBlock>
+      <div v-if="futures.length" class="ac-spec-grid">
+        <div v-for="[name, node] in futures" :key="'f-' + name" class="ac-spec-card">
+          <div class="ac-spec-title">期货 · {{ name }}</div>
+          <div class="ac-spec-meta">近月 {{ textOf(node?.近月价格) || '—' }}</div>
+          <div class="ac-spec-meta">远月 {{ textOf(node?.远月价格) || '—' }}</div>
+          <div class="ac-spec-meta">基差 {{ textOf(node?.基差) || '—' }}</div>
+        </div>
+      </div>
     </div>
 
     <div v-if="tradeVisible" class="ac-sub-stack">
@@ -106,8 +110,8 @@
           <div class="ac-region-industry">{{ textOf(st?.原因) }}</div>
         </div>
       </div>
-      <div v-if="policies.length" class="ac-nested">
-        <div class="ac-kv-key">贸易政策</div>
+      <div v-if="policies.length" class="ac-sub-stack" style="margin-top: 8px">
+        <h4 class="ac-brief-subh">📜 贸易政策</h4>
         <div v-for="[k, v] in policies" :key="k" class="ac-timeline-node">
           <strong>{{ k }} · </strong>
           <span>{{ textOf(v) }}</span>
@@ -117,24 +121,29 @@
 
     <div v-if="econEvents.length" class="ac-sub-stack">
       <h4 class="ac-brief-subh">📰 经济事件</h4>
-      <FoldBlock
+      <div
         v-for="[name, node] in econEvents"
         :key="name"
-        :title="name"
-        :summary="textOf(node?.当前态势) || textOf(node?.描述).slice(0, 40)"
+        class="ac-timeline-node"
       >
-        <KvGrid :data="node" :labels="['描述', '影响维度', '当前态势']" :cols="1" />
-      </FoldBlock>
+        <div class="ac-timeline-node-head">
+          <strong>📰 {{ name }}</strong>
+        </div>
+        <div v-if="textOf(node?.描述)" class="ac-timeline-node-line">{{ textOf(node?.描述) }}</div>
+        <div class="ac-econ-event-tags">
+          <span v-if="textOf(node?.影响维度)" class="ac-tag">📊 {{ textOf(node?.影响维度) }}</span>
+          <StatusTag v-if="textOf(node?.当前态势)" :value="node?.当前态势" />
+        </div>
+      </div>
     </div>
-  </BriefSection>
+  </div>
 </template>
 
 <script setup lang="ts">
 import { entriesOf, hasAnyText, isNonEmptyText, textOf } from '../../brief-utils';
-import BriefSection from './BriefSection.vue';
 import ChangeBadge from './ChangeBadge.vue';
-import FoldBlock from './FoldBlock.vue';
 import KvGrid from './KvGrid.vue';
+import StatusTag from './StatusTag.vue';
 
 const props = defineProps<{ world: Record<string, any> | null }>();
 
@@ -166,12 +175,13 @@ const moneyVisible = computed(
 const specMood = computed(() => textOf(econ.value?.投机市场?.市场整体情绪).trim());
 const specAssets = computed(() => entriesOf(econ.value?.投机市场?.主要交易标的));
 const futures = computed(() => entriesOf(econ.value?.投机市场?.期货合约));
+const hasSpecIndex = computed(() => hasAnyText(econ.value?.投机市场?.投机指数, ['报', '周涨跌']));
 const specVisible = computed(
   () =>
     isNonEmptyText(specMood.value) ||
     specAssets.value.length > 0 ||
     futures.value.length > 0 ||
-    hasAnyText(econ.value?.投机市场?.投机指数, ['报', '周涨跌']),
+    hasSpecIndex.value,
 );
 
 const routes = computed(() => entriesOf(econ.value?.贸易格局?.主要商路));

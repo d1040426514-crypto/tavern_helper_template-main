@@ -78,8 +78,8 @@ export function getStatusClass(status: unknown): StatusClass {
   const s = textOf(status).trim();
   if (!s) return '';
   if (/萌芽|胚胎|embryo/i.test(s)) return 'status-embryo';
-  if (/发展|developing|进行/i.test(s)) return 'status-developing';
-  if (/临界|critical|变革|前夜/i.test(s)) return 'status-critical';
+  if (/恶化|危机|崩溃|临界|critical|变革|前夜/i.test(s)) return 'status-critical';
+  if (/发展|developing|进行|转折|恢复|改善|好转/i.test(s)) return 'status-developing';
   return '';
 }
 

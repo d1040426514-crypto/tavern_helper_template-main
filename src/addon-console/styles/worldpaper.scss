@@ -197,8 +197,9 @@
   font-family: var(--font-display);
   font-weight: 700;
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 4px;
+  gap: 4px 8px;
 }
 
 .addon-console .ac-brief-foot {
@@ -563,12 +564,12 @@
 .addon-console .ac-currency-grid,
 .addon-console .ac-spec-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 8px;
 }
 
 .addon-console .ac-currency-grid {
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr));
   gap: 10px;
 }
 
@@ -611,6 +612,126 @@
   padding: 10px 14px;
   margin-bottom: 8px;
   border: 1px solid var(--climate-wrap-border);
+}
+
+.addon-console .ac-econ-page {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.addon-console .ac-econ-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 10px;
+  padding: 8px 12px;
+  margin-bottom: 8px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--climate-wrap-border);
+  background: var(--climate-wrap-bg);
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-econ-summary-label {
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.addon-console .ac-econ-summary-value {
+  color: var(--ink-deep);
+  font-weight: 600;
+  word-break: break-word;
+  flex: 1 1 8em;
+  min-width: 0;
+}
+
+.addon-console .ac-econ-summary-sep {
+  color: var(--ink-light);
+  opacity: 0.6;
+}
+
+.addon-console .ac-econ-inline {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--base-highlight-text);
+  background: var(--base-highlight-bg);
+  border: 1px solid var(--base-highlight-border);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-family: var(--font-body);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.addon-console .ac-econ-event-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 3px;
+}
+
+.addon-console .ac-econ-event {
+  margin: 4px 0;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--divider);
+  background: var(--region-card-bg);
+  overflow: hidden;
+}
+
+.addon-console .ac-econ-event-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  padding: 8px 10px;
+  min-height: 40px;
+  cursor: pointer;
+  list-style: none;
+  font-family: var(--font-body);
+}
+
+.addon-console .ac-econ-event-summary::-webkit-details-marker {
+  display: none;
+}
+
+.addon-console .ac-econ-event-summary::before {
+  content: '▸';
+  color: var(--gold);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+.addon-console .ac-econ-event[open] > .ac-econ-event-summary::before {
+  content: '▾';
+}
+
+.addon-console .ac-econ-event-name {
+  font-weight: 700;
+  color: var(--region-name-color);
+}
+
+.addon-console .ac-econ-event-desc {
+  flex: 1 1 12em;
+  min-width: 0;
+  font-size: 0.82rem;
+  color: var(--ink-mid);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.addon-console .ac-econ-event-body {
+  padding: 0 10px 10px;
+  border-top: 1px dashed var(--divider);
 }
 
 .addon-console .ac-base-highlight {
@@ -768,16 +889,7 @@
   font-family: var(--font-serif);
 }
 
-/* —— 三子页签 —— */
-.addon-console .ac-brief-page-tabs {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding: 2px 0 4px;
-  flex-shrink: 0;
-  -webkit-overflow-scrolling: touch;
-}
-
+/* —— 三子页签按钮（容器在 shell.scss） —— */
 .addon-console .ac-brief-page-tab {
   flex: 1 1 auto;
   display: inline-flex;

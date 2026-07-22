@@ -49,6 +49,24 @@
       </button>
     </div>
 
+    <nav
+      v-if="!loading && !error && tab === 'brief' && selectedWorld"
+      class="ac-brief-page-tabs"
+      aria-label="简报子页"
+    >
+      <button
+        v-for="item in briefPages"
+        :key="item.id"
+        type="button"
+        class="ac-brief-page-tab"
+        :class="{ active: briefPage === item.id }"
+        @click="briefPage = item.id"
+      >
+        <span class="ac-brief-page-tab-icon" aria-hidden="true">{{ item.icon }}</span>
+        <span>{{ item.label }}</span>
+      </button>
+    </nav>
+
     <div v-if="loading" class="ac-hint">⏳ 连接 Addon API…</div>
     <div v-else-if="error" class="ac-hint ac-warn">{{ error }}</div>
     <div v-else class="ac-main">
@@ -57,7 +75,7 @@
       </div>
 
       <div v-show="tab === 'brief'" class="ac-main-scroll">
-        <StatusBoard :world="selectedWorldData" :world-name="selectedWorld || ''" />
+        <StatusBoard :world="selectedWorldData" :world-name="selectedWorld || ''" :brief-page="briefPage" />
       </div>
 
       <div v-show="tab === 'control'" class="ac-main-scroll">
@@ -99,6 +117,13 @@ const planeMerge = ref(false);
 const worlds = ref<Record<string, any>>({});
 const selectedWorld = ref<string | null>(null);
 const tab = ref<'brief' | 'control'>('brief');
+const briefPage = ref<'era' | 'plot' | 'econ'>('era');
+
+const briefPages = [
+  { id: 'era' as const, label: '时代快讯', icon: '🕰️' },
+  { id: 'plot' as const, label: '世界剧情态势', icon: '⚔️' },
+  { id: 'econ' as const, label: '世界经济简报', icon: '💰' },
+];
 
 let api: AddonConsoleApi | null = null;
 
