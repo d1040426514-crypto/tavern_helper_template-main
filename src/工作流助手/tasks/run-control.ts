@@ -6,18 +6,25 @@ export class RunCancelledError extends Error {
 }
 
 let abortController: AbortController | null = null;
+let runEpoch = 0;
 const activeGenerationIds = new Set<string>();
 
-export function beginRun(): AbortSignal {
+export function beginRun(): { signal: AbortSignal; epoch: number } {
   abortController?.abort();
   abortController = new AbortController();
   activeGenerationIds.clear();
-  return abortController.signal;
+  const epoch = ++runEpoch;
+  return { signal: abortController.signal, epoch };
 }
 
-export function endRun(): void {
+export function endRun(epoch?: number): void {
+  if (epoch !== undefined && epoch !== runEpoch) return;
   abortController = null;
   activeGenerationIds.clear();
+}
+
+export function getRunEpoch(): number {
+  return runEpoch;
 }
 
 export function getRunSignal(): AbortSignal | undefined {

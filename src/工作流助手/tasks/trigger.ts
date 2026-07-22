@@ -6,13 +6,14 @@ import { applyInjectVariableUpdates } from './inject-variable-update';
 import {
   beginRun,
   endRun,
+  getRunEpoch,
   requestCancelRun,
+  RunCancelledError,
 } from './run-control';
 import {
   isPostProcessSilent,
-  isProcessing,
-  markProcessing,
   runPostProcessTasks,
+  tryMarkProcessing,
   unmarkProcessing,
 } from './runtime';
 import { applyAssistantChatTagExtract } from './chat-tag-extract';
@@ -195,8 +196,22 @@ function scheduleAutoTrigger(
 ): void {
   if (isMvuDeferActive() && source === 'message_received') return;
   if (shouldSuppressAutoTriggerAfterAbort()) return;
-  if (shouldDedupAutoTrigger(messageId)) return;
-  void handleMessageReceived(messageId, type, { fromGenerationEnded: source === 'generation_ended' });
+
+  const resolved = resolveAutoTriggerMessageId(messageId);
+  const targetId = resolved?.id;
+  if (targetId == null) return;
+
+  const launch = () => {
+    if (shouldDedupAutoTrigger(targetId)) return;
+    void handleMessageReceived(messageId, type, { fromGenerationEnded: source === 'generation_ended' });
+  };
+
+  // GENERATION_ENDED 的 messageId 常与 MESSAGE_RECEIVED 不同，按楼层去重；并略延迟让 regenerate 等先占坑
+  if (source === 'generation_ended') {
+    setTimeout(launch, 80);
+    return;
+  }
+  launch();
 }
 
 export async function handleMessageReceived(
@@ -218,107 +233,122 @@ export async function handleMessageReceived(
   if (!settings.enabled && !options?.force) return;
   if (!isAutoTriggerMessageType(type) && !options?.force && !options?.fromGenerationEnded) return;
   if (isPostProcessSilent()) return;
-  if (isProcessing(targetId)) return;
 
-  let msg = getChatMessages(targetId)[0];
-  if (!msg || msg.role !== 'assistant') return;
+  // 在任何 await 之前占坑，避免 GENERATION_ENDED / MESSAGE_RECEIVED 同楼双开
+  if (!tryMarkProcessing(targetId)) return;
 
-  const explicitIsRerun = options?.isRerun === true;
-  const bodyReplaceEnabled = hasConfiguredChatBodyTagReplaceRules(settings);
-  const clearedStale = await clearStalePostProcessRunMarkers(targetId);
-  if (clearedStale) {
-    msg = getChatMessages(targetId)[0];
-    if (!msg || msg.role !== 'assistant') return;
-  }
-
-  const hadDoneFlag = !!(msg.data as Record<string, unknown>)?._post_process_done;
-  // 自动重跑仅认 regenerate/swipe/continue 等；GENERATION_ENDED+继承 done 不得误判为 rerun
-  const isRerun =
-    explicitIsRerun ||
-    clearedStale ||
-    (hadDoneFlag && isContentRefreshMessageType(type));
-
-  if (!options?.force && hadDoneFlag && !isRerun) return;
-
-  markProcessing(targetId);
-  const signal = beginRun();
-  showTaskProgressToast('正在准备工作流任务...', () => {
-    requestCancelRun();
-  });
-
-  const onProgress = (update: TaskProgressUpdate) => {
-    if (isTaskProgressStopping()) return;
-    updateTaskProgressToast(update);
-  };
-
+  let runEpoch: number | undefined;
   try {
-    if (isRerun) {
-      restorePostProcessTagsFromPreviousFloor(targetId);
-      // 仅手动重跑且启用正文替换时才 restore；自动路径若 restore 会把新楼/刷新生文打回上一轮 origin
-      if (bodyReplaceEnabled && explicitIsRerun) {
-        await restoreBodyReplaceOrigin(targetId);
+    let msg = getChatMessages(targetId)[0];
+    if (!msg || msg.role !== 'assistant') return;
+
+    const explicitIsRerun = options?.isRerun === true;
+    const bodyReplaceEnabled = hasConfiguredChatBodyTagReplaceRules(settings);
+    const clearedStale = await clearStalePostProcessRunMarkers(targetId);
+    if (clearedStale) {
+      msg = getChatMessages(targetId)[0];
+      if (!msg || msg.role !== 'assistant') return;
+    }
+
+    const hadDoneFlag = !!(msg.data as Record<string, unknown>)?._post_process_done;
+    // 自动重跑仅认 regenerate/swipe/continue 等；GENERATION_ENDED+继承 done 不得误判为 rerun
+    const isRerun =
+      explicitIsRerun ||
+      clearedStale ||
+      (hadDoneFlag && isContentRefreshMessageType(type));
+
+    if (!options?.force && hadDoneFlag && !isRerun) return;
+
+    const { signal, epoch } = beginRun();
+    runEpoch = epoch;
+    showTaskProgressToast('正在准备工作流任务...', () => {
+      requestCancelRun();
+    });
+
+    const onProgress = (update: TaskProgressUpdate) => {
+      if (isTaskProgressStopping()) return;
+      updateTaskProgressToast(update);
+    };
+
+    try {
+      if (isRerun) {
+        restorePostProcessTagsFromPreviousFloor(targetId);
+        // 仅手动重跑且启用正文替换时才 restore；自动路径若 restore 会把新楼/刷新生文打回上一轮 origin
+        if (bodyReplaceEnabled && explicitIsRerun) {
+          await restoreBodyReplaceOrigin(targetId);
+        }
+        await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
+        await clearWorldbookWriteMessageKeys(targetId);
+        await reconcileReplicaTasksFromChat({ excludeMessageId: targetId, reason: 'rerun' });
+        await clearReplicaStateMessageKeys(targetId);
+        const reconciled = resolveEffectiveSettings(loadSettings());
+        settings.tasks = reconciled.tasks;
+        settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
       }
-      await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
-      await clearWorldbookWriteMessageKeys(targetId);
-      await reconcileReplicaTasksFromChat({ excludeMessageId: targetId, reason: 'rerun' });
-      await clearReplicaStateMessageKeys(targetId);
-      const reconciled = resolveEffectiveSettings(loadSettings());
-      settings.tasks = reconciled.tasks;
-      settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
+      if (bodyReplaceEnabled) {
+        await ensureBodyReplaceOriginCaptured(targetId);
+      }
+      applyAssistantChatTagExtract(targetId, settings, { isRerun });
+
+      const snapshot = captureDataSnapshot();
+      const { results, cancelled, newlyCreatedReplicaIds, executedMemberIds } = await runPostProcessTasks(
+        settings,
+        snapshot,
+        targetId,
+        {
+          bypassSchedule: options?.bypassSchedule ?? false,
+          isRerun,
+          signal,
+          onProgress,
+          taskIdFilter: options?.taskIdFilter,
+        },
+      );
+
+      baseSettings.scheduleState = _.cloneDeep(settings.scheduleState);
+      persistRunStatus(baseSettings, targetId, results);
+
+      if (cancelled) {
+        acuToast('warning', '工作流已由用户取消');
+        return;
+      }
+
+      const hasSuccess = results.some(r => r.success && !r.skipped);
+      if (hasSuccess) {
+        await applyTagVariableInjectTemplate(settings, results, targetId);
+
+        const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
+        await injectToAiFloor(targetId, aiBlock, { isRerun });
+        await applyInjectVariableUpdates(targetId, aiBlock, { isRerun });
+      }
+
+      incrementReplicaRunCounts(settings, executedMemberIds);
+      await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
+
+      if (settings.messageVarRetention?.enabled) {
+        const { cleanupOldMessageFloorVariables } = await import('./message-var-retention');
+        cleanupOldMessageFloorVariables(settings.messageVarRetention.keepFloors);
+      }
+
+      hideTaskProgressToast();
+      await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
+      await writeReplicaStateSnapshot(targetId, settings.tasks);
+    } catch (e) {
+      const superseded =
+        e instanceof RunCancelledError && runEpoch !== undefined && getRunEpoch() !== runEpoch;
+      if (superseded) {
+        return;
+      }
+      if (e instanceof RunCancelledError) {
+        acuToast('warning', '工作流已由用户取消');
+        return;
+      }
+      console.error(SCRIPT_LOG_PREFIX, e);
+      acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      hideTaskProgressToast();
+      endRun(runEpoch);
     }
-    if (bodyReplaceEnabled) {
-      await ensureBodyReplaceOriginCaptured(targetId);
-    }
-    applyAssistantChatTagExtract(targetId, settings, { isRerun });
-
-    const snapshot = captureDataSnapshot();
-    const { results, cancelled, newlyCreatedReplicaIds, executedMemberIds } = await runPostProcessTasks(
-      settings,
-      snapshot,
-      targetId,
-      {
-        bypassSchedule: options?.bypassSchedule ?? false,
-        isRerun,
-        signal,
-        onProgress,
-        taskIdFilter: options?.taskIdFilter,
-      },
-    );
-
-    baseSettings.scheduleState = _.cloneDeep(settings.scheduleState);
-    persistRunStatus(baseSettings, targetId, results);
-
-    if (cancelled) {
-      acuToast('warning', '工作流已由用户取消');
-      return;
-    }
-
-    const hasSuccess = results.some(r => r.success && !r.skipped);
-    if (hasSuccess) {
-      await applyTagVariableInjectTemplate(settings, results, targetId);
-
-      const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
-      await injectToAiFloor(targetId, aiBlock, { isRerun });
-      await applyInjectVariableUpdates(targetId, aiBlock, { isRerun });
-    }
-
-    incrementReplicaRunCounts(settings, executedMemberIds);
-    await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
-
-    if (settings.messageVarRetention?.enabled) {
-      const { cleanupOldMessageFloorVariables } = await import('./message-var-retention');
-      cleanupOldMessageFloorVariables(settings.messageVarRetention.keepFloors);
-    }
-
-    hideTaskProgressToast();
-    await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
-    await writeReplicaStateSnapshot(targetId, settings.tasks);
-  } catch (e) {
-    console.error(SCRIPT_LOG_PREFIX, e);
-    acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
-    hideTaskProgressToast();
-    endRun();
     unmarkProcessing(targetId);
   }
 }

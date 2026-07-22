@@ -84,6 +84,13 @@ export function markProcessing(messageId: number): void {
   processingIds.add(messageId);
 }
 
+/** 同步占坑：已在处理则返回 false，避免同楼双开竞态 */
+export function tryMarkProcessing(messageId: number): boolean {
+  if (processingIds.has(messageId)) return false;
+  processingIds.add(messageId);
+  return true;
+}
+
 export function unmarkProcessing(messageId: number): void {
   processingIds.delete(messageId);
 }
