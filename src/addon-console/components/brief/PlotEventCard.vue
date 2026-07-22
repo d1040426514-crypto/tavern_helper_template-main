@@ -16,14 +16,13 @@
     <div v-if="hasOracle" class="ac-oracle-grid">
       <div v-if="macro" class="ac-oracle-cell">
         <div class="ac-oracle-label">宏观层</div>
-        <div class="ac-oracle-value">{{ macroName || macro }}</div>
         <div v-if="macroSymbol" class="ac-hexagram-row">
           <span class="ac-hexagram" aria-hidden="true">{{ macroSymbol }}</span>
         </div>
+        <div class="ac-oracle-value">{{ macroName || macro }}</div>
       </div>
       <div v-if="develop" class="ac-oracle-cell">
         <div class="ac-oracle-label">发展层</div>
-        <div class="ac-oracle-value">{{ develop }}</div>
         <div v-if="developCards.length" class="ac-tarot-row">
           <figure
             v-for="(c, i) in developCards"
@@ -34,10 +33,10 @@
             <img v-if="tarotSrc(c.name)" :src="tarotSrc(c.name)" :alt="c.name" />
           </figure>
         </div>
+        <div class="ac-oracle-value">{{ develop }}</div>
       </div>
       <div v-if="detail" class="ac-oracle-cell">
         <div class="ac-oracle-label">细节层</div>
-        <div class="ac-oracle-value">{{ detail }}</div>
         <div v-if="detailCards.length" class="ac-tarot-row">
           <figure
             v-for="(c, i) in detailCards"
@@ -48,6 +47,7 @@
             <img v-if="tarotSrc(c.name)" :src="tarotSrc(c.name)" :alt="c.name" />
           </figure>
         </div>
+        <div class="ac-oracle-value">{{ detail }}</div>
       </div>
     </div>
 
