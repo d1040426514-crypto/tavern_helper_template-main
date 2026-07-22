@@ -1,5 +1,5 @@
-:root,
-[data-theme='light'] {
+.addon-console,
+.addon-console[data-theme='light'] {
   --deep-navy: #1a2740;
   --midnight: #1e3050;
   --royal-blue: #253d5e;
@@ -36,7 +36,7 @@
   --font-body: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
 }
 
-[data-theme='dark'] {
+.addon-console[data-theme='dark'] {
   --cream-bg: #121a28;
   --cream-card: #1a2436;
   --cream-dark: #0e1522;
@@ -57,19 +57,11 @@
   --down: #e07060;
 }
 
-*,
-*::before,
-*::after {
+.addon-console,
+.addon-console *,
+.addon-console *::before,
+.addon-console *::after {
   box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  padding: 0;
-  background: transparent;
-  font-family: var(--font-body);
-  color: var(--text);
 }
 
 .addon-console {
@@ -82,6 +74,7 @@ body {
     radial-gradient(ellipse at bottom left, rgba(37, 61, 94, 0.08), transparent 46%),
     linear-gradient(180deg, var(--cream-dark), var(--cream-bg) 28%);
   color: var(--text);
+  font-family: var(--font-body);
   font-size: 13px;
   line-height: 1.5;
   overflow: hidden;

@@ -341,7 +341,7 @@ function ensureShell(): HTMLElement {
   `;
   shell.addEventListener('click', e => {
     const t = e.target as HTMLElement | null;
-    if (t?.getAttribute('data-ac-close') === '1') setOpen(false);
+    if (t?.getAttribute('data-ac-close') === '1') closeAddonConsole();
   });
   hostBody().appendChild(shell);
   return shell;
@@ -377,12 +377,19 @@ export function openAddonConsole(): void {
   ensureStyles();
   ensureShell();
   loadConsoleContent();
+  // 关闭时会卸掉 teleported 样式；再次打开需补回（内容可能已挂载）
+  if (vueApp && !styleDestroy) {
+    syncTeleportedStyles();
+  }
   setOpen(true);
   exposeHostApi();
 }
 
 export function closeAddonConsole(): void {
   setOpen(false);
+  // 移除注入父页的控制台样式，避免污染酒馆主题
+  styleDestroy?.();
+  styleDestroy = null;
 }
 
 export function toggleAddonConsole(): void {
