@@ -22,22 +22,35 @@ const planeMerge = addonUi.位面交汇 === true;
 const replicaKey = String(`{{replica:val}}`).trim();
 const isEmpty = !addonData || Object.keys(addonData || {}).length === 0;
 
-let displayData = null;
+let primaryWorld = null;
+let otherWorlds = null;
 
 if (!isEmpty) {
-  if (planeMerge) {
-    displayData = stripAddonForDisplay(addonData);
-  } else if (replicaKey) {
-    const stripped = stripAddonForDisplay(addonData);
-    const world = stripped && typeof stripped === 'object' ? stripped[replicaKey] : undefined;
-    if (world != null) {
-      displayData = { [replicaKey]: world };
+  const stripped = stripAddonForDisplay(addonData);
+  if (stripped != null && typeof stripped === 'object' && !Array.isArray(stripped)) {
+    if (planeMerge) {
+      const others = {};
+      for (const [name, world] of Object.entries(stripped)) {
+        if (replicaKey && name === replicaKey) {
+          primaryWorld = { [name]: world };
+        } else {
+          others[name] = world;
+        }
+      }
+      if (Object.keys(others).length > 0) otherWorlds = others;
+    } else if (replicaKey && stripped[replicaKey] != null) {
+      primaryWorld = { [replicaKey]: stripped[replicaKey] };
     }
   }
 }
 _%>
-<%_ if (displayData && Object.keys(displayData).length > 0) { _%>
-<WorldPaper>
-<%- YAML.stringify(displayData, { blockQuote: 'literal' }) %>
-</WorldPaper>
+<%_ if (primaryWorld) { _%>
+<上期世界状态>
+<%- YAML.stringify(primaryWorld, { blockQuote: 'literal' }) %>
+</上期世界状态>
+<%_ } _%>
+<%_ if (otherWorlds) { _%>
+<上期其它世界状态>
+<%- YAML.stringify(otherWorlds, { blockQuote: 'literal' }) %>
+</上期其它世界状态>
 <%_ } _%>
