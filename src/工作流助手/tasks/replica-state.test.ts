@@ -5,6 +5,7 @@ import {
   applyLastEnumToReplicaSnapshot,
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
+  mergeReplicaStateForRerun,
   mergeReplicaStateSnapshots,
   normalizeReplicaStateSnapshot,
 } from './replica-state';
@@ -89,6 +90,71 @@ test('applyReplicaStateToTasks empty snapshot clears all members', () => {
   const tasks = [rootTask(), memberTask('剑'), memberTask('盾')];
   const next = applyReplicaStateToTasks(tasks, {});
   assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 0);
+});
+
+test('mergeReplicaStateForRerun keeps current when history empty', () => {
+  const current = {
+    root: {
+      attrValues: ['阿斯塔利亚'],
+      launchedAttrValues: ['阿斯塔利亚'],
+      lastEnumAttrValues: ['阿斯塔利亚'],
+    },
+  };
+  const merged = mergeReplicaStateForRerun({}, current);
+  assert.deepEqual(merged.root?.attrValues, ['阿斯塔利亚']);
+  assert.deepEqual(merged.root?.launchedAttrValues, ['阿斯塔利亚']);
+  assert.deepEqual(merged.root?.lastEnumAttrValues, ['阿斯塔利亚']);
+});
+
+test('mergeReplicaStateForRerun prefers history members over current', () => {
+  const history = { root: { attrValues: ['剑'], launchedAttrValues: ['剑'] } };
+  const current = {
+    root: {
+      attrValues: ['剑', '盾'],
+      launchedAttrValues: ['剑', '盾'],
+      lastEnumAttrValues: ['盾'],
+    },
+  };
+  const merged = mergeReplicaStateForRerun(history, current);
+  assert.deepEqual(merged.root?.attrValues, ['剑']);
+  assert.deepEqual(merged.root?.launchedAttrValues, ['剑']);
+  assert.deepEqual(merged.root?.lastEnumAttrValues, ['盾']);
+});
+
+test('mergeReplicaStateForRerun history with members keeps own lastEnum', () => {
+  const history = {
+    root: { attrValues: ['剑'], launchedAttrValues: ['剑'], lastEnumAttrValues: ['剑'] },
+  };
+  const current = {
+    root: { attrValues: ['盾'], lastEnumAttrValues: ['盾'] },
+  };
+  const merged = mergeReplicaStateForRerun(history, current);
+  assert.deepEqual(merged.root?.attrValues, ['剑']);
+  assert.deepEqual(merged.root?.lastEnumAttrValues, ['剑']);
+});
+
+test('rerun merge then apply keeps manual launched members when history empty', () => {
+  const tasks = [
+    rootTask({
+      name: '世界时局',
+      replicaFamilySpec: '世界锚定@world',
+      replicaFamilyBaseName: '世界时局',
+      replicaFamilyScheduleMode: 'manual',
+    }),
+    memberTask('阿斯塔利亚', {
+      name: '世界时局 阿斯塔利亚',
+      replicaFamilySpec: '世界锚定@world',
+      replicaFamilyLaunched: true,
+    }),
+  ];
+  const current = {
+    root: { attrValues: ['阿斯塔利亚'], launchedAttrValues: ['阿斯塔利亚'] },
+  };
+  const merged = mergeReplicaStateForRerun({}, current);
+  const next = applyReplicaStateToTasks(tasks, merged);
+  const member = next.find(t => t.replicaFamilyAttrValue === '阿斯塔利亚');
+  assert.ok(member);
+  assert.equal(member?.replicaFamilyLaunched, true);
 });
 
 test('applyReplicaStateToTasks restores launched flags in manual mode', () => {

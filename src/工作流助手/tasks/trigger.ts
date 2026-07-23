@@ -60,7 +60,7 @@ import {
 import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
 import {
   clearReplicaStateMessageKeys,
-  reconcileReplicaTasksFromChat,
+  reconcileReplicaTasksForRerun,
   writeReplicaStateSnapshot,
 } from './replica-reconcile';
 import { showReplicaFamilyCleanupDialog } from '../ui/mount-cleanup-dialog';
@@ -279,7 +279,7 @@ export async function handleMessageReceived(
         }
         await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
         await clearWorldbookWriteMessageKeys(targetId);
-        await reconcileReplicaTasksFromChat({ excludeMessageId: targetId, reason: 'rerun' });
+        await reconcileReplicaTasksForRerun(targetId);
         await clearReplicaStateMessageKeys(targetId);
         const reconciled = resolveEffectiveSettings(loadSettings());
         settings.tasks = reconciled.tasks;

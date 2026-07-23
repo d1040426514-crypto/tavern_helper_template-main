@@ -126,6 +126,59 @@ test('prepareStageTasksWithReplicaSync auto runs only relay replicas', () => {
   assert.ok(runtime.every(r => ['1', '2'].includes(r.replicaFamilyAttrValue ?? '')));
 });
 
+test('prepareStageTasksWithReplicaSync auto runs only current-round relay markers', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  const { tasks: runtime, skippedRoots } = prepareStageTasksWithReplicaSync(
+    [root],
+    merged.tasks,
+    relayMap({
+      'item@id=1': ENUM_REGISTRY_MARKER,
+    }),
+  );
+  assert.equal(skippedRoots.length, 0);
+  assert.equal(runtime.length, 1);
+  assert.equal(runtime[0]!.replicaFamilyAttrValue, '1');
+});
+
+test('prepareStageTasksWithReplicaSync auto skips when relay empty (no lastEnum fallback)', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
+  const merged = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]);
+  const { tasks: runtime, skippedRoots } = prepareStageTasksWithReplicaSync(
+    [root],
+    merged.tasks,
+    new Map(),
+  );
+  assert.equal(runtime.length, 0);
+  assert.equal(skippedRoots.length, 1);
+  assert.equal(skippedRoots[0]!.root.id, root.id);
+  assert.equal(skippedRoots[0]!.skipReason, '副本族：上一阶段 relay 无可用属性实例');
+});
+
+test('prepareStageTasksWithReplicaSync manual skip reason when none launched', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['阿斯塔利亚'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyAttrValue === '阿斯塔利亚' ? { ...t, replicaFamilyLaunched: false } : t,
+  );
+  const { tasks: runtime, skippedRoots } = prepareStageTasksWithReplicaSync([root], tasks, new Map());
+  assert.equal(runtime.length, 0);
+  assert.equal(skippedRoots.length, 1);
+  assert.equal(skippedRoots[0]!.skipReason, '副本族：手动调度下无已启动副本');
+});
+
+test('prepareStageTasksWithReplicaSync manual keeps launched orphans without relay', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['阿斯塔利亚'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyAttrValue === '阿斯塔利亚' ? { ...t, replicaFamilyLaunched: true } : t,
+  );
+  const { tasks: runtime, skippedRoots } = prepareStageTasksWithReplicaSync([root], tasks, new Map());
+  assert.equal(skippedRoots.length, 0);
+  assert.equal(runtime.length, 1);
+  assert.equal(runtime[0]!.replicaFamilyAttrValue, '阿斯塔利亚');
+});
+
 test('resetNewlyCreatedReplicaLaunched sets launched false', () => {
   const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
   const merged = mergeReplicaFamilyFromRelay(root, ['1'], [root]);

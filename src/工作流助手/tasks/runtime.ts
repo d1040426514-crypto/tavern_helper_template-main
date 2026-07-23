@@ -474,12 +474,12 @@ export async function runPostProcessTasks(
       allNewlyCreatedReplicaIds.push(...prepared.newlyCreatedReplicaIds);
 
       const stageTasks = prepared.tasks;
-      const skippedRootResults: TaskRunResult[] = prepared.skippedRoots.map(root => ({
+      const skippedRootResults: TaskRunResult[] = prepared.skippedRoots.map(({ root, skipReason }) => ({
         taskId: root.id,
         taskName: root.name,
         success: false,
         skipped: true,
-        skipReason: '副本族：上一阶段 relay 无可用属性实例',
+        skipReason,
         extractedBlock: '',
         extractedTags: {},
         injectOnlyTagNames: [],

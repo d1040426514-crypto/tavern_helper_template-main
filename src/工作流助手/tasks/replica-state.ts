@@ -91,6 +91,46 @@ export function mergeReplicaStateSnapshots(snapshots: ReplicaStateSnapshot[]): R
   return merged;
 }
 
+function cloneRootState(state: ReplicaRootState): ReplicaRootState {
+  return {
+    attrValues: [...state.attrValues],
+    ...(state.launchedAttrValues?.length ? { launchedAttrValues: [...state.launchedAttrValues] } : {}),
+    ...(state.lastEnumAttrValues?.length ? { lastEnumAttrValues: [...state.lastEnumAttrValues] } : {}),
+  };
+}
+
+/**
+ * 重跑专用：以排除本楼后的历史快照为基；
+ * 若某 root 在 history 中缺失或 attrValues 为空，则用本楼清快照前的状态回退，
+ * 避免仅存在于本楼的手动副本族成员被删光。
+ * history 已有成员时，仅在缺 lastEnum 时从 current 补。
+ */
+export function mergeReplicaStateForRerun(
+  history: ReplicaStateSnapshot,
+  currentFloor: ReplicaStateSnapshot | null | undefined,
+): ReplicaStateSnapshot {
+  const merged: ReplicaStateSnapshot = {};
+  for (const [rootId, state] of Object.entries(history)) {
+    merged[rootId] = cloneRootState(state);
+  }
+  if (!currentFloor) return merged;
+
+  for (const [rootId, current] of Object.entries(currentFloor)) {
+    const hist = merged[rootId];
+    if (!hist?.attrValues?.length) {
+      merged[rootId] = cloneRootState(current);
+      continue;
+    }
+    if (!hist.lastEnumAttrValues?.length && current.lastEnumAttrValues?.length) {
+      merged[rootId] = {
+        ...hist,
+        lastEnumAttrValues: [...current.lastEnumAttrValues],
+      };
+    }
+  }
+  return merged;
+}
+
 /**
  * 将本轮 pending enum 与已有快照中的 lastEnum 合并进由 tasks 构建的快照。
  * pending 优先；否则保留 existing / fallback 中的 lastEnum，避免空跑冲掉。

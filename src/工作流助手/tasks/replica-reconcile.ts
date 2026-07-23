@@ -6,6 +6,7 @@ import {
   applyLastEnumToReplicaSnapshot,
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
+  mergeReplicaStateForRerun,
   mergeReplicaStateSnapshots,
   normalizeReplicaStateSnapshot,
   POST_PROCESS_REPLICA_STATE_KEY,
@@ -17,6 +18,7 @@ import type { PostProcessTask } from './schema';
 export {
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
+  mergeReplicaStateForRerun,
   mergeReplicaStateSnapshots,
   POST_PROCESS_REPLICA_STATE_KEY,
 } from './replica-state';
@@ -131,6 +133,32 @@ export async function reconcileReplicaTasksFromChat(options: ReconcileReplicaOpt
 
     settings.tasks = nextTasks;
     await persistRuntimeTaskChanges(baseSettings, settings);
+  } finally {
+    reconcileInFlight = false;
+  }
+}
+
+/**
+ * 重跑专用：历史快照（排除本楼）+ 本楼清快照前回退合并后重放成员。
+ * 不向本轮 relay 注入 lastEnum 种子；auto 副本族仍只认本轮 ReplicaEnum。
+ */
+export async function reconcileReplicaTasksForRerun(messageId: number): Promise<void> {
+  const currentSnap = readReplicaStateFromMessage(messageId);
+  const history = collectReplicaStateFromChat({ excludeMessageId: messageId, reason: 'rerun' });
+  const merged = mergeReplicaStateForRerun(history, currentSnap);
+
+  if (reconcileInFlight) return;
+  reconcileInFlight = true;
+  try {
+    const baseSettings = loadSettings();
+    const settings = resolveEffectiveSettings(baseSettings);
+    if (!hasReplicaFamilyRoot(settings.tasks)) return;
+
+    const nextTasks = applyReplicaStateToTasks(settings.tasks, merged);
+    if (!_.isEqual(nextTasks, settings.tasks)) {
+      settings.tasks = nextTasks;
+      await persistRuntimeTaskChanges(baseSettings, settings);
+    }
   } finally {
     reconcileInFlight = false;
   }

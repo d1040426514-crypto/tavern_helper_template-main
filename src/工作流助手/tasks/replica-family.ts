@@ -563,12 +563,33 @@ export function resolveReplicaLaunchedPlaceholder(
   return listLaunchedAttrValuesWithFallback(root, allTasks, relayMap, snapshot).join('、');
 }
 
+export type SkippedReplicaRoot = {
+  root: PostProcessTask;
+  skipReason: string;
+};
+
 export type PrepareStageReplicaSyncResult = {
   tasks: PostProcessTask[];
   allTasks: PostProcessTask[];
-  skippedRoots: PostProcessTask[];
+  skippedRoots: SkippedReplicaRoot[];
   newlyCreatedReplicaIds: string[];
 };
+
+/** 副本族无可运行成员时的跳过原因（按调度模式区分） */
+export function describeReplicaFamilySkipReason(
+  root: PostProcessTask,
+  replicas: PostProcessTask[],
+  relayAttrValues: string[],
+): string {
+  const mode = getReplicaFamilyScheduleMode(root);
+  if (mode === 'manual') {
+    if (!replicas.length) return '副本族：无可用副本成员';
+    return '副本族：手动调度下无已启动副本';
+  }
+  if (!relayAttrValues.length) return '副本族：上一阶段 relay 无可用属性实例';
+  if (!replicas.length) return '副本族：无可用副本成员';
+  return '副本族：relay 枚举与可运行副本无交集';
+}
 
 export function prepareStageTasksWithReplicaSync(
   stageTasks: PostProcessTask[],
@@ -576,7 +597,7 @@ export function prepareStageTasksWithReplicaSync(
   relayMap: RelayTagMap,
 ): PrepareStageReplicaSyncResult {
   let updatedAll = [...allTasks];
-  const skippedRoots: PostProcessTask[] = [];
+  const skippedRoots: SkippedReplicaRoot[] = [];
   const runtimeTasks: PostProcessTask[] = [];
   const handledRoots = new Set<string>();
   const newlyCreatedReplicaIds: string[] = [];
@@ -609,7 +630,10 @@ export function prepareStageTasksWithReplicaSync(
       });
 
       if (!runnable.length) {
-        skippedRoots.push(syncedRoot);
+        skippedRoots.push({
+          root: syncedRoot,
+          skipReason: describeReplicaFamilySkipReason(syncedRoot, replicas, attrValues),
+        });
         continue;
       }
       runtimeTasks.push(...runnable);
