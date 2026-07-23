@@ -39,22 +39,30 @@ check('item@id 多实例不聚合', () => {
   assert.equal(extractedTags['item@id=2'], 'B');
 });
 
-check('item@id 缺 id 回退裸 key item', () => {
+check('item@id 缺 id 忽略裸标签', () => {
   const text = '<item id="1">A</item><item>无id</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
   assert.equal(extractedTags['item@id=1'], 'A');
-  assert.equal(extractedTags.item, '无id');
+  assert.equal(extractedTags.item, undefined);
 });
 
-check('item@id 仅无 id 实例', () => {
+check('item@id 仅无 id 实例为空', () => {
   const { extractedTags } = extractInjectTagsFromResponse('<item>仅无id</item>', ['item@id']);
-  assert.equal(extractedTags.item, '仅无id');
-  assert.equal(extractedTags['item@id=1'], undefined);
+  assert.equal(Object.keys(extractedTags).length, 0);
 });
 
-check('item@id 多个无 id 后者覆盖', () => {
+check('item@id 多个无 id 不摘取', () => {
   const { extractedTags } = extractInjectTagsFromResponse('<item>first</item><item>second</item>', ['item@id']);
-  assert.equal(extractedTags.item, 'second');
+  assert.equal(Object.keys(extractedTags).length, 0);
+});
+
+check('npc@act 思维链裸开标签不吞带属性块', () => {
+  const text =
+    '<think>仅限更新佐久夜的<npc>内容，确保其行为的独立性。</think>\n' +
+    '<npc act="佐久夜">正文</npc>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['npc@act']);
+  assert.equal(extractedTags['npc@act=佐久夜'], '正文');
+  assert.equal(extractedTags.npc, undefined);
 });
 
 check('item@id 同 key 后者覆盖', () => {
@@ -90,17 +98,16 @@ check('{{item@id=1}} 精确引用完整块', () => {
   assert.ok(!out.includes('<item@id=1>'));
 });
 
-check('{{item}} 展开全部实例', () => {
+check('{{item}} 仅展开裸 key', () => {
   const map: RelayTagMap = new Map([
     ['item@id=2', ['<item id="2">B</item>']],
     ['item@id=1', ['<item id="1">A</item>']],
     ['item', ['<item>无id</item>']],
   ]);
-  const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id']));
-  assert.ok(out.includes('<item id="1">\nA\n</item>'));
-  assert.ok(out.includes('<item id="2">\nB\n</item>'));
-  assert.ok(out.includes('<item>\n无id\n</item>'));
-  assert.ok(!out.includes('<item><item'));
+  const out = replacePlotTagPlaceholdersWithHistory('{{item}}', map, new Map(), new Set(['item@id', 'item']));
+  assert.equal(out, '<item>\n无id\n</item>');
+  assert.ok(!out.includes('<item id="1">'));
+  assert.ok(!out.includes('<item id="2">'));
 });
 
 check('{{result}} 内文仍包裸标签', () => {
@@ -184,9 +191,9 @@ check('formatTagValuesForInject 多段合并单外层', () => {
   assert.equal(out, '<result>\nhello\n\nworld\n</result>');
 });
 
-check('expandWritableKeys {{item}} 含复合 key', () => {
+check('expandWritableKeys {{item}} 仅裸 key', () => {
   const keys = expandWritableKeysFromPlaceholder('item', ['item', 'item@id=1', 'item@id=2', 'result']);
-  assert.deepEqual(keys, ['item', 'item@id=1', 'item@id=2']);
+  assert.deepEqual(keys, ['item']);
 });
 
 check('expandWritableKeys {{item@id=1}} 精确', () => {

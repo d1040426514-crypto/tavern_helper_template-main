@@ -34,17 +34,26 @@ test('item@id splits by attribute', () => {
   assert.equal(injectedFragments[1], '<item id="2">\nB\n</item>');
 });
 
-test('item@id falls back bare key when no id', () => {
+test('item@id skips bare tag without id', () => {
   const text = '<item id="1">A</item><item>无id</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
   assert.equal(extractedTags['item@id=1'], 'A');
-  assert.equal(extractedTags.item, '无id');
+  assert.equal(extractedTags.item, undefined);
 });
 
-test('two bare items last wins on item@id config', () => {
+test('item@id only bare tags yields empty', () => {
   const text = '<item>first</item><item>second</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
-  assert.equal(extractedTags.item, 'second');
+  assert.equal(Object.keys(extractedTags).length, 0);
+});
+
+test('npc@act skips bare open in think and keeps attr block', () => {
+  const text =
+    '<think>仅限更新佐久夜的<npc>内容，确保其行为的独立性。</think>\n' +
+    '<npc act="佐久夜">正文</npc>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['npc@act']);
+  assert.equal(extractedTags['npc@act=佐久夜'], '正文');
+  assert.equal(extractedTags.npc, undefined);
 });
 
 test('bare result keeps inner last', () => {

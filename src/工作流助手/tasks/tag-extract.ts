@@ -144,27 +144,41 @@ export type TagInstance = {
   attrs: Record<string, string>;
 };
 
-export function findAllTagInstances(text: string, tagName: string): TagInstance[] {
+export function findAllTagInstances(
+  text: string,
+  tagName: string,
+  options?: { requiredAttr?: string },
+): TagInstance[] {
   const source = String(text ?? '');
   if (!source || !tagName) return [];
   const instances: TagInstance[] = [];
   let searchFrom = 0;
   const closeTagLen = `</${tagName}>`.length;
+  const requiredAttr = options?.requiredAttr?.trim().toLowerCase();
 
   while (searchFrom < source.length) {
     const openStart = findOpenTagAt(source, tagName, searchFrom);
     if (openStart === -1) break;
     const openEnd = findOpenTagEnd(source, openStart);
     if (openEnd === -1) break;
+    const openTag = source.slice(openStart, openEnd + 1);
+    const attrs = parseOpenTagAttributes(openTag);
+    if (requiredAttr) {
+      const attrValue = attrs[requiredAttr];
+      if (attrValue === undefined || attrValue === '') {
+        // 跳过缺少目标属性的开标签，避免与后续闭标签错配吞掉带属性块
+        searchFrom = openEnd + 1;
+        continue;
+      }
+    }
     const closeStart = findCloseTag(source, tagName, openEnd + 1);
     if (closeStart === -1) break;
     const closeEnd = closeStart + closeTagLen;
-    const openTag = source.slice(openStart, openEnd + 1);
     const inner = source.slice(openEnd + 1, closeStart);
     instances.push({
       fullBlock: source.slice(openStart, closeEnd),
       inner,
-      attrs: parseOpenTagAttributes(openTag),
+      attrs,
     });
     searchFrom = closeEnd;
   }
@@ -222,13 +236,12 @@ function extractBareTagLastInner(text: string, tagName: string): string | null {
 
 function extractByAttrSpec(text: string, spec: ExtractTagSpec): Record<string, string> {
   const result: Record<string, string> = {};
-  const instances = findAllTagInstances(text, spec.tagName);
+  if (!spec.attrName) return result;
+  const instances = findAllTagInstances(text, spec.tagName, { requiredAttr: spec.attrName });
   for (const inst of instances) {
-    const attrValue = spec.attrName ? inst.attrs[spec.attrName.toLowerCase()] : undefined;
-    const key =
-      attrValue !== undefined && attrValue !== ''
-        ? buildCompositeKey(spec.tagName, spec.attrName!, attrValue)
-        : spec.tagName;
+    const attrValue = inst.attrs[spec.attrName.toLowerCase()];
+    if (attrValue === undefined || attrValue === '') continue;
+    const key = buildCompositeKey(spec.tagName, spec.attrName, attrValue);
     result[key] = inst.inner.trim();
   }
   return result;
@@ -369,7 +382,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     {
       title: '按属性',
       config: 'item@id',
-      rule: '扫描所有 <item …>，按 id 属性分成 item@id=值，存内文；缺 id 时回退裸 key item；同 key 后者覆盖。引用时包回带属性的完整标签块。',
+      rule: '扫描所有 <item …>，按 id 属性分成 item@id=值，存内文；缺少该属性的开标签忽略，不摘取；同 key 后者覆盖。引用时包回带属性的完整标签块。',
       example: '<item id="1">A</item><item id="2">B</item> → item_id.1="A"、item_id.2="B"',
     },
   ],

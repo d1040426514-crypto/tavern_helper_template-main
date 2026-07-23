@@ -910,6 +910,6 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: 'post_process_tags',
-    desc: '【非占位符】消息楼层标签变量；复合 key 如 post_process_tags.item@id=1。item@id 配置下无 id 的实例回退裸 key item',
+    desc: '【非占位符】消息楼层标签变量；复合 key 如 post_process_tags.item@id=1。item@id 配置下缺少 id 的开标签忽略，不摘取',
   },
 ];
