@@ -139,6 +139,26 @@ export function resolveWorldbookWriteContent(
   return rendered.trim();
 }
 
+/**
+ * 将说明文档里的字面占位符「标签@属性」替换为规则实际目标规格。
+ * 例如目标 npc@act 时：{{total:launched:标签@属性}} → {{total:launched:npc@act}}
+ */
+export function rewriteAttrSpecDocPlaceholders(template: string, targetTag: string): string {
+  const spec = parseExtractTagSpec(targetTag.trim());
+  if (!spec?.attrName) return template;
+  const concrete = `${spec.tagName}@${spec.attrName}`;
+  // 长前缀优先，避免 total:标签@属性 误伤 total:launched:…
+  return template
+    .split('{{total:last-launched:标签@属性}}')
+    .join(`{{total:last-launched:${concrete}}}`)
+    .split('{{total:launched:标签@属性}}')
+    .join(`{{total:launched:${concrete}}}`)
+    .split('{{total:标签@属性}}')
+    .join(`{{total:${concrete}}}`)
+    .split('{{标签@属性}}')
+    .join(`{{${concrete}}}`);
+}
+
 export function resolveWriteTargetBookName(rule: ChatWorldbookWriteRule): string | null {
   if (rule.bookSource === 'manual') {
     const name = rule.manualBookName.trim();
@@ -400,11 +420,12 @@ export async function applyChatWorldbookWriteAfterStage(
       const spec = parseExtractTagSpec(rule.targetTag.trim());
       const useSplit = rule.splitByAttr && !!spec?.attrName;
       const keysToWrite = useSplit ? Object.keys(stageTags) : [spec?.tagName ?? rule.targetTag.trim()];
+      const template = rewriteAttrSpecDocPlaceholders(rule.template, rule.targetTag);
 
       let writtenCount = 0;
       for (const tagKey of keysToWrite) {
         const rendered = await renderChatBodyTagReplaceTemplate(
-          rule.template,
+          template,
           allStageResults,
           messageId,
           settings.tasks,

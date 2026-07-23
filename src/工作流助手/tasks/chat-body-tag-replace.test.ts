@@ -100,6 +100,16 @@ test('collectStageTagsForRule item@id=same value overwrites', () => {
   assert.equal(tags['item@id=1'], 'B');
 });
 
+test('collectStageTagsForRule skips ReplicaEnum registry markers', () => {
+  const { ENUM_REGISTRY_MARKER } = require('./replica-enum-parse') as typeof import('./replica-enum-parse');
+  const tags = collectStageTagsForRule(
+    [stageResult({ 'npc@act=安娜': ENUM_REGISTRY_MARKER, 'npc@act=贝拉': '正文' })],
+    'npc@act',
+  );
+  assert.equal(tags['npc@act=安娜'], undefined);
+  assert.equal(tags['npc@act=贝拉'], '正文');
+});
+
 test('shouldClearStalePostProcessRunMarkers detects inherited done without inject suffix', () => {
   assert.equal(
     shouldClearStalePostProcessRunMarkers({

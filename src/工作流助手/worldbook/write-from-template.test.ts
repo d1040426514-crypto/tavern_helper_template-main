@@ -12,6 +12,7 @@ import {
   resolveWrapperStableNames,
   resolveWorldbookWriteContent,
   resolveWriteTargetBookName,
+  rewriteAttrSpecDocPlaceholders,
 } from './write-from-template';
 import type { ChatWorldbookWriteRule } from '../tasks/schema';
 
@@ -75,6 +76,22 @@ test('resolveWorldbookWriteContent non-split uses rendered as-is', () => {
   const rendered = '<content>polished</content>';
   const content = resolveWorldbookWriteContent('content', {}, rendered, false);
   assert.equal(content, rendered);
+});
+
+test('rewriteAttrSpecDocPlaceholders maps legend stubs to targetTag', () => {
+  const out = rewriteAttrSpecDocPlaceholders(
+    'x{{标签@属性}} {{total:标签@属性}} {{total:launched:标签@属性}} {{total:last-launched:标签@属性}}y',
+    'npc@act',
+  );
+  assert.equal(
+    out,
+    'x{{npc@act}} {{total:npc@act}} {{total:launched:npc@act}} {{total:last-launched:npc@act}}y',
+  );
+});
+
+test('rewriteAttrSpecDocPlaceholders leaves concrete placeholders untouched', () => {
+  const tpl = '<后台角色动态>\n{{npc@act}}\n</后台角色动态>';
+  assert.equal(rewriteAttrSpecDocPlaceholders(tpl, 'npc@act'), tpl);
 });
 
 test('resolveEntryKeys binds attrValue for keyword splitByAttr', () => {

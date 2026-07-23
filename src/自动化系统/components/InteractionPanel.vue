@@ -42,7 +42,7 @@ const open = ref(true);
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
-  margin-bottom: 10px;
+  margin-bottom: 8px;
   box-shadow: var(--glow-card);
   overflow: hidden;
   position: relative;
@@ -52,7 +52,7 @@ const open = ref(true);
     position: absolute;
     top: 0;
     left: 0;
-    width: 3px;
+    width: 2px;
     height: 100%;
     background: linear-gradient(180deg, var(--accent-coral) 0%, var(--accent-gold) 100%);
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
@@ -64,56 +64,63 @@ const open = ref(true);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 9px 12px 9px 16px;
-  background: rgba(30, 26, 50, 0.5);
+  padding: 6px 8px 6px 12px;
+  background: var(--bg-panel-header);
   cursor: pointer;
   font-weight: 700;
-  font-size: 14px;
+  font-size: 0.78rem;
   font-family: var(--font-display);
   color: var(--text-accent);
-  letter-spacing: 0.5px;
-  gap: 6px;
-  min-height: 38px;
+  letter-spacing: 0.3px;
+  gap: 5px;
+  min-height: var(--touch-min);
   user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.2s;
+
+  &:hover {
+    background: var(--bg-panel-header-hover);
+  }
 }
 
 .panel-icon {
-  font-size: 16px;
+  font-size: 0.85rem;
   flex-shrink: 0;
+  line-height: 1;
 }
 
 .panel-label {
   flex: 1;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   min-width: 0;
   flex-wrap: wrap;
 }
 
 .panel-badge {
   font-family: var(--font-mono);
-  font-size: 7px;
+  font-size: 0.52rem;
   font-weight: 600;
-  background: rgba(224, 160, 144, 0.18);
+  background: var(--debut-bg);
   color: var(--accent-coral);
-  padding: 2px 6px;
-  border-radius: 10px;
-  letter-spacing: 1px;
+  padding: 1px 5px;
+  border-radius: 8px;
+  letter-spacing: 0.6px;
   white-space: nowrap;
 }
 
 .panel-caret {
-  font-size: 12px;
-  transition: transform 0.4s;
+  font-size: 0.65rem;
+  transition: transform 0.35s;
   color: var(--accent-lavender);
-  width: 20px;
-  height: 20px;
+  width: 28px;
+  height: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(180, 150, 220, 0.08);
+  background: var(--bg-control);
   flex-shrink: 0;
 }
 
@@ -121,72 +128,107 @@ const open = ref(true);
   max-height: 0;
   overflow: hidden;
   transition:
-    max-height 0.45s ease-out,
-    padding 0.45s ease-out;
-  padding: 0 14px;
+    max-height 0.4s ease-out,
+    padding 0.4s ease-out;
+  padding: 0 var(--panel-pad-x);
 
   &.open {
-    max-height: 4000px;
-    padding: 10px 14px 14px;
+    max-height: 8000px;
+    padding: 8px var(--panel-pad-x) 10px;
   }
 }
 
 .ix-list {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
 .ix-card {
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 10px 12px;
+  padding: 7px 9px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
+  min-width: 0;
 }
 
 .ix-top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px 10px;
+  gap: 4px 8px;
 }
 
 .ix-id {
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   font-weight: 700;
   color: var(--accent-coral);
-  background: rgba(224, 160, 144, 0.12);
-  padding: 2px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(224, 160, 144, 0.3);
+  background: var(--debut-bg);
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
 }
 
 .ix-roles {
-  font-size: 0.72rem;
+  font-size: 0.62rem;
   color: var(--text-secondary);
+  min-width: 0;
+  word-break: break-word;
 }
 
 .ix-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px 8px;
-  font-size: 0.7rem;
-  line-height: 1.45;
+  gap: 2px 6px;
+  font-size: 0.62rem;
+  line-height: 1.4;
 }
 
 .ix-label {
   font-weight: 700;
   color: var(--accent-sky);
-  font-size: 0.63rem;
-  letter-spacing: 0.3px;
+  font-size: 0.58rem;
+  letter-spacing: 0.2px;
 }
 
 .ix-value {
   color: var(--text-primary);
   word-break: break-word;
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 640px) {
+  .major-panel {
+    margin-bottom: 6px;
+  }
+
+  .panel-header {
+    padding: 7px 8px 7px 10px;
+    font-size: 0.75rem;
+    min-height: 40px;
+  }
+
+  .panel-caret {
+    width: 36px;
+    height: 36px;
+  }
+
+  .panel-content.open {
+    padding: 6px 8px 8px;
+  }
+
+  .ix-card {
+    padding: 6px 8px;
+  }
+
+  .ix-row {
+    flex-direction: column;
+    gap: 1px;
+  }
 }
 </style>

@@ -1,7 +1,7 @@
 <template>
   <div class="npc-card" :class="{ 'npc-card--empty': npc.empty }">
     <div class="npc-card-top">
-      <div class="npc-avatar">🌟</div>
+      <div class="npc-avatar" aria-hidden="true">🌟</div>
       <div class="npc-identity">
         <div class="npc-name">
           <span class="npc-name-icon">💠</span>
@@ -15,7 +15,7 @@
     </div>
 
     <div v-if="npc.statusParts.length" class="npc-status-row">
-      <span v-for="(part, i) in npc.statusParts" :key="i">
+      <span v-for="(part, i) in npc.statusParts" :key="i" class="npc-status-item">
         <span class="npc-status-dot">●</span>
         <strong>{{ statusLabels[i] || '详情' }}:</strong>
         {{ part }}
@@ -93,59 +93,49 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
   background: var(--bg-card);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);
-  padding: 12px 14px;
+  padding: var(--card-pad);
   box-shadow: var(--glow-card);
-  transition: all var(--transition-smooth);
+  transition:
+    background var(--transition-smooth),
+    border-color var(--transition-smooth),
+    box-shadow var(--transition-smooth);
   position: relative;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 5px;
+  min-width: 0;
 
   &:hover {
     background: var(--bg-card-hover);
     border-color: var(--border-glow);
     box-shadow: var(--glow-accent);
-    transform: translateY(-2px);
-  }
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: -20px;
-    right: -20px;
-    width: 60px;
-    height: 60px;
-    border-radius: 50%;
-    background: radial-gradient(circle, rgba(180, 150, 220, 0.06) 0%, transparent 70%);
-    pointer-events: none;
   }
 
   &--empty {
-    opacity: 0.72;
+    opacity: 0.78;
   }
 }
 
 .npc-card-top {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   position: relative;
   z-index: 1;
 }
 
 .npc-avatar {
-  width: 36px;
-  height: 36px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, rgba(180, 150, 220, 0.3), rgba(140, 170, 210, 0.25));
+  background: linear-gradient(135deg, var(--bg-step), rgba(140, 170, 210, 0.18));
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 13px;
   flex-shrink: 0;
-  border: 2px solid rgba(200, 180, 230, 0.4);
-  box-shadow: 0 0 8px rgba(160, 140, 200, 0.2);
+  border: 1px solid var(--border-subtle);
 }
 
 .npc-identity {
@@ -158,80 +148,81 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
 
 .npc-name {
   font-family: var(--font-display);
-  font-size: 0.95rem;
+  font-size: 0.82rem;
   font-weight: 700;
   color: var(--text-primary);
-  letter-spacing: 0.3px;
-  line-height: 1.3;
+  letter-spacing: 0.2px;
+  line-height: 1.25;
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   flex-wrap: wrap;
 }
 
 .npc-name-icon {
-  font-size: 0.7rem;
+  font-size: 0.62rem;
   color: var(--accent-gold);
 }
 
 .npc-wealth-tag {
   font-family: var(--font-mono);
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 600;
-  padding: 2px 6px;
-  border-radius: 8px;
-  letter-spacing: 0.3px;
+  padding: 1px 5px;
+  border-radius: 6px;
+  letter-spacing: 0.2px;
   white-space: nowrap;
   display: inline-block;
   width: fit-content;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .wealth-destitute {
-  background: rgba(200, 120, 100, 0.2);
-  color: #e09080;
-  border: 1px solid rgba(200, 120, 100, 0.35);
+  background: var(--wealth-destitute-bg);
+  color: var(--wealth-destitute-fg);
+  border: 1px solid var(--wealth-destitute-bd);
 }
 .wealth-poor {
-  background: rgba(200, 150, 100, 0.2);
-  color: #d4a070;
-  border: 1px solid rgba(200, 150, 100, 0.35);
+  background: var(--wealth-poor-bg);
+  color: var(--wealth-poor-fg);
+  border: 1px solid var(--wealth-poor-bd);
 }
 .wealth-tight {
-  background: rgba(190, 160, 110, 0.2);
-  color: #c8a860;
-  border: 1px solid rgba(190, 160, 110, 0.35);
+  background: var(--wealth-tight-bg);
+  color: var(--wealth-tight-fg);
+  border: 1px solid var(--wealth-tight-bd);
 }
 .wealth-balanced {
-  background: rgba(160, 180, 140, 0.2);
-  color: #a0b880;
-  border: 1px solid rgba(160, 180, 140, 0.35);
+  background: var(--wealth-balanced-bg);
+  color: var(--wealth-balanced-fg);
+  border: 1px solid var(--wealth-balanced-bd);
 }
 .wealth-comfortable {
-  background: rgba(130, 180, 150, 0.2);
-  color: #80b890;
-  border: 1px solid rgba(130, 180, 150, 0.35);
+  background: var(--wealth-comfortable-bg);
+  color: var(--wealth-comfortable-fg);
+  border: 1px solid var(--wealth-comfortable-bd);
 }
 .wealth-welloff {
-  background: rgba(120, 170, 180, 0.2);
-  color: #78a8b4;
-  border: 1px solid rgba(120, 170, 180, 0.35);
+  background: var(--wealth-welloff-bg);
+  color: var(--wealth-welloff-fg);
+  border: 1px solid var(--wealth-welloff-bd);
 }
 .wealth-rich {
-  background: rgba(180, 160, 100, 0.25);
-  color: #d4c070;
-  border: 1px solid rgba(200, 170, 100, 0.5);
-  box-shadow: 0 0 6px rgba(200, 170, 100, 0.15);
+  background: var(--wealth-rich-bg);
+  color: var(--wealth-rich-fg);
+  border: 1px solid var(--wealth-rich-bd);
 }
 .wealth-tycoon {
-  background: rgba(200, 170, 90, 0.3);
-  color: #f0d080;
-  border: 1px solid rgba(220, 190, 100, 0.6);
-  box-shadow: 0 0 8px rgba(220, 190, 100, 0.25);
+  background: var(--wealth-tycoon-bg);
+  color: var(--wealth-tycoon-fg);
+  border: 1px solid var(--wealth-tycoon-bd);
 }
 
 .npc-status-row {
   font-family: var(--font-mono);
-  font-size: 0.65rem;
+  font-size: 0.58rem;
   color: var(--text-secondary);
   display: flex;
   flex-wrap: wrap;
@@ -241,32 +232,32 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
   line-height: 1.4;
 }
 
+.npc-status-item {
+  min-width: 0;
+  word-break: break-word;
+}
+
 .npc-status-dot {
   color: var(--accent-sky);
   font-weight: 700;
 }
 
 .npc-chain-section {
-  background: rgba(30, 26, 50, 0.5);
+  background: var(--bg-chain);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 5px 7px;
   position: relative;
   z-index: 1;
-  border-left: 3px solid var(--accent-lavender);
-}
-
-:global(.theme-light) .npc-chain-section {
-  background: rgba(235, 228, 215, 0.5);
-  border-left-color: rgba(130, 100, 60, 0.5);
+  border-left: 2px solid var(--border-chain);
 }
 
 .chain-label {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
-  letter-spacing: 0.8px;
+  letter-spacing: 0.5px;
   color: var(--accent-lavender);
   text-transform: uppercase;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   font-family: var(--font-mono);
 }
 
@@ -274,47 +265,48 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 3px;
-  font-size: 0.68rem;
+  gap: 2px;
+  font-size: 0.62rem;
   color: var(--text-secondary);
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .chain-step {
-  background: rgba(180, 150, 220, 0.12);
-  padding: 2px 6px;
-  border-radius: 5px;
+  background: var(--bg-step);
+  color: var(--text-primary);
+  padding: 1px 5px;
+  border-radius: 4px;
   font-weight: 500;
   white-space: normal;
   word-break: break-word;
   min-width: 0;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
 }
 
 .chain-arrow {
   color: var(--accent-gold);
   font-weight: 700;
   flex-shrink: 0;
-  font-size: 0.7rem;
+  font-size: 0.62rem;
 }
 
 .chain-predict {
   color: var(--accent-rose);
   font-weight: 600;
   font-style: italic;
-  font-size: 0.65rem;
+  font-size: 0.6rem;
   word-break: break-word;
   min-width: 0;
 }
 
 .chain-debut-tag {
-  background: rgba(220, 150, 120, 0.25);
-  color: #f0b090;
-  padding: 2px 6px;
-  border-radius: 5px;
+  background: var(--debut-bg);
+  color: var(--debut-fg);
+  padding: 1px 5px;
+  border-radius: 4px;
   font-weight: 700;
-  font-size: 0.6rem;
-  letter-spacing: 0.3px;
+  font-size: 0.55rem;
+  letter-spacing: 0.2px;
   animation: pulseTag 2s ease-in-out infinite;
   white-space: nowrap;
 }
@@ -322,35 +314,37 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
 @keyframes pulseTag {
   0%,
   100% {
-    box-shadow: 0 0 0 0 rgba(220, 150, 120, 0.5);
+    opacity: 1;
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(220, 150, 120, 0);
+    opacity: 0.82;
   }
 }
 
 .npc-info-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px 5px;
-  font-size: 0.68rem;
+  gap: 2px 4px;
+  font-size: 0.62rem;
   color: var(--text-secondary);
   position: relative;
   z-index: 1;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 .npc-info-label {
   font-weight: 700;
   color: var(--accent-sky);
   white-space: nowrap;
-  font-size: 0.63rem;
-  letter-spacing: 0.3px;
+  font-size: 0.58rem;
+  letter-spacing: 0.2px;
 }
 
 .npc-info-value {
   color: var(--text-primary);
   word-break: break-word;
+  min-width: 0;
+  flex: 1;
 }
 
 .npc-memory-block {
@@ -358,14 +352,14 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
 }
 
 .memory-label {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.52rem;
   font-weight: 700;
-  letter-spacing: 0.6px;
+  letter-spacing: 0.5px;
   color: var(--accent-lavender);
   text-transform: uppercase;
 }
@@ -377,47 +371,67 @@ const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
 }
 
 .memory-tag {
-  font-size: 0.62rem;
-  background: rgba(160, 140, 200, 0.12);
-  border: 1px solid rgba(160, 140, 200, 0.25);
-  padding: 2px 6px;
-  border-radius: 8px;
+  font-size: 0.56rem;
+  background: var(--memory-bg);
+  border: 1px solid var(--memory-bd);
+  padding: 1px 5px;
+  border-radius: 6px;
   color: var(--text-secondary);
-  line-height: 1.4;
+  line-height: 1.35;
   max-width: 100%;
   word-break: break-word;
-  transition: all 0.2s;
-
-  &:hover {
-    background: rgba(180, 150, 220, 0.2);
-    border-color: rgba(180, 150, 220, 0.4);
-    color: var(--text-primary);
-  }
 
   &--settled {
-    background: rgba(140, 170, 200, 0.12);
-    border-color: rgba(140, 170, 200, 0.25);
+    background: var(--memory-settled-bg);
+    border-color: var(--memory-settled-bd);
   }
 
   &--core {
-    background: rgba(200, 170, 100, 0.15);
-    border-color: rgba(200, 170, 100, 0.35);
+    background: var(--memory-core-bg);
+    border-color: var(--memory-core-bd);
     color: var(--accent-gold);
   }
 }
 
 @media (max-width: 640px) {
   .npc-card {
-    padding: 10px 12px;
-    gap: 5px;
+    padding: 7px 8px;
+    gap: 4px;
   }
+
   .npc-avatar {
-    width: 30px;
-    height: 30px;
-    font-size: 15px;
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
   }
+
   .npc-name {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  .npc-status-row {
+    font-size: 0.56rem;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .chain-flow {
+    font-size: 0.6rem;
+  }
+
+  .chain-step,
+  .chain-predict {
+    flex: 1 1 100%;
+  }
+
+  .chain-arrow {
+    display: none;
+  }
+
+  .npc-info-row {
+    flex-direction: column;
+    gap: 1px;
+    font-size: 0.6rem;
   }
 }
 </style>

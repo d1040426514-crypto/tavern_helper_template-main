@@ -79,18 +79,25 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .app-hint {
-  padding: 0.85em 1em;
+  padding: 0.7em 0.85em;
   color: var(--text-muted);
   background: var(--bg-card);
   border: 1px dashed var(--border-subtle);
   border-radius: var(--radius-md);
   overflow-wrap: anywhere;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 
   code {
     font-size: 0.9em;
     color: var(--accent-lavender);
     font-family: var(--font-mono);
+  }
+}
+
+@media (max-width: 640px) {
+  .app-hint {
+    padding: 0.6em 0.7em;
+    font-size: 0.75rem;
   }
 }
 </style>

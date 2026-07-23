@@ -6,6 +6,7 @@ import {
   storedTagValueToInner,
   type ExtractTagSpec,
 } from './tag-extract';
+import { isEnumRegistryMarker } from './replica-enum-parse';
 import { processTemplateText } from './template-process';
 import {
   buildCurrentFloorTagMap,
@@ -63,6 +64,8 @@ export function collectStageTagsForRule(stageResults: TaskRunResult[], targetTag
     if (!r.success || r.skipped) continue;
     for (const [key, value] of Object.entries(r.extractedTags ?? {})) {
       if (!String(value ?? '').trim()) continue;
+      // ReplicaEnum 仅注册键名，不含可写入正文；不当作成写入/替换的有效摘取
+      if (isEnumRegistryMarker(String(value))) continue;
       if (!keyMatchesExtractSpec(key, spec)) continue;
       merged[key] = value;
     }
