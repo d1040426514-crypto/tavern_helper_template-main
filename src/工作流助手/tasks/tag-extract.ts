@@ -388,7 +388,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         code: '{{total:launched:标签@属性}}',
-        desc: '工作流脚本占位符：仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含本轮 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。',
+        desc: '工作流脚本占位符：优先展开本轮可运行副本的复合实例（manual=replicaFamilyLaunched，auto=relay <ReplicaEnum>）；本轮名单为空则回退 last-launched（仅 post_process_tags）。例如 {{total:launched:item@id}}。',
       },
       {
         code: '{{total:last-launched:标签@属性}}',
@@ -440,8 +440,8 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '副本保留 id、属性值、启动状态与独立启停；不可修改任务级工作流配置（提示词、API、阶段、提取标签等），第 2 页「按任务配置」仅针对原本；删除副本与手动调度除外。',
       '直接编辑副本会在下次镜像时被覆盖。',
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
-      '提示词可用 {{replica:launched:任务名}} 列出指定副本族原本在本轮已开启副本的后缀名（顿号连接，不含共有任务名前缀）。',
-      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族本轮已开启副本的复合实例正文（与 {{total:标签@属性}} 同形，但按本轮 launched/enum 过滤）。',
+      '提示词可用 {{replica:launched:任务名}} 列出指定副本族已开启副本的后缀名（顿号连接）；本轮名单为空则回退楼层 last-launched 名单。',
+      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族复合实例正文：本轮优先，空则回退 last-launched（仅 post_process_tags）。',
       '提示词可用 {{total:last-launched:标签@属性}} 展开楼层快照中上次启动副本的复合实例正文（只读 post_process_tags）。',
       '{{total:…}} / {{total:last-launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用。',
     ],

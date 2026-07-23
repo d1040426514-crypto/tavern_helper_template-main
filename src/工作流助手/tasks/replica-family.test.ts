@@ -18,6 +18,7 @@ import {
   isReplicaFamilyRootTemplate,
   listLaunchedReplicaSuffixes,
   listLastLaunchedAttrValues,
+  listLaunchedAttrValuesWithFallback,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
   resolveReplicaLaunchedPlaceholder,
@@ -545,6 +546,56 @@ test('listLastLaunchedAttrValues falls back when primary empty', () => {
       a: { attrValues: ['1'], launchedAttrValues: ['1'] },
     }),
     ['1'],
+  );
+});
+
+test('listLaunchedAttrValuesWithFallback prefers current then last', () => {
+  const root = baseTask({
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyAttrValue === '1'
+      ? { ...t, replicaFamilyLaunched: true }
+      : t.replicaFamilyAttrValue === '2'
+        ? { ...t, replicaFamilyLaunched: false }
+        : t,
+  );
+  const syncedRoot = tasks.find(t => t.id === root.id)!;
+  assert.deepEqual(
+    listLaunchedAttrValuesWithFallback(syncedRoot, tasks, new Map(), {
+      [root.id]: { attrValues: ['1', '2'], launchedAttrValues: ['2'] },
+    }),
+    ['1'],
+  );
+
+  tasks = tasks.map(t =>
+    t.replicaFamilyRootId ? { ...t, replicaFamilyLaunched: false } : t,
+  );
+  assert.deepEqual(
+    listLaunchedAttrValuesWithFallback(syncedRoot, tasks, new Map(), {
+      [root.id]: { attrValues: ['1', '2'], launchedAttrValues: ['2'] },
+    }),
+    ['2'],
+  );
+});
+
+test('resolveReplicaLaunchedPlaceholder falls back to last-launched list', () => {
+  const root = baseTask({
+    name: '副本族处理',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyRootId ? { ...t, replicaFamilyLaunched: false } : t,
+  );
+  assert.equal(
+    resolveReplicaLaunchedPlaceholder('副本族处理', tasks, new Map(), {
+      [root.id]: { attrValues: ['1', '2'], launchedAttrValues: ['2'] },
+    }),
+    '2',
   );
 });
 

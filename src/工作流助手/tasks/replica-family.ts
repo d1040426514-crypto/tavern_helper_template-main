@@ -540,14 +540,27 @@ export function listLastLaunchedAttrValues(
   return sortAttrValues([...new Set(chosen)]);
 }
 
+/** 本轮 runnable 优先；整表为空则回退楼层 last-launched 名单 */
+export function listLaunchedAttrValuesWithFallback(
+  root: PostProcessTask,
+  allTasks: PostProcessTask[],
+  relayMap: RelayTagMap,
+  snapshot: ReplicaStateSnapshot,
+): string[] {
+  const current = listLaunchedReplicaSuffixes(root, allTasks, relayMap);
+  if (current.length) return current;
+  return listLastLaunchedAttrValues(root, snapshot);
+}
+
 export function resolveReplicaLaunchedPlaceholder(
   ref: string,
   allTasks: PostProcessTask[],
   relayMap: RelayTagMap,
+  snapshot: ReplicaStateSnapshot = {},
 ): string {
   const root = findReplicaFamilyRootByRef(ref, allTasks);
   if (!root) return '';
-  return listLaunchedReplicaSuffixes(root, allTasks, relayMap).join('、');
+  return listLaunchedAttrValuesWithFallback(root, allTasks, relayMap, snapshot).join('、');
 }
 
 export type PrepareStageReplicaSyncResult = {

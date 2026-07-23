@@ -638,6 +638,147 @@ test('total:last-launched falls back to other field when primary empty', () => {
   assert.ok(out.includes('B'));
 });
 
+test('total:launched prefers current round over last-launched snapshot', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rep1 = {
+    ...root,
+    id: 'rep-1',
+    name: '副本族处理 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['CUR']],
+    ['item@id=2', ['LAST']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map(),
+    history,
+    new Set(),
+    {
+      historyFallback: 'all-tags',
+      allTasks: [root, rep1],
+      replicaState: {
+        'root-1': { attrValues: ['1', '2'], launchedAttrValues: ['2'] },
+      },
+    },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('CUR'));
+  assert.ok(!out.includes('<item id="2">'));
+  assert.ok(!out.includes('LAST'));
+});
+
+test('total:launched falls back to last-launched when current empty', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rep2 = {
+    ...root,
+    id: 'rep-2',
+    name: '副本族处理 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '2',
+    replicaFamilyLaunched: false,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['LAST']],
+    ['item@id=2', ['OTHER']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map([['item@id=1', ['RELAY-ONLY']]]),
+    history,
+    new Set(),
+    {
+      historyFallback: 'all-tags',
+      allTasks: [root, rep2],
+      replicaState: {
+        'root-1': { attrValues: ['1', '2'], launchedAttrValues: ['1'] },
+      },
+    },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('LAST'));
+  assert.ok(!out.includes('RELAY-ONLY'));
+  assert.ok(!out.includes('<item id="2">'));
+});
+
+test('total:launched empty when both current and last empty', () => {
+  const root = {
+    id: 'root-1',
+    name: '副本族处理',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '副本族处理',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map(),
+    new Map([['item@id=1', ['A']]]),
+    new Set(),
+    {
+      historyFallback: 'all-tags',
+      allTasks: [root],
+      replicaState: { 'root-1': { attrValues: ['1'] } },
+    },
+  );
+  assert.equal(out, '');
+});
+
 if (process.exitCode) {
   process.exit(process.exitCode);
 }

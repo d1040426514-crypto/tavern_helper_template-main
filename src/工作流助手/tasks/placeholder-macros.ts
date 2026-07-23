@@ -137,6 +137,6 @@ export const REGISTERED_MACRO_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{replica:launched:任务名}}',
-    desc: '输出可运行副本的属性值列表（顿号连接），支持任务名或 Id。manual 看 replicaFamilyLaunched；auto 看楼层 lastEnumAttrValues。',
+    desc: '输出可运行副本属性值列表（顿号连接）；本轮优先，空则回退楼层 last-launched 名单。支持任务名或 Id。',
   },
 ];

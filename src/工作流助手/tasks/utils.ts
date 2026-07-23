@@ -380,6 +380,25 @@ function applyNestedRefresh(
   });
 }
 
+function resolveTotalLastLaunchedInject(
+  spec: { tagName: string; attrName: string },
+  messageVarHistoryMap: RelayTagMap,
+  options?: PlotPlaceholderResolveOptions,
+): string {
+  if (!options?.allTasks?.length) return '';
+  const root = findReplicaFamilyRootByAttrSpec(spec, options.allTasks);
+  if (!root) return '';
+  const suffixes = listLastLaunchedAttrValues(root, options.replicaState ?? {});
+  const parts: string[] = [];
+  for (const suffix of suffixes) {
+    const key = buildCompositeKey(spec.tagName, spec.attrName, suffix);
+    // 仅读楼层落盘，忽略本轮 relay
+    const part = resolvePlaceholderInjectTextFromMap(messageVarHistoryMap, key);
+    if (part) parts.push(part);
+  }
+  return parts.join('\n\n');
+}
+
 export function resolvePlaceholderForInject(
   placeholderName: string,
   relayTagMap: RelayTagMap,
@@ -394,23 +413,21 @@ export function resolvePlaceholderForInject(
   const launchedRef = parseReplicaLaunchedPlaceholder(placeholderName);
   if (launchedRef != null) {
     if (!options?.allTasks?.length) return '';
-    return resolveReplicaLaunchedPlaceholder(launchedRef, options.allTasks, relayTagMap);
+    return resolveReplicaLaunchedPlaceholder(
+      launchedRef,
+      options.allTasks,
+      relayTagMap,
+      options.replicaState ?? {},
+    );
   }
 
   const totalLastLaunchedSpec = parseTotalLastLaunchedPlaceholder(placeholderName);
   if (totalLastLaunchedSpec) {
-    if (!options?.allTasks?.length) return '';
-    const root = findReplicaFamilyRootByAttrSpec(totalLastLaunchedSpec, options.allTasks);
-    if (!root) return '';
-    const suffixes = listLastLaunchedAttrValues(root, options.replicaState ?? {});
-    const parts: string[] = [];
-    for (const suffix of suffixes) {
-      const key = buildCompositeKey(totalLastLaunchedSpec.tagName, totalLastLaunchedSpec.attrName, suffix);
-      // 仅读楼层落盘，忽略本轮 relay
-      const part = resolvePlaceholderInjectTextFromMap(messageVarHistoryMap, key);
-      if (part) parts.push(part);
-    }
-    return parts.join('\n\n');
+    return resolveTotalLastLaunchedInject(
+      totalLastLaunchedSpec,
+      messageVarHistoryMap,
+      options,
+    );
   }
 
   const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
@@ -418,20 +435,24 @@ export function resolvePlaceholderForInject(
     if (!options?.allTasks?.length) return '';
     const root = findReplicaFamilyRootByAttrSpec(totalLaunchedSpec, options.allTasks);
     if (!root) return '';
-    const suffixes = listLaunchedReplicaSuffixes(root, options.allTasks, relayTagMap);
-    const parts: string[] = [];
-    for (const suffix of suffixes) {
-      const key = buildCompositeKey(totalLaunchedSpec.tagName, totalLaunchedSpec.attrName, suffix);
-      const part = resolvePlaceholderForInject(
-        key,
-        relayTagMap,
-        messageVarHistoryMap,
-        injectOnlyTags,
-        options,
-      );
-      if (part) parts.push(part);
+    const currentSuffixes = listLaunchedReplicaSuffixes(root, options.allTasks, relayTagMap);
+    if (currentSuffixes.length) {
+      const parts: string[] = [];
+      for (const suffix of currentSuffixes) {
+        const key = buildCompositeKey(totalLaunchedSpec.tagName, totalLaunchedSpec.attrName, suffix);
+        const part = resolvePlaceholderForInject(
+          key,
+          relayTagMap,
+          messageVarHistoryMap,
+          injectOnlyTags,
+          options,
+        );
+        if (part) parts.push(part);
+      }
+      return parts.join('\n\n');
     }
-    return parts.join('\n\n');
+    // 本轮名单空 → 回退 last-launched（仅 history）
+    return resolveTotalLastLaunchedInject(totalLaunchedSpec, messageVarHistoryMap, options);
   }
 
   const totalSpec = parseTotalPlaceholder(placeholderName);
@@ -868,7 +889,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{total:launched:标签@属性}}',
-    desc: '工作流脚本占位符：展开对应副本族本轮可运行（已开启）副本的 tag@attr=* 复合实例正文。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含本轮 relay <ReplicaEnum> 注册的副本。',
+    desc: '工作流脚本占位符：优先展开本轮可运行副本（manual=replicaFamilyLaunched，auto=relay <ReplicaEnum>）；本轮名单为空则回退 last-launched（仅 post_process_tags）。不回退全量 total:。',
   },
   {
     code: '{{total:last-launched:标签@属性}}',
@@ -881,7 +902,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{replica:launched:任务名}}',
-    desc: '解析为指定副本族原本在本轮可运行（已开启）副本的后缀名列表（replicaFamilyAttrValue），顿号连接，不含共有任务名前缀；支持任务名或任务 Id。manual 模式仅含 replicaFamilyLaunched 的副本；auto 模式仅含 relay <ReplicaEnum> 注册的副本。亦注册为酒馆助手宏。',
+    desc: '本轮可运行副本后缀名列表（顿号连接）；本轮为空则回退楼层 last-launched 名单。支持任务名或 Id。亦注册为酒馆助手宏。',
   },
   {
     code: '{{char}} 等',
