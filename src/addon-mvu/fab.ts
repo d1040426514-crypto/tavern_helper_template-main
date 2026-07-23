@@ -797,6 +797,32 @@ function unbindOrbitSyncListeners(): void {
   }
 }
 
+const SOFT_UNLOAD_KEY = '__addonConsoleSoftUnload';
+
+type HostWithSoftUnload = Window & { [SOFT_UNLOAD_KEY]?: number };
+
+/** 聊天切换即将 reload 时调用：pagehide 走软清理，避免悬浮球闪烁 */
+export function markAddonConsoleSoftUnload(): void {
+  try {
+    (hostWin() as HostWithSoftUnload)[SOFT_UNLOAD_KEY] = Date.now();
+  } catch {
+    /* ignore */
+  }
+}
+
+function consumeAddonConsoleSoftUnload(): boolean {
+  try {
+    const win = hostWin() as HostWithSoftUnload;
+    if (win[SOFT_UNLOAD_KEY]) {
+      delete win[SOFT_UNLOAD_KEY];
+      return true;
+    }
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
+
 export function injectAddonConsoleFab(): void {
   ensureStyles();
   exposeHostApi();
@@ -831,7 +857,7 @@ export function injectAddonConsoleFab(): void {
 
 /**
  * 脚本 iframe 卸载时的软清理：卸下面板，但保留父页悬浮球与样式，
- * 避免 CHAT_CHANGED / HMR 重载脚本时悬浮球闪没再出现。
+ * 避免 CHAT_CHANGED 重载脚本时悬浮球闪没再出现。
  */
 export function softTeardownAddonConsoleHost(): void {
   unmountConsole();
@@ -856,4 +882,12 @@ export function destroyAddonConsoleHost(): void {
   } catch {
     /* ignore */
   }
+}
+
+/**
+ * pagehide 入口：聊天切换软清理（保悬浮球），关闭脚本硬清理（移除悬浮球）。
+ */
+export function teardownAddonConsoleHostOnUnload(): void {
+  if (consumeAddonConsoleSoftUnload()) softTeardownAddonConsoleHost();
+  else destroyAddonConsoleHost();
 }

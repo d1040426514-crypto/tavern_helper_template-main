@@ -64,8 +64,9 @@ function tryGetCurrentChatId(): string | undefined {
 /**
  * 聊天切换时刷新脚本 iframe. 初始化时若 parent.SillyTavern 尚未就绪,
  * 不会抛错, 而是等首次 CHAT_CHANGED / 稍后回填当前 chatId.
+ * @param options.beforeReload 在 location.reload 之前同步调用（可写父页标记等）
  */
-export function reloadOnChatChange(): EventOnReturn {
+export function reloadOnChatChange(options?: { beforeReload?: () => void }): EventOnReturn {
   let chat_id = tryGetCurrentChatId();
 
   if (chat_id === undefined) {
@@ -89,6 +90,11 @@ export function reloadOnChatChange(): EventOnReturn {
     }
     if (chat_id !== new_chat_id) {
       chat_id = new_chat_id;
+      try {
+        options?.beforeReload?.();
+      } catch {
+        /* ignore */
+      }
       window.location.reload();
     }
   });

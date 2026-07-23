@@ -1,7 +1,7 @@
 import { waitUntil } from 'async-wait-until';
 import { reloadOnChatChange } from '@util/script';
 
-import { injectAddonConsoleFab, softTeardownAddonConsoleHost } from './fab';
+import { injectAddonConsoleFab, markAddonConsoleSoftUnload, teardownAddonConsoleHostOnUnload } from './fab';
 import { Addon } from './global-api';
 import { backfillChatAddonData, processFloor } from './store';
 
@@ -82,13 +82,13 @@ function initAddonMvu(): void {
     errorCatched(() => processFloor(getLastMessageId()))();
   });
 
-  reloadOnChatChange();
+  reloadOnChatChange({ beforeReload: markAddonConsoleSoftUnload });
   initializeGlobal('Addon', Addon);
   exposeAddonOnParent();
   errorCatched(injectAddonConsoleFab)();
 
   $(window).on('pagehide', () => {
-    errorCatched(softTeardownAddonConsoleHost)();
+    errorCatched(teardownAddonConsoleHostOnUnload)();
   });
 
   console.info('[addon-mvu] 已加载: addon_data / archive / ui、控制台悬浮球与 Addon API 已启用');
