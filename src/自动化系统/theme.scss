@@ -1,0 +1,70 @@
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700;900&display=swap');
+
+:root,
+.chronicle-root {
+  --bg-deep: #121420;
+  --bg-card: rgba(28, 26, 48, 0.85);
+  --bg-card-hover: rgba(34, 31, 58, 0.92);
+  --bg-panel: rgba(22, 20, 40, 0.7);
+  --border-subtle: rgba(150, 140, 200, 0.2);
+  --border-glow: rgba(170, 150, 220, 0.35);
+  --accent-rose: #d4a0b8;
+  --accent-lavender: #b8a4d4;
+  --accent-sky: #8cb8d8;
+  --accent-gold: #d4c090;
+  --accent-mint: #90c4a8;
+  --accent-coral: #e0a090;
+  --text-primary: #e8e4f2;
+  --text-secondary: #c4bfd8;
+  --text-muted: #9893b0;
+  --text-accent: #f0e6d8;
+  --glow-soft: 0 0 18px rgba(160, 140, 200, 0.15);
+  --glow-card: 0 0 24px rgba(140, 120, 180, 0.12);
+  --glow-accent: 0 0 14px rgba(180, 150, 210, 0.25);
+  --radius-sm: 8px;
+  --radius-md: 14px;
+  --radius-lg: 18px;
+  --radius-xl: 22px;
+  --font-display: 'DM Serif Display', 'Noto Serif SC', Georgia, serif;
+  --font-body: Inter, 'Noto Serif SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+  --transition-smooth: 0.3s cubic-bezier(0.33, 1, 0.68, 1);
+}
+
+.chronicle-root.theme-light {
+  --bg-deep: #f5f1ec;
+  --bg-card: rgba(255, 252, 248, 0.9);
+  --bg-card-hover: rgba(255, 250, 244, 0.95);
+  --bg-panel: rgba(248, 244, 238, 0.8);
+  --border-subtle: rgba(140, 120, 90, 0.2);
+  --border-glow: rgba(150, 130, 100, 0.35);
+  --accent-rose: #b8708a;
+  --accent-lavender: #8a78b0;
+  --accent-sky: #5c8aa8;
+  --accent-gold: #b89850;
+  --accent-mint: #609878;
+  --accent-coral: #c88070;
+  --text-primary: #2a2230;
+  --text-secondary: #4a4058;
+  --text-muted: #786e84;
+  --text-accent: #3a2a18;
+  --glow-soft: 0 0 18px rgba(120, 100, 70, 0.1);
+  --glow-card: 0 0 20px rgba(100, 80, 50, 0.08);
+  --glow-accent: 0 0 12px rgba(140, 110, 60, 0.18);
+}
+
+.chronicle-root {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  margin: 10px 0;
+  font-family: var(--font-body);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+}
