@@ -5,6 +5,21 @@ const MAX_RETRIES = 30;
 const RETRY_DELAY_MS = 500;
 const MENU_CLOSE_DELAY_MS = 150;
 
+/** 聊天切换即将 reload 时置位：pagehide 软清理，保留魔杖入口 DOM，避免闪烁 */
+let softUnloadPending = false;
+
+export function markExtensionsMenuSoftUnload(): void {
+  softUnloadPending = true;
+}
+
+export function consumeExtensionsMenuSoftUnload(): boolean {
+  if (softUnloadPending) {
+    softUnloadPending = false;
+    return true;
+  }
+  return false;
+}
+
 function getMenuIds(): { containerId: string; itemId: string } {
   const prefix = getScriptId();
   return {

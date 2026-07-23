@@ -9,7 +9,11 @@ import { registerTagVariableInheritance } from './tasks/tag-variables';
 import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { registerReplicaReconcile } from './tasks/replica-reconcile';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
-import { registerExtensionsMenuEntry } from './ui/extensions-menu';
+import {
+  registerExtensionsMenuEntry,
+  markExtensionsMenuSoftUnload,
+  consumeExtensionsMenuSoftUnload,
+} from './ui/extensions-menu';
 import { initApiSecretsStorage } from './settings/api-secrets-storage';
 import { loadSettings, useSettingsStore } from './settings';
 import { updateGlobalTheme } from './ui/theme';
@@ -57,7 +61,7 @@ $(() => {
   const offTrigger = registerTrigger();
   const offChatTagExtract = registerUserChatTagExtractTrigger();
   const offTagInherit = registerTagVariableInheritance();
-  const offChat = reloadOnChatChange();
+  const offChat = reloadOnChatChange({ beforeReload: markExtensionsMenuSoftUnload });
   const offWorldbookReconcile = registerWorldbookWriteReconcile();
   const offReplicaReconcile = registerReplicaReconcile();
   const offPlaceholderMacros = registerPlaceholderMacros();
@@ -76,7 +80,11 @@ $(() => {
   });
 
   $(window).on('pagehide', () => {
-    menuEntry.destroy();
+    const soft = consumeExtensionsMenuSoftUnload();
+    // 聊天切换 reload：保留父页魔杖入口 DOM，重载后仅重绑点击，避免闪烁
+    if (!soft) {
+      menuEntry.destroy();
+    }
     offTrigger.stop();
     offChatTagExtract.stop();
     offTagInherit.stop();
