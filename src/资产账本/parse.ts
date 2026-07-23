@@ -346,6 +346,32 @@ export function parseCashBaseTotal(cashBase: string): string {
   return softTrim(m?.[1] ?? '');
 }
 
+export type ProductionSplit = {
+  sold: string;
+  stock: string;
+  self: string;
+};
+
+/**
+ * 从产线正文提取分流摘要。
+ * 例：`分流: 已售8→收入; 入库2→仓库; 自用0（已售+入库+自用=产出）`
+ */
+export function parseProductionSplit(text: string): ProductionSplit | null {
+  const t = String(text ?? '');
+  const line =
+    t
+      .split(/\r?\n/)
+      .map(l => l.trim())
+      .find(l => /^分流\s*[:：]/.test(l)) ?? (/\b分流\s*[:：]/.test(t) ? t : '');
+  if (!line) return null;
+  const body = line.replace(/^[\s\S]*?分流\s*[:：]\s*/, '');
+  const sold = body.match(/已售\s*([^;；→\n]*?)(?=\s*(?:→|;|；|入库|自用|$))/)?.[1]?.trim() ?? '';
+  const stock = body.match(/入库\s*([^;；→\n]*?)(?=\s*(?:→|;|；|自用|已售|$))/)?.[1]?.trim() ?? '';
+  const self = body.match(/自用\s*([^;；→\n（(]*?)(?=\s*(?:→|;|；|（|\(|已售|入库|$))/)?.[1]?.trim() ?? '';
+  if (!sold && !stock && !self) return null;
+  return { sold, stock, self };
+}
+
 /** 从币种正文提取期末与 Δ */
 export function parseCashMetrics(text: string): CashMetrics {
   const t = String(text ?? '');

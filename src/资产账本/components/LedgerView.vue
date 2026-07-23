@@ -166,7 +166,12 @@
               <span v-if="b.attrs.status" class="tag" :class="statusTagClass(b.attrs.status)">{{
                 b.attrs.status
               }}</span>
-              <AttrChips :attrs="b.attrs" :hide="['type', 'count', 'status', 'quality']" />
+              <span v-if="b.attrs.maintain" class="muted"> · 维护:{{ b.attrs.maintain }}</span>
+              <span v-if="b.attrs.baseIncome" class="muted"> · 基线收入:{{ b.attrs.baseIncome }}</span>
+              <AttrChips
+                :attrs="b.attrs"
+                :hide="['type', 'count', 'status', 'quality', 'maintain', 'baseIncome']"
+              />
               <p v-if="b.text" class="muted staff-note">{{ b.text }}</p>
             </div>
           </FoldPanel>
@@ -329,13 +334,25 @@
               :key="'ri-' + ii"
               variant="sub"
               :title="pick(item.attrs, 'name') || '条目'"
-              :summary="pick(item.attrs, 'amount') || oneLine(item.text)"
+              :summary="moneyItemSummary(item)"
               :badge="pick(item.attrs, 'amount')"
               badge-class="is-plus"
               :default-open="false"
               :forced-open="forcedOpen"
             >
-              <AttrChips :attrs="item.attrs" :hide="['name', 'amount']" />
+              <div v-if="moneyItemMeta(item)" class="item-meta">
+                <span v-if="isRecurring(item.attrs)" class="tag tag-warm">常备</span>
+                <span v-if="pick(item.attrs, 'type')" class="tag tag-primary">{{
+                  pick(item.attrs, 'type')
+                }}</span>
+                <span v-if="pick(item.attrs, 'order')" class="muted"
+                  >订单:{{ pick(item.attrs, 'order') }}</span
+                >
+              </div>
+              <AttrChips
+                :attrs="item.attrs"
+                :hide="['name', 'amount', 'type', 'recurring', 'order']"
+              />
               <StatRow :text="item.text" />
             </FoldPanel>
           </FoldPanel>
@@ -355,13 +372,25 @@
               :key="'ei-' + ii"
               variant="sub"
               :title="pick(item.attrs, 'name') || '条目'"
-              :summary="pick(item.attrs, 'amount') || oneLine(item.text)"
+              :summary="moneyItemSummary(item)"
               :badge="pick(item.attrs, 'amount')"
               badge-class="is-minus"
               :default-open="false"
               :forced-open="forcedOpen"
             >
-              <AttrChips :attrs="item.attrs" :hide="['name', 'amount']" />
+              <div v-if="moneyItemMeta(item)" class="item-meta">
+                <span v-if="isRecurring(item.attrs)" class="tag tag-warm">常备</span>
+                <span v-if="pick(item.attrs, 'type')" class="tag tag-primary">{{
+                  pick(item.attrs, 'type')
+                }}</span>
+                <span v-if="pick(item.attrs, 'order')" class="muted"
+                  >订单:{{ pick(item.attrs, 'order') }}</span
+                >
+              </div>
+              <AttrChips
+                :attrs="item.attrs"
+                :hide="['name', 'amount', 'type', 'recurring', 'order']"
+              />
               <StatRow :text="item.text" />
             </FoldPanel>
           </FoldPanel>
@@ -386,6 +415,18 @@
               :forced-open="forcedOpen"
             >
               <AttrChips :attrs="line.attrs" :hide="['production', 'building', 'count', 'run']" />
+              <div
+                v-for="split in [lineSplit(line.text)].filter(Boolean)"
+                :key="'split-' + li"
+                class="split-row"
+              >
+                <span class="split-label">分流</span>
+                <span v-if="split!.sold" class="split-chip split-chip--sold">已售 {{ split!.sold }}</span>
+                <span v-if="split!.stock" class="split-chip split-chip--stock"
+                  >入库 {{ split!.stock }}</span
+                >
+                <span v-if="split!.self" class="split-chip split-chip--self">自用 {{ split!.self }}</span>
+              </div>
               <StatRow :text="line.text" />
             </FoldPanel>
           </FoldPanel>
@@ -469,7 +510,7 @@ import FoldPanel from './FoldPanel.vue';
 import PreLine from './PreLine.vue';
 import ProgressBar from './ProgressBar.vue';
 import StatRow from './StatRow.vue';
-import { parseCashMetrics } from '../parse';
+import { parseCashMetrics, parseProductionSplit } from '../parse';
 import type { BusinessData, EntityData, LedgerData, NamedBlock, OperationsData } from '../types';
 
 defineProps<{
@@ -537,6 +578,31 @@ function moneySummary(total: string, period: string): string {
   if (!total && !period) return '';
   if (total && period) return `${total} / ${period}`;
   return total || period;
+}
+
+function isRecurring(attrs: Record<string, string>): boolean {
+  const v = String(attrs?.recurring ?? '')
+    .trim()
+    .toLowerCase();
+  return v === 'true' || v === '1' || v === 'yes';
+}
+
+/** 折叠标题摘要：常备 · 类型（金额走 badge） */
+function moneyItemSummary(item: NamedBlock): string {
+  const parts = [
+    isRecurring(item.attrs) ? '常备' : '',
+    pick(item.attrs, 'type'),
+  ].filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+  return oneLine(item.text);
+}
+
+function moneyItemMeta(item: NamedBlock): boolean {
+  return !!(isRecurring(item.attrs) || pick(item.attrs, 'type') || pick(item.attrs, 'order'));
+}
+
+function lineSplit(text: string) {
+  return parseProductionSplit(text);
 }
 
 function bizSummary(biz: BusinessData): string {
@@ -946,6 +1012,59 @@ function statusTagClass(status: string): string {
 
 .staff-note {
   margin: 0 0 0.4em;
+}
+
+.item-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 4px 0 6px;
+}
+
+.split-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin: 6px 0 8px;
+  padding: 6px 8px;
+  border-radius: var(--radius-xs);
+  background: rgba(74, 124, 92, 0.08);
+  border: 1px solid rgba(74, 124, 92, 0.2);
+}
+
+.split-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--accent-green);
+  letter-spacing: 0.3px;
+}
+
+.split-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 8px;
+  line-height: 1.4;
+}
+
+.split-chip--sold {
+  background: rgba(74, 124, 92, 0.15);
+  color: var(--accent-green);
+  border: 1px solid rgba(74, 124, 92, 0.25);
+}
+
+.split-chip--stock {
+  background: rgba(176, 125, 68, 0.12);
+  color: var(--accent-primary);
+  border: 1px solid rgba(176, 125, 68, 0.25);
+}
+
+.split-chip--self {
+  background: rgba(90, 110, 140, 0.12);
+  color: var(--text-secondary);
+  border: 1px solid rgba(90, 110, 140, 0.22);
 }
 
 .manager-name {

@@ -6,8 +6,9 @@ import {
   parseCashMetrics,
   parseLedger,
   parseLedgerBody,
+  parseProductionSplit,
   parseProgressPct,
-} from './parse.ts';
+} from './parse';
 
 function test(name: string, fn: () => void): void {
   try {
@@ -44,12 +45,13 @@ test('parse warehouse and facilities tags', () => {
 
 test('parse facility paired tag with description', () => {
   const body = parseLedgerBody(
-    '<实体 name="商栈"><基建><设施 type="锯木房" count="2" quality="良" status="Normal" maintain="3银/周">北岸码头旁双联木工棚，专司原木剖板</设施></基建></实体>',
+    '<实体 name="商栈"><基建><设施 type="锯木房" count="2" quality="良" status="Normal" maintain="3银/周" baseIncome="5银/周">北岸码头旁双联木工棚，专司原木剖板</设施></基建></实体>',
   );
   const f = body.entities[0]?.facilities[0];
   assert.equal(f?.attrs.type, '锯木房');
   assert.equal(f?.attrs.count, '2');
   assert.equal(f?.attrs.maintain, '3银/周');
+  assert.equal(f?.attrs.baseIncome, '5银/周');
   assert.equal(f?.text, '北岸码头旁双联木工棚，专司原木剖板');
 });
 
@@ -282,6 +284,52 @@ test('parse staff meta, roles and key persons', () => {
   assert.equal(ent?.keyPersons[0]?.attrs.level, '老练');
   assert.equal(ent?.keyPersons[0]?.attrs.status, '在岗');
   assert.equal(ent?.keyPersons[0]?.text, '');
+});
+
+test('parse revenue type and recurring attrs', () => {
+  const body = parseLedgerBody(`
+<经营 name="商栈" 周期="周">
+  <收入 total="30" 周期="周">
+    <条目 name="铺租基线" amount="+20" type="租金" recurring="true">
+      计算:10×2=20 | 来源:设施baseIncome | 波动:无
+    </条目>
+    <条目 name="木板加价" amount="+10" type="现货" order="O9">
+      单价:1 × 数量:10 = 10 | 对方:北商行
+    </条目>
+  </收入>
+  <支出 total="8" 周期="周">
+    <条目 name="维护" amount="-8" type="维护" recurring="true">计算:4×2</条目>
+  </支出>
+</经营>
+`);
+  const rev = body.businesses[0]?.revenueItems ?? [];
+  assert.equal(rev[0]?.attrs.type, '租金');
+  assert.equal(rev[0]?.attrs.recurring, 'true');
+  assert.equal(rev[1]?.attrs.type, '现货');
+  assert.equal(rev[1]?.attrs.order, 'O9');
+  assert.equal(body.businesses[0]?.expenseItems[0]?.attrs.recurring, 'true');
+  assert.equal(body.businesses[0]?.expenseItems[0]?.attrs.type, '维护');
+});
+
+test('parseProductionSplit extracts sold/stock/self', () => {
+  const split = parseProductionSplit(`
+投入: 原木 8根/周
+产出: 木板 10张/周
+分流: 已售8→收入; 入库2→仓库; 自用0（已售+入库+自用=产出）
+品质: 良 | 损耗:5% | 瓶颈:人力
+`);
+  assert.ok(split);
+  assert.equal(split?.sold, '8');
+  assert.equal(split?.stock, '2');
+  assert.equal(split?.self, '0');
+
+  const qty = parseProductionSplit('分流: 已售木板10张→收入; 入库0→仓库; 自用2张');
+  assert.equal(qty?.sold, '木板10张');
+  assert.equal(qty?.stock, '0');
+  assert.equal(qty?.self, '2张');
+
+  assert.equal(parseProductionSplit('投入: 原木\n产出: 木板'), null);
+  assert.equal(parseProductionSplit('分流: 无明细'), null);
 });
 
 test('findAllPairs self-closing', () => {
