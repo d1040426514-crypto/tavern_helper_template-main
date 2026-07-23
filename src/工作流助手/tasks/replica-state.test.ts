@@ -86,10 +86,42 @@ test('applyReplicaStateToTasks adds missing members from snapshot', () => {
   assert.deepEqual(attrs, ['剑', '盾']);
 });
 
-test('applyReplicaStateToTasks empty snapshot clears all members', () => {
+test('applyReplicaStateToTasks empty snapshot preserves members', () => {
   const tasks = [rootTask(), memberTask('剑'), memberTask('盾')];
   const next = applyReplicaStateToTasks(tasks, {});
-  assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 0);
+  assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 2);
+});
+
+test('applyReplicaStateToTasks empty attrValues preserves members', () => {
+  const tasks = [rootTask(), memberTask('剑')];
+  const next = applyReplicaStateToTasks(tasks, { root: { attrValues: [] } });
+  assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 1);
+});
+
+test('mergeReplicaStateForRerun ignores history empty attrValues', () => {
+  const history = { root: { attrValues: [] as string[] } };
+  const merged = mergeReplicaStateForRerun(history, null);
+  assert.equal(merged.root, undefined);
+});
+
+test('rerun empty history state does not wipe UI world member', () => {
+  const tasks = [
+    rootTask({
+      name: '世界时局与经济简报',
+      replicaFamilySpec: '世界锚定@world',
+      replicaFamilyBaseName: '世界时局与经济简报',
+      replicaFamilyScheduleMode: 'manual',
+    }),
+    memberTask('阿斯塔利亚', {
+      name: '世界时局与经济简报 阿斯塔利亚',
+      replicaFamilySpec: '世界锚定@world',
+      replicaFamilyLaunched: true,
+    }),
+  ];
+  const history = { root: { attrValues: [] as string[] } };
+  const merged = mergeReplicaStateForRerun(history, null);
+  const next = applyReplicaStateToTasks(tasks, merged);
+  assert.ok(next.find(t => t.replicaFamilyAttrValue === '阿斯塔利亚'));
 });
 
 test('mergeReplicaStateForRerun keeps current when history empty', () => {

@@ -60,6 +60,8 @@ export function buildReplicaStateFromTasks(tasks: PostProcessTask[]): ReplicaSta
       attrValues.push(attr);
       if (member.replicaFamilyLaunched === true) launchedAttrValues.push(attr);
     }
+    // 无成员时不写入空 attrValues，避免污染楼层快照、重跑时被当成「清光名单」
+    if (!attrValues.length) continue;
     snapshot[root.id] = {
       attrValues,
       ...(launchedAttrValues.length ? { launchedAttrValues } : {}),
@@ -68,11 +70,23 @@ export function buildReplicaStateFromTasks(tasks: PostProcessTask[]): ReplicaSta
   return snapshot;
 }
 
-/** 合并多楼快照：后者整包覆盖前者；lastEnum 若后者未带则保留前者 */
+/** 合并多楼快照：后者整包覆盖前者；lastEnum 若后者未带则保留前者；空 attrValues 不覆盖已有成员名单 */
 export function mergeReplicaStateSnapshots(snapshots: ReplicaStateSnapshot[]): ReplicaStateSnapshot {
   const merged: ReplicaStateSnapshot = {};
   for (const snapshot of snapshots) {
     for (const [rootId, state] of Object.entries(snapshot)) {
+      if (!state.attrValues?.length) {
+        // 仅补 lastEnum，不写入空成员名单
+        const prev = merged[rootId];
+        if (state.lastEnumAttrValues?.length) {
+          if (prev) {
+            if (!prev.lastEnumAttrValues?.length) {
+              merged[rootId] = { ...prev, lastEnumAttrValues: [...state.lastEnumAttrValues] };
+            }
+          }
+        }
+        continue;
+      }
       const prev = merged[rootId];
       const lastEnumAttrValues = state.lastEnumAttrValues?.length
         ? [...state.lastEnumAttrValues]
@@ -111,14 +125,17 @@ export function mergeReplicaStateForRerun(
 ): ReplicaStateSnapshot {
   const merged: ReplicaStateSnapshot = {};
   for (const [rootId, state] of Object.entries(history)) {
+    // 历史空名单视为无效，不写入（否则会在 current 也空时清掉 UI/MVU 成员）
+    if (!state.attrValues?.length) continue;
     merged[rootId] = cloneRootState(state);
   }
   if (!currentFloor) return merged;
 
   for (const [rootId, current] of Object.entries(currentFloor)) {
+    if (!current.attrValues?.length && !current.lastEnumAttrValues?.length) continue;
     const hist = merged[rootId];
     if (!hist?.attrValues?.length) {
-      merged[rootId] = cloneRootState(current);
+      if (current.attrValues?.length) merged[rootId] = cloneRootState(current);
       continue;
     }
     if (!hist.lastEnumAttrValues?.length && current.lastEnumAttrValues?.length) {
@@ -168,8 +185,10 @@ export function applyReplicaStateToTasks(
   for (const root of tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
     const state = snapshot[root.id];
-    const desired = state?.attrValues ?? [];
-    const launchedSet = new Set(state?.launchedAttrValues ?? []);
+    // 快照未收录或空名单：保留现有成员（UI/MVU 手动创建的世界副本等）
+    if (!state?.attrValues?.length) continue;
+    const desired = state.attrValues;
+    const launchedSet = new Set(state.launchedAttrValues ?? []);
 
     const currentRoot = next.find(t => t.id === root.id) ?? root;
     const keepSet = new Set(desired);
