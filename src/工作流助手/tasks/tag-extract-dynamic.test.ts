@@ -1,6 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { parseDynamicAttrPlaceholder, parseTotalLaunchedPlaceholder, parseTotalPlaceholder } from './tag-extract';
+import {
+  parseDynamicAttrPlaceholder,
+  parseTotalLastLaunchedPlaceholder,
+  parseTotalLaunchedPlaceholder,
+  parseTotalPlaceholder,
+} from './tag-extract';
 
 test('parseDynamicAttrPlaceholder accepts tag@attr', () => {
   assert.deepEqual(parseDynamicAttrPlaceholder('item@id'), { tagName: 'item', attrName: 'id' });
@@ -43,7 +48,27 @@ test('parseTotalLaunchedPlaceholder resolves total:launched:tag@attr', () => {
   assert.equal(parseTotalLaunchedPlaceholder('total:launched:'), null);
 });
 
-test('parseTotalPlaceholder rejects total:launched form', () => {
+test('parseTotalLastLaunchedPlaceholder resolves total:last-launched:tag@attr', () => {
+  assert.deepEqual(parseTotalLastLaunchedPlaceholder('total:last-launched:item@id'), {
+    tagName: 'item',
+    attrName: 'id',
+  });
+  assert.deepEqual(parseTotalLastLaunchedPlaceholder('TOTAL:LAST-LAUNCHED:npc@name'), {
+    tagName: 'npc',
+    attrName: 'name',
+  });
+  assert.equal(parseTotalLastLaunchedPlaceholder('total:launched:item@id'), null);
+  assert.equal(parseTotalLastLaunchedPlaceholder('total:last-launched:item@id=1'), null);
+  assert.equal(parseTotalLastLaunchedPlaceholder('total:last-launched:'), null);
+});
+
+test('parseTotalPlaceholder rejects launched / last-launched forms', () => {
   assert.equal(parseTotalPlaceholder('total:launched:item@id'), null);
   assert.equal(parseTotalPlaceholder('TOTAL:LAUNCHED:item@id'), null);
+  assert.equal(parseTotalPlaceholder('total:last-launched:item@id'), null);
+});
+
+test('parseTotalLaunchedPlaceholder rejects last-launched form', () => {
+  assert.equal(parseTotalLaunchedPlaceholder('total:last-launched:item@id'), null);
+  assert.equal(parseTotalLaunchedPlaceholder('TOTAL:LAST-LAUNCHED:item@id'), null);
 });

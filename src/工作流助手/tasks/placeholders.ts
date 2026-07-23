@@ -32,6 +32,8 @@ import type { DataSnapshot } from '../bridge/database-api';
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import { normalizePromptRole } from './prompt-role';
 import { buildEffectivePromptGroups, iterTaskPromptContents } from './prompt-auto-segments';
+import type { ReplicaStateSnapshot } from './replica-state';
+import { resolveReplicaStateForMessage } from './replica-reconcile';
 
 export interface SharedContext {
   messageId: number;
@@ -44,6 +46,8 @@ export interface SharedContext {
   taskManagedWorldbookCache: Map<string, string>;
   messageVarHistoryMap: RelayTagMap;
   injectOnlyTagsUnion: Set<string>;
+  /** 楼层副本状态快照，供 {{total:last-launched:…}} */
+  replicaState: ReplicaStateSnapshot;
 }
 
 function buildContext7(settings: ScriptSettings, messageId: number, aiText: string): string {
@@ -116,6 +120,7 @@ export async function buildSharedContext(
     ? buildPreviousFloorTagMap(messageId)
     : buildCurrentFloorTagMap(messageId);
   const injectOnlyTagsUnion = buildInjectOnlyTagsUnion(settings.tasks);
+  const replicaState = resolveReplicaStateForMessage(messageId);
 
   return {
     messageId,
@@ -128,17 +133,20 @@ export async function buildSharedContext(
     taskManagedWorldbookCache: new Map(),
     messageVarHistoryMap,
     injectOnlyTagsUnion,
+    replicaState,
   };
 }
 
 function buildPlotPlaceholderOptions(
   task: PostProcessTask,
   allTasks: PostProcessTask[],
+  replicaState?: ReplicaStateSnapshot,
 ): PlotPlaceholderResolveOptions {
   const replicaAttrSpec = getReplicaAttrSpecForTask(task);
   return {
     historyFallback: 'all-tags',
     allTasks,
+    ...(replicaState ? { replicaState } : {}),
     ...(replicaAttrSpec ? { replicaAttrSpec } : {}),
     ...(task.replicaFamilyAttrValue ? { replicaAttrValue: task.replicaFamilyAttrValue } : {}),
   };
@@ -157,7 +165,7 @@ function buildWorldbookScanText(
     relayTagMap,
     ctx.messageVarHistoryMap,
     ctx.injectOnlyTagsUnion,
-    buildPlotPlaceholderOptions(task, ctx.settings.tasks),
+    buildPlotPlaceholderOptions(task, ctx.settings.tasks, ctx.replicaState),
   );
   return [baseScan, triggerText, needs$8InScan ? (ctx.vars.$8?.trim() ?? '') : '']
     .filter(Boolean)
@@ -228,9 +236,10 @@ export async function renderTaskMessages(
   injectOnlyTagsUnion: Set<string>,
   messageId: number,
   allTasks: PostProcessTask[],
+  replicaState?: ReplicaStateSnapshot,
 ): Promise<RunLogMessage[]> {
   const messages: RunLogMessage[] = [];
-  const plotOptions = buildPlotPlaceholderOptions(task, allTasks);
+  const plotOptions = buildPlotPlaceholderOptions(task, allTasks, replicaState);
   for (const g of buildEffectivePromptGroups(task)) {
     if (!isPromptGroupEnabled(g)) continue;
     let content = g.content;

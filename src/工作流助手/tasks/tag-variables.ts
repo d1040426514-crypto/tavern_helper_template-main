@@ -440,6 +440,10 @@ export async function mergeAiFloorInjectBlock(
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
     allTasks: settings.tasks,
+    // 惰性加载，避免单测经 tag-variables → reconcile → settings → Pinia
+    replicaState: (
+      require('./replica-reconcile') as typeof import('./replica-reconcile')
+    ).resolveReplicaStateForMessage(messageId),
   });
   return processTemplateText(out, messageId, { role: 'system' });
 }

@@ -15,6 +15,7 @@ import { recordPendingLastEnumAttrValues } from './replica-enum-pending';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
 import { PostProcessTaskSchema, type PostProcessTask, type ReplicaFamilyScheduleMode } from './schema';
+import type { ReplicaStateSnapshot } from './replica-state';
 import type { TaskProgressItem, TaskProgressStatus } from '../ui/task-progress-display';
 
 const REPLICA_NAME_SUFFIX_RE = / \{.+\}$/;
@@ -518,6 +519,25 @@ export function listLaunchedReplicaSuffixes(
     .map(r => getReplicaDisplaySuffix(r))
     .filter((s): s is string => !!s);
   return sortAttrValues([...new Set(suffixes)]);
+}
+
+/**
+ * 楼层快照中「上次启动」属性值列表。
+ * manual → launchedAttrValues；auto → lastEnumAttrValues；所选为空则回退另一字段。
+ */
+export function listLastLaunchedAttrValues(
+  root: PostProcessTask,
+  snapshot: ReplicaStateSnapshot,
+): string[] {
+  const state = snapshot[root.id];
+  if (!state) return [];
+  const launched = (state.launchedAttrValues ?? []).map(v => String(v).trim()).filter(Boolean);
+  const enums = (state.lastEnumAttrValues ?? []).map(v => String(v).trim()).filter(Boolean);
+  const mode = getReplicaFamilyScheduleMode(root);
+  const primary = mode === 'manual' ? launched : enums;
+  const fallback = mode === 'manual' ? enums : launched;
+  const chosen = primary.length ? primary : fallback;
+  return sortAttrValues([...new Set(chosen)]);
 }
 
 export function resolveReplicaLaunchedPlaceholder(

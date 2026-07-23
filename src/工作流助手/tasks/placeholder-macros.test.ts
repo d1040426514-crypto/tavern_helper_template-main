@@ -63,13 +63,13 @@ test('buildMacroRelayFromReplicaState uses lastEnumAttrValues markers', () => {
   assert.equal(relay.has('item@id=2'), false);
 });
 
-test('resolveWorkflowPlaceholderMacro auto filters by lastEnum', () => {
+test('resolveWorkflowPlaceholderMacro last-launched auto uses lastEnum', () => {
   const tasks = [rootTask(), memberTask('1'), memberTask('2')];
   const history: RelayTagMap = new Map([
     ['item@id=1', ['A']],
     ['item@id=2', ['B']],
   ]);
-  const out = resolveWorkflowPlaceholderMacro('total:launched:item@id', 0, {
+  const out = resolveWorkflowPlaceholderMacro('total:last-launched:item@id', 0, {
     tasks,
     historyMap: history,
     replicaState: {
@@ -81,13 +81,13 @@ test('resolveWorkflowPlaceholderMacro auto filters by lastEnum', () => {
   assert.ok(!out.includes('<item id="2">'));
 });
 
-test('resolveWorkflowPlaceholderMacro auto empty without lastEnum', () => {
+test('resolveWorkflowPlaceholderMacro last-launched auto empty without lastEnum', () => {
   const tasks = [rootTask(), memberTask('1'), memberTask('2')];
   const history: RelayTagMap = new Map([
     ['item@id=1', ['A']],
     ['item@id=2', ['B']],
   ]);
-  const out = resolveWorkflowPlaceholderMacro('total:launched:item@id', 0, {
+  const out = resolveWorkflowPlaceholderMacro('total:last-launched:item@id', 0, {
     tasks,
     historyMap: history,
     replicaState: { 'root-1': { attrValues: ['1', '2'] } },
@@ -95,23 +95,42 @@ test('resolveWorkflowPlaceholderMacro auto empty without lastEnum', () => {
   assert.equal(out, '');
 });
 
-test('resolveWorkflowPlaceholderMacro manual uses launched flags', () => {
+test('resolveWorkflowPlaceholderMacro last-launched manual uses launchedAttrValues', () => {
   const tasks = [
     rootTask({ replicaFamilyScheduleMode: 'manual' }),
-    memberTask('1', { replicaFamilyLaunched: true }),
-    memberTask('2', { replicaFamilyLaunched: false }),
+    memberTask('1'),
+    memberTask('2'),
   ];
   const history: RelayTagMap = new Map([
     ['item@id=1', ['A']],
     ['item@id=2', ['B']],
   ]);
-  const out = resolveWorkflowPlaceholderMacro('total:launched:item@id', 0, {
+  const out = resolveWorkflowPlaceholderMacro('total:last-launched:item@id', 0, {
     tasks,
     historyMap: history,
-    replicaState: {},
+    replicaState: {
+      'root-1': {
+        attrValues: ['1', '2'],
+        launchedAttrValues: ['1'],
+      },
+    },
   });
   assert.ok(out.includes('<item id="1">'));
   assert.ok(!out.includes('<item id="2">'));
+});
+
+test('resolveWorkflowPlaceholderMacro last-launched ignores relay-only content', () => {
+  const tasks = [rootTask(), memberTask('1')];
+  const history: RelayTagMap = new Map();
+  const out = resolveWorkflowPlaceholderMacro('total:last-launched:item@id', 0, {
+    tasks,
+    historyMap: history,
+    replicaState: {
+      'root-1': { attrValues: ['1'], lastEnumAttrValues: ['1'] },
+    },
+  });
+  // history 空则即使 snapshot 有名单也无正文
+  assert.equal(out, '');
 });
 
 test('resolveWorkflowPlaceholderMacro replica:launched joins suffixes', () => {

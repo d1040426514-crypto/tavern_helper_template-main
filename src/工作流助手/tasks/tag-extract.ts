@@ -34,11 +34,23 @@ export function parseDynamicAttrPlaceholder(name: string): { tagName: string; at
 }
 
 export const TOTAL_LAUNCHED_PLACEHOLDER_PREFIX = 'total:launched:';
+export const TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX = 'total:last-launched:';
+
+/** {{total:last-launched:tag@attr}}：展开楼层快照中上次启动副本的 tag@attr=* 正文 */
+export function parseTotalLastLaunchedPlaceholder(name: string): { tagName: string; attrName: string } | null {
+  const trimmed = name.trim();
+  const lower = trimmed.toLowerCase();
+  const prefix = TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
+  if (!lower.startsWith(prefix)) return null;
+  return parseDynamicAttrPlaceholder(trimmed.slice(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.length).trim());
+}
 
 /** {{total:launched:tag@attr}}：仅展开副本族本轮可运行副本的 tag@attr=* 实例 */
 export function parseTotalLaunchedPlaceholder(name: string): { tagName: string; attrName: string } | null {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
+  // 避免 total:last-launched: 被误当成 launched
+  if (lower.startsWith(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase())) return null;
   const prefix = TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
   if (!lower.startsWith(prefix)) return null;
   return parseDynamicAttrPlaceholder(trimmed.slice(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.length).trim());
@@ -49,7 +61,8 @@ export function parseTotalPlaceholder(name: string): { tagName: string; attrName
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
   if (!lower.startsWith('total:')) return null;
-  // total:launched:… 由 parseTotalLaunchedPlaceholder 处理，此处不误解析
+  // total:launched:… / total:last-launched:… 由专用解析处理
+  if (lower.startsWith(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase())) return null;
   if (lower.startsWith(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase())) return null;
   return parseDynamicAttrPlaceholder(trimmed.slice('total:'.length).trim());
 }
@@ -375,7 +388,11 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         code: '{{total:launched:标签@属性}}',
-        desc: '仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。亦注册为酒馆助手宏；宏侧 auto 读楼层 lastEnumAttrValues。',
+        desc: '工作流脚本占位符：仅展开对应副本族本轮可运行（已开启）副本的复合实例；manual 模式仅含 replicaFamilyLaunched 的副本，auto 模式仅含本轮 relay <ReplicaEnum> 注册的副本。例如 {{total:launched:item@id}}。',
+      },
+      {
+        code: '{{total:last-launched:标签@属性}}',
+        desc: '展开楼层快照中「上次启动」副本的复合实例正文（仅 post_process_tags）；manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。脚本与酒馆助手宏均可使用。例如 {{total:last-launched:item@id}}。',
       },
       {
         code: '{{item@id=1}}',
@@ -424,8 +441,9 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '直接编辑副本会在下次镜像时被覆盖。',
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
       '提示词可用 {{replica:launched:任务名}} 列出指定副本族原本在本轮已开启副本的后缀名（顿号连接，不含共有任务名前缀）。',
-      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族本轮已开启副本的复合实例正文（与 {{total:标签@属性}} 同形，但按 launched/enum 过滤）。',
-      '{{total:…}} / {{total:launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用；auto 的 launched 过滤依赖楼层 _post_process_replica_state.lastEnumAttrValues。',
+      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族本轮已开启副本的复合实例正文（与 {{total:标签@属性}} 同形，但按本轮 launched/enum 过滤）。',
+      '提示词可用 {{total:last-launched:标签@属性}} 展开楼层快照中上次启动副本的复合实例正文（只读 post_process_tags）。',
+      '{{total:…}} / {{total:last-launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用。',
     ],
     example:
       'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',

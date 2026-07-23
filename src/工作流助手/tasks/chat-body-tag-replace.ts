@@ -170,6 +170,9 @@ export async function renderChatBodyTagReplaceTemplate(
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
     allTasks,
+    replicaState: (
+      require('./replica-reconcile') as typeof import('./replica-reconcile')
+    ).resolveReplicaStateForMessage(messageId),
   });
   return processTemplateText(out, messageId, { role: 'system' });
 }

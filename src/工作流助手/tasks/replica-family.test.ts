@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { test } from 'node:test';
 import lodash from 'lodash';
 
 (globalThis as typeof globalThis & { _: typeof lodash })._ = lodash;
@@ -16,6 +17,7 @@ import {
   isReplicaFamilyMember,
   isReplicaFamilyRootTemplate,
   listLaunchedReplicaSuffixes,
+  listLastLaunchedAttrValues,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
   resolveReplicaLaunchedPlaceholder,
@@ -499,6 +501,51 @@ test('listLaunchedReplicaSuffixes used by total:launched filters manual', () => 
   const syncedRoot = tasks.find(t => t.id === root.id)!;
   assert.deepEqual(listLaunchedReplicaSuffixes(syncedRoot, tasks, new Map()), ['1']);
   assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'item', attrName: 'id' }, tasks)?.id, root.id);
+});
+
+test('listLastLaunchedAttrValues manual prefers launchedAttrValues', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'manual' });
+  assert.deepEqual(
+    listLastLaunchedAttrValues(root, {
+      [root.id]: {
+        attrValues: ['1', '2'],
+        launchedAttrValues: ['1'],
+        lastEnumAttrValues: ['2'],
+      },
+    }),
+    ['1'],
+  );
+});
+
+test('listLastLaunchedAttrValues auto prefers lastEnumAttrValues', () => {
+  const root = baseTask({ replicaFamilyScheduleMode: 'auto' });
+  assert.deepEqual(
+    listLastLaunchedAttrValues(root, {
+      [root.id]: {
+        attrValues: ['1', '2'],
+        launchedAttrValues: ['1'],
+        lastEnumAttrValues: ['2'],
+      },
+    }),
+    ['2'],
+  );
+});
+
+test('listLastLaunchedAttrValues falls back when primary empty', () => {
+  const manual = baseTask({ id: 'm', replicaFamilyScheduleMode: 'manual' });
+  assert.deepEqual(
+    listLastLaunchedAttrValues(manual, {
+      m: { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+    }),
+    ['2'],
+  );
+  const auto = baseTask({ id: 'a', replicaFamilyScheduleMode: 'auto' });
+  assert.deepEqual(
+    listLastLaunchedAttrValues(auto, {
+      a: { attrValues: ['1'], launchedAttrValues: ['1'] },
+    }),
+    ['1'],
+  );
 });
 
 if (process.exitCode) process.exit(process.exitCode);

@@ -180,6 +180,7 @@ async function runSingleTask(
     ctx.injectOnlyTagsUnion,
     ctx.messageId,
     ctx.settings.tasks,
+    ctx.replicaState,
   );
   if (!messages.length) {
     return {

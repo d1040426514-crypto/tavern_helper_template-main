@@ -39,6 +39,14 @@ export function readReplicaStateFromMessage(messageId: number): ReplicaStateSnap
   return normalizeReplicaStateSnapshot(data[POST_PROCESS_REPLICA_STATE_KEY]);
 }
 
+/** 本楼快照优先；空则向上合并聊天中的副本状态 */
+export function resolveReplicaStateForMessage(messageId: number): ReplicaStateSnapshot {
+  if (messageId < 0) return {};
+  const direct = readReplicaStateFromMessage(messageId);
+  if (direct && Object.keys(direct).length) return direct;
+  return collectReplicaStateFromChat({ maxMessageId: messageId });
+}
+
 /** 写入当前楼的副本状态快照（仅 assistant 楼） */
 export async function writeReplicaStateSnapshot(
   messageId: number,

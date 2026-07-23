@@ -22,13 +22,9 @@ function resolveReplicaStateForMacro(messageId: number): ReplicaStateSnapshot {
   if (messageId < 0) return {};
   // 惰性加载，避免单测经 reconcile → settings → Pinia
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const {
-    readReplicaStateFromMessage,
-    collectReplicaStateFromChat,
-  } = require('./replica-reconcile') as typeof import('./replica-reconcile');
-  const direct = readReplicaStateFromMessage(messageId);
-  if (direct && Object.keys(direct).length) return direct;
-  return collectReplicaStateFromChat({ maxMessageId: messageId });
+  const { resolveReplicaStateForMessage } =
+    require('./replica-reconcile') as typeof import('./replica-reconcile');
+  return resolveReplicaStateForMessage(messageId);
 }
 
 function loadEffectiveTasks(): PostProcessTask[] {
@@ -39,7 +35,7 @@ function loadEffectiveTasks(): PostProcessTask[] {
   return resolveEffectiveSettings(loadSettings()).tasks;
 }
 
-/** 用楼层 lastEnumAttrValues 重建带 ENUM_REGISTRY_MARKER 的合成 relay，供 auto launched 过滤 */
+/** 用楼层 lastEnumAttrValues 重建带 ENUM_REGISTRY_MARKER 的合成 relay，供 auto {{replica:launched}} 过滤 */
 export function buildMacroRelayFromReplicaState(
   tasks: PostProcessTask[],
   snapshot: ReplicaStateSnapshot,
@@ -82,6 +78,7 @@ export function resolveWorkflowPlaceholderMacro(
   return resolvePlaceholderForInject(trimmed, relayMap, historyMap, new Set(), {
     historyFallback: 'all-tags',
     allTasks: tasks,
+    replicaState: snapshot,
   });
 }
 
@@ -103,10 +100,11 @@ function replaceMacroMatch(
 
 export function registerPlaceholderMacros(): { stop(): void } {
   const handles = [
-    registerMacroLike(/\{\{(total:launched:[^}]+)\}\}/gi, (context, _substring, inner) =>
+    registerMacroLike(/\{\{(total:last-launched:[^}]+)\}\}/gi, (context, _substring, inner) =>
       replaceMacroMatch(context, String(inner ?? '')),
     ),
-    registerMacroLike(/\{\{(total:(?!launched:)[^}]+)\}\}/gi, (context, _substring, inner) =>
+    // 排除 launched: / last-launched:，避免被普通 total: 吃掉
+    registerMacroLike(/\{\{(total:(?!launched:|last-launched:)[^}]+)\}\}/gi, (context, _substring, inner) =>
       replaceMacroMatch(context, String(inner ?? '')),
     ),
     registerMacroLike(/\{\{(replica:launched:[^}]+)\}\}/gi, (context, _substring, inner) =>
@@ -134,11 +132,11 @@ export const REGISTERED_MACRO_LEGEND: { code: string; desc: string }[] = [
     desc: '展开楼层 post_process_tags 中该规格的全部复合实例，例如 {{total:item@id}}。',
   },
   {
-    code: '{{total:launched:标签@属性}}',
-    desc: '仅展开本轮可运行副本的复合实例。manual 看 replicaFamilyLaunched；auto 看楼层 _post_process_replica_state.lastEnumAttrValues（需先跑过带 <ReplicaEnum> 的工作流）。',
+    code: '{{total:last-launched:标签@属性}}',
+    desc: '展开楼层快照中上次启动副本的复合实例正文（仅 post_process_tags）。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues；所选为空则回退另一字段。',
   },
   {
     code: '{{replica:launched:任务名}}',
-    desc: '输出可运行副本的属性值列表（顿号连接），支持任务名或 Id；过滤规则同 total:launched。',
+    desc: '输出可运行副本的属性值列表（顿号连接），支持任务名或 Id。manual 看 replicaFamilyLaunched；auto 看楼层 lastEnumAttrValues。',
   },
 ];
