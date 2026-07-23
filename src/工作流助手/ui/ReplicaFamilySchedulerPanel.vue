@@ -10,6 +10,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   updateMode: [mode: ReplicaFamilyScheduleMode];
   updateMember: [memberId: string, patch: { launched?: boolean }];
+  createMember: [];
 }>();
 
 const scheduleMode = computed({
@@ -35,7 +36,18 @@ function toggleMemberLaunched(member: PostProcessTask): void {
 
 <template>
   <div class="acu-subsection replica-scheduler">
-    <h5>副本调度</h5>
+    <div class="replica-scheduler__heading">
+      <h5>副本调度</h5>
+      <button
+        type="button"
+        class="acu-btn acu-btn--sm acu-icon-btn"
+        title="新建副本"
+        aria-label="新建副本"
+        @click="emit('createMember')"
+      >
+        <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+      </button>
+    </div>
     <p class="acu-notes acu-notes--sm">
       自动模式：每轮仅执行上一阶段 relay 枚举列表中的副本。手动模式：点选副本表示「已启动」；新建副本首轮自动启动并执行，轮末自动变为未启动。
     </p>
@@ -49,7 +61,7 @@ function toggleMemberLaunched(member: PostProcessTask): void {
         <span>手动调度</span>
       </label>
     </div>
-    <div v-if="members.length" class="replica-scheduler__chip-list">
+    <div class="replica-scheduler__chip-list">
       <div
         v-for="member in members"
         :key="member.id"
@@ -79,6 +91,8 @@ function toggleMemberLaunched(member: PostProcessTask): void {
         </button>
       </div>
     </div>
-    <p v-else class="acu-notes acu-notes--sm">暂无副本；启用任务后将在运行时按 relay 增量同步。</p>
+    <p v-if="!members.length" class="acu-notes acu-notes--sm">
+      暂无副本；可点右上角加号新建，或启用任务后在运行时按 relay 增量同步。
+    </p>
   </div>
 </template>

@@ -91,6 +91,7 @@ import {
   deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
   updateReplicaFamilyScheduleMode as updateReplicaFamilyScheduleModeInStore,
   updateReplicaMemberSchedule as updateReplicaMemberScheduleInStore,
+  ensureReplicaFamilyMember as ensureReplicaFamilyMemberInStore,
   updatePresetFields,
   updateTask as updateTaskInStore,
 } from '../tasks/task-store';
@@ -1289,6 +1290,49 @@ function onReplicaMemberScheduleChange(
   if (idx < 0) return;
   const member = settings.value.tasks[idx]!;
   if (patch.launched !== undefined) member.replicaFamilyLaunched = patch.launched;
+}
+
+async function onCreateReplicaMember(): Promise<void> {
+  const root = selectedTask.value;
+  if (!root?.syncAsReplicaFamily || root.replicaFamilyRootId) return;
+
+  const baseName = (root.replicaFamilyBaseName ?? root.name).trim() || '副本族';
+  const spec =
+    root.replicaFamilyEnumSpec?.trim() || root.replicaFamilySpec?.trim() || '标签@属性';
+  const name = await acuPrompt({
+    title: '新建任务副本',
+    message: `请输入属性值（将作为「${baseName}」副本后缀，对应 ${spec}）：`,
+    confirmText: '创建',
+    danger: false,
+    prompt: { placeholder: '例如 阿斯塔利亚' },
+  });
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) {
+    acuToast('warning', '副本属性值不能为空');
+    return;
+  }
+
+  const exists = replicaFamilyMembers.value.some(
+    m => (m.replicaFamilyAttrValue ?? '').trim() === trimmed,
+  );
+  if (exists) {
+    acuToast('warning', `副本「${trimmed}」已存在`);
+    return;
+  }
+
+  try {
+    await ensureReplicaFamilyMemberInStore(root.id, trimmed, { launched: true }, 'ui');
+    if (chatScopeActive.value) {
+      await refreshTaskView();
+    } else {
+      settings.value.tasks = listTasks();
+    }
+    acuToast('success', `已创建副本「${trimmed}」`);
+  } catch (e) {
+    console.error(`${SCRIPT_LOG_PREFIX} 新建副本失败:`, e);
+    acuToast('warning', e instanceof Error ? e.message : String(e));
+  }
 }
 
 function resolveReplicaCleanupMessageFloorId(): number {
@@ -2525,6 +2569,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 :members="replicaFamilyMembers"
                 @update-mode="onReplicaScheduleModeChange"
                 @update-member="onReplicaMemberScheduleChange"
+                @create-member="onCreateReplicaMember"
               />
               <div class="acu-subsection acu-collapsible-subsection acu-api-config-section">
                 <button
