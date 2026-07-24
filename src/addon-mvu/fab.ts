@@ -308,7 +308,14 @@ function ensureStyles(): void {
 }
 
 #${SHELL_ID}{
+  /* ST 常给 html 加 transform 且 height:0；仅 inset:0 会让 fixed 壳高度塌成 0 */
   position:fixed;inset:0;z-index:9995;pointer-events:none;
+  width:100%;
+  height:100vh;
+  height:100dvh;
+  max-height:100vh;
+  max-height:100dvh;
+  box-sizing:border-box;
   display:flex;align-items:center;justify-content:center;
   padding:0;
 }
@@ -357,12 +364,11 @@ function ensureStyles(): void {
     padding-left:env(safe-area-inset-left,0px);
     align-items:stretch;
     justify-content:stretch;
-    box-sizing:border-box;
   }
   #${SHELL_ID} .ac-panel{
-    width:auto;
-    height:auto;
-    flex:1;
+    width:100%;
+    height:100%;
+    flex:1 1 auto;
     align-self:stretch;
     min-height:0;
     max-height:none;
