@@ -2,6 +2,7 @@ import { getAddonArchive, writeAddonArchive } from './archive';
 import { shouldShowAddonUpdateErrors } from './config';
 import { reconcileSingularityAfterPatch } from './control';
 import { AddonEvent } from './events';
+import { canonicalizePatchOps, verifyCanonicalWrites } from './patch-canonicalize';
 import { applyMvuLikePatch, extractAddonJsonPatchOpsWithIssues, MvuJsonPatchOp, PatchIssue } from './patch';
 import { syncReplicaLaunched } from './replica-sync';
 import { AddonData, normalizeAddonData } from './schema';
@@ -69,14 +70,18 @@ export async function updateAddonFromMessage(
     ops = options.mutateOps(ops);
   }
 
+  const { ops: canon_ops, issues: canon_issues } = canonicalizePatchOps(ops, base);
+  ops = canon_ops;
+
   if (options.emitEvents) {
     await eventEmit(AddonEvent.PATCH_PARSED, old_wrapper, ops, options.message_content ?? message);
   }
 
   const { data: patched, issues: apply_issues } = applyMvuLikePatch(_.cloneDeep(base), ops);
-  const issues = [...parse_issues, ...apply_issues];
+  let issues = [...parse_issues, ...canon_issues, ...apply_issues];
 
   let new_wrapper = wrapAddonData(normalizeAddonData(patched));
+  issues.push(...verifyCanonicalWrites(ops, new_wrapper.addon_data));
 
   if (options.emitEvents) {
     await eventEmit(AddonEvent.VARIABLE_UPDATE_ENDED, new_wrapper, old_wrapper);

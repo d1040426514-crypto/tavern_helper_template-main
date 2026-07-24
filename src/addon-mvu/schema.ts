@@ -434,6 +434,7 @@ export function stripInvalidStrictBooleans(value: unknown): unknown {
 
 /**
  * addon 变量结构 (对齐 MVU stat_data 的 zod 用法).
+ * 修改固定段结构时须同步 patch-path-index.ts
  *
  * - 根即为世界 map: addon_data[世界名] = 世界条目
  * - 字符串占位选项: 宽松 z.string().prefault(''), 约束写在世界书变量更新规则
