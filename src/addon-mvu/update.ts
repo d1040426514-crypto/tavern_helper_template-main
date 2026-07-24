@@ -32,10 +32,11 @@ export function wrapAddonData(addon_data: AddonData): AddonWrapper {
 }
 
 function notifyIssues(issues: PatchIssue[]): void {
-  if (issues.length === 0 || !shouldShowAddonUpdateErrors()) {
+  const visible = issues.filter(issue => issue.kind !== 'heal');
+  if (visible.length === 0 || !shouldShowAddonUpdateErrors()) {
     return;
   }
-  const lines = issues.map(issue => {
+  const lines = visible.map(issue => {
     const op_hint = issue.op ? ` [${issue.op.op} ${'path' in issue.op ? issue.op.path : ''}]` : '';
     return `${issue.kind === 'parse' ? '解析' : '应用'}: ${issue.message}${op_hint}`;
   });

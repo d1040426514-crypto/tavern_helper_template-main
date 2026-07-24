@@ -1,5 +1,7 @@
 import { parseString } from '@util/common';
 
+import { getAtPath, resolveParentForWrite, resolveParentStrict } from './patch-heal';
+
 /** 与 MVU 变量输出格式兼容的 JSON Patch 操作 */
 export type MvuJsonPatchOp =
   | { op: 'replace'; path: string; value: unknown }
@@ -9,7 +11,7 @@ export type MvuJsonPatchOp =
   | { op: 'move'; from: string; to: string };
 
 export type PatchIssue = {
-  kind: 'parse' | 'apply';
+  kind: 'parse' | 'apply' | 'heal';
   message: string;
   op?: MvuJsonPatchOp;
 };
@@ -56,80 +58,46 @@ function assertWritablePath(segments: string[]): void {
   }
 }
 
-function getAtPath(root: unknown, segments: string[]): unknown {
-  let current = root;
-  for (const segment of segments) {
-    if (current === null || current === undefined) {
-      return undefined;
-    }
-    if (Array.isArray(current)) {
-      if (segment === '-') {
-        return undefined;
-      }
-      const index = Number(segment);
-      current = current[index];
-      continue;
-    }
-    if (typeof current === 'object') {
-      current = (current as Record<string, unknown>)[segment];
-      continue;
-    }
-    return undefined;
-  }
-  return current;
-}
-
-function resolveParent(root: Record<string, unknown>, segments: string[]): {
-  parent: Record<string, unknown> | unknown[];
-  key: string;
-} {
-  if (segments.length === 0) {
-    throw new Error('不能对根路径执行该操作');
-  }
-  const parentSegments = segments.slice(0, -1);
-  const key = segments[segments.length - 1]!;
-  let parent: unknown = root;
-  for (const segment of parentSegments) {
-    if (parent === null || parent === undefined) {
-      throw new Error(`路径不存在: /${segments.join('/')}`);
-    }
-    if (Array.isArray(parent)) {
-      if (segment === '-') {
-        throw new Error(`路径不存在: /${segments.join('/')}`);
-      }
-      parent = parent[Number(segment)];
-      continue;
-    }
-    if (typeof parent === 'object') {
-      parent = (parent as Record<string, unknown>)[segment];
-      continue;
-    }
-    throw new Error(`路径不存在: /${segments.join('/')}`);
-  }
-  if (parent === null || parent === undefined || typeof parent !== 'object') {
-    throw new Error(`路径不存在: /${segments.join('/')}`);
-  }
-  return { parent: parent as Record<string, unknown> | unknown[], key };
-}
-
-function setAtPath(root: Record<string, unknown>, segments: string[], value: unknown): void {
-  if (segments.length === 0) {
-    throw new Error('不能 replace 根对象');
-  }
-  const { parent, key } = resolveParent(root, segments);
+function assignAtParent(
+  parent: Record<string, unknown> | unknown[],
+  key: string,
+  value: unknown,
+  mode: 'set' | 'insert',
+): void {
   if (Array.isArray(parent)) {
     if (key === '-') {
       parent.push(value);
       return;
     }
-    parent[Number(key)] = value;
+    const index = Number(key);
+    if (mode === 'insert') {
+      parent.splice(index, 0, value);
+      return;
+    }
+    parent[index] = value;
     return;
   }
   parent[key] = value;
 }
 
+function setAtPathForWrite(root: Record<string, unknown>, segments: string[], value: unknown): void {
+  if (segments.length === 0) {
+    throw new Error('不能 replace 根对象');
+  }
+  const { parent, key } = resolveParentForWrite(root, segments);
+  assignAtParent(parent, key, value, 'set');
+}
+
+function setAtPathStrict(root: Record<string, unknown>, segments: string[], value: unknown): void {
+  if (segments.length === 0) {
+    throw new Error('不能 replace 根对象');
+  }
+  const { parent, key } = resolveParentStrict(root, segments);
+  assignAtParent(parent, key, value, 'set');
+}
+
 function removeAtPath(root: Record<string, unknown>, segments: string[]): void {
-  const { parent, key } = resolveParent(root, segments);
+  const { parent, key } = resolveParentStrict(root, segments);
   if (Array.isArray(parent)) {
     if (key === '-') {
       throw new Error('不能 remove 数组占位符 -');
@@ -156,7 +124,7 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
         return;
       }
       assertWritablePath(segments);
-      setAtPath(root, segments, op.value);
+      setAtPathForWrite(root, segments, op.value);
       return;
     }
     case 'delta': {
@@ -166,7 +134,10 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       }
       assertWritablePath(segments);
       const current = getAtPath(root, segments);
-      setAtPath(root, segments, coerceNumber(current) + coerceNumber(op.value));
+      if (current === undefined) {
+        throw new Error(`路径不存在: ${op.path}`);
+      }
+      setAtPathStrict(root, segments, coerceNumber(current) + coerceNumber(op.value));
       return;
     }
     case 'insert': {
@@ -175,17 +146,8 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
         return;
       }
       assertWritablePath(segments);
-      const { parent, key } = resolveParent(root, segments);
-      if (Array.isArray(parent)) {
-        if (key === '-') {
-          parent.push(op.value);
-          return;
-        }
-        const index = Number(key);
-        parent.splice(index, 0, op.value);
-        return;
-      }
-      parent[key] = op.value;
+      const { parent, key } = resolveParentForWrite(root, segments);
+      assignAtParent(parent, key, op.value, 'insert');
       return;
     }
     case 'remove': {
@@ -206,8 +168,11 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
       assertWritablePath(fromSegments);
       assertWritablePath(toSegments);
       const value = getAtPath(root, fromSegments);
+      if (value === undefined) {
+        throw new Error(`路径不存在: ${op.from}`);
+      }
       removeAtPath(root, fromSegments);
-      setAtPath(root, toSegments, value);
+      setAtPathForWrite(root, toSegments, value);
       return;
     }
     default:
@@ -266,3 +231,5 @@ export function applyMvuLikePatch<T extends Record<string, unknown>>(
   }
   return { data: result, issues };
 }
+
+export { ensurePathForWrite, pathExists } from './patch-heal';
