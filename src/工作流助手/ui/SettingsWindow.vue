@@ -785,15 +785,24 @@ async function handlePurgeAllManagedWorldbookEntries(): Promise<void> {
   if (
     !(await acuConfirm({
       message:
-        '将删除全部世界书中以 WorkflowHelper- 开头的托管条目。不会清空本聊天的写入账本/快照；若仍在本聊天并触发重算，仍会按账本重放。建议在切换聊天前使用。确定继续？',
+        '将扫描本机全部世界书，删除所有以 WorkflowHelper- 开头的托管条目（数量可能大于当前规则数：含其它书中的历史残留、已删规则留下的孤儿）。不会清空本聊天的写入账本/快照；若仍在本聊天并触发重算，仍会按账本重放。建议在切换聊天前使用。确定继续？',
     }))
   ) {
     return;
   }
   purgingManagedWorldbookEntries.value = true;
   try {
-    const deleted = await purgeAllManagedWorldbookEntries();
-    acuToast('success', deleted > 0 ? `已清理 ${deleted} 个托管世界书条目` : '没有可清理的托管条目');
+    const result = await purgeAllManagedWorldbookEntries();
+    if (result.deleted <= 0) {
+      acuToast('success', '没有可清理的托管条目');
+    } else {
+      const parts = [`已清理 ${result.deleted} 个托管世界书条目`];
+      parts.push(`涉及 ${result.affectedBooks.length} 本世界书`);
+      if (result.orphanOnly > 0) {
+        parts.push(`其中 ${result.orphanOnly} 个为当前规则外残留`);
+      }
+      acuToast('success', parts.join('；'));
+    }
   } catch (e) {
     acuToast('error', `清理失败: ${e instanceof Error ? e.message : String(e)}`);
   } finally {
@@ -3211,7 +3220,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 同一标签可配置多条规则。写入结果保存在 assistant 楼 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑 / 滑楼（切换候选回复，Swipe）本层会先回放到上一层状态再重新写入，并同步恢复对应的任务副本。
               </p>
               <p class="acu-notes acu-notes--sm">
-                托管条目名前缀固定为 <code>WorkflowHelper-</code>；仅这些条目会被自动清理/重放。<strong>副本族清理</strong> 或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
+                托管条目名前缀固定为 <code>WorkflowHelper-</code>；仅这些条目会被自动清理/重放。「清理全部世界书条目」会扫描本机<strong>全部</strong>世界书，数量可能大于当前规则条数（例如曾写入「写卡」等其它书、或旧规则留下的孤儿）。<strong>副本族清理</strong> 或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
               </p>
               <p class="acu-notes acu-notes--sm">
                 切换「目标世界书」或手动指定书名时，该规则已写入的托管条目会自动从旧书迁移到新书（含账本重放与孤儿清理），无需手动删旧条目。

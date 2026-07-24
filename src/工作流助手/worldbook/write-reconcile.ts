@@ -5,6 +5,7 @@ import type { ChatWorldbookWriteRule } from '../tasks/schema';
 import { resolveWriteTargetBookName, upsertEntryByStableName } from './write-from-template';
 import {
   isManagedWorldbookEntryName,
+  isManagedWorldbookEntryNameForRule,
   ledgerEntryKey,
   ledgerStableNamesForBook,
   mergeAppliedLedgerEntries,
@@ -61,6 +62,27 @@ export function collectTargetBookNames(rules: ChatWorldbookWriteRule[]): string[
   for (const rule of rules) {
     const bookName = resolveWriteTargetBookName(rule);
     if (bookName) names.add(bookName);
+  }
+  return [...names];
+}
+
+/** 孤儿清理扫描范围：有账本时 = 规则目标书 ∪ 账本出现过的书；空账本时扫全部世界书以清掉跨书残留 */
+export function collectBooksForOrphanCleanup(
+  rules: ChatWorldbookWriteRule[],
+  ledger: Map<string, WorldbookWriteAppliedEntry>,
+): string[] {
+  const targetBooks = collectTargetBookNames(rules);
+  if (ledger.size === 0) {
+    try {
+      return [...new Set(getWorldbookNames())];
+    } catch {
+      return targetBooks;
+    }
+  }
+  const names = new Set(targetBooks);
+  for (const entry of ledger.values()) {
+    const book = entry.bookName?.trim();
+    if (book) names.add(book);
   }
   return [...names];
 }
@@ -153,8 +175,16 @@ export async function deleteManagedWorldbookEntries(
 /**
  * 删除全部世界书中的工作流助手托管条目（WorkflowHelper-）。
  * 不碰聊天写入账本/快照，也不触发 reconcile 重放。
+ * 数量可能大于当前规则数：含其它书中的历史残留、已删规则留下的孤儿等。
  */
-export async function purgeAllManagedWorldbookEntries(): Promise<number> {
+export type PurgeManagedWorldbookResult = {
+  deleted: number;
+  affectedBooks: string[];
+  matchCurrentRule: number;
+  orphanOnly: number;
+};
+
+export async function purgeAllManagedWorldbookEntries(): Promise<PurgeManagedWorldbookResult> {
   return withWorldbookWriteLock(async () => {
     const rules = resolveEffectiveSettings(loadSettings()).chatWorldbookWriteRules ?? [];
     let bookNames: string[];
@@ -163,18 +193,36 @@ export async function purgeAllManagedWorldbookEntries(): Promise<number> {
     } catch {
       bookNames = collectTargetBookNames(rules);
     }
-    if (!bookNames.length) return 0;
+    if (!bookNames.length) {
+      return { deleted: 0, affectedBooks: [], matchCurrentRule: 0, orphanOnly: 0 };
+    }
 
     const selectedBook = getSelectedWorldInfoBookName();
     const emptyKeep = new Set<string>();
     let deleted = 0;
     const affectedBooks: string[] = [];
+    const deletedDetails: Array<{
+      bookName: string;
+      name: string;
+      matchesCurrentRule: boolean;
+    }> = [];
     for (const bookName of bookNames) {
       const isSelected = !!selectedBook && bookName === selectedBook;
       try {
         const result = await deleteWorldbookEntries(
           bookName,
-          entry => shouldDeleteManagedEntryAsOrphan(entry.name || '', rules, emptyKeep),
+          entry => {
+            const name = entry.name || '';
+            const willDelete = shouldDeleteManagedEntryAsOrphan(name, rules, emptyKeep);
+            if (willDelete) {
+              deletedDetails.push({
+                bookName,
+                name: name.trim(),
+                matchesCurrentRule: rules.some(r => isManagedWorldbookEntryNameForRule(name, r)),
+              });
+            }
+            return willDelete;
+          },
           isSelected ? { render: 'immediate' } : undefined,
         );
         const n = result?.deleted_entries?.length ?? 0;
@@ -185,10 +233,13 @@ export async function purgeAllManagedWorldbookEntries(): Promise<number> {
       }
     }
 
+    const matchCurrentRule = deletedDetails.filter(d => d.matchesCurrentRule).length;
+    const orphanOnly = deletedDetails.filter(d => !d.matchesCurrentRule).length;
+
     if (selectedBook && affectedBooks.includes(selectedBook)) {
       reloadSelectedWorldInfoEditor(selectedBook);
     }
-    return deleted;
+    return { deleted, affectedBooks, matchCurrentRule, orphanOnly };
   });
 }
 
@@ -227,36 +278,38 @@ export async function reconcileWorldbookWritesFromChat(
     try {
       const settings = resolveEffectiveSettings(loadSettings());
       const rules = settings.chatWorldbookWriteRules ?? [];
-      const bookNames = collectTargetBookNames(rules);
-      if (!bookNames.length) return;
+      if (!rules.length) return;
 
       const ledger = collectAppliedLedgerFromChat(options);
       const reason = options.reason ?? 'unknown';
       const isInit = reason.startsWith('init');
+      const ruleIds = new Set(rules.map(r => r.id));
+      const bookNames = collectBooksForOrphanCleanup(rules, ledger);
+      if (!bookNames.length) return;
 
-      if (isInit && !isChatLedgerReadable()) {
-        scheduleEmptyLedgerRetry(reason);
-        return;
-      }
-
-      // 切聊天/初始化时账本可能尚未可读：禁止按空账本清光托管条目
-      if (ledger.size === 0 && shouldGuardEmptyLedger(reason)) {
-        scheduleEmptyLedgerRetry(reason);
+      // 聊天未就绪时推迟；可读且账本为空（新聊天）继续清其它书中的托管残留
+      if (!isChatLedgerReadable()) {
+        if (shouldGuardEmptyLedger(reason) || isInit) {
+          scheduleEmptyLedgerRetry(reason);
+        }
         return;
       }
 
       await deleteOrphanManagedWorldbookEntries(bookNames, rules, ledger);
 
       if (!ledger.size) {
-        if (isInit) {
+        if (isInit || reason === 'chat_changed' || reason === 'ledger_retry') {
           initReconcileSucceeded = true;
           lastInitReconcileLedgerSize = 0;
+          emptyLedgerRetryCount = 0;
         }
         return;
       }
 
       const writtenBooks = new Set<string>();
       for (const entry of ledger.values()) {
+        // 已删除规则的账本条目不再重放，避免「规则外孤儿」清完又写回
+        if (!ruleIds.has(entry.ruleId)) continue;
         const partial = _.cloneDeep(entry.partial);
         partial.name = entry.stableName;
         try {
