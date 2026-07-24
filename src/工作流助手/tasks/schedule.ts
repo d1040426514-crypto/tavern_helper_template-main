@@ -164,9 +164,15 @@ export function shouldRunTask(
   if (mode === 'round') {
     const roundInterval = schedule.roundInterval ?? 0;
     if (roundInterval >= 2) {
-      const last = state?.lastRunRound ?? 0;
-      if (ctx.currentRound - last < roundInterval) {
-        return { run: false, reason: `回合间隔未到 (${ctx.currentRound - last}/${roundInterval})` };
+      let last = state?.lastRunRound ?? 0;
+      // 删楼/换聊天后 AI 回合数可能小于历史 lastRunRound，差值会变负并长期卡死
+      if (last > ctx.currentRound) {
+        last = ctx.currentRound;
+        if (state) state.lastRunRound = last;
+      }
+      const delta = ctx.currentRound - last;
+      if (delta < roundInterval) {
+        return { run: false, reason: `回合间隔未到 (${delta}/${roundInterval})` };
       }
     }
     return { run: true };

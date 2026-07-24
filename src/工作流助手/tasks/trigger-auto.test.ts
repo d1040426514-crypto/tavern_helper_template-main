@@ -48,6 +48,17 @@ test('round interval 3 skips until gap met', () => {
   assert.equal(shouldRunTask(task, { lastRunRound: 2 }, ctx).run, true);
 });
 
+test('round interval heals stale lastRunRound above currentRound', () => {
+  const task = makeTask({ mode: 'round', roundInterval: 2 });
+  const state = { lastRunRound: 6, lastRunAt: 1 };
+  const ctx = makeCtx({ currentRound: 4 });
+  const check = shouldRunTask(task, state, ctx);
+  assert.equal(state.lastRunRound, 4);
+  assert.equal(check.run, false);
+  assert.equal(check.reason, '回合间隔未到 (0/2)');
+  assert.equal(shouldRunTask(task, state, makeCtx({ currentRound: 6 })).run, true);
+});
+
 test('time mode with message tag runs when parse ok', () => {
   const task = makeTask({
     mode: 'time',
