@@ -194,6 +194,24 @@ export async function purgeAllManagedWorldbookEntries(): Promise<number> {
 
 let lastInitReconcileLedgerSize = 0;
 let initReconcileSucceeded = false;
+/** 空账本软保护重试次数（避免聊天未就绪时误清托管条目） */
+let emptyLedgerRetryCount = 0;
+
+/** init / 切聊天阶段允许「账本暂时为空」：不删托管条目，稍后重试 */
+function shouldGuardEmptyLedger(reason: string): boolean {
+  return (
+    reason.startsWith('init') ||
+    reason === 'chat_changed' ||
+    reason === 'ledger_retry' ||
+    reason === 'mvu_extra_analysis_deferred'
+  );
+}
+
+function scheduleEmptyLedgerRetry(_reason: string): void {
+  if (emptyLedgerRetryCount >= 4) return;
+  emptyLedgerRetryCount += 1;
+  scheduleWorldbookReconcile('ledger_retry', 1200);
+}
 
 export async function reconcileWorldbookWritesFromChat(
   options: ReconcileWorldbookWritesOptions = {},
@@ -216,9 +234,16 @@ export async function reconcileWorldbookWritesFromChat(
       const reason = options.reason ?? 'unknown';
       const isInit = reason.startsWith('init');
 
-      if (isInit && !isChatLedgerReadable()) return;
+      if (isInit && !isChatLedgerReadable()) {
+        scheduleEmptyLedgerRetry(reason);
+        return;
+      }
 
-      if (isInit && ledger.size === 0) return;
+      // 切聊天/初始化时账本可能尚未可读：禁止按空账本清光托管条目
+      if (ledger.size === 0 && shouldGuardEmptyLedger(reason)) {
+        scheduleEmptyLedgerRetry(reason);
+        return;
+      }
 
       await deleteOrphanManagedWorldbookEntries(bookNames, rules, ledger);
 
@@ -242,7 +267,8 @@ export async function reconcileWorldbookWritesFromChat(
         }
       }
       reloadWorldInfoEditorIfSelected(writtenBooks);
-      if (isInit) {
+      emptyLedgerRetryCount = 0;
+      if (isInit || reason === 'chat_changed' || reason === 'ledger_retry') {
         initReconcileSucceeded = true;
         lastInitReconcileLedgerSize = ledger.size;
       }
@@ -267,6 +293,7 @@ export function scheduleWorldbookReconcile(reason: string, delayMs = 500): void 
 export function registerWorldbookWriteReconcile(): EventOnReturn {
   initReconcileSucceeded = false;
   lastInitReconcileLedgerSize = 0;
+  emptyLedgerRetryCount = 0;
 
   const runInit = (pass: number) => {
     if (pass === 2 && initReconcileSucceeded && lastInitReconcileLedgerSize > 0) return;
@@ -279,6 +306,15 @@ export function registerWorldbookWriteReconcile(): EventOnReturn {
     scheduleWorldbookReconcile('message_deleted', 500);
   });
 
+  const offChatChanged = eventOn(tavern_events.CHAT_CHANGED, (chatId: string) => {
+    const id = String(chatId ?? '').trim();
+    if (!id) return;
+    initReconcileSucceeded = false;
+    lastInitReconcileLedgerSize = 0;
+    emptyLedgerRetryCount = 0;
+    scheduleWorldbookReconcile('chat_changed', 800);
+  });
+
   return {
     stop: () => {
       if (reconcileTimer) {
@@ -287,6 +323,7 @@ export function registerWorldbookWriteReconcile(): EventOnReturn {
       }
       pendingReconcile = null;
       offDeleted.stop();
+      offChatChanged.stop();
     },
   };
 }

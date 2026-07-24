@@ -136,7 +136,7 @@ export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessT
   const plotWorldbook = resolveReplicaPlotWorldbookFields(replica, root);
 
   return PostProcessTaskSchema.parse({
-    ...structuredClone(root),
+    ..._.cloneDeep(root),
     id: replica.id,
     name: `${getReplicaFamilyBaseNameFromTask(root)} ${attrValue}`,
     syncAsReplicaFamily: false,

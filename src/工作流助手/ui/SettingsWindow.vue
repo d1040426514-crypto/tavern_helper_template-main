@@ -540,11 +540,10 @@ function ensureReplicasMirroredInPlace(tasks: PostProcessTask[]): void {
   if (syncingReplicas) return;
   syncingReplicas = true;
   try {
-    const mirrored = mirrorAllReplicaFamilies(tasks);
-    if (mirrored === tasks) return;
-    for (let i = 0; i < mirrored.length; i++) {
-      tasks[i] = mirrored[i]!;
-    }
+    // 深拷贝后再镜像，避免对 Vue reactive Proxy 调用 structuredClone / Zod 副作用
+    const mirrored = mirrorAllReplicaFamilies(_.cloneDeep(tasks));
+    if (_.isEqual(mirrored, tasks)) return;
+    tasks.splice(0, tasks.length, ...mirrored);
   } finally {
     syncingReplicas = false;
   }

@@ -187,6 +187,43 @@ test('applyReplicaFamilyCleanup removes unkept replica tasks', () => {
   });
 });
 
+test('applyReplicaFamilyCleanup ignores roots absent from keep map', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const worldRoot: PostProcessTask = {
+      ...baseSettings().tasks[0]!,
+      id: 'world',
+      name: '世界时局与经济简报',
+      replicaFamilySpec: '世界锚定@world',
+      replicaFamilyBaseName: '世界时局与经济简报',
+    };
+    const worldA: PostProcessTask = {
+      ...baseSettings().tasks[1]!,
+      id: 'world-a',
+      name: '世界 A',
+      replicaFamilyRootId: 'world',
+      replicaFamilyAttrValue: '阿斯塔利亚',
+      replicaFamilySpec: '世界锚定@world',
+    };
+    const worldB: PostProcessTask = {
+      ...worldA,
+      id: 'world-b',
+      name: '世界 B',
+      replicaFamilyAttrValue: '另一世界',
+    };
+    const settings = baseSettings({
+      tasks: [...baseSettings().tasks, worldRoot, worldA, worldB],
+    });
+    // 只删世界族的一个副本，其它族不在 keep 表中 → 不得被清光
+    const next = applyReplicaFamilyCleanup(settings, { world: ['阿斯塔利亚'] }, 0);
+    assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'root').length, 2);
+    assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'world').length, 1);
+    assert.ok(next.tasks.find(t => t.replicaFamilyAttrValue === '阿斯塔利亚'));
+    assert.equal(next.tasks.find(t => t.replicaFamilyAttrValue === '另一世界'), undefined);
+  });
+});
+
 test('applyReplicaFamilyCleanup without persist leaves lastManualKeepByRoot unchanged', () => {
   withAccessibleMessageFloor(0, () => {
     const g = globalThis as Record<string, unknown>;

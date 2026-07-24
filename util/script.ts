@@ -84,12 +84,15 @@ export function reloadOnChatChange(options?: { beforeReload?: () => void }): Eve
   }
 
   return eventOn(tavern_events.CHAT_CHANGED, new_chat_id => {
+    const next = String(new_chat_id ?? '').trim();
+    // 酒馆切聊天时会先抛空 id，忽略以免误 reload 到未就绪状态
+    if (!next) return;
     if (chat_id === undefined) {
-      chat_id = new_chat_id;
+      chat_id = next;
       return;
     }
-    if (chat_id !== new_chat_id) {
-      chat_id = new_chat_id;
+    if (chat_id !== next) {
+      chat_id = next;
       try {
         options?.beforeReload?.();
       } catch {

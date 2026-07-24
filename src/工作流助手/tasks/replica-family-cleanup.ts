@@ -340,6 +340,8 @@ export function applyReplicaFamilyCleanup(
 
   for (const root of settings.tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
+    // 未出现在 keep 表中的 root 视为「本次不处理」，避免手动删单族时把其它族 keep 当成 []
+    if (!Object.prototype.hasOwnProperty.call(keepAttrValuesByRoot, root.id)) continue;
     const keepSet = new Set(keepAttrValuesByRoot[root.id] ?? []);
     const members = getReplicaTasks(root.id, tasks);
     const toRemove: string[] = [];
@@ -366,7 +368,6 @@ export function applyReplicaFamilyCleanup(
         attrValues: [...toRemove],
       });
     }
-
   }
 
   if (options?.persistManualKeepByRoot) {
