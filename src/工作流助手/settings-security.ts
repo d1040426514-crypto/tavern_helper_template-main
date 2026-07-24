@@ -71,6 +71,17 @@ function sanitizeTaskForShare(task: PostProcessTask): PostProcessTask {
   return next;
 }
 
+/** 导出预设：去掉本机 API 预设路由，保留 recommendedModel */
+function stripTaskApiPresetRefsForShare(task: PostProcessTask): PostProcessTask {
+  return {
+    ...task,
+    apiPresetName: '',
+    apiPresetFallbackNames: [],
+    apiPrimaryMaxConcurrency: 5,
+    apiFallbackMaxConcurrencies: [],
+  };
+}
+
 export function sanitizePresetWorldbookRefsForShare(preset: PostProcessPreset): PostProcessPreset {
   return {
     ...preset,
@@ -100,14 +111,18 @@ export function buildPresetFromSettings(settings: ScriptSettings, name: string):
   };
 }
 
-/** UI 导出预设 JSON：仅工作流预设 + 清洗本机世界书绑定 */
+/** UI 导出预设 JSON：仅工作流预设 + 清洗本机世界书绑定与任务 API 预设名 */
 export function buildShareablePresetExport(
   settings: ScriptSettings,
   name?: string,
 ): PostProcessPreset {
   const resolved =
     name?.trim() || settings.activePresetName.trim() || '导出预设';
-  return sanitizePresetWorldbookRefsForShare(buildPresetFromSettings(settings, resolved));
+  const preset = sanitizePresetWorldbookRefsForShare(buildPresetFromSettings(settings, resolved));
+  return {
+    ...preset,
+    tasks: preset.tasks.map(stripTaskApiPresetRefsForShare),
+  };
 }
 
 /** 分享导出 / 外部 API：剥离 API 凭据与本机世界书绑定，保留 url/model/name 与任务 recommendedModel */

@@ -31,6 +31,10 @@ function minimalSettings() {
         id: 't1',
         name: '任务',
         recommendedModel: 'deepseek-chat',
+        apiPresetName: 'GG:gemini-3-flash-preview',
+        apiPresetFallbackNames: ['备用'],
+        apiPrimaryMaxConcurrency: 2,
+        apiFallbackMaxConcurrencies: [1],
         taskWorkflowPresets: [
           {
             name: 'wf',
@@ -111,6 +115,10 @@ test('buildShareablePresetExport drops API and runtime fields', () => {
   assert.equal(parsed.success, true);
   assert.equal(exported.name, '我的预设');
   assert.equal(exported.tasks[0]?.recommendedModel, 'deepseek-chat');
+  assert.equal(exported.tasks[0]?.apiPresetName, '');
+  assert.deepEqual(exported.tasks[0]?.apiPresetFallbackNames, []);
+  assert.equal(exported.tasks[0]?.apiPrimaryMaxConcurrency, 5);
+  assert.deepEqual(exported.tasks[0]?.apiFallbackMaxConcurrencies, []);
   assert.equal(exported.plotWorldbookConfig.source, 'character');
   assert.equal(exported.chatWorldbookWriteRules[0]?.manualBookName, '');
 
@@ -122,6 +130,7 @@ test('buildShareablePresetExport drops API and runtime fields', () => {
   assert.equal('enabled' in raw, false);
   assert.equal('uiThemeId' in raw, false);
   assert.equal('presets' in raw, false);
+  assert.equal(settings.tasks[0]?.apiPresetName, 'GG:gemini-3-flash-preview');
   assert.equal(settings.apiPresets[0]?.apiConfig.apiKey, 'secret-key');
   assert.equal(settings.plotWorldbookConfig.source, 'manual');
 });
