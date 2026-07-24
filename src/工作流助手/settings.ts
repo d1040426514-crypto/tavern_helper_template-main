@@ -3,6 +3,7 @@ import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
 import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
 import {
+  buildPresetFromSettings,
   detectSecretsInImportRaw,
   importedSettingsHadApiConfig,
 } from './settings-security';
@@ -161,23 +162,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
   }
 
   function buildPresetFromCurrent(name: string): PostProcessPreset {
-    const s = settings.value;
-    return {
-      name,
-      tasks: _.cloneDeep(s.tasks),
-      finalInjectTemplate: s.finalInjectTemplate,
-      tagVariableInjectTemplate: s.tagVariableInjectTemplate,
-      chatExtractTags: _.cloneDeep(s.chatExtractTags ?? { user: [], assistant: [] }),
-      chatBodyTagReplaceRules: _.cloneDeep(s.chatBodyTagReplaceRules ?? []),
-      chatWorldbookWriteRules: _.cloneDeep(s.chatWorldbookWriteRules ?? []),
-      contextTurnCount: s.contextTurnCount,
-      contextExtractRules: _.cloneDeep(s.contextExtractRules),
-      contextExcludeRules: _.cloneDeep(s.contextExcludeRules),
-      plotWorldbookConfig: _.cloneDeep(s.plotWorldbookConfig),
-      taskPlotWorldbookOverridesEnabled: s.taskPlotWorldbookOverridesEnabled,
-      taskContextOverridesEnabled: s.taskContextOverridesEnabled,
-      memoryRecallRecentCount: s.memoryRecallRecentCount ?? 10,
-    };
+    return buildPresetFromSettings(settings.value, name);
   }
 
   function saveActivePreset(): boolean {

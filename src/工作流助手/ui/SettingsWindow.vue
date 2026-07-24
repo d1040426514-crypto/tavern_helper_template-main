@@ -2,7 +2,7 @@
 import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
 import { useSettingsStore } from '../settings';
-import { redactScriptSettingsForShare } from '../settings-security';
+import { buildShareablePresetExport } from '../settings-security';
 import type {
   PostProcessTask,
   ReplicaFamilyScheduleMode,
@@ -1843,10 +1843,9 @@ function exportTaskRunLog(task: RunLogTaskResult): void {
 }
 
 function exportPresetJson() {
-  downloadSettingsJson(
-    redactScriptSettingsForShare(settings.value),
-    'workflow-assistant-settings.json',
-  );
+  const preset = buildShareablePresetExport(settings.value);
+  const safeName = sanitizeLogFilenamePart(preset.name);
+  downloadSettingsJson(preset, `workflow-assistant-preset-${safeName}.json`);
 }
 
 function triggerImportPreset() {
@@ -2317,7 +2316,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn"
                   type="button"
-                  title="导出 JSON（不含 API 密钥）"
+                  title="导出 JSON（不含 API 配置）"
                   aria-label="导出 JSON"
                   @click="exportPresetJson"
                 >

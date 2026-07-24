@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import lodash from 'lodash';
-import { ScriptSettingsSchema } from './tasks/schema';
-import { detectSecretsInImportRaw, redactScriptSettingsForShare } from './settings-security';
+import { PostProcessPresetSchema, ScriptSettingsSchema } from './tasks/schema';
+import {
+  buildShareablePresetExport,
+  detectSecretsInImportRaw,
+  redactScriptSettingsForShare,
+} from './settings-security';
 
 (globalThis as typeof globalThis & { _: typeof lodash })._ = lodash;
 
@@ -17,6 +21,11 @@ function test(name: string, fn: () => void): void {
 
 function minimalSettings() {
   return ScriptSettingsSchema.parse({
+    activePresetName: '我的预设',
+    enabled: true,
+    uiThemeId: 'creamy-minimal',
+    scheduleState: { t1: { lastRunRound: 3 } },
+    lastRunStatus: { messageId: 9, at: 1, taskResults: [] },
     tasks: [
       {
         id: 't1',
@@ -71,6 +80,57 @@ test('redactScriptSettingsForShare clears apiKey but keeps recommendedModel', ()
 test('detectSecretsInImportRaw finds apiKey in nested object', () => {
   assert.equal(detectSecretsInImportRaw({ apiPresets: [{ apiConfig: { apiKey: 'x' } }] }), true);
   assert.equal(detectSecretsInImportRaw({ tasks: [{ id: 'a', name: 'n' }] }), false);
+});
+
+test('buildShareablePresetExport drops API and runtime fields', () => {
+  const settings = minimalSettings();
+  settings.plotWorldbookConfig = {
+    source: 'manual',
+    manualSelection: ['写卡'],
+    enabledEntries: { 写卡: [1, 2] },
+  };
+  settings.chatWorldbookWriteRules = [
+    {
+      id: 'r1',
+      targetTag: 'result',
+      template: '{{result}}',
+      entryName: '',
+      bookSource: 'manual',
+      manualBookName: '写卡',
+      entryType: 'constant',
+      keywords: '',
+      splitByAttr: false,
+      wrapTagName: '',
+      placement: { position: 'at_depth_as_system', depth: 2, order: 10000 },
+      preventRecursion: true,
+    },
+  ];
+
+  const exported = buildShareablePresetExport(settings);
+  const parsed = PostProcessPresetSchema.safeParse(exported);
+  assert.equal(parsed.success, true);
+  assert.equal(exported.name, '我的预设');
+  assert.equal(exported.tasks[0]?.recommendedModel, 'deepseek-chat');
+  assert.equal(exported.plotWorldbookConfig.source, 'character');
+  assert.equal(exported.chatWorldbookWriteRules[0]?.manualBookName, '');
+
+  const raw = exported as Record<string, unknown>;
+  assert.equal('apiConfig' in raw, false);
+  assert.equal('apiPresets' in raw, false);
+  assert.equal('scheduleState' in raw, false);
+  assert.equal('lastRunStatus' in raw, false);
+  assert.equal('enabled' in raw, false);
+  assert.equal('uiThemeId' in raw, false);
+  assert.equal('presets' in raw, false);
+  assert.equal(settings.apiPresets[0]?.apiConfig.apiKey, 'secret-key');
+  assert.equal(settings.plotWorldbookConfig.source, 'manual');
+});
+
+test('buildShareablePresetExport uses fallback name when active preset empty', () => {
+  const settings = minimalSettings();
+  settings.activePresetName = '';
+  assert.equal(buildShareablePresetExport(settings).name, '导出预设');
+  assert.equal(buildShareablePresetExport(settings, '自定义名').name, '自定义名');
 });
 
 test('redactScriptSettingsForShare strips machine-local worldbook bindings', () => {

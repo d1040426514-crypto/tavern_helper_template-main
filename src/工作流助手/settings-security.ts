@@ -80,6 +80,36 @@ export function sanitizePresetWorldbookRefsForShare(preset: PostProcessPreset): 
   };
 }
 
+/** 从当前设置抽出 PostProcessPreset（不含 API / 运行时字段） */
+export function buildPresetFromSettings(settings: ScriptSettings, name: string): PostProcessPreset {
+  return {
+    name,
+    tasks: _.cloneDeep(settings.tasks),
+    finalInjectTemplate: settings.finalInjectTemplate,
+    tagVariableInjectTemplate: settings.tagVariableInjectTemplate,
+    chatExtractTags: _.cloneDeep(settings.chatExtractTags ?? { user: [], assistant: [] }),
+    chatBodyTagReplaceRules: _.cloneDeep(settings.chatBodyTagReplaceRules ?? []),
+    chatWorldbookWriteRules: _.cloneDeep(settings.chatWorldbookWriteRules ?? []),
+    contextTurnCount: settings.contextTurnCount,
+    contextExtractRules: _.cloneDeep(settings.contextExtractRules),
+    contextExcludeRules: _.cloneDeep(settings.contextExcludeRules),
+    plotWorldbookConfig: _.cloneDeep(settings.plotWorldbookConfig),
+    taskPlotWorldbookOverridesEnabled: settings.taskPlotWorldbookOverridesEnabled,
+    taskContextOverridesEnabled: settings.taskContextOverridesEnabled,
+    memoryRecallRecentCount: settings.memoryRecallRecentCount ?? 10,
+  };
+}
+
+/** UI 导出预设 JSON：仅工作流预设 + 清洗本机世界书绑定 */
+export function buildShareablePresetExport(
+  settings: ScriptSettings,
+  name?: string,
+): PostProcessPreset {
+  const resolved =
+    name?.trim() || settings.activePresetName.trim() || '导出预设';
+  return sanitizePresetWorldbookRefsForShare(buildPresetFromSettings(settings, resolved));
+}
+
 /** 分享导出 / 外部 API：剥离 API 凭据与本机世界书绑定，保留 url/model/name 与任务 recommendedModel */
 export function redactScriptSettingsForShare(settings: ScriptSettings): ScriptSettings {
   const cloned = _.cloneDeep(settings);
