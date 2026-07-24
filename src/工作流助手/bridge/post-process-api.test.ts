@@ -20,6 +20,7 @@ const expectedMethods = [
   'updateTaskExecutionOptions',
   'updateTaskApiPreset',
   'updateTaskApiPresetRouting',
+  'updateTaskApiPresetMode',
   'addPromptGroup',
   'removePromptGroup',
   'movePromptGroup',
@@ -84,7 +85,7 @@ async function main(): Promise<void> {
     const { acuPostProcessTaskApi } = await import('./post-process-api.js');
     const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
     assert.deepEqual(missing, []);
-    assert.equal(expectedMethods.length, 59);
+    assert.equal(expectedMethods.length, 60);
 
     const exposed = acuPostProcessTaskApi.getEffectiveSettings();
     assert.equal(exposed.apiConfig.apiKey, '');

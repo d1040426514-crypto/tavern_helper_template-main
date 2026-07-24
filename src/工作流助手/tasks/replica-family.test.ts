@@ -21,6 +21,7 @@ import {
   listLaunchedAttrValuesWithFallback,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
+  promoteReplicaApiPatchToCustom,
   resolveReplicaLaunchedPlaceholder,
   scanDynamicAttrPlaceholders,
   substituteDynamicPlaceholder,
@@ -343,6 +344,39 @@ test('assertReplicaMemberPatchAllowed blocks workflow fields', () => {
   assert.doesNotThrow(() =>
     assertReplicaMemberPatchAllowed(member, { plotWorldbookMode: 'inheritRoot' }),
   );
+  assert.doesNotThrow(() =>
+    assertReplicaMemberPatchAllowed(member, {
+      apiPresetMode: 'custom',
+      apiPresetName: 'replica-api',
+      apiPresetFallbackNames: ['fb'],
+      apiPrimaryMaxConcurrency: 3,
+      apiFallbackMaxConcurrencies: [2],
+    }),
+  );
+});
+
+test('promoteReplicaApiPatchToCustom upgrades bare routing patches', () => {
+  const member = {
+    ...baseTask({ syncAsReplicaFamily: false }),
+    id: 'rep-1',
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    apiPresetMode: 'inheritRoot' as const,
+  };
+  const promoted = promoteReplicaApiPatchToCustom(member, { apiPresetName: 'solo' });
+  assert.equal(promoted.apiPresetMode, 'custom');
+  assert.equal(promoted.apiPresetName, 'solo');
+
+  const keepInherit = promoteReplicaApiPatchToCustom(member, {
+    apiPresetMode: 'inheritRoot',
+    apiPresetName: 'ignored-by-mirror',
+  });
+  assert.equal(keepInherit.apiPresetMode, 'inheritRoot');
+
+  const root = baseTask();
+  assert.deepEqual(promoteReplicaApiPatchToCustom(root, { apiPresetName: 'x' }), {
+    apiPresetName: 'x',
+  });
 });
 
 test('syncReplicaFromRoot preserves custom plotWorldbookConfig on member', () => {
@@ -406,6 +440,68 @@ test('syncReplicaFromRoot preserves inheritRoot mode and clears config', () => {
   const synced = syncReplicaFromRoot(replica, root);
   assert.equal(synced.plotWorldbookMode, 'inheritRoot');
   assert.equal(synced.plotWorldbookConfig, undefined);
+});
+
+test('syncReplicaFromRoot inherits API routing when apiPresetMode is inheritRoot', () => {
+  const root = baseTask({
+    apiPresetName: 'root-api',
+    apiPresetFallbackNames: ['root-fb'],
+    apiPrimaryMaxConcurrency: 7,
+    apiFallbackMaxConcurrencies: [3],
+    promptGroups: [{ name: '', role: 'user', content: 'handle {{item@id}} here', enabled: true }],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [{ name: '', role: 'user', content: 'stale', enabled: true }],
+    apiPresetMode: 'inheritRoot' as const,
+    apiPresetName: 'old-api',
+    apiPresetFallbackNames: ['old-fb'],
+    apiPrimaryMaxConcurrency: 1,
+    apiFallbackMaxConcurrencies: [1],
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.apiPresetMode, 'inheritRoot');
+  assert.equal(synced.apiPresetName, 'root-api');
+  assert.deepEqual(synced.apiPresetFallbackNames, ['root-fb']);
+  assert.equal(synced.apiPrimaryMaxConcurrency, 7);
+  assert.deepEqual(synced.apiFallbackMaxConcurrencies, [3]);
+});
+
+test('syncReplicaFromRoot preserves custom API routing on member', () => {
+  const root = baseTask({
+    apiPresetName: 'root-api',
+    apiPresetFallbackNames: ['root-fb'],
+    apiPrimaryMaxConcurrency: 7,
+    apiFallbackMaxConcurrencies: [3],
+    promptGroups: [{ name: '', role: 'user', content: 'handle {{item@id}} here', enabled: true }],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [{ name: '', role: 'user', content: 'stale', enabled: true }],
+    apiPresetMode: 'custom' as const,
+    apiPresetName: 'replica-api',
+    apiPresetFallbackNames: ['replica-fb'],
+    apiPrimaryMaxConcurrency: 2,
+    apiFallbackMaxConcurrencies: [4],
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.apiPresetMode, 'custom');
+  assert.equal(synced.apiPresetName, 'replica-api');
+  assert.deepEqual(synced.apiPresetFallbackNames, ['replica-fb']);
+  assert.equal(synced.apiPrimaryMaxConcurrency, 2);
+  assert.deepEqual(synced.apiFallbackMaxConcurrencies, [4]);
 });
 
 function relayMap(entries: Record<string, string>): RelayTagMap {

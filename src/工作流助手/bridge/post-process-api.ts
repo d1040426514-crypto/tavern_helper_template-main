@@ -33,6 +33,7 @@ import {
   updateTask,
   updateTaskApiPreset,
   updateTaskApiPresetRouting,
+  updateTaskApiPresetMode,
   updateTaskContext,
   updateTaskExecutionOptions,
   updateTaskExtractTags,
@@ -67,6 +68,7 @@ import {
 } from '../tasks/runtime';
 import { sanitizeSettingsForExternalApi } from '../settings-security';
 import type {
+  ApiPresetMode,
   ChatTaskScopeState,
   PlotWorldbookConfig,
   PlotWorldbookMode,
@@ -111,6 +113,7 @@ export interface AcuPostProcessTaskAPI {
   updateTaskExecutionOptions(taskId: string, patch: TaskExecutionOptionsPatch): Promise<PostProcessTask>;
   updateTaskApiPreset(taskId: string, presetName: string): Promise<PostProcessTask>;
   updateTaskApiPresetRouting(taskId: string, patch: TaskApiPresetRoutingPatch): Promise<PostProcessTask>;
+  updateTaskApiPresetMode(taskId: string, mode: ApiPresetMode): Promise<PostProcessTask>;
   addPromptGroup(taskId: string, group?: Partial<PromptGroup>): Promise<PostProcessTask>;
   removePromptGroup(taskId: string, index: number): Promise<PostProcessTask>;
   movePromptGroup(taskId: string, index: number, delta: -1 | 1): Promise<PostProcessTask>;
@@ -202,6 +205,8 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
     apiCall(() => updateTaskApiPreset(taskId, presetName, 'api')) as Promise<PostProcessTask>,
   updateTaskApiPresetRouting: (taskId, patch) =>
     apiCall(() => updateTaskApiPresetRouting(taskId, patch, 'api')) as Promise<PostProcessTask>,
+  updateTaskApiPresetMode: (taskId, mode) =>
+    apiCall(() => updateTaskApiPresetMode(taskId, mode, 'api')) as Promise<PostProcessTask>,
   addPromptGroup: (taskId, group) =>
     apiCall(() => addPromptGroup(taskId, group, 'api')) as Promise<PostProcessTask>,
   removePromptGroup: (taskId, index) =>

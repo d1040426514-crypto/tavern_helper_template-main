@@ -71,6 +71,9 @@ export const PlotWorldbookConfigSchema = z.object({
 
 export const PlotWorldbookModeSchema = z.enum(['inherit', 'custom', 'inheritRoot']);
 
+/** 副本族成员 API 路由：沿用原本 / 本副本自定义 */
+export const ApiPresetModeSchema = z.enum(['inheritRoot', 'custom']);
+
 export const ApiConfigSchema = z.object({
   url: z.string().default(''),
   apiKey: z.string().default(''),
@@ -189,6 +192,8 @@ const PostProcessTaskShape = z.object({
   apiPresetFallbackNames: z.array(z.string()).default([]),
   apiPrimaryMaxConcurrency: z.number().int().min(0).default(5),
   apiFallbackMaxConcurrencies: z.array(z.number().int().min(0)).default([]),
+  /** 副本族成员：沿用原本 / 本副本自定义 API 路由；普通任务与原本忽略此字段 */
+  apiPresetMode: ApiPresetModeSchema.default('inheritRoot'),
   schedule: TaskScheduleSchema.optional(),
   plotWorldbookMode: PlotWorldbookModeSchema.default('inherit'),
   plotWorldbookConfig: PlotWorldbookConfigSchema.optional(),
@@ -403,6 +408,7 @@ export type ApiPreset = z.infer<typeof ApiPresetSchema>;
 export type ApiPresetBinding = z.infer<typeof ApiPresetBindingSchema>;
 export type PlotWorldbookConfig = z.infer<typeof PlotWorldbookConfigSchema>;
 export type PlotWorldbookMode = z.infer<typeof PlotWorldbookModeSchema>;
+export type ApiPresetMode = z.infer<typeof ApiPresetModeSchema>;
 export type TaskContextConfig = z.infer<typeof TaskContextConfigSchema>;
 export type PostProcessPreset = z.infer<typeof PostProcessPresetSchema>;
 export type ScriptSettings = z.infer<typeof ScriptSettingsSchema>;

@@ -17,6 +17,7 @@ import {
   PostProcessPresetSchema,
   PostProcessTaskSchema,
   ChatTaskScopeStateSchema,
+  type ApiPresetMode,
   type ChatTaskScopeState,
   type PostProcessTask,
   type ReplicaFamilyScheduleMode,
@@ -26,6 +27,7 @@ import { newTaskId, cloneTaskForInsert } from './task-clone';
 import {
   assertReplicaMemberPatchAllowed,
   buildReplicaFromRoot,
+  copyApiRoutingFieldsFrom,
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   getReplicaFamilyBaseNameFromTask,
@@ -33,6 +35,7 @@ import {
   isReplicaFamilyMember,
   listReplicaFamilyScheduleEntries,
   mirrorAllReplicaFamilies,
+  promoteReplicaApiPatchToCustom,
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
   validateReplicaFamilyEligibility,
@@ -204,9 +207,10 @@ export async function updateTask(
     throw new Error(`任务不存在: ${id}`);
   }
   assertReplicaMemberPatchAllowed(tasks[index]!, patch);
+  const effectivePatch = promoteReplicaApiPatchToCustom(tasks[index]!, patch);
   const updated = PostProcessTaskSchema.parse({
     ...tasks[index],
-    ...patch,
+    ...effectivePatch,
     id,
   });
   tasks[index] = updated;
@@ -544,9 +548,54 @@ export async function updateTaskApiPresetRouting(
       apiPresetFallbackNames: nextFallbacks,
       apiPrimaryMaxConcurrency: nextPrimaryMaxConcurrency,
       apiFallbackMaxConcurrencies: nextFallbackMaxConcurrencies,
+      ...(isReplicaFamilyMember(task) ? { apiPresetMode: 'custom' as const } : {}),
     },
     source,
   );
+}
+
+export async function updateTaskApiPresetMode(
+  id: string,
+  mode: ApiPresetMode,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const task = getTask(id);
+  if (!task) throw new Error(`任务不存在: ${id}`);
+  if (!isReplicaFamilyMember(task)) {
+    throw new Error('仅副本族成员可设置 apiPresetMode');
+  }
+  if (mode !== 'inheritRoot' && mode !== 'custom') {
+    throw new Error(`无效的 apiPresetMode: ${mode}`);
+  }
+
+  const root = listTasks().find(t => t.id === task.replicaFamilyRootId);
+  if (!root) throw new Error('副本族原本不存在');
+
+  if (mode === 'inheritRoot') {
+    // 立即写回原本路由，避免仅改 mode 后到 mirror 之间的竞态窗口
+    return updateTask(
+      id,
+      {
+        apiPresetMode: 'inheritRoot',
+        ...copyApiRoutingFieldsFrom(root),
+      },
+      source,
+    );
+  }
+
+  // 切到 custom：若尚未自定义，用原本当前路由种子初始化（与 UI 一致）
+  if (task.apiPresetMode !== 'custom') {
+    return updateTask(
+      id,
+      {
+        apiPresetMode: 'custom',
+        ...copyApiRoutingFieldsFrom(root),
+      },
+      source,
+    );
+  }
+
+  return updateTask(id, { apiPresetMode: 'custom' }, source);
 }
 
 export async function addPromptGroup(

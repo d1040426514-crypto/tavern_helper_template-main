@@ -313,6 +313,11 @@ const availableFallbackPresetsForAdd = computed(() => {
   return settings.value.apiPresets.filter(p => !used.has(p.name));
 });
 
+const availableFallbackPresetsForReplicaAdd = computed(() => {
+  const used = collectUsedApiPresetNames(editorTask.value);
+  return settings.value.apiPresets.filter(p => !used.has(p.name));
+});
+
 function ensureTaskApiConfig(task: PostProcessTask) {
   if (!task.apiPresetFallbackNames) task.apiPresetFallbackNames = [];
   task.apiPrimaryMaxConcurrency = normalizeRouteMaxConcurrency(task.apiPrimaryMaxConcurrency);
@@ -323,6 +328,34 @@ function ensureTaskApiConfig(task: PostProcessTask) {
     task.apiPrimaryMaxConcurrency ?? DEFAULT_ROUTE_MAX_CONCURRENCY,
   );
 }
+
+function seedReplicaApiFromRoot(replica: PostProcessTask, root: PostProcessTask) {
+  replica.apiPresetName = root.apiPresetName ?? '';
+  replica.apiPresetFallbackNames = _.cloneDeep(root.apiPresetFallbackNames ?? []);
+  replica.apiPrimaryMaxConcurrency = root.apiPrimaryMaxConcurrency ?? DEFAULT_ROUTE_MAX_CONCURRENCY;
+  replica.apiFallbackMaxConcurrencies = _.cloneDeep(root.apiFallbackMaxConcurrencies ?? []);
+  ensureTaskApiConfig(replica);
+}
+
+const replicaApiPresetMode = computed({
+  get: (): 'inheritRoot' | 'custom' =>
+    editorTask.value?.apiPresetMode === 'custom' ? 'custom' : 'inheritRoot',
+  set: (mode: 'inheritRoot' | 'custom') => {
+    const replica = editorTask.value;
+    const root = selectedTask.value;
+    if (!replica?.replicaFamilyRootId || !root) return;
+    if (mode === 'custom') {
+      if (replica.apiPresetMode !== 'custom') {
+        seedReplicaApiFromRoot(replica, root);
+      }
+      replica.apiPresetMode = 'custom';
+    } else {
+      // 立即从原本写回路由，避免 debounce mirror 前的竞态
+      seedReplicaApiFromRoot(replica, root);
+      replica.apiPresetMode = 'inheritRoot';
+    }
+  },
+});
 
 function addTaskApiFallback() {
   const task = selectedTask.value;
@@ -345,10 +378,41 @@ function removeTaskApiFallback(index: number) {
   task.apiFallbackMaxConcurrencies?.splice(index, 1);
 }
 
+function addReplicaApiFallback() {
+  const task = editorTask.value;
+  if (!task?.replicaFamilyRootId) return;
+  task.apiPresetMode = 'custom';
+  ensureTaskApiConfig(task);
+  const next = availableFallbackPresetsForReplicaAdd.value[0];
+  if (!next) {
+    acuToast('warning', '没有可添加的备用预设');
+    return;
+  }
+  task.apiPresetFallbackNames.push(next.name);
+  if (!task.apiFallbackMaxConcurrencies) task.apiFallbackMaxConcurrencies = [];
+  task.apiFallbackMaxConcurrencies.push(task.apiPrimaryMaxConcurrency ?? DEFAULT_ROUTE_MAX_CONCURRENCY);
+}
+
+function removeReplicaApiFallback(index: number) {
+  const task = editorTask.value;
+  if (!task?.replicaFamilyRootId || !task.apiPresetFallbackNames) return;
+  task.apiPresetMode = 'custom';
+  task.apiPresetFallbackNames.splice(index, 1);
+  task.apiFallbackMaxConcurrencies?.splice(index, 1);
+}
+
 watch(
   selectedTask,
   task => {
     if (task) ensureTaskApiConfig(task);
+  },
+  { immediate: true },
+);
+
+watch(
+  editorTask,
+  task => {
+    if (task?.replicaFamilyRootId) ensureTaskApiConfig(task);
   },
   { immediate: true },
 );
@@ -976,6 +1040,24 @@ const apiConfigSummary = computed(() => {
   const primary = task.apiPresetName?.trim() || '全局默认';
   const fallbackCount = task.apiPresetFallbackNames?.length ?? 0;
   return fallbackCount > 0 ? `主要: ${primary} · ${fallbackCount} 个备用` : `主要: ${primary}`;
+});
+
+function formatApiRoutingSummary(task: PostProcessTask | null | undefined): string {
+  if (!task) return '';
+  const primary = task.apiPresetName?.trim() || '全局默认';
+  const fallbackCount = task.apiPresetFallbackNames?.length ?? 0;
+  return fallbackCount > 0 ? `主要: ${primary} · ${fallbackCount} 个备用` : `主要: ${primary}`;
+}
+
+const rootApiConfigSummary = computed(() => formatApiRoutingSummary(selectedTask.value));
+
+const replicaApiConfigSummary = computed(() => {
+  const replica = editorTask.value;
+  if (!replica?.replicaFamilyRootId) return '';
+  if (replica.apiPresetMode === 'custom') {
+    return `自定义 · ${formatApiRoutingSummary(replica)}`;
+  }
+  return `沿用原本 · ${rootApiConfigSummary.value}`;
 });
 
 const executionStrategySummary = computed(() =>
@@ -2504,8 +2586,122 @@ function saveRunLogTaskTags(taskId: string): void {
                 </button>
               </div>
               <p v-if="isViewingReplicaMember" class="acu-notes replica-family-bar__hint">
-                当前为副本预览（占位符已替换为精确属性值）；编辑请切回「原本」。
+                当前为副本预览（占位符已替换为精确属性值）；提示词等请切回「原本」编辑。API 预设可在下方对本副本单独配置。
               </p>
+              <div
+                v-if="isViewingReplicaMember && editorTask"
+                class="acu-subsection acu-collapsible-subsection acu-api-config-section"
+              >
+                <button
+                  type="button"
+                  class="acu-collapsible-subsection__header"
+                  :aria-expanded="apiConfigExpanded"
+                  @click="apiConfigExpanded = !apiConfigExpanded"
+                >
+                  <span class="acu-collapsible-subsection__title">副本 API 配置</span>
+                  <span class="acu-collapsible-subsection__summary">{{ replicaApiConfigSummary }}</span>
+                  <i
+                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                    :class="apiConfigExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                    aria-hidden="true"
+                  />
+                </button>
+                <div v-show="apiConfigExpanded" class="acu-collapsible-subsection__body">
+                  <p class="acu-api-config__intro">
+                    默认沿用副本族原本的 API 路由；切到「本副本自定义」后可独立选择主/备预设与并发。
+                  </p>
+                  <div class="acu-row acu-row--inline">
+                    <label>
+                      <input v-model="replicaApiPresetMode" type="radio" value="inheritRoot" />
+                      沿用任务原本
+                    </label>
+                    <label>
+                      <input v-model="replicaApiPresetMode" type="radio" value="custom" />
+                      本副本自定义
+                    </label>
+                  </div>
+                  <template v-if="replicaApiPresetMode === 'inheritRoot'">
+                    <p class="acu-notes acu-notes--sm">
+                      当前跟随原本：{{ rootApiConfigSummary || '全局默认' }}
+                    </p>
+                  </template>
+                  <template v-else>
+                    <div class="acu-api-config__block">
+                      <label class="acu-field-label">主要 API 预设</label>
+                      <div class="acu-api-routing-row">
+                        <select
+                          v-model="editorTask.apiPresetName"
+                          class="acu-select acu-api-config__preset-select"
+                        >
+                          <option value="">全局默认</option>
+                          <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">
+                            {{ p.name }}
+                          </option>
+                        </select>
+                        <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                        <input
+                          v-model.number="editorTask.apiPrimaryMaxConcurrency"
+                          class="acu-input acu-api-config__concurrency-input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          title="0 表示不限制"
+                        />
+                        <span class="acu-api-config__suffix">次</span>
+                      </div>
+                      <div class="acu-api-routing-fallbacks">
+                        <label class="acu-field-label">备用 API 预设</label>
+                        <div
+                          v-for="(fallbackName, fbIndex) in editorTask.apiPresetFallbackNames ?? []"
+                          :key="`rep-fb-${fbIndex}-${fallbackName}`"
+                          class="acu-api-routing-row acu-api-routing-fallback-row"
+                        >
+                          <select
+                            v-model="editorTask.apiPresetFallbackNames![fbIndex]"
+                            class="acu-select acu-api-config__preset-select"
+                          >
+                            <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">
+                              {{ p.name }}
+                            </option>
+                          </select>
+                          <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                          <input
+                            v-model.number="editorTask.apiFallbackMaxConcurrencies![fbIndex]"
+                            class="acu-input acu-api-config__concurrency-input"
+                            type="number"
+                            min="0"
+                            step="1"
+                            title="0 表示不限制"
+                          />
+                          <span class="acu-api-config__suffix">次</span>
+                          <button
+                            class="acu-btn acu-btn--sm"
+                            type="button"
+                            title="删除此备用"
+                            @click="removeReplicaApiFallback(fbIndex)"
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <button
+                          class="acu-btn acu-btn--sm"
+                          type="button"
+                          :disabled="!availableFallbackPresetsForReplicaAdd.length"
+                          @click="addReplicaApiFallback"
+                        >
+                          + 添加备用
+                        </button>
+                        <p
+                          v-if="!settings.apiPresets.length"
+                          class="acu-notes acu-notes--sm acu-api-config__empty-hint"
+                        >
+                          请先在全局「API」页添加至少一个 API 预设。
+                        </p>
+                      </div>
+                    </div>
+                  </template>
+                </div>
+              </div>
               <template v-if="!isViewingReplicaMember">
               <div class="acu-row acu-row--inline acu-task-editor__toolbar">
                 <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />

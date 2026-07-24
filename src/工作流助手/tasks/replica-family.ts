@@ -128,12 +128,81 @@ function resolveReplicaPlotWorldbookFields(
   };
 }
 
-/** 将副本镜像为原本的实时副本：全字段同步（含 API），保留副本身份字段，提示词动态占位符精确化 */
+type ReplicaApiFields = Pick<
+  PostProcessTask,
+  | 'apiPresetMode'
+  | 'apiPresetName'
+  | 'apiPresetFallbackNames'
+  | 'apiPrimaryMaxConcurrency'
+  | 'apiFallbackMaxConcurrencies'
+>;
+
+/** 副本 API：custom 保留本副本路由；否则沿用原本 */
+function resolveReplicaApiFields(replica: PostProcessTask, root: PostProcessTask): ReplicaApiFields {
+  const mode = replica.apiPresetMode === 'custom' ? 'custom' : 'inheritRoot';
+  if (mode === 'custom') {
+    return {
+      apiPresetMode: 'custom',
+      ...copyApiRoutingFieldsFrom(replica),
+    };
+  }
+  return {
+    apiPresetMode: 'inheritRoot',
+    ...copyApiRoutingFieldsFrom(root),
+  };
+}
+
+/** 拷贝任务 API 路由四字段（深拷贝数组） */
+export function copyApiRoutingFieldsFrom(
+  source: Pick<
+    PostProcessTask,
+    | 'apiPresetName'
+    | 'apiPresetFallbackNames'
+    | 'apiPrimaryMaxConcurrency'
+    | 'apiFallbackMaxConcurrencies'
+  >,
+): Pick<
+  PostProcessTask,
+  | 'apiPresetName'
+  | 'apiPresetFallbackNames'
+  | 'apiPrimaryMaxConcurrency'
+  | 'apiFallbackMaxConcurrencies'
+> {
+  return {
+    apiPresetName: source.apiPresetName ?? '',
+    apiPresetFallbackNames: _.cloneDeep(source.apiPresetFallbackNames ?? []),
+    apiPrimaryMaxConcurrency: source.apiPrimaryMaxConcurrency ?? 5,
+    apiFallbackMaxConcurrencies: _.cloneDeep(source.apiFallbackMaxConcurrencies ?? []),
+  };
+}
+
+const REPLICA_API_ROUTING_PATCH_KEYS = [
+  'apiPresetName',
+  'apiPresetFallbackNames',
+  'apiPrimaryMaxConcurrency',
+  'apiFallbackMaxConcurrencies',
+] as const;
+
+/** 副本 patch 含路由字段且未显式指定 inheritRoot 时，自动升为 custom，避免下次镜像被盖掉 */
+export function promoteReplicaApiPatchToCustom(
+  task: PostProcessTask,
+  patch: Partial<PostProcessTask>,
+): Partial<PostProcessTask> {
+  if (!isReplicaFamilyMember(task)) return patch;
+  if (patch.apiPresetMode === 'inheritRoot') return patch;
+  if (patch.apiPresetMode === 'custom') return patch;
+  const touchesRouting = REPLICA_API_ROUTING_PATCH_KEYS.some(k => Object.prototype.hasOwnProperty.call(patch, k));
+  if (!touchesRouting) return patch;
+  return { ...patch, apiPresetMode: 'custom' };
+}
+
+/** 将副本镜像为原本的实时副本：同步工作流字段；API 在 inheritRoot 时跟随原本，custom 时保留副本路由；保留副本身份字段，提示词动态占位符精确化 */
 export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessTask): PostProcessTask {
   const attrValue = replica.replicaFamilyAttrValue ?? '';
   if (!attrValue) return replica;
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
   const plotWorldbook = resolveReplicaPlotWorldbookFields(replica, root);
+  const apiFields = resolveReplicaApiFields(replica, root);
 
   return PostProcessTaskSchema.parse({
     ..._.cloneDeep(root),
@@ -150,6 +219,7 @@ export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessT
     promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
     structuredOutputRules: substituteStructuredOutputRules(root.structuredOutputRules, spec, attrValue),
     ...plotWorldbook,
+    ...apiFields,
   });
 }
 
@@ -294,6 +364,11 @@ export const REPLICA_MEMBER_WRITABLE_KEYS = new Set<keyof PostProcessTask>([
   'enabled',
   'plotWorldbookMode',
   'plotWorldbookConfig',
+  'apiPresetMode',
+  'apiPresetName',
+  'apiPresetFallbackNames',
+  'apiPrimaryMaxConcurrency',
+  'apiFallbackMaxConcurrencies',
 ]);
 
 const REPLICA_MEMBER_PATCH_DENIED_MSG = '副本为原本镜像，请编辑「原本」';

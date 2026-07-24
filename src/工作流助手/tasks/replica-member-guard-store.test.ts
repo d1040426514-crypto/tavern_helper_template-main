@@ -54,7 +54,7 @@ g.window = {
 };
 
 void (async () => {
-  const { clearChatScope, createTask, deleteTask, listTasks, replaceTasks, updateTask, updateTaskPlotWorldbook } = await import(
+  const { clearChatScope, createTask, deleteTask, listTasks, replaceTasks, updateTask, updateTaskPlotWorldbook, updateTaskApiPresetRouting, updateTaskApiPresetMode } = await import(
     './task-store'
   );
   const { updateReplicaMemberSchedule } = await import('./task-store');
@@ -71,6 +71,7 @@ void (async () => {
         extractInjectTags: ['item@id'],
         syncAsReplicaFamily: true,
         replicaFamilySpec: 'item@id',
+        apiPresetName: 'root-api',
       },
       'api',
     );
@@ -97,6 +98,28 @@ void (async () => {
 
     const inheritRootUpdated = await updateTaskPlotWorldbook(replica!.id, { mode: 'inheritRoot' }, 'api');
     assert.equal(inheritRootUpdated.plotWorldbookMode, 'inheritRoot');
+
+    const apiUpdated = await updateTaskApiPresetRouting(
+      replica!.id,
+      { primary: 'replica-api', primaryMaxConcurrency: 3 },
+      'api',
+    );
+    assert.equal(apiUpdated.apiPresetMode, 'custom');
+    assert.equal(apiUpdated.apiPresetName, 'replica-api');
+    assert.equal(apiUpdated.apiPrimaryMaxConcurrency, 3);
+
+    const modeInherit = await updateTaskApiPresetMode(replica!.id, 'inheritRoot', 'api');
+    assert.equal(modeInherit.apiPresetMode, 'inheritRoot');
+    assert.equal(modeInherit.apiPresetName, 'root-api');
+
+    const modeCustom = await updateTaskApiPresetMode(replica!.id, 'custom', 'api');
+    assert.equal(modeCustom.apiPresetMode, 'custom');
+    assert.equal(modeCustom.apiPresetName, 'root-api');
+
+    // 仅改路由字段也应自动升为 custom，避免下次镜像盖掉
+    const bareRouting = await updateTask(replica!.id, { apiPresetName: 'solo-via-patch' }, 'api');
+    assert.equal(bareRouting.apiPresetMode, 'custom');
+    assert.equal(bareRouting.apiPresetName, 'solo-via-patch');
 
     const scheduled = await updateReplicaMemberSchedule(replica!.id, { launched: true }, 'api');
     assert.equal(scheduled.replicaFamilyLaunched, true);
