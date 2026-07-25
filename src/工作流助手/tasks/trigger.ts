@@ -268,11 +268,10 @@ export async function handleMessageReceived(
     }
 
     const hadDoneFlag = !!(msg.data as Record<string, unknown>)?._post_process_done;
-    // 自动重跑仅认 regenerate/swipe/continue 等；GENERATION_ENDED+继承 done 不得误判为 rerun
-    const isRerun =
-      explicitIsRerun ||
-      clearedStale ||
-      (hadDoneFlag && isContentRefreshMessageType(type));
+    // 自动重跑仅认 regenerate/swipe/continue 等。
+    // clearedStale 只表示「继承了上一楼的 done/inject」，清理后应视为本楼首次跑，
+    // 不得当成 isRerun（否则会 restore 继承来的空 baseline，清空已继承的 addon_data）。
+    const isRerun = explicitIsRerun || (hadDoneFlag && isContentRefreshMessageType(type));
 
     if (!options?.force && hadDoneFlag && !isRerun) return;
 

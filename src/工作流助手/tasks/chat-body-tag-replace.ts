@@ -264,7 +264,13 @@ export function isBodyReplaceOriginInheritedFromPreviousFloor(
   return (prev.message ?? '') === origin;
 }
 
-/** 清除陈旧的 done / inject / body-replace origin，避免误 restore 上一楼正文 */
+/** 与 inject-variable-update 中 baseline 键一致；继承残留必须一并清除 */
+const INJECT_VAR_BASELINE_KEY = '_post_process_inject_var_baseline';
+
+/**
+ * 清除陈旧的 done / inject / body-replace origin / 注入变量 baseline。
+ * 新楼常从上一楼继承这些标记；若不清 baseline，后续误判 isRerun 时会 restore 空骨架并清空 addon_data。
+ */
 export async function clearStalePostProcessRunMarkers(messageId: number): Promise<boolean> {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return false;
@@ -284,6 +290,7 @@ export async function clearStalePostProcessRunMarkers(messageId: number): Promis
   delete data._post_process_done;
   delete data._post_process_inject_block;
   delete data[BODY_REPLACE_ORIGIN_KEY];
+  delete data[INJECT_VAR_BASELINE_KEY];
 
   await setChatMessages([{ message_id: messageId, data }], { refresh: 'none' });
   return true;
