@@ -151,6 +151,32 @@ export function intervalToMs(value: number, unit: keyof typeof UNIT_MS): number 
   return value * (UNIT_MS[unit] ?? UNIT_MS.hour);
 }
 
+const REMAINING_PARTS: { unit: keyof typeof UNIT_MS; label: string }[] = [
+  { unit: 'year', label: '年' },
+  { unit: 'month', label: '月' },
+  { unit: 'week', label: '周' },
+  { unit: 'day', label: '天' },
+  { unit: 'hour', label: '小时' },
+  { unit: 'minute', label: '分钟' },
+];
+
+/** 将剩余毫秒格式化为简短中文时长（最多两个单位） */
+export function formatRemainingDuration(remainingMs: number): string {
+  let left = Math.max(0, Math.floor(remainingMs));
+  if (left < UNIT_MS.minute) return '不足1分钟';
+
+  const parts: string[] = [];
+  for (const { unit, label } of REMAINING_PARTS) {
+    const size = UNIT_MS[unit];
+    if (left < size) continue;
+    const n = Math.floor(left / size);
+    parts.push(`${n}${label}`);
+    left -= n * size;
+    if (parts.length >= 2) break;
+  }
+  return parts.length ? parts.join('') : '不足1分钟';
+}
+
 export const GAME_TIME_FORMAT_HELP = {
   preprocess:
     '解析前仅取首行；@ 之后视为地点、| 之后视为天气/备注并自动剥离。例：复兴纪元488年-5月-14日-15:48 @ 某地| 天气 → 只解析日期时间部分。',

@@ -91,6 +91,48 @@ test('time mode skip on parse fail', () => {
   assert.equal(check.reason, '游戏时间解析失败');
 });
 
+test('time mode skip includes remaining game time', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 1,
+      unit: 'hour',
+      timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
+      onParseFail: 'skip',
+    },
+  });
+  // 第1天 08:00 → 上次；当前 08:30 → 还剩 30 分钟
+  const lastMs = 1 * 86_400_000 + 8 * 3_600_000;
+  const ctx = makeCtx({
+    currentAiText: '<time>第1天 08:30</time>',
+    currentPairText: '<time>第1天 08:30</time>',
+  });
+  const check = shouldRunTask(task, { lastRunRound: 1, lastRunGameTimeMs: lastMs }, ctx);
+  assert.equal(check.run, false);
+  assert.match(check.reason ?? '', /^游戏时间间隔未到，还剩 /);
+  assert.ok(check.reason?.includes('30分钟'));
+});
+
+test('wall clock skip includes remaining', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 1,
+      unit: 'hour',
+      timeSource: { type: 'message_tag', tagNames: ['missing'], scope: 'current_ai' },
+      onParseFail: 'wall_clock',
+    },
+  });
+  const ctx = makeCtx();
+  const last = Date.now() - 15 * 60_000;
+  const check = shouldRunTask(task, { lastRunRound: 0, lastRunAt: last }, ctx);
+  assert.equal(check.run, false);
+  assert.match(check.reason ?? '', /^时间间隔未到\(墙钟\)，还剩 /);
+  assert.ok(check.reason?.includes('分钟') || check.reason?.includes('小时'));
+});
+
 test('updateScheduleStateAfterRun records round and game time', () => {
   const settings = { scheduleState: {} } as ScriptSettings;
   const task = makeTask({

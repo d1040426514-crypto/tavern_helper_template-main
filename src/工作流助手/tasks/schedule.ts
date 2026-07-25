@@ -1,6 +1,6 @@
 import _ from 'lodash';
 import { findLatestAssistantFloorId } from './message-floor';
-import { intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs } from './parse-game-time';
+import { intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs, formatRemainingDuration } from './parse-game-time';
 import { extractLastTagContent } from './utils';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
 
@@ -189,8 +189,11 @@ export function shouldRunTask(
     if (ti.onParseFail === 'wall_clock') {
       const now = Date.now();
       const last = state?.lastRunAt ?? 0;
-      if (now - last < intervalToMs(ti.value, ti.unit)) {
-        return { run: false, reason: '时间间隔未到(墙钟)' };
+      const need = intervalToMs(ti.value, ti.unit);
+      const elapsed = now - last;
+      if (elapsed < need) {
+        const left = formatRemainingDuration(need - elapsed);
+        return { run: false, reason: `时间间隔未到(墙钟)，还剩 ${left}` };
       }
       return { run: true };
     }
@@ -203,8 +206,13 @@ export function shouldRunTask(
     return { run: true };
   }
   const lastMs = state?.lastRunGameTimeMs;
-  if (lastMs != null && nowMs - lastMs < intervalToMs(ti.value, ti.unit)) {
-    return { run: false, reason: '游戏时间间隔未到' };
+  if (lastMs != null) {
+    const need = intervalToMs(ti.value, ti.unit);
+    const elapsed = nowMs - lastMs;
+    if (elapsed < need) {
+      const left = formatRemainingDuration(need - elapsed);
+      return { run: false, reason: `游戏时间间隔未到，还剩 ${left}` };
+    }
   }
 
   return { run: true };
