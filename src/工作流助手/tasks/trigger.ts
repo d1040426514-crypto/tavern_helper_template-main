@@ -189,12 +189,22 @@ function shouldDedupAutoTrigger(messageId: number): boolean {
   return false;
 }
 
+function isMvuExtraAnalysisActiveSafe(): boolean {
+  try {
+    return typeof Mvu !== 'undefined' && Mvu.isDuringExtraAnalysis?.() === true;
+  } catch {
+    return false;
+  }
+}
+
 function scheduleAutoTrigger(
   messageId: number,
   type: string,
   source: 'message_received' | 'generation_ended',
 ): void {
   if (isMvuDeferActive() && source === 'message_received') return;
+  // MVU 额外模型解析期间也会触发 GENERATION_ENDED，不应启动工作流
+  if (source === 'generation_ended' && isMvuExtraAnalysisActiveSafe()) return;
   if (shouldSuppressAutoTriggerAfterAbort()) return;
 
   const resolved = resolveAutoTriggerMessageId(messageId);
@@ -202,6 +212,7 @@ function scheduleAutoTrigger(
   if (targetId == null) return;
 
   const launch = () => {
+    if (source === 'generation_ended' && isMvuExtraAnalysisActiveSafe()) return;
     if (shouldDedupAutoTrigger(targetId)) return;
     void handleMessageReceived(messageId, type, { fromGenerationEnded: source === 'generation_ended' });
   };
@@ -244,7 +255,13 @@ export async function handleMessageReceived(
 
     const explicitIsRerun = options?.isRerun === true;
     const bodyReplaceEnabled = hasConfiguredChatBodyTagReplaceRules(settings);
-    const clearedStale = await clearStalePostProcessRunMarkers(targetId);
+    // GENERATION_ENDED 兜底触发不是用户刷新生文；MVU 额外模型解析改写正文后 inject 后缀可能丢失，
+    // 若仍按「陈旧 done」清理会误判为 rerun，导致额外模型结束后再跑一遍工作流。
+    const allowStaleClear =
+      !options?.fromGenerationEnded || isContentRefreshMessageType(type);
+    const clearedStale = allowStaleClear
+      ? await clearStalePostProcessRunMarkers(targetId)
+      : false;
     if (clearedStale) {
       msg = getChatMessages(targetId)[0];
       if (!msg || msg.role !== 'assistant') return;
