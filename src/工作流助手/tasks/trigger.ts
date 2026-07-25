@@ -203,7 +203,7 @@ function scheduleAutoTrigger(
   source: 'message_received' | 'generation_ended',
 ): void {
   if (isMvuDeferActive() && source === 'message_received') return;
-  // MVU 额外模型解析期间也会触发 GENERATION_ENDED，不应启动工作流
+  // MVU 额外模型解析期间也会触发 GENERATION_ENDED，不应启动工作流（防双跑；变量就绪以 defer 的 ENDED 为准）
   if (source === 'generation_ended' && isMvuExtraAnalysisActiveSafe()) return;
   if (shouldSuppressAutoTriggerAfterAbort()) return;
 
