@@ -34,6 +34,87 @@ export function normalizeGameTimeRaw(raw: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
+const CN_DIGIT: Record<string, number> = {
+  零: 0,
+  〇: 0,
+  一: 1,
+  二: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+/** 将常见中文数字（约 0–9999）转为整数；无法识别时返回 null */
+export function chineseNumeralToInt(raw: string): number | null {
+  const s = String(raw ?? '').trim();
+  if (!s) return null;
+  if (/^\d+$/.test(s)) return Number(s);
+
+  let total = 0;
+  let section = 0;
+  let num = 0;
+  let hasDigit = false;
+
+  for (const ch of s) {
+    if (ch in CN_DIGIT) {
+      num = CN_DIGIT[ch];
+      hasDigit = true;
+      continue;
+    }
+    if (ch === '十') {
+      section += (num || 1) * 10;
+      num = 0;
+      hasDigit = true;
+      continue;
+    }
+    if (ch === '百') {
+      section += (num || 1) * 100;
+      num = 0;
+      hasDigit = true;
+      continue;
+    }
+    if (ch === '千') {
+      section += (num || 1) * 1000;
+      num = 0;
+      hasDigit = true;
+      continue;
+    }
+    if (ch === '万') {
+      total += (section + num) * 10_000;
+      section = 0;
+      num = 0;
+      hasDigit = true;
+      continue;
+    }
+    return null;
+  }
+
+  if (!hasDigit) return null;
+  return total + section + num;
+}
+
+const YEAR_TOKEN_RE = /(?:(\d+)|([一二三四五六七八九十百千万两零〇]+))\s*年/;
+
+function parseYearFromText(text: string): number | null {
+  const m = text.match(YEAR_TOKEN_RE);
+  if (!m) return null;
+  if (m[1] != null) return Number(m[1]);
+  return chineseNumeralToInt(m[2]);
+}
+
+function extractClock(text: string): { hour: number; minute: number } | null {
+  const colon = text.match(/(\d{1,2})\s*[:：]\s*(\d{2})(?:\s*[:：]\s*(\d{2}))?/);
+  if (colon) return { hour: Number(colon[1]), minute: Number(colon[2]) };
+  const cn = text.match(/(\d{1,2})\s*时\s*(\d{1,2})\s*分?/);
+  if (cn) return { hour: Number(cn[1]), minute: Number(cn[2]) };
+  return null;
+}
+
 function tryParseExplicitYmd(text: string, parseFormat?: string): number | null {
   if (!parseFormat) return null;
   const m = text.match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
@@ -71,28 +152,38 @@ function tryParseNumericDate(text: string): number | null {
 }
 
 /**
- * 中文/架空历法：复兴纪元488年-5月-14日-星期三-15:48、2026年6月30日15时30分
+ * 中文/架空历法：
+ * - 复兴纪元488年-5月-14日-星期三-15:48、2026年6月30日15时30分
+ * - 新王国历十年-01/01/10:15、新王国历十年-01/01 10:15
+ * - 复兴纪元488年-5-14-15:48
  */
 function tryParseChineseCalendar(text: string): number | null {
-  const yearM = text.match(/(\d+)\s*年/);
+  const year = parseYearFromText(text);
+  if (year == null || Number.isNaN(year)) return null;
+
+  // 年 + 斜杠/点/横杠月日（可无「月」「日」字），时刻可选：十年-01/01/10:15、488年-5-14-15:48
+  const slashM = text.match(
+    /(?:(?:\d+)|(?:[一二三四五六七八九十百千万两零〇]+))\s*年\s*[-/]?\s*(\d{1,2})\s*[/.-]\s*(\d{1,2})(?:\s*[/.\-\s]\s*(\d{1,2})\s*[:：]\s*(\d{2}))?/,
+  );
+  if (slashM) {
+    const month = Number(slashM[1]);
+    const day = Number(slashM[2]);
+    if (slashM[3] != null && slashM[4] != null) {
+      return encodeCalendarMs(year, month, day, Number(slashM[3]), Number(slashM[4]));
+    }
+    const clock = extractClock(text);
+    if (clock) return encodeCalendarMs(year, month, day, clock.hour, clock.minute);
+    return encodeCalendarMs(year, month, day);
+  }
+
   const monthM = text.match(/(\d{1,2})\s*月/);
   const dayM = text.match(/(\d{1,2})\s*日/);
-  if (!yearM || !monthM || !dayM) return null;
+  if (!monthM || !dayM) return null;
 
-  const year = Number(yearM[1]);
   const month = Number(monthM[1]);
   const day = Number(dayM[1]);
-
-  const timePatterns = [
-    /(\d{1,2})\s*[:：]\s*(\d{2})(?:\s*[:：]\s*(\d{2}))?/,
-    /(\d{1,2})\s*时\s*(\d{1,2})\s*分?/,
-  ];
-  for (const re of timePatterns) {
-    const tm = text.match(re);
-    if (tm) {
-      return encodeCalendarMs(year, month, day, Number(tm[1]), Number(tm[2]));
-    }
-  }
+  const clock = extractClock(text);
+  if (clock) return encodeCalendarMs(year, month, day, clock.hour, clock.minute);
   return encodeCalendarMs(year, month, day);
 }
 
@@ -182,6 +273,8 @@ export const GAME_TIME_FORMAT_HELP = {
     '解析前仅取首行；@ 之后视为地点、| 之后视为天气/备注并自动剥离。例：复兴纪元488年-5月-14日-15:48 @ 某地| 天气 → 只解析日期时间部分。',
   examples: [
     '中文/架空历法：复兴纪元488年5月14日15:48、2026年6月30日15时30分',
+    '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15',
+    '横杠月日时：复兴纪元488年-5-14-15:48',
     '横杠简写：488-5-14 15:48',
     '公历数字：2026-06-30 15:48、2026/06/30 15:48',
     'ISO 类：以四位年份开头的 2026-06-30T15:48 等',
