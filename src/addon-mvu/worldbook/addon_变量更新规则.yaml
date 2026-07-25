@@ -38,7 +38,8 @@ WorldPaper_Update_Rules:
     - 禁止 Weaver 创建新世界键（禁止 insert/replace/remove/move 作用在 /{世界名}）
     - 目标世界不存在于<上期世界状态>时，不要对该世界写任何 patch
     - 深层 insert 前父级 map 须已存在；判定对象是 path 末段键：末段不存在用 insert，末段已存在才 replace
-    - 追加类 map（事件脉络、流变历程、岁月史书正史/特异点、史诗传奇）新增条目一律 insert 新键；禁止整包 replace 父 map 来“追加”
+    - 新建剧情事件/传闻必须 insert 完整条目（path 末段＝事件名/传闻名）；禁止仅 insert 事件脉络/流变历程子节点冒充新建
+    - 追加类 map（事件脉络、流变历程、岁月史书正史/特异点、史诗传奇）在**已有**父条目上新增节点一律 insert 新键；禁止整包 replace 父 map 来“追加”
     - 百分比、价格、汇率、投机指数等 schema 字段均为 string，禁止 JSON number
   ${世界名称}:
     降临:
@@ -403,7 +404,7 @@ WorldPaper_Update_Rules:
           事件脉络.${日期}:
             format: 纪元/年号-YYYY年-MM月-DD日 作为键；值为该日事件进展与走向描述
             check:
-              - 事件有实质推进时 insert 对应日期节点
+              - 仅用于**已有**事件有实质推进时 insert 对应日期节点
               - 禁止 replace 整个事件脉络；禁止复用已有日期键覆盖旧进展
           结算条件:
             check:
@@ -458,7 +459,7 @@ WorldPaper_Update_Rules:
               check:
                 - 推动该阶段认知变化的事件与具体流变过程
             check:
-              - 有实质流变时 insert 新编号（下一编号＝现有最大编号+1，首节点用"1"）
+              - 仅用于**已有**传闻有实质流变时 insert 新编号（下一编号＝现有最大编号+1）
               - 禁止 replace 整个流变历程；禁止复用已有编号覆盖旧节点
       团体动态:
         世界背景团体:
