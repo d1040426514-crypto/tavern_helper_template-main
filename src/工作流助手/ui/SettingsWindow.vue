@@ -3252,9 +3252,9 @@ function saveRunLogTaskTags(taskId: string): void {
             <AcuHelpPanel v-model:open="finalInjectHelpOpen" id="final-inject-help" label="AI楼层文末注入说明">
               <p class="acu-notes acu-notes--sm" style="margin: 0">
                 渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{ 标签名 }}</code
-                >。不写入消息楼层变量。 若注入内容含 <code>&lt;JSONPatch&gt;</code> /
-                <code>&lt;AddonJSONPatch&gt;</code>，注入后将分别触发 MVU <code>stat_data</code> 与
-                <code>addon_data</code> 更新（仅解析注入块，各一次）。
+                >。仅作展示，不写入消息楼层变量，也不再因文末块触发变量更新。 任务输出含
+                <code>&lt;UpdateVariable&gt;</code> 时，在该阶段结果写入 relay 后立即更新本楼
+                MVU <code>stat_data</code> / <code>addon_data</code>，供后续阶段读取。
               </p>
             </AcuHelpPanel>
             <textarea

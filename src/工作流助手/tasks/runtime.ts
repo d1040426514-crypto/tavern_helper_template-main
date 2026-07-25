@@ -36,6 +36,10 @@ import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
 import { applyChatBodyTagReplaceAfterStage } from './chat-body-tag-replace';
+import {
+  applyVariableUpdatesAfterStage,
+  restoreInjectVarBaselineForRerun,
+} from './inject-variable-update';
 import { applyChatWorldbookWriteAfterStage } from '../worldbook/write-from-template';
 import {
   buildStageProgressDisplayItems,
@@ -56,6 +60,11 @@ export interface TaskRunResult {
   extractedTags: Record<string, string>;
   injectOnlyTagNames: string[];
   rawResponse: string;
+  /**
+   * 用于阶段末变量更新的全文（processedResponse || rawResponse）。
+   * 不可用 extractedBlock：其它 extractInjectTags 命中时 UpdateVariable 可能不在 block 里。
+   */
+  variableUpdateSource?: string;
   reasoningContent?: string;
   promptMessages: RunLogMessage[];
   durationMs: number;
@@ -146,6 +155,7 @@ async function runSingleTask(
       extractedTags: {},
       injectOnlyTagNames: [],
       rawResponse: '',
+      variableUpdateSource: '',
       promptMessages: [],
       durationMs: Date.now() - start,
       stage: task.stage,
@@ -163,6 +173,7 @@ async function runSingleTask(
       extractedTags: {},
       injectOnlyTagNames: [],
       rawResponse: '',
+      variableUpdateSource: '',
       promptMessages: [],
       durationMs: Date.now() - start,
       stage: task.stage,
@@ -192,6 +203,7 @@ async function runSingleTask(
       extractedTags: {},
       injectOnlyTagNames: [],
       rawResponse: '',
+      variableUpdateSource: '',
       promptMessages: [],
       durationMs: Date.now() - start,
       stage: task.stage,
@@ -306,6 +318,7 @@ async function runSingleTask(
     extractedTags,
     injectOnlyTagNames: plotExtraction.injectOnlyTagNames,
     rawResponse,
+    variableUpdateSource: responseForBlock,
     reasoningContent,
     promptMessages: messages,
     durationMs: Date.now() - start,
@@ -416,6 +429,10 @@ export async function runPostProcessTasks(
   messageId: number,
   options?: RunPostProcessOptions,
 ): Promise<RunPostProcessResult> {
+  if (options?.isRerun) {
+    await restoreInjectVarBaselineForRerun(messageId);
+  }
+
   const ctx = await buildSharedContext(messageId, settings, snapshot, { isRerun: options?.isRerun });
   checkRunCancelled(options?.signal);
   let enabledTasks = settings.tasks.filter(t => t.enabled);
@@ -451,6 +468,8 @@ export async function runPostProcessTasks(
       routePoolRegistry,
     });
     reporter.setFinished(task.id, result);
+    checkRunCancelled(options?.signal);
+    await applyVariableUpdatesAfterStage(messageId, [result]);
     return {
       results: [result],
       ctx,
@@ -484,6 +503,7 @@ export async function runPostProcessTasks(
         extractedTags: {},
         injectOnlyTagNames: [],
         rawResponse: '',
+        variableUpdateSource: '',
         promptMessages: [],
         durationMs: 0,
         stage: root.stage,
@@ -519,6 +539,8 @@ export async function runPostProcessTasks(
           mergeRelayTagMap(aggregatedRelayTags, r.extractedTags);
         }
       }
+
+      await applyVariableUpdatesAfterStage(messageId, stageResults);
 
       await applyChatBodyTagReplaceAfterStage({
         messageId: ctx.messageId,

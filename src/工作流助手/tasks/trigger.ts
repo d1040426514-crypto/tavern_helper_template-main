@@ -2,7 +2,6 @@ import { captureDataSnapshot } from '../bridge/database-api';
 import { loadSettings, saveSettings } from '../settings';
 import { resolveEffectiveSettings } from './effective-settings';
 import { injectToAiFloor } from './inject';
-import { applyInjectVariableUpdates } from './inject-variable-update';
 import {
   beginRun,
   endRun,
@@ -334,7 +333,6 @@ export async function handleMessageReceived(
 
         const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
         await injectToAiFloor(targetId, aiBlock, { isRerun });
-        await applyInjectVariableUpdates(targetId, aiBlock, { isRerun });
       }
 
       incrementReplicaRunCounts(settings, executedMemberIds);
