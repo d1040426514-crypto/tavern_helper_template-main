@@ -67,14 +67,13 @@ test('time mode with message tag runs when parse ok', () => {
       value: 1,
       unit: 'hour',
       timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
-      onParseFail: 'skip',
     },
   });
   const ctx = makeCtx();
   assert.equal(shouldRunTask(task, undefined, ctx).run, true);
 });
 
-test('time mode skip on parse fail', () => {
+test('time mode skip when source missing', () => {
   const task = makeTask({
     mode: 'time',
     timeInterval: {
@@ -82,13 +81,12 @@ test('time mode skip on parse fail', () => {
       value: 1,
       unit: 'hour',
       timeSource: { type: 'message_tag', tagNames: ['missing'], scope: 'current_ai' },
-      onParseFail: 'skip',
     },
   });
   const ctx = makeCtx();
   const check = shouldRunTask(task, undefined, ctx);
   assert.equal(check.run, false);
-  assert.equal(check.reason, '游戏时间解析失败');
+  assert.equal(check.reason, '读不到游戏时间，已跳过');
 });
 
 test('time mode skip includes remaining game time', () => {
@@ -99,7 +97,6 @@ test('time mode skip includes remaining game time', () => {
       value: 1,
       unit: 'hour',
       timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
-      onParseFail: 'skip',
     },
   });
   // 第1天 08:00 → 上次；当前 08:30 → 还剩 30 分钟
@@ -114,7 +111,7 @@ test('time mode skip includes remaining game time', () => {
   assert.ok(check.reason?.includes('30分钟'));
 });
 
-test('wall clock skip includes remaining', () => {
+test('legacy onParseFail wall_clock still skips when source missing', () => {
   const task = makeTask({
     mode: 'time',
     timeInterval: {
@@ -129,8 +126,26 @@ test('wall clock skip includes remaining', () => {
   const last = Date.now() - 15 * 60_000;
   const check = shouldRunTask(task, { lastRunRound: 0, lastRunAt: last }, ctx);
   assert.equal(check.run, false);
-  assert.match(check.reason ?? '', /^时间间隔未到\(墙钟\)，还剩 /);
-  assert.ok(check.reason?.includes('分钟') || check.reason?.includes('小时'));
+  assert.equal(check.reason, '读不到游戏时间，已跳过');
+});
+
+test('time mode skip when format unparseable', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 1,
+      unit: 'hour',
+      timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<time>不是时间</time>',
+    currentPairText: '<time>不是时间</time>',
+  });
+  const check = shouldRunTask(task, undefined, ctx);
+  assert.equal(check.run, false);
+  assert.equal(check.reason, '游戏时间格式无法解析，已跳过');
 });
 
 test('updateScheduleStateAfterRun records round and game time', () => {
@@ -142,7 +157,6 @@ test('updateScheduleStateAfterRun records round and game time', () => {
       value: 1,
       unit: 'hour',
       timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
-      onParseFail: 'skip',
     },
   });
   const ctx = makeCtx({ currentRound: 7 });

@@ -1,15 +1,18 @@
 import _ from 'lodash';
 import { findLatestAssistantFloorId } from './message-floor';
-import { intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs, formatRemainingDuration } from './parse-game-time';
-import { extractLastTagContent } from './utils';
+import { formatRemainingDuration, intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs } from './parse-game-time';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
+import { extractLastTagContent } from './utils';
 
 export function resolveScheduleMode(schedule: TaskSchedule): 'round' | 'time' {
   if (schedule.mode) return schedule.mode;
   return schedule.timeInterval?.enabled ? 'time' : 'round';
 }
 
-/** 任一启用任务为「按游戏时间 + 最新消息楼层变量」时，后处理需等 MVU stat_data 更新后再执行 */
+/**
+ * @deprecated 延后触发已改为「MVU 就绪即入队并适配额外模型解析」（见 mvu-trigger-defer），不再按本函数门控。
+ * 保留供兼容；任一启用任务为「按游戏时间 + 最新消息楼层变量」时曾表示需等 stat_data。
+ */
 export function needsMvuDeferredRun(settings: ScriptSettings): boolean {
   return settings.tasks.some(t => {
     if (!t.enabled) return false;
@@ -39,10 +42,7 @@ export function countAssistantRounds(): number {
   }
 }
 
-export function resolveTimeRaw(
-  task: PostProcessTask,
-  ctx: ScheduleContext,
-): { raw: string | null; fail: boolean } {
+export function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): { raw: string | null; fail: boolean } {
   const ti = task.schedule?.timeInterval;
   if (!ti) return { raw: null, fail: false };
   const src = ti.timeSource;
@@ -182,28 +182,12 @@ export function shouldRunTask(
   if (!ti) return { run: true };
 
   const { raw, fail } = resolveTimeRaw(task, ctx);
-  if (fail) {
-    if (ti.onParseFail === 'skip') {
-      return { run: false, reason: '游戏时间解析失败' };
-    }
-    if (ti.onParseFail === 'wall_clock') {
-      const now = Date.now();
-      const last = state?.lastRunAt ?? 0;
-      const need = intervalToMs(ti.value, ti.unit);
-      const elapsed = now - last;
-      if (elapsed < need) {
-        const left = formatRemainingDuration(need - elapsed);
-        return { run: false, reason: `时间间隔未到(墙钟)，还剩 ${left}` };
-      }
-      return { run: true };
-    }
-    return { run: true };
+  if (fail || !raw) {
+    return { run: false, reason: '读不到游戏时间，已跳过' };
   }
-  const nowMs =
-    ti.onParseFail === 'wall_clock' && !raw ? Date.now() : parseGameTimeToMs(raw!, ti.parseFormat);
+  const nowMs = parseGameTimeToMs(raw, ti.parseFormat);
   if (nowMs == null) {
-    if (ti.onParseFail === 'skip') return { run: false, reason: '游戏时间格式无法解析' };
-    return { run: true };
+    return { run: false, reason: '游戏时间格式无法解析，已跳过' };
   }
   const lastMs = state?.lastRunGameTimeMs;
   if (lastMs != null) {
@@ -240,8 +224,6 @@ export function updateScheduleStateAfterRun(
         entry.lastRunGameTimeRaw = raw;
         const ms = parseGameTimeToMs(raw, ti.parseFormat);
         if (ms != null) entry.lastRunGameTimeMs = ms;
-      } else if (ti.onParseFail === 'wall_clock') {
-        entry.lastRunGameTimeMs = Date.now();
       }
     }
   }

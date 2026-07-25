@@ -1,63 +1,24 @@
 <script setup lang="ts">
-import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
-import { useSettingsStore } from '../settings';
-import { buildShareablePresetExport } from '../settings-security';
-import type {
-  PostProcessTask,
-  ReplicaFamilyScheduleMode,
-  RunLogTaskResult,
-  TaskWorkflowPresetEntry,
-} from '../tasks/schema';
-import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
-import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
-import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
+import { computed, inject, onMounted, onUnmounted, ref, watch } from 'vue';
 import {
-  getPostProcessWritableTagNames,
-  pickTagsForPostProcessWrite,
-  writeFloorTagValues,
-} from '../tasks/tag-variables';
-import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-replace';
-import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
-import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
-import {
-  commaSeparatedListsEqual,
-  formatCommaSeparatedList,
-  parseCommaSeparatedList,
-} from '../tasks/comma-separated';
-import { STRUCTURED_OUTPUT_MODE_HELP } from '../tasks/strict-variable-response';
-import {
-  syncStructuredOutputPromptGroup,
-  updateStructuredOutputRulesCacheFromPromptGroups,
-} from '../tasks/structured-output-prompt-rules';
-import PlotWorldbookSection from './PlotWorldbookSection.vue';
-import TaskPlotWorldbookPanel from './TaskPlotWorldbookPanel.vue';
-import Context7Section from './Context7Section.vue';
-import TaskContextPanel from './TaskContextPanel.vue';
-import ApiConfigPanel from './ApiConfigPanel.vue';
-import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
-import PromptSegmentCard from './PromptSegmentCard.vue';
-import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
-import ReplicaFamilyCleanupPanel from './ReplicaFamilyCleanupPanel.vue';
-import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
-import RunLogWorldbookSyncPanel from './RunLogWorldbookSyncPanel.vue';
-import AcuToggle from './AcuToggle.vue';
-import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
-import AcuHelpPanel from './AcuHelpPanel.vue';
-import AcuConfirmDialog from './AcuConfirmDialog.vue';
-import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
-import { useTaskClipboard } from './composables/useTaskClipboard';
-import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
-import {
-  movePromptGroupAt,
-  remapManualExpandedKeys,
-  reorderPromptGroupsAt,
-} from '../tasks/prompt-group-ops';
-import {
-  alignFallbackMaxConcurrencies,
   DEFAULT_ROUTE_MAX_CONCURRENCY,
+  alignFallbackMaxConcurrencies,
   normalizeRouteMaxConcurrency,
 } from '../api/route-concurrency-limits';
+import { loadSettings, useSettingsStore } from '../settings';
+import { buildShareablePresetExport } from '../settings-security';
+import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-replace';
+import { commaSeparatedListsEqual, formatCommaSeparatedList, parseCommaSeparatedList } from '../tasks/comma-separated';
+import { resolveEffectiveSettings } from '../tasks/effective-settings';
+import { ACU_PP_CHAT_SCOPE_CHANGED, ACU_PP_TASKS_CHANGED, type TasksChangedPayload } from '../tasks/events';
+import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
+import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
+import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
+import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
+import { movePromptGroupAt, remapManualExpandedKeys, reorderPromptGroupsAt } from '../tasks/prompt-group-ops';
+import { pruneWorldbookForRemovedReplicas } from '../tasks/prune-applied-for-replica';
+import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
@@ -67,58 +28,81 @@ import {
   syncReplicaFamily,
 } from '../tasks/replica-family';
 import {
-  ensureReplicaFamilyCleanupDefaults,
   applyReplicaFamilyCleanup,
+  ensureReplicaFamilyCleanupDefaults,
   type RemovedReplicaCleanupInfo,
 } from '../tasks/replica-family-cleanup';
-import { pruneWorldbookForRemovedReplicas } from '../tasks/prune-applied-for-replica';
-import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
+import { probeTaskGameTime } from '../tasks/schedule';
+import type {
+  ChatWorldbookWriteRule,
+  PlotWorldbookConfig,
+  PostProcessTask,
+  ReplicaFamilyScheduleMode,
+  RunLogTaskResult,
+  TaskContextConfig,
+  TaskWorkflowPresetEntry,
+} from '../tasks/schema';
+import { STRUCTURED_OUTPUT_MODE_HELP } from '../tasks/strict-variable-response';
+import {
+  syncStructuredOutputPromptGroup,
+  updateStructuredOutputRulesCacheFromPromptGroups,
+} from '../tasks/structured-output-prompt-rules';
+import { EXTRACT_INJECT_TAGS_HELP } from '../tasks/tag-extract';
+import {
+  getPostProcessWritableTagNames,
+  pickTagsForPostProcessWrite,
+  writeFloorTagValues,
+} from '../tasks/tag-variables';
+import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
+import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
 import {
   addPromptGroup as addPromptGroupInStore,
+  applyReplicaFamilyCleanupInStore,
+  applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
   clearChatScope,
   createTask as createTaskInStore,
   deleteTask as deleteTaskInStore,
+  deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
   duplicateTask as duplicateTaskInStore,
+  ensureReplicaFamilyMember as ensureReplicaFamilyMemberInStore,
   getChatScopeState,
   listTasks,
   moveTask as moveTaskInStore,
   removePromptGroup as removePromptGroupInStore,
   replaceTasks,
-  setTaskEnabled as setTaskEnabledInStore,
   saveTaskWorkflowPreset as saveTaskWorkflowPresetInStore,
-  applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
-  applyReplicaFamilyCleanupInStore,
-  deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
+  setTaskEnabled as setTaskEnabledInStore,
+  updatePresetFields,
   updateReplicaFamilyScheduleMode as updateReplicaFamilyScheduleModeInStore,
   updateReplicaMemberSchedule as updateReplicaMemberScheduleInStore,
-  ensureReplicaFamilyMember as ensureReplicaFamilyMemberInStore,
-  updatePresetFields,
   updateTask as updateTaskInStore,
 } from '../tasks/task-store';
-import { resolveEffectiveSettings } from '../tasks/effective-settings';
-import { loadSettings } from '../settings';
-import {
-  DEFAULT_WORLDBOOK_WRITE_PLACEMENT,
-  normalizeWorldbookWritePlacement,
-} from '../worldbook/entry-order';
-import {
-  migrateWorldbookWriteRuleTarget,
-  resolveWriteTargetBookName,
-} from '../worldbook/write-book-migrate';
-import { purgeAllManagedWorldbookEntries } from '../worldbook/write-reconcile';
-import type { PlotWorldbookConfig, TaskContextConfig, ChatWorldbookWriteRule } from '../tasks/schema';
-import {
-  ACU_PP_CHAT_SCOPE_CHANGED,
-  ACU_PP_TASKS_CHANGED,
-  type TasksChangedPayload,
-} from '../tasks/events';
-import { probeTaskGameTime } from '../tasks/schedule';
-import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
 import { mergeTaskWorkflowPresetsOnTask } from '../tasks/task-workflow-preset';
-import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
-import { ensureAcuToastStyles } from './toast-styles';
-import { acuToast } from './toast';
+import { PLACEHOLDER_LEGEND, filterXmlExtractedTagsForDisplay } from '../tasks/utils';
+import { DEFAULT_WORLDBOOK_WRITE_PLACEMENT, normalizeWorldbookWritePlacement } from '../worldbook/entry-order';
+import { migrateWorldbookWriteRuleTarget, resolveWriteTargetBookName } from '../worldbook/write-book-migrate';
+import { purgeAllManagedWorldbookEntries } from '../worldbook/write-reconcile';
+import AcuConfirmDialog from './AcuConfirmDialog.vue';
+import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
+import AcuHelpPanel from './AcuHelpPanel.vue';
+import AcuToggle from './AcuToggle.vue';
+import ApiConfigPanel from './ApiConfigPanel.vue';
 import { RERUN_BUTTON_LABEL, SCRIPT_DISPLAY_NAME, SCRIPT_LOG_PREFIX, WORKFLOW_TASK_LABEL } from './brand';
+import { acuConfirm, acuPrompt } from './composables/useAcuConfirm';
+import { useTaskClipboard } from './composables/useTaskClipboard';
+import Context7Section from './Context7Section.vue';
+import PlotWorldbookSection from './PlotWorldbookSection.vue';
+import PromptSegmentCard from './PromptSegmentCard.vue';
+import ReplicaFamilyCleanupPanel from './ReplicaFamilyCleanupPanel.vue';
+import ReplicaFamilySchedulerPanel from './ReplicaFamilySchedulerPanel.vue';
+import RunLogWorldbookSyncPanel from './RunLogWorldbookSyncPanel.vue';
+import TaskContextPanel from './TaskContextPanel.vue';
+import TaskPlotWorldbookPanel from './TaskPlotWorldbookPanel.vue';
+import TaskPromptAutoSegmentsPanel from './TaskPromptAutoSegmentsPanel.vue';
+import TaskWorkflowPresetPanel from './TaskWorkflowPresetPanel.vue';
+import { BUILTIN_UI_THEMES, applyThemeTokens, updateGlobalTheme } from './theme';
+import { acuToast } from './toast';
+import { ensureAcuToastStyles } from './toast-styles';
 
 const closeWindow = inject<() => void>('closeSettings', () => {});
 
@@ -338,8 +322,7 @@ function seedReplicaApiFromRoot(replica: PostProcessTask, root: PostProcessTask)
 }
 
 const replicaApiPresetMode = computed({
-  get: (): 'inheritRoot' | 'custom' =>
-    editorTask.value?.apiPresetMode === 'custom' ? 'custom' : 'inheritRoot',
+  get: (): 'inheritRoot' | 'custom' => (editorTask.value?.apiPresetMode === 'custom' ? 'custom' : 'inheritRoot'),
   set: (mode: 'inheritRoot' | 'custom') => {
     const replica = editorTask.value;
     const root = selectedTask.value;
@@ -722,9 +705,7 @@ function ensureChatBodyTagReplaceRules(): void {
 
 function isChatBodyReplaceTagUsedByOther(tag: string, ruleId: string): boolean {
   const normalized = tag.trim();
-  return (settings.value.chatBodyTagReplaceRules ?? []).some(
-    r => r.id !== ruleId && r.targetTag.trim() === normalized,
-  );
+  return (settings.value.chatBodyTagReplaceRules ?? []).some(r => r.id !== ruleId && r.targetTag.trim() === normalized);
 }
 
 function isChatBodyReplaceTagStale(targetTag: string): boolean {
@@ -764,10 +745,7 @@ function truncateRulePreview(text: string, maxLen = 48): string {
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized;
 }
 
-function worldbookWriteRuleBookLabel(rule: {
-  bookSource?: string;
-  manualBookName?: string;
-}): string {
+function worldbookWriteRuleBookLabel(rule: { bookSource?: string; manualBookName?: string }): string {
   if (rule.bookSource === 'manual') return rule.manualBookName?.trim() || '未指定世界书';
   return '角色主世界书';
 }
@@ -942,11 +920,15 @@ function isWorldbookWriteAtDepth(rule: { placement?: { position?: string } }): b
   return pos === 'at_depth_as_system' || pos === 'at_depth';
 }
 
-function ensureWorldbookWritePlacement(rule: { placement?: { position?: string; depth?: number; order?: number } }): void {
+function ensureWorldbookWritePlacement(rule: {
+  placement?: { position?: string; depth?: number; order?: number };
+}): void {
   rule.placement = normalizeWorldbookWritePlacement(rule.placement);
 }
 
-function syncWorldbookWritePlacement(rule: { placement?: { position?: string; depth?: number; order?: number } }): void {
+function syncWorldbookWritePlacement(rule: {
+  placement?: { position?: string; depth?: number; order?: number };
+}): void {
   rule.placement = normalizeWorldbookWritePlacement(rule.placement);
 }
 
@@ -1060,9 +1042,7 @@ const replicaApiConfigSummary = computed(() => {
   return `沿用原本 · ${rootApiConfigSummary.value}`;
 });
 
-const executionStrategySummary = computed(() =>
-  scheduleMode.value === 'time' ? '按游戏时间间隔' : '按回合间隔',
-);
+const executionStrategySummary = computed(() => (scheduleMode.value === 'time' ? '按游戏时间间隔' : '按回合间隔'));
 
 const chatBodyTagReplaceSummary = computed(() => {
   const count = settings.value.chatBodyTagReplaceRules?.length ?? 0;
@@ -1190,9 +1170,7 @@ function onChatExtractAssistantTagsInput(e: Event): void {
 }
 
 function onChatExtractAssistantTagsBlur(): void {
-  chatExtractAssistantTagsDraft.value = formatCommaSeparatedList(
-    settings.value.chatExtractTags?.assistant ?? [],
-  );
+  chatExtractAssistantTagsDraft.value = formatCommaSeparatedList(settings.value.chatExtractTags?.assistant ?? []);
 }
 
 function onExtractInjectTagsInput(e: Event): void {
@@ -1219,9 +1197,7 @@ function onTimeTagNamesInput(e: Event): void {
 
 function onTimeTagNamesBlur(): void {
   const src = selectedTask.value?.schedule?.timeInterval?.timeSource;
-  timeTagNamesDraft.value = formatCommaSeparatedList(
-    src?.type === 'message_tag' ? src.tagNames : [],
-  );
+  timeTagNamesDraft.value = formatCommaSeparatedList(src?.type === 'message_tag' ? src.tagNames : []);
 }
 
 const timeTagScope = computed({
@@ -1231,7 +1207,8 @@ const timeTagScope = computed({
   },
   set: (v: 'current_ai' | 'current_pair') => {
     const task = selectedTask.value;
-    if (!task?.schedule?.timeInterval?.timeSource || task.schedule.timeInterval.timeSource.type !== 'message_tag') return;
+    if (!task?.schedule?.timeInterval?.timeSource || task.schedule.timeInterval.timeSource.type !== 'message_tag')
+      return;
     task.schedule.timeInterval.timeSource.scope = v;
   },
 });
@@ -1257,23 +1234,6 @@ const timeVariablePath = computed({
     const task = selectedTask.value;
     if (!task?.schedule?.timeInterval?.timeSource || task.schedule.timeInterval.timeSource.type !== 'variable') return;
     task.schedule.timeInterval.timeSource.path = v;
-  },
-});
-
-const showMvuDeferHint = computed(
-  () =>
-    scheduleMode.value === 'time' &&
-    timeSourceType.value === 'variable' &&
-    timeVariableType.value === 'message',
-);
-
-const timeOnParseFail = computed({
-  get: () => selectedTask.value?.schedule?.timeInterval?.onParseFail ?? 'skip',
-  set: (v: 'skip' | 'run' | 'wall_clock') => {
-    const task = selectedTask.value;
-    if (!task) return;
-    ensureTaskSchedule(task);
-    task.schedule!.timeInterval!.onParseFail = v;
   },
 });
 
@@ -1366,10 +1326,7 @@ function onReplicaScheduleModeChange(mode: ReplicaFamilyScheduleMode): void {
   if (idx >= 0) settings.value.tasks[idx]!.replicaFamilyScheduleMode = mode;
 }
 
-function onReplicaMemberScheduleChange(
-  memberId: string,
-  patch: { launched?: boolean },
-): void {
+function onReplicaMemberScheduleChange(memberId: string, patch: { launched?: boolean }): void {
   if (chatScopeActive.value) {
     void updateReplicaMemberScheduleInStore(memberId, patch, 'ui')
       .then(() => refreshTaskView())
@@ -1387,8 +1344,7 @@ async function onCreateReplicaMember(): Promise<void> {
   if (!root?.syncAsReplicaFamily || root.replicaFamilyRootId) return;
 
   const baseName = (root.replicaFamilyBaseName ?? root.name).trim() || '副本族';
-  const spec =
-    root.replicaFamilyEnumSpec?.trim() || root.replicaFamilySpec?.trim() || '标签@属性';
+  const spec = root.replicaFamilyEnumSpec?.trim() || root.replicaFamilySpec?.trim() || '标签@属性';
   const name = await acuPrompt({
     title: '新建任务副本',
     message: `请输入属性值（将作为「${baseName}」副本后缀，对应 ${spec}）：`,
@@ -1403,9 +1359,7 @@ async function onCreateReplicaMember(): Promise<void> {
     return;
   }
 
-  const exists = replicaFamilyMembers.value.some(
-    m => (m.replicaFamilyAttrValue ?? '').trim() === trimmed,
-  );
+  const exists = replicaFamilyMembers.value.some(m => (m.replicaFamilyAttrValue ?? '').trim() === trimmed);
   if (exists) {
     acuToast('warning', `副本「${trimmed}」已存在`);
     return;
@@ -1649,11 +1603,7 @@ function applyPromptGroupsReorder(fromIndex: number, toIndex: number): void {
   const task = promptPreviewTask.value ?? selectedTask.value;
   if (!task || fromIndex === toIndex) return;
   task.promptGroups = reorderPromptGroupsAt(task.promptGroups ?? [], fromIndex, toIndex);
-  expandedPromptRowKeys.value = remapManualExpandedKeys(
-    expandedPromptRowKeys.value,
-    fromIndex,
-    toIndex,
-  );
+  expandedPromptRowKeys.value = remapManualExpandedKeys(expandedPromptRowKeys.value, fromIndex, toIndex);
 }
 
 async function persistPromptGroupsIfChatScope(): Promise<void> {
@@ -1672,11 +1622,7 @@ async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
     const next = movePromptGroupAt(task.promptGroups ?? [], index, delta);
     const toIndex = index + delta;
     task.promptGroups = next;
-    expandedPromptRowKeys.value = remapManualExpandedKeys(
-      expandedPromptRowKeys.value,
-      index,
-      toIndex,
-    );
+    expandedPromptRowKeys.value = remapManualExpandedKeys(expandedPromptRowKeys.value, index, toIndex);
     await persistPromptGroupsIfChatScope();
   } catch {
     // 边界不可移动时静默忽略
@@ -1730,7 +1676,7 @@ async function handleClearChatScope() {
     return;
   }
   await clearChatScope('ui');
-    void refreshTaskView();
+  void refreshTaskView();
   selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
   acuToast('success', '已清除聊天快照');
 }
@@ -1788,11 +1734,11 @@ async function handleRerun() {
 
 function saveTaskPreset() {
   if (!settings.value.activePresetName.trim()) {
-    acuToast('warning','请先选择当前预设');
+    acuToast('warning', '请先选择当前预设');
     return;
   }
   if (store.saveActivePreset()) {
-    acuToast('success',`预设「${settings.value.activePresetName}」已保存`);
+    acuToast('success', `预设「${settings.value.activePresetName}」已保存`);
   }
 }
 
@@ -1828,9 +1774,7 @@ async function confirmRenameSelectedTask(): Promise<void> {
   });
   if (!newName) return;
   if (newName === (task.name?.trim() || '')) return;
-  const otherNames = new Set(
-    displayTasks.value.filter(t => t.id !== task.id).map(t => t.name.trim()),
-  );
+  const otherNames = new Set(displayTasks.value.filter(t => t.id !== task.id).map(t => t.name.trim()));
   if (otherNames.has(newName)) {
     acuToast('warning', `任务「${newName}」已存在，请换一个名称`);
     return;
@@ -1912,7 +1856,10 @@ function downloadTextFile(text: string, filename: string): void {
 }
 
 function sanitizeLogFilenamePart(name: string): string {
-  const cleaned = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_').replace(/\s+/g, '_').trim();
+  const cleaned = name
+    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+    .replace(/\s+/g, '_')
+    .trim();
   return cleaned || 'task';
 }
 
@@ -1970,20 +1917,13 @@ function formatRunLogTime(at?: number): string {
   return new Date(at).toLocaleString('zh-CN');
 }
 
-function runLogStatusText(r: {
-  skipped?: boolean;
-  skipReason?: string;
-  success?: boolean;
-}): string {
+function runLogStatusText(r: { skipped?: boolean; skipReason?: string; success?: boolean }): string {
   if (r.skipped) return `跳过${r.skipReason ? `（${r.skipReason}）` : ''}`;
   if (r.success) return '成功';
   return '失败';
 }
 
-function runLogHadApiRequest(r: {
-  skipped?: boolean;
-  promptMessages?: unknown[];
-}): boolean {
+function runLogHadApiRequest(r: { skipped?: boolean; promptMessages?: unknown[] }): boolean {
   return !r.skipped && (r.promptMessages?.length ?? 0) > 0;
 }
 
@@ -2242,11 +2182,7 @@ function saveRunLogTaskTags(taskId: string): void {
             :aria-pressed="windowFullscreen"
             @click="toggleWindowFullscreen"
           >
-            <i
-              class="fa-fw fa-solid"
-              :class="windowFullscreen ? 'fa-compress' : 'fa-expand'"
-              aria-hidden="true"
-            ></i>
+            <i class="fa-fw fa-solid" :class="windowFullscreen ? 'fa-compress' : 'fa-expand'" aria-hidden="true"></i>
           </button>
           <button class="acu-btn acu-window-close" type="button" title="关闭" @click="closeWindow">×</button>
         </div>
@@ -2299,7 +2235,8 @@ function saveRunLogTaskTags(taskId: string): void {
             >
               <p class="acu-notes acu-notes--sm" style="margin: 0">
                 每次工作流执行完成后，自动删除更早楼层的<strong>全部</strong>消息楼层变量（含
-                <code>stat_data</code> 与 <code>post_process_tags</code>），<strong>不可恢复</strong>。最新楼始终保留，不影响变量继承。
+                <code>stat_data</code> 与
+                <code>post_process_tags</code>），<strong>不可恢复</strong>。最新楼始终保留，不影响变量继承。
               </p>
             </AcuHelpPanel>
           </div>
@@ -2308,10 +2245,7 @@ function saveRunLogTaskTags(taskId: string): void {
         </div>
 
         <div v-show="currentPage === 2" class="acu-page">
-          <PlotWorldbookSection
-            :config="settings.plotWorldbookConfig"
-            @update:config="onPlotWorldbookConfigUpdate"
-          />
+          <PlotWorldbookSection :config="settings.plotWorldbookConfig" @update:config="onPlotWorldbookConfigUpdate" />
           <TaskPlotWorldbookPanel
             v-model:enabled="taskPlotWorldbookOverridesModel"
             :tasks="plotWorldbookPanelTasks"
@@ -2353,8 +2287,12 @@ function saveRunLogTaskTags(taskId: string): void {
                 <code>{{ item.code }}</code> — {{ item.desc }}
               </div>
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
-                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（单任务输出内裸名取最后一次；<code>标签@属性</code> 如 <code>item@id</code> 按属性值分实例）；多任务/多阶段同名标签内文以换行合并为单段，供后续阶段的
-                <code v-pre>{{标签名}}</code> 占位符使用。多实例分别调用 API 的场景（副本族）见任务页「提取写入标签」说明。
+                相同执行阶段的任务并行执行；不同阶段按阶段号从小到大串行执行。任务完成后按「提取写入标签」从输出摘取标签（单任务输出内裸名取最后一次；<code
+                  >标签@属性</code
+                >
+                如 <code>item@id</code> 按属性值分实例）；多任务/多阶段同名标签内文以换行合并为单段，供后续阶段的
+                <code v-pre>{{ 标签名 }}</code> 占位符使用。多实例分别调用 API
+                的场景（副本族）见任务页「提取写入标签」说明。
               </p>
             </div>
           </div>
@@ -2363,15 +2301,16 @@ function saveRunLogTaskTags(taskId: string): void {
             <h4>已注册酒馆助手宏</h4>
             <div class="acu-placeholder-legend acu-macro-legend">
               <p class="acu-notes" style="margin-top: 0; margin-bottom: 8px">
-                脚本加载时通过 <code>registerMacroLike</code> 注册，可在主聊天提示词、世界书、正则与 EJS 宏阶段等走酒馆助手宏管线的文本中直接使用（无需再经工作流脚本
+                脚本加载时通过 <code>registerMacroLike</code> 注册，可在主聊天提示词、世界书、正则与 EJS
+                宏阶段等走酒馆助手宏管线的文本中直接使用（无需再经工作流脚本
                 <code v-pre>{{}}</code> 替换）。任务提示词内仍优先由脚本阶段解析。
               </p>
               <div v-for="item in REGISTERED_MACRO_LEGEND" :key="item.code" class="acu-placeholder-item">
                 <code>{{ item.code }}</code> — {{ item.desc }}
               </div>
               <p class="acu-notes" style="margin-top: 8px; margin-bottom: 0">
-                宏侧读当前（或上下文）楼层的 <code>post_process_tags</code> 与副本状态快照；无数据时替换为空。auto 的 launched 过滤依赖最近一次工作流写入的
-                <code>lastEnumAttrValues</code>，旧楼未跑过 enum 时可能为空。
+                宏侧读当前（或上下文）楼层的 <code>post_process_tags</code> 与副本状态快照；无数据时替换为空。auto 的
+                launched 过滤依赖最近一次工作流写入的 <code>lastEnumAttrValues</code>，旧楼未跑过 enum 时可能为空。
               </p>
             </div>
           </div>
@@ -2381,7 +2320,8 @@ function saveRunLogTaskTags(taskId: string): void {
           <div class="acu-section acu-preset-section">
             <h4>全局预设</h4>
             <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
-              当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API 或本页任务编辑仅影响此聊天，不会修改全局活动预设。
+              当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API
+              或本页任务编辑仅影响此聊天，不会修改全局活动预设。
               <button class="acu-btn acu-btn--sm" type="button" style="margin-left: 8px" @click="handleClearChatScope">
                 清除快照
               </button>
@@ -2461,19 +2401,24 @@ function saveRunLogTaskTags(taskId: string): void {
                 label="聊天摘取标签说明"
               />
             </div>
-            <AcuHelpPanel
-              v-model:open="chatExtractTagsHelpOpen"
-              id="chat-extract-tags-help"
-              label="聊天摘取标签说明"
-            >
+            <AcuHelpPanel v-model:open="chatExtractTagsHelpOpen" id="chat-extract-tags-help" label="聊天摘取标签说明">
               <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-                预设级配置，从酒馆主聊天正文摘取标签并直接写入当前楼层 <code>post_process_tags</code>，无需「消息楼层标签变量注入」模板。与任务级「提取写入标签」独立；同 key 时当轮任务摘取优先。
+                预设级配置，从酒馆主聊天正文摘取标签并直接写入当前楼层
+                <code>post_process_tags</code>，无需「消息楼层标签变量注入」模板。与任务级「提取写入标签」独立；同 key
+                时当轮任务摘取优先。
               </p>
               <p class="acu-notes acu-notes--sm">
-                <strong>用户输入</strong>：在 <code>MESSAGE_SENT</code> 最后阶段（<code>eventMakeLast</code>）从最终用户消息摘取，写入用户楼变量，供下一 AI 楼继承。
+                <strong>用户输入</strong>：在
+                <code>MESSAGE_SENT</code>
+                最后阶段（<code>eventMakeLast</code>）从最终用户消息摘取，写入用户楼变量，供下一 AI 楼继承。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-                <strong>AI 输出</strong>：在工作流任务开始前从当前 AI 楼正文摘取并写入，供当轮任务 <code v-pre>{{标签名}}</code> 与聊天注入引用。语法同任务级：裸名或 <code>item@id</code>。裸名取正文中<strong>最后一次出现的该开标签</strong>至其闭标签之间的内文；<code>标签@属性</code> 仍按属性分实例枚举。
+                <strong>AI 输出</strong>：在工作流任务开始前从当前 AI 楼正文摘取并写入，供当轮任务
+                <code v-pre>{{ 标签名 }}</code> 与聊天注入引用。语法同任务级：裸名或
+                <code>item@id</code>。裸名取正文中<strong>最后一次出现的该开标签</strong>至其闭标签之间的内文；<code
+                  >标签@属性</code
+                >
+                仍按属性分实例枚举。
               </p>
             </AcuHelpPanel>
             <div class="acu-row acu-row--extract-tags">
@@ -2551,10 +2496,7 @@ function saveRunLogTaskTags(taskId: string): void {
               </button>
             </div>
             <div v-if="selectedTask" class="acu-task-editor">
-              <div
-                v-if="selectedTask.syncAsReplicaFamily && replicaFamilyMembers.length"
-                class="replica-family-bar"
-              >
+              <div v-if="selectedTask.syncAsReplicaFamily && replicaFamilyMembers.length" class="replica-family-bar">
                 <span class="replica-family-bar__label">副本族</span>
                 <button
                   type="button"
@@ -2622,18 +2564,13 @@ function saveRunLogTaskTags(taskId: string): void {
                     </label>
                   </div>
                   <template v-if="replicaApiPresetMode === 'inheritRoot'">
-                    <p class="acu-notes acu-notes--sm">
-                      当前跟随原本：{{ rootApiConfigSummary || '全局默认' }}
-                    </p>
+                    <p class="acu-notes acu-notes--sm">当前跟随原本：{{ rootApiConfigSummary || '全局默认' }}</p>
                   </template>
                   <template v-else>
                     <div class="acu-api-config__block">
                       <label class="acu-field-label">主要 API 预设</label>
                       <div class="acu-api-routing-row">
-                        <select
-                          v-model="editorTask.apiPresetName"
-                          class="acu-select acu-api-config__preset-select"
-                        >
+                        <select v-model="editorTask.apiPresetName" class="acu-select acu-api-config__preset-select">
                           <option value="">全局默认</option>
                           <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">
                             {{ p.name }}
@@ -2704,338 +2641,358 @@ function saveRunLogTaskTags(taskId: string): void {
                 </div>
               </div>
               <template v-if="!isViewingReplicaMember">
-              <div class="acu-row acu-row--inline acu-task-editor__toolbar">
-                <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />
-                <div class="acu-task-editor__actions">
-                  <button
-                    class="acu-btn acu-btn--sm acu-icon-btn"
-                    type="button"
-                    title="重命名任务"
-                    aria-label="重命名任务"
-                    @click="confirmRenameSelectedTask"
-                  >
-                    <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
-                  </button>
-                  <button
-                    class="acu-btn acu-btn--sm acu-icon-btn"
-                    type="button"
-                    title="复制为新副本"
-                    aria-label="复制为新副本"
-                    @click="duplicateSelectedTask"
-                  >
-                    <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
-                  </button>
-                  <button
-                    class="acu-btn acu-btn--sm acu-icon-btn"
-                    type="button"
-                    title="跨预设复制"
-                    aria-label="跨预设复制"
-                    @click="copySelectedTask"
-                  >
-                    <i class="fa-fw fa-solid fa-clipboard" aria-hidden="true"></i>
-                  </button>
-                  <button
-                    class="acu-btn acu-btn--sm acu-icon-btn"
-                    type="button"
-                    title="粘贴"
-                    aria-label="粘贴"
-                    :disabled="!hasClipboard"
-                    @click="pasteTask"
-                  >
-                    <i class="fa-fw fa-solid fa-paste" aria-hidden="true"></i>
-                  </button>
-                  <button
-                    class="acu-btn acu-btn--sm acu-icon-btn danger"
-                    type="button"
-                    title="删除任务"
-                    aria-label="删除任务"
-                    @click="removeTask(selectedTask.id)"
-                  >
-                    <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
-                  </button>
-                </div>
-              </div>
-              <div class="acu-row">
-                <label>执行阶段</label>
-                <input v-model.number="selectedTask.stage" class="acu-input" type="number" min="1" step="1" title="相同阶段并行，不同阶段串行" />
-              </div>
-              <TaskWorkflowPresetPanel
-                v-if="selectedTask && !selectedReplicaViewId"
-                :task="selectedTask"
-                @save="onTaskWorkflowPresetSave"
-                @apply="onTaskWorkflowPresetApply"
-                @delete="onTaskWorkflowPresetDelete"
-                @import="onTaskWorkflowPresetImport"
-              />
-              <ReplicaFamilySchedulerPanel
-                v-if="selectedTask.syncAsReplicaFamily && !selectedReplicaViewId"
-                :root="selectedTask"
-                :members="replicaFamilyMembers"
-                @update-mode="onReplicaScheduleModeChange"
-                @update-member="onReplicaMemberScheduleChange"
-                @create-member="onCreateReplicaMember"
-              />
-              <div class="acu-subsection acu-collapsible-subsection acu-api-config-section">
-                <button
-                  type="button"
-                  class="acu-collapsible-subsection__header"
-                  :aria-expanded="apiConfigExpanded"
-                  @click="apiConfigExpanded = !apiConfigExpanded"
-                >
-                  <span class="acu-collapsible-subsection__title">API配置</span>
-                  <span class="acu-collapsible-subsection__summary">{{ apiConfigSummary }}</span>
-                  <i
-                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
-                    :class="apiConfigExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
-                    aria-hidden="true"
-                  />
-                </button>
-                <div v-show="apiConfigExpanded" class="acu-collapsible-subsection__body">
-                <p class="acu-api-config__intro">
-                  配置本任务的 LLM 路由与并发分流；每个 API 预设可单独设置最大并发，同阶段并行时各路由按各自上限分担请求。
-                </p>
-
-                <AcuHelpPanel
-                  v-model:open="apiRouteConcurrencyHelpOpen"
-                  id="api-route-concurrency-help"
-                  label="路由最大并发说明"
-                >
-                  <p class="acu-notes acu-notes--sm acu-api-config__example-text">
-                    例：主要上限 5、备用 A 上限 2、备用 B 上限 10；本轮 17 次并发时先按各路线上限分配，余量排队后补入有空闲槽位的路由。填 0 表示该路由不限制。
-                  </p>
-                </AcuHelpPanel>
-
-                <div class="acu-api-config__block">
-                  <div class="acu-api-config__recommended-model">
-                    <span class="acu-api-config__recommended-model-text">
-                      推荐模型：{{ selectedTask.recommendedModel?.trim() || '' }}
-                    </span>
+                <div class="acu-row acu-row--inline acu-task-editor__toolbar">
+                  <AcuToggle v-model="selectedTaskEnabledModel" label="启用" />
+                  <div class="acu-task-editor__actions">
                     <button
                       class="acu-btn acu-btn--sm acu-icon-btn"
                       type="button"
-                      title="编辑推荐模型"
-                      aria-label="编辑推荐模型"
-                      @click="confirmEditRecommendedModel"
+                      title="重命名任务"
+                      aria-label="重命名任务"
+                      @click="confirmRenameSelectedTask"
                     >
                       <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
                     </button>
-                  </div>
-                  <label class="acu-field-label">主要 API 预设</label>
-                  <div class="acu-api-routing-row">
-                    <select
-                      v-model="selectedTask.apiPresetName"
-                      class="acu-select acu-api-config__preset-select"
+                    <button
+                      class="acu-btn acu-btn--sm acu-icon-btn"
+                      type="button"
+                      title="复制为新副本"
+                      aria-label="复制为新副本"
+                      @click="duplicateSelectedTask"
                     >
-                      <option value="">全局默认</option>
-                      <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                    </select>
-                    <span class="acu-api-routing-row__concurrency-label">最大并发</span>
-                    <input
-                      v-model.number="selectedTask.apiPrimaryMaxConcurrency"
-                      class="acu-input acu-api-config__concurrency-input"
-                      type="number"
-                      min="0"
-                      step="1"
-                      title="0 表示不限制"
-                    />
-                    <span class="acu-api-config__suffix">次</span>
-                    <AcuHelpIconBtn
-                      v-model:open="apiRouteConcurrencyHelpOpen"
-                      panel-id="api-route-concurrency-help"
-                      label="路由最大并发说明"
-                    />
+                      <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      class="acu-btn acu-btn--sm acu-icon-btn"
+                      type="button"
+                      title="跨预设复制"
+                      aria-label="跨预设复制"
+                      @click="copySelectedTask"
+                    >
+                      <i class="fa-fw fa-solid fa-clipboard" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      class="acu-btn acu-btn--sm acu-icon-btn"
+                      type="button"
+                      title="粘贴"
+                      aria-label="粘贴"
+                      :disabled="!hasClipboard"
+                      @click="pasteTask"
+                    >
+                      <i class="fa-fw fa-solid fa-paste" aria-hidden="true"></i>
+                    </button>
+                    <button
+                      class="acu-btn acu-btn--sm acu-icon-btn danger"
+                      type="button"
+                      title="删除任务"
+                      aria-label="删除任务"
+                      @click="removeTask(selectedTask.id)"
+                    >
+                      <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                    </button>
                   </div>
+                </div>
+                <div class="acu-row">
+                  <label>执行阶段</label>
+                  <input
+                    v-model.number="selectedTask.stage"
+                    class="acu-input"
+                    type="number"
+                    min="1"
+                    step="1"
+                    title="相同阶段并行，不同阶段串行"
+                  />
+                </div>
+                <TaskWorkflowPresetPanel
+                  v-if="selectedTask && !selectedReplicaViewId"
+                  :task="selectedTask"
+                  @save="onTaskWorkflowPresetSave"
+                  @apply="onTaskWorkflowPresetApply"
+                  @delete="onTaskWorkflowPresetDelete"
+                  @import="onTaskWorkflowPresetImport"
+                />
+                <ReplicaFamilySchedulerPanel
+                  v-if="selectedTask.syncAsReplicaFamily && !selectedReplicaViewId"
+                  :root="selectedTask"
+                  :members="replicaFamilyMembers"
+                  @update-mode="onReplicaScheduleModeChange"
+                  @update-member="onReplicaMemberScheduleChange"
+                  @create-member="onCreateReplicaMember"
+                />
+                <div class="acu-subsection acu-collapsible-subsection acu-api-config-section">
+                  <button
+                    type="button"
+                    class="acu-collapsible-subsection__header"
+                    :aria-expanded="apiConfigExpanded"
+                    @click="apiConfigExpanded = !apiConfigExpanded"
+                  >
+                    <span class="acu-collapsible-subsection__title">API配置</span>
+                    <span class="acu-collapsible-subsection__summary">{{ apiConfigSummary }}</span>
+                    <i
+                      class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                      :class="apiConfigExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  <div v-show="apiConfigExpanded" class="acu-collapsible-subsection__body">
+                    <p class="acu-api-config__intro">
+                      配置本任务的 LLM 路由与并发分流；每个 API
+                      预设可单独设置最大并发，同阶段并行时各路由按各自上限分担请求。
+                    </p>
 
-                  <div class="acu-api-routing-fallbacks">
-                    <label class="acu-field-label">备用 API 预设</label>
-                    <div
-                      v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
-                      :key="`fb-${fbIndex}-${fallbackName}`"
-                      class="acu-api-routing-row acu-api-routing-fallback-row"
+                    <AcuHelpPanel
+                      v-model:open="apiRouteConcurrencyHelpOpen"
+                      id="api-route-concurrency-help"
+                      label="路由最大并发说明"
                     >
-                      <select
-                        v-model="selectedTask.apiPresetFallbackNames![fbIndex]"
-                        class="acu-select acu-api-config__preset-select"
-                      >
-                        <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
-                      </select>
-                      <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                      <p class="acu-notes acu-notes--sm acu-api-config__example-text">
+                        例：主要上限 5、备用 A 上限 2、备用 B 上限 10；本轮 17
+                        次并发时先按各路线上限分配，余量排队后补入有空闲槽位的路由。填 0 表示该路由不限制。
+                      </p>
+                    </AcuHelpPanel>
+
+                    <div class="acu-api-config__block">
+                      <div class="acu-api-config__recommended-model">
+                        <span class="acu-api-config__recommended-model-text">
+                          推荐模型：{{ selectedTask.recommendedModel?.trim() || '' }}
+                        </span>
+                        <button
+                          class="acu-btn acu-btn--sm acu-icon-btn"
+                          type="button"
+                          title="编辑推荐模型"
+                          aria-label="编辑推荐模型"
+                          @click="confirmEditRecommendedModel"
+                        >
+                          <i class="fa-fw fa-solid fa-pencil" aria-hidden="true"></i>
+                        </button>
+                      </div>
+                      <label class="acu-field-label">主要 API 预设</label>
+                      <div class="acu-api-routing-row">
+                        <select v-model="selectedTask.apiPresetName" class="acu-select acu-api-config__preset-select">
+                          <option value="">全局默认</option>
+                          <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                        </select>
+                        <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                        <input
+                          v-model.number="selectedTask.apiPrimaryMaxConcurrency"
+                          class="acu-input acu-api-config__concurrency-input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          title="0 表示不限制"
+                        />
+                        <span class="acu-api-config__suffix">次</span>
+                        <AcuHelpIconBtn
+                          v-model:open="apiRouteConcurrencyHelpOpen"
+                          panel-id="api-route-concurrency-help"
+                          label="路由最大并发说明"
+                        />
+                      </div>
+
+                      <div class="acu-api-routing-fallbacks">
+                        <label class="acu-field-label">备用 API 预设</label>
+                        <div
+                          v-for="(fallbackName, fbIndex) in selectedTask.apiPresetFallbackNames ?? []"
+                          :key="`fb-${fbIndex}-${fallbackName}`"
+                          class="acu-api-routing-row acu-api-routing-fallback-row"
+                        >
+                          <select
+                            v-model="selectedTask.apiPresetFallbackNames![fbIndex]"
+                            class="acu-select acu-api-config__preset-select"
+                          >
+                            <option v-for="p in settings.apiPresets" :key="p.name" :value="p.name">{{ p.name }}</option>
+                          </select>
+                          <span class="acu-api-routing-row__concurrency-label">最大并发</span>
+                          <input
+                            v-model.number="selectedTask.apiFallbackMaxConcurrencies![fbIndex]"
+                            class="acu-input acu-api-config__concurrency-input"
+                            type="number"
+                            min="0"
+                            step="1"
+                            title="0 表示不限制"
+                          />
+                          <span class="acu-api-config__suffix">次</span>
+                          <button
+                            class="acu-btn acu-btn--sm"
+                            type="button"
+                            title="删除此备用"
+                            @click="removeTaskApiFallback(fbIndex)"
+                          >
+                            删除
+                          </button>
+                        </div>
+                        <button
+                          class="acu-btn acu-btn--sm"
+                          type="button"
+                          :disabled="!availableFallbackPresetsForAdd.length"
+                          @click="addTaskApiFallback"
+                        >
+                          + 添加备用
+                        </button>
+                        <p
+                          v-if="!settings.apiPresets.length"
+                          class="acu-notes acu-notes--sm acu-api-config__empty-hint"
+                        >
+                          请先在全局「API」页添加至少一个 API 预设。
+                        </p>
+                      </div>
+                    </div>
+
+                    <ul class="acu-api-config__hints acu-notes acu-notes--sm">
+                      <li>API 抛错时按顺序 failover 到备用预设。</li>
+                      <li>字数不足或摘取失败时仍在主要预设上重试，不切换到备用分流。</li>
+                    </ul>
+                  </div>
+                </div>
+                <div class="acu-subsection acu-collapsible-subsection">
+                  <button
+                    type="button"
+                    class="acu-collapsible-subsection__header"
+                    :aria-expanded="executionStrategyExpanded"
+                    @click="executionStrategyExpanded = !executionStrategyExpanded"
+                  >
+                    <span class="acu-collapsible-subsection__title">执行策略</span>
+                    <span class="acu-collapsible-subsection__summary">{{ executionStrategySummary }}</span>
+                    <i
+                      class="fa-fw fa-solid acu-collapsible-subsection__chevron"
+                      :class="executionStrategyExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
+                      aria-hidden="true"
+                    />
+                  </button>
+                  <div v-show="executionStrategyExpanded" class="acu-collapsible-subsection__body">
+                    <p class="acu-notes">回合间隔与时间间隔分别配置，选择其中一项逻辑执行（手动重跑忽略调度）。</p>
+                    <p class="acu-notes">
+                      若角色卡启用了 MVU：工作流会等变量更新完成后再执行；若同时开启额外模型解析，则等额外解析结束且变量写入后再执行（无 MVU 的卡仍即时触发）。
+                    </p>
+                    <div class="acu-row acu-row--inline">
+                      <label><input v-model="scheduleMode" type="radio" value="round" /> 按回合间隔</label>
+                      <label><input v-model="scheduleMode" type="radio" value="time" /> 按游戏时间间隔</label>
+                    </div>
+                    <div v-if="scheduleMode === 'round'" class="acu-row">
+                      <label>每隔</label>
                       <input
-                        v-model.number="selectedTask.apiFallbackMaxConcurrencies![fbIndex]"
-                        class="acu-input acu-api-config__concurrency-input"
+                        v-model.number="selectedRoundInterval"
+                        class="acu-input"
                         type="number"
                         min="0"
                         step="1"
-                        title="0 表示不限制"
+                        style="width: 72px"
                       />
-                      <span class="acu-api-config__suffix">次</span>
-                      <button
-                        class="acu-btn acu-btn--sm"
-                        type="button"
-                        title="删除此备用"
-                        @click="removeTaskApiFallback(fbIndex)"
+                      <span>回合执行一次</span>
+                      <span class="acu-notes">（0 或 1 = 每楼都执行）</span>
+                    </div>
+                    <template v-if="scheduleMode === 'time'">
+                      <div class="acu-row">
+                        <label>每隔</label>
+                        <input
+                          v-model.number="timeIntervalValue"
+                          class="acu-input"
+                          type="number"
+                          min="1"
+                          step="1"
+                          style="width: 72px"
+                        />
+                        <select v-model="timeIntervalUnit" class="acu-select">
+                          <option value="minute">分钟</option>
+                          <option value="hour">小时</option>
+                          <option value="day">天</option>
+                          <option value="week">周</option>
+                          <option value="month">月</option>
+                          <option value="year">年</option>
+                        </select>
+                        <span>游戏时间执行一次</span>
+                      </div>
+                      <div class="acu-row acu-row--inline">
+                        <label>时间数据来源</label>
+                        <label><input v-model="timeSourceType" type="radio" value="message_tag" /> 正文标签</label>
+                        <label><input v-model="timeSourceType" type="radio" value="variable" /> 楼层变量</label>
+                      </div>
+                      <template v-if="timeSourceType === 'message_tag'">
+                        <div class="acu-row">
+                          <label>标签名（半角或全角逗号分隔）</label>
+                          <input
+                            class="acu-input"
+                            style="flex: 1"
+                            placeholder="time,世界时间 或 time，世界时间"
+                            :value="timeTagNamesDraft"
+                            @input="onTimeTagNamesInput"
+                            @blur="onTimeTagNamesBlur"
+                          />
+                        </div>
+                        <div class="acu-row">
+                          <label>扫描范围</label>
+                          <select v-model="timeTagScope" class="acu-select">
+                            <option value="current_ai">当前 AI 楼正文</option>
+                            <option value="current_pair">本轮 user+AI 正文</option>
+                          </select>
+                        </div>
+                      </template>
+                      <template v-else>
+                        <div class="acu-row">
+                          <label>变量域</label>
+                          <select v-model="timeVariableType" class="acu-select">
+                            <option value="message">最新消息楼层</option>
+                            <option value="chat">聊天变量</option>
+                            <option value="global">全局变量</option>
+                            <option value="character">角色变量</option>
+                            <option value="script">脚本变量</option>
+                          </select>
+                          <input
+                            v-model="timeVariablePath"
+                            class="acu-input"
+                            placeholder="变量路径，如 stat_data.世界.当前时间"
+                            style="flex: 2"
+                          />
+                        </div>
+                      </template>
+                      <div class="acu-row acu-row--inline acu-game-time-probe">
+                        <button
+                          class="acu-btn acu-btn--sm primary acu-game-time-probe__btn"
+                          type="button"
+                          @click="testGameTimeParse"
+                        >
+                          <i class="fa-fw fa-solid fa-clock" aria-hidden="true"></i>
+                          测试时间解析
+                        </button>
+                        <span
+                          v-if="gameTimeParseTestHint"
+                          class="acu-notes acu-notes--sm acu-game-time-probe__hint"
+                          :class="gameTimeParseTestHintClass"
+                          >{{ gameTimeParseTestHint }}</span
+                        >
+                      </div>
+                      <div class="acu-heading-with-help">
+                        <span class="acu-collapsible-help__inline-title">支持的时间格式</span>
+                        <AcuHelpIconBtn
+                          v-model:open="gameTimeFormatHelpOpen"
+                          panel-id="game-time-format-help"
+                          label="支持的时间格式说明"
+                        />
+                      </div>
+                      <AcuHelpPanel
+                        v-model:open="gameTimeFormatHelpOpen"
+                        id="game-time-format-help"
+                        label="支持的时间格式说明"
                       >
-                        删除
-                      </button>
-                    </div>
-                    <button
-                      class="acu-btn acu-btn--sm"
-                      type="button"
-                      :disabled="!availableFallbackPresetsForAdd.length"
-                      @click="addTaskApiFallback"
-                    >
-                      + 添加备用
-                    </button>
-                    <p v-if="!settings.apiPresets.length" class="acu-notes acu-notes--sm acu-api-config__empty-hint">
-                      请先在全局「API」页添加至少一个 API 预设。
-                    </p>
+                        <p class="acu-notes acu-notes--sm">{{ GAME_TIME_FORMAT_HELP.preprocess }}</p>
+                        <ul class="acu-collapsible-help__list">
+                          <li
+                            v-for="(line, idx) in GAME_TIME_FORMAT_HELP.examples"
+                            :key="idx"
+                            class="acu-notes acu-notes--sm"
+                          >
+                            {{ line }}
+                          </li>
+                        </ul>
+                        <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                          {{ GAME_TIME_FORMAT_HELP.footnote }}
+                        </p>
+                      </AcuHelpPanel>
+                    </template>
                   </div>
                 </div>
-
-                <ul class="acu-api-config__hints acu-notes acu-notes--sm">
-                  <li>API 抛错时按顺序 failover 到备用预设。</li>
-                  <li>字数不足或摘取失败时仍在主要预设上重试，不切换到备用分流。</li>
-                </ul>
-                </div>
-              </div>
-              <div class="acu-subsection acu-collapsible-subsection">
-                <button
-                  type="button"
-                  class="acu-collapsible-subsection__header"
-                  :aria-expanded="executionStrategyExpanded"
-                  @click="executionStrategyExpanded = !executionStrategyExpanded"
-                >
-                  <span class="acu-collapsible-subsection__title">执行策略</span>
-                  <span class="acu-collapsible-subsection__summary">{{ executionStrategySummary }}</span>
-                  <i
-                    class="fa-fw fa-solid acu-collapsible-subsection__chevron"
-                    :class="executionStrategyExpanded ? 'fa-chevron-up' : 'fa-chevron-down'"
-                    aria-hidden="true"
-                  />
-                </button>
-                <div v-show="executionStrategyExpanded" class="acu-collapsible-subsection__body">
-                <p class="acu-notes">回合间隔与时间间隔分别配置，选择其中一项逻辑执行（手动重跑忽略调度）。</p>
-              <div class="acu-row acu-row--inline">
-                <label><input v-model="scheduleMode" type="radio" value="round" /> 按回合间隔</label>
-                <label><input v-model="scheduleMode" type="radio" value="time" /> 按游戏时间间隔</label>
-              </div>
-                <div v-if="scheduleMode === 'round'" class="acu-row">
-                  <label>每隔</label>
-                  <input v-model.number="selectedRoundInterval" class="acu-input" type="number" min="0" step="1" style="width: 72px" />
-                  <span>回合执行一次</span>
-                  <span class="acu-notes">（0 或 1 = 每楼都执行）</span>
-                </div>
-                <template v-if="scheduleMode === 'time'">
-                  <div class="acu-row">
-                    <label>每隔</label>
-                    <input v-model.number="timeIntervalValue" class="acu-input" type="number" min="1" step="1" style="width: 72px" />
-                    <select v-model="timeIntervalUnit" class="acu-select">
-                      <option value="minute">分钟</option>
-                      <option value="hour">小时</option>
-                      <option value="day">天</option>
-                      <option value="week">周</option>
-                      <option value="month">月</option>
-                      <option value="year">年</option>
-                    </select>
-                    <span>游戏时间执行一次</span>
-                  </div>
-                  <p v-if="showMvuDeferHint" class="acu-notes">
-                    使用最新消息楼层变量（stat_data）作为游戏时间时，全部任务将在 MVU 变量更新完成后再执行。
-                  </p>
-                  <div class="acu-row acu-row--inline">
-                    <label>时间数据来源</label>
-                    <label><input v-model="timeSourceType" type="radio" value="message_tag" /> 正文标签</label>
-                    <label><input v-model="timeSourceType" type="radio" value="variable" /> 楼层变量</label>
-                  </div>
-                  <template v-if="timeSourceType === 'message_tag'">
-                    <div class="acu-row">
-                      <label>标签名（半角或全角逗号分隔）</label>
-                      <input
-                        class="acu-input"
-                        style="flex: 1"
-                        placeholder="time,世界时间 或 time，世界时间"
-                        :value="timeTagNamesDraft"
-                        @input="onTimeTagNamesInput"
-                        @blur="onTimeTagNamesBlur"
-                      />
-                    </div>
-                    <div class="acu-row">
-                      <label>扫描范围</label>
-                      <select v-model="timeTagScope" class="acu-select">
-                        <option value="current_ai">当前 AI 楼正文</option>
-                        <option value="current_pair">本轮 user+AI 正文</option>
-                      </select>
-                    </div>
-                  </template>
-                  <template v-else>
-                    <div class="acu-row">
-                      <label>变量域</label>
-                      <select v-model="timeVariableType" class="acu-select">
-                        <option value="message">最新消息楼层</option>
-                        <option value="chat">聊天变量</option>
-                        <option value="global">全局变量</option>
-                        <option value="character">角色变量</option>
-                        <option value="script">脚本变量</option>
-                      </select>
-                      <input v-model="timeVariablePath" class="acu-input" placeholder="变量路径，如 stat_data.世界.当前时间" style="flex: 2" />
-                    </div>
-                  </template>
-                  <div class="acu-row">
-                    <label>时间解析失败时</label>
-                    <select v-model="timeOnParseFail" class="acu-select">
-                      <option value="skip">跳过本任务</option>
-                      <option value="run">仍执行</option>
-                      <option value="wall_clock">使用系统时间</option>
-                    </select>
-                  </div>
-                  <div class="acu-row acu-row--inline acu-game-time-probe">
-                    <button
-                      class="acu-btn acu-btn--sm primary acu-game-time-probe__btn"
-                      type="button"
-                      @click="testGameTimeParse"
-                    >
-                      <i class="fa-fw fa-solid fa-clock" aria-hidden="true"></i>
-                      测试时间解析
-                    </button>
-                    <span
-                      v-if="gameTimeParseTestHint"
-                      class="acu-notes acu-notes--sm acu-game-time-probe__hint"
-                      :class="gameTimeParseTestHintClass"
-                    >{{ gameTimeParseTestHint }}</span>
-                  </div>
-                  <div class="acu-heading-with-help">
-                    <span class="acu-collapsible-help__inline-title">支持的时间格式</span>
-                    <AcuHelpIconBtn
-                      v-model:open="gameTimeFormatHelpOpen"
-                      panel-id="game-time-format-help"
-                      label="支持的时间格式说明"
-                    />
-                  </div>
-                  <AcuHelpPanel
-                    v-model:open="gameTimeFormatHelpOpen"
-                    id="game-time-format-help"
-                    label="支持的时间格式说明"
-                  >
-                    <p class="acu-notes acu-notes--sm">{{ GAME_TIME_FORMAT_HELP.preprocess }}</p>
-                    <ul class="acu-collapsible-help__list">
-                      <li
-                        v-for="(line, idx) in GAME_TIME_FORMAT_HELP.examples"
-                        :key="idx"
-                        class="acu-notes acu-notes--sm"
-                      >
-                        {{ line }}
-                      </li>
-                    </ul>
-                    <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ GAME_TIME_FORMAT_HELP.footnote }}</p>
-                  </AcuHelpPanel>
-                </template>
-                </div>
-              </div>
               </template>
-              <TaskPromptAutoSegmentsPanel
-                v-if="selectedTask && !isViewingReplicaMember"
-                :task="selectedTask"
-              />
+              <TaskPromptAutoSegmentsPanel v-if="selectedTask && !isViewingReplicaMember" :task="selectedTask" />
               <TaskPromptAutoSegmentsPanel
                 v-else-if="isViewingReplicaMember && editorTask"
                 :task="editorTask"
@@ -3059,161 +3016,185 @@ function saveRunLogTaskTags(taskId: string): void {
                 </button>
                 <div v-show="promptSectionExpanded" class="acu-collapsible-subsection__body">
                   <div ref="promptZoneRef" class="acu-task-prompt-zone">
-              <template v-if="!isViewingReplicaMember">
-              <div class="acu-row acu-row--extract-tags">
-                <label class="acu-label-with-help" for="extract-inject-tags-input">
-                  提取写入标签
-                  <AcuHelpIconBtn
-                    v-model:open="extractInjectTagsHelpOpen"
-                    panel-id="extract-inject-tags-help"
-                    label="摘取机制说明"
-                  />
-                </label>
-                <input
-                  id="extract-inject-tags-input"
-                  class="acu-input"
-                  style="flex: 1"
-                  placeholder="半角或全角逗号分隔，如 recall,supplement 或 item@id"
-                  :value="extractInjectTagsDraft"
-                  @input="onExtractInjectTagsInput"
-                  @blur="onExtractInjectTagsBlur"
-                />
-              </div>
-              <AcuHelpPanel
-                v-model:open="extractInjectTagsHelpOpen"
-                id="extract-inject-tags-help"
-                label="提取写入标签说明"
-              >
-                <p class="acu-notes acu-notes--sm acu-extract-tags-help__intro">{{ EXTRACT_INJECT_TAGS_HELP.intro }}</p>
-                <div
-                  v-for="mode in EXTRACT_INJECT_TAGS_HELP.modes"
-                  :key="mode.config"
-                  class="acu-extract-tags-help__mode"
-                >
-                  <p class="acu-extract-tags-help__mode-title">
-                    {{ mode.title }}：<code>{{ mode.config }}</code>
-                  </p>
-                  <p class="acu-notes acu-notes--sm">{{ mode.rule }}</p>
-                  <p class="acu-extract-tags-help__example">
-                    <span class="acu-extract-tags-help__example-label">示例</span>
-                    <code>{{ mode.example }}</code>
-                  </p>
-                </div>
-                <p class="acu-extract-tags-help__section-title">{{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.title }}</p>
-                <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.intro }}</p>
-                <ul class="acu-extract-tags-help__list">
-                  <li
-                    v-for="(tip, idx) in EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.tips"
-                    :key="`dyn-${idx}`"
-                    class="acu-notes acu-notes--sm"
-                  >
-                    <template v-if="'code' in tip && tip.code">
-                      <code>{{ tip.code }}</code> {{ tip.desc }}
+                    <template v-if="!isViewingReplicaMember">
+                      <div class="acu-row acu-row--extract-tags">
+                        <label class="acu-label-with-help" for="extract-inject-tags-input">
+                          提取写入标签
+                          <AcuHelpIconBtn
+                            v-model:open="extractInjectTagsHelpOpen"
+                            panel-id="extract-inject-tags-help"
+                            label="摘取机制说明"
+                          />
+                        </label>
+                        <input
+                          id="extract-inject-tags-input"
+                          class="acu-input"
+                          style="flex: 1"
+                          placeholder="半角或全角逗号分隔，如 recall,supplement 或 item@id"
+                          :value="extractInjectTagsDraft"
+                          @input="onExtractInjectTagsInput"
+                          @blur="onExtractInjectTagsBlur"
+                        />
+                      </div>
+                      <AcuHelpPanel
+                        v-model:open="extractInjectTagsHelpOpen"
+                        id="extract-inject-tags-help"
+                        label="提取写入标签说明"
+                      >
+                        <p class="acu-notes acu-notes--sm acu-extract-tags-help__intro">
+                          {{ EXTRACT_INJECT_TAGS_HELP.intro }}
+                        </p>
+                        <div
+                          v-for="mode in EXTRACT_INJECT_TAGS_HELP.modes"
+                          :key="mode.config"
+                          class="acu-extract-tags-help__mode"
+                        >
+                          <p class="acu-extract-tags-help__mode-title">
+                            {{ mode.title }}：<code>{{ mode.config }}</code>
+                          </p>
+                          <p class="acu-notes acu-notes--sm">{{ mode.rule }}</p>
+                          <p class="acu-extract-tags-help__example">
+                            <span class="acu-extract-tags-help__example-label">示例</span>
+                            <code>{{ mode.example }}</code>
+                          </p>
+                        </div>
+                        <p class="acu-extract-tags-help__section-title">
+                          {{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.title }}
+                        </p>
+                        <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.intro }}</p>
+                        <ul class="acu-extract-tags-help__list">
+                          <li
+                            v-for="(tip, idx) in EXTRACT_INJECT_TAGS_HELP.dynamicPlaceholders.tips"
+                            :key="`dyn-${idx}`"
+                            class="acu-notes acu-notes--sm"
+                          >
+                            <template v-if="'code' in tip && tip.code">
+                              <code>{{ tip.code }}</code> {{ tip.desc }}
+                            </template>
+                            <template v-else>{{ tip.desc }}</template>
+                          </li>
+                        </ul>
+                        <p class="acu-extract-tags-help__section-title">
+                          {{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.title }}
+                        </p>
+                        <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.intro }}</p>
+                        <div
+                          v-for="step in EXTRACT_INJECT_TAGS_HELP.replicaFamily.steps"
+                          :key="step.title"
+                          class="acu-extract-tags-help__mode"
+                        >
+                          <p class="acu-extract-tags-help__mode-title">{{ step.title }}</p>
+                          <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ step.desc }}</p>
+                        </div>
+                        <ul class="acu-extract-tags-help__list">
+                          <li
+                            v-for="(note, idx) in EXTRACT_INJECT_TAGS_HELP.replicaFamily.notes"
+                            :key="`rep-note-${idx}`"
+                            class="acu-notes acu-notes--sm"
+                          >
+                            {{ note }}
+                          </li>
+                        </ul>
+                        <p class="acu-extract-tags-help__example">
+                          <span class="acu-extract-tags-help__example-label">典型流程</span>
+                          <code>{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.example }}</code>
+                        </p>
+                        <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">
+                          {{ EXTRACT_INJECT_TAGS_HELP.relay }}
+                        </p>
+                      </AcuHelpPanel>
+                      <div class="acu-row acu-row--inline acu-row--task-output-settings">
+                        <AcuToggle
+                          v-model="promptDragSortEnabled"
+                          class="acu-task-output-settings__drag-toggle"
+                          label="拖曳排序"
+                        />
+                        <label>最大重试次数</label>
+                        <input
+                          v-model.number="selectedTask.maxRetries"
+                          class="acu-input"
+                          type="number"
+                          min="1"
+                          step="1"
+                          style="width: 96px"
+                        />
+                        <label>最小回复字数</label>
+                        <input
+                          v-model.number="selectedTask.minLength"
+                          class="acu-input"
+                          type="number"
+                          min="0"
+                          step="1"
+                          style="width: 96px"
+                        />
+                        <label class="acu-label-with-help">
+                          结构化 JSON 输出
+                          <AcuHelpIconBtn
+                            v-model:open="structuredOutputHelpOpen"
+                            panel-id="structured-output-help"
+                            label="结构化 JSON 输出说明"
+                          />
+                        </label>
+                        <select
+                          v-model="selectedTask.structuredOutputMode"
+                          class="acu-select acu-task-output-settings__select"
+                        >
+                          <option value="off">关闭（XML 标签）</option>
+                          <option value="mvu_json_patch">MVU JSON Patch</option>
+                          <option value="addon_json_patch">Addon JSON Patch</option>
+                        </select>
+                      </div>
+                      <AcuHelpPanel
+                        v-model:open="structuredOutputHelpOpen"
+                        id="structured-output-help"
+                        label="结构化 JSON 输出说明"
+                      >
+                        <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.intro }}</p>
+                        <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.apiPreset }}</p>
+                        <ul class="acu-collapsible-help__list">
+                          <li
+                            v-for="mode in STRUCTURED_OUTPUT_MODE_HELP.modes"
+                            :key="mode.value"
+                            class="acu-notes acu-notes--sm"
+                          >
+                            <strong>{{ mode.title }}</strong
+                            >：{{ mode.desc }}
+                          </li>
+                        </ul>
+                        <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                          {{ STRUCTURED_OUTPUT_MODE_HELP.retry }}
+                        </p>
+                      </AcuHelpPanel>
+                      <p class="acu-notes" style="margin: 0 0 8px">
+                        最小回复字数填 0
+                        表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
+                      </p>
+                      <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
+                        灰色自动段为合并预览，请在上方「任务级提示词自动段」中编辑。
+                      </p>
                     </template>
-                    <template v-else>{{ tip.desc }}</template>
-                  </li>
-                </ul>
-                <p class="acu-extract-tags-help__section-title">{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.title }}</p>
-                <p class="acu-notes acu-notes--sm">{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.intro }}</p>
-                <div
-                  v-for="step in EXTRACT_INJECT_TAGS_HELP.replicaFamily.steps"
-                  :key="step.title"
-                  class="acu-extract-tags-help__mode"
-                >
-                  <p class="acu-extract-tags-help__mode-title">{{ step.title }}</p>
-                  <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ step.desc }}</p>
-                </div>
-                <ul class="acu-extract-tags-help__list">
-                  <li
-                    v-for="(note, idx) in EXTRACT_INJECT_TAGS_HELP.replicaFamily.notes"
-                    :key="`rep-note-${idx}`"
-                    class="acu-notes acu-notes--sm"
-                  >
-                    {{ note }}
-                  </li>
-                </ul>
-                <p class="acu-extract-tags-help__example">
-                  <span class="acu-extract-tags-help__example-label">典型流程</span>
-                  <code>{{ EXTRACT_INJECT_TAGS_HELP.replicaFamily.example }}</code>
-                </p>
-                <p class="acu-notes acu-notes--sm acu-extract-tags-help__relay">{{ EXTRACT_INJECT_TAGS_HELP.relay }}</p>
-              </AcuHelpPanel>
-              <div class="acu-row acu-row--inline acu-row--task-output-settings">
-                <AcuToggle
-                  v-model="promptDragSortEnabled"
-                  class="acu-task-output-settings__drag-toggle"
-                  label="拖曳排序"
-                />
-                <label>最大重试次数</label>
-                <input v-model.number="selectedTask.maxRetries" class="acu-input" type="number" min="1" step="1" style="width: 96px" />
-                <label>最小回复字数</label>
-                <input v-model.number="selectedTask.minLength" class="acu-input" type="number" min="0" step="1" style="width: 96px" />
-                <label class="acu-label-with-help">
-                  结构化 JSON 输出
-                  <AcuHelpIconBtn
-                    v-model:open="structuredOutputHelpOpen"
-                    panel-id="structured-output-help"
-                    label="结构化 JSON 输出说明"
-                  />
-                </label>
-                <select v-model="selectedTask.structuredOutputMode" class="acu-select acu-task-output-settings__select">
-                  <option value="off">关闭（XML 标签）</option>
-                  <option value="mvu_json_patch">MVU JSON Patch</option>
-                  <option value="addon_json_patch">Addon JSON Patch</option>
-                </select>
-              </div>
-              <AcuHelpPanel
-                v-model:open="structuredOutputHelpOpen"
-                id="structured-output-help"
-                label="结构化 JSON 输出说明"
-              >
-                <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.intro }}</p>
-                <p class="acu-notes acu-notes--sm">{{ STRUCTURED_OUTPUT_MODE_HELP.apiPreset }}</p>
-                <ul class="acu-collapsible-help__list">
-                  <li v-for="mode in STRUCTURED_OUTPUT_MODE_HELP.modes" :key="mode.value" class="acu-notes acu-notes--sm">
-                    <strong>{{ mode.title }}</strong>：{{ mode.desc }}
-                  </li>
-                </ul>
-                <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">{{ STRUCTURED_OUTPUT_MODE_HELP.retry }}</p>
-              </AcuHelpPanel>
-              <p class="acu-notes" style="margin: 0 0 8px">
-                最小回复字数填 0 表示不限制；未达字数将重试（最多「最大重试次数」次）。若已提取到「提取写入标签」内容则视为成功。
-              </p>
-              <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
-                灰色自动段为合并预览，请在上方「任务级提示词自动段」中编辑。
-              </p>
-              </template>
-              <template v-for="row in promptPreviewRows" :key="promptRowKey(row)">
-                <PromptSegmentCard
-                  :row-key="promptRowKey(row)"
-                  :group="row.group"
-                  :expanded="isPromptRowExpanded(promptRowKey(row))"
-                  :readonly="row.kind === 'auto'"
-                  :auto-badge="row.kind === 'auto' ? `自动段 · ${row.slotName}` : ''"
-                  :manual-index="row.kind === 'manual' ? row.manualIndex : -1"
-                  :manual-count="manualPromptGroupCount"
-                  :disabled="isViewingReplicaMember"
-                  :drag-enabled="promptDragSortEnabled"
-                  :dragging="
-                    row.kind === 'manual' && promptDrag?.fromIndex === row.manualIndex
-                  "
-                  :drop-marker="
-                    row.kind === 'manual' ? promptDropMarker(row.manualIndex) : null
-                  "
-                  @toggle="togglePromptRow(promptRowKey(row))"
-                  @move="delta => row.kind === 'manual' && movePromptGroup(row.manualIndex, delta)"
-                  @remove="row.kind === 'manual' && removePromptGroup(row.manualIndex)"
-                  @drag-start="onPromptDragStart"
-                />
-              </template>
-              <button
-                v-if="!isViewingReplicaMember"
-                class="acu-btn"
-                type="button"
-                @click="addPromptGroup"
-              >
-                + 提示词段
-              </button>
+                    <template v-for="row in promptPreviewRows" :key="promptRowKey(row)">
+                      <PromptSegmentCard
+                        :row-key="promptRowKey(row)"
+                        :group="row.group"
+                        :expanded="isPromptRowExpanded(promptRowKey(row))"
+                        :readonly="row.kind === 'auto'"
+                        :auto-badge="row.kind === 'auto' ? `自动段 · ${row.slotName}` : ''"
+                        :manual-index="row.kind === 'manual' ? row.manualIndex : -1"
+                        :manual-count="manualPromptGroupCount"
+                        :disabled="isViewingReplicaMember"
+                        :drag-enabled="promptDragSortEnabled"
+                        :dragging="row.kind === 'manual' && promptDrag?.fromIndex === row.manualIndex"
+                        :drop-marker="row.kind === 'manual' ? promptDropMarker(row.manualIndex) : null"
+                        @toggle="togglePromptRow(promptRowKey(row))"
+                        @move="delta => row.kind === 'manual' && movePromptGroup(row.manualIndex, delta)"
+                        @remove="row.kind === 'manual' && removePromptGroup(row.manualIndex)"
+                        @drag-start="onPromptDragStart"
+                      />
+                    </template>
+                    <button v-if="!isViewingReplicaMember" class="acu-btn" type="button" @click="addPromptGroup">
+                      + 提示词段
+                    </button>
                   </div>
                 </div>
               </div>
@@ -3241,7 +3222,7 @@ function saveRunLogTaskTags(taskId: string): void {
               label="消息楼层标签变量注入说明"
             >
               <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-                该注入模板中显式出现的 <code v-pre>{{标签名}}</code> 会写入当前 AI 楼消息变量
+                该注入模板中显式出现的 <code v-pre>{{ 标签名 }}</code> 会写入当前 AI 楼消息变量
                 <code>post_process_tags.{标签名}</code>。变量随楼层自动继承，供下轮工作流解读存档数据。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
@@ -3268,17 +3249,19 @@ function saveRunLogTaskTags(taskId: string): void {
                 label="AI楼层文末注入说明"
               />
             </div>
-            <AcuHelpPanel
-              v-model:open="finalInjectHelpOpen"
-              id="final-inject-help"
-              label="AI楼层文末注入说明"
-            >
+            <AcuHelpPanel v-model:open="finalInjectHelpOpen" id="final-inject-help" label="AI楼层文末注入说明">
               <p class="acu-notes acu-notes--sm" style="margin: 0">
-                渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{标签名}}</code>。不写入消息楼层变量。
-                若注入内容含 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code>，注入后将分别触发 MVU <code>stat_data</code> 与 <code>addon_data</code> 更新（仅解析注入块，各一次）。
+                渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{ 标签名 }}</code
+                >。不写入消息楼层变量。 若注入内容含 <code>&lt;JSONPatch&gt;</code> /
+                <code>&lt;AddonJSONPatch&gt;</code>，注入后将分别触发 MVU <code>stat_data</code> 与
+                <code>addon_data</code> 更新（仅解析注入块，各一次）。
               </p>
             </AcuHelpPanel>
-            <textarea v-model="settings.finalInjectTemplate" class="acu-textarea" placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}" />
+            <textarea
+              v-model="settings.finalInjectTemplate"
+              class="acu-textarea"
+              placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}"
+            />
           </div>
 
           <div class="acu-section acu-config-rules-section">
@@ -3296,13 +3279,18 @@ function saveRunLogTaskTags(taskId: string): void {
               label="聊天正文标签替换说明"
             >
               <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-                仅对 <strong>assistant</strong> 楼生效。可添加多条规则，每条绑定一个「AI 输出摘取」标签与写入模板；同一标签最多一条规则。
+                仅对 <strong>assistant</strong> 楼生效。可添加多条规则，每条绑定一个「AI
+                输出摘取」标签与写入模板；同一标签最多一条规则。
               </p>
               <p class="acu-notes acu-notes--sm">
-                工作流按阶段执行：当本阶段任务产出匹配该标签时，先同步 <code>post_process_tags</code>，再在正文中<strong>原位置</strong>替换该标签内文（裸名取最后一次开标签；<code>标签@属性</code> 按属性实例）。
+                工作流按阶段执行：当本阶段任务产出匹配该标签时，先同步
+                <code>post_process_tags</code
+                >，再在正文中<strong>原位置</strong>替换该标签内文（裸名取最后一次开标签；<code>标签@属性</code>
+                按属性实例）。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-                模板占位符同文末注入；模板内 <code>&lt;JSONPatch&gt;</code> / <code>&lt;AddonJSONPatch&gt;</code> 不会触发变量解析。
+                模板占位符同文末注入；模板内 <code>&lt;JSONPatch&gt;</code> /
+                <code>&lt;AddonJSONPatch&gt;</code> 不会触发变量解析。
               </p>
             </AcuHelpPanel>
             <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
@@ -3321,75 +3309,75 @@ function saveRunLogTaskTags(taskId: string): void {
                 />
               </button>
               <div v-show="chatBodyTagReplaceExpanded" class="acu-collapsible-subsection__body">
-            <p v-if="!assistantChatExtractTags.length" class="acu-notes acu-notes--sm">
-              请先在上方「聊天摘取标签」中配置 AI 输出摘取项。
-            </p>
-            <template v-else>
-              <div class="acu-config-rules-list">
-                <details
-                  v-for="rule in settings.chatBodyTagReplaceRules ?? []"
-                  :key="rule.id"
-                  class="acu-config-rule-item"
-                >
-                  <summary class="acu-config-rule-item__summary">
-                    <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
-                    <span class="acu-config-rule-item__meta">{{ truncateRulePreview(rule.template) }}</span>
-                    <span
-                      v-if="isChatBodyReplaceTagStale(rule.targetTag)"
-                      class="acu-notes acu-log-warn acu-config-rule-item__warn"
+                <p v-if="!assistantChatExtractTags.length" class="acu-notes acu-notes--sm">
+                  请先在上方「聊天摘取标签」中配置 AI 输出摘取项。
+                </p>
+                <template v-else>
+                  <div class="acu-config-rules-list">
+                    <details
+                      v-for="rule in settings.chatBodyTagReplaceRules ?? []"
+                      :key="rule.id"
+                      class="acu-config-rule-item"
                     >
-                      未在 AI 输出摘取列表中
-                    </span>
-                  </summary>
-                  <div class="acu-config-rule-item__body">
-                    <div class="acu-row" style="align-items: flex-start; gap: 8px">
-                      <div style="flex: 0 0 140px">
-                        <label class="acu-label-with-help">目标标签</label>
-                        <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
-                          <option
-                            v-for="tag in assistantChatExtractTags"
-                            :key="tag"
-                            :value="tag"
-                            :disabled="isChatBodyReplaceTagUsedByOther(tag, rule.id)"
+                      <summary class="acu-config-rule-item__summary">
+                        <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
+                        <span class="acu-config-rule-item__meta">{{ truncateRulePreview(rule.template) }}</span>
+                        <span
+                          v-if="isChatBodyReplaceTagStale(rule.targetTag)"
+                          class="acu-notes acu-log-warn acu-config-rule-item__warn"
+                        >
+                          未在 AI 输出摘取列表中
+                        </span>
+                      </summary>
+                      <div class="acu-config-rule-item__body">
+                        <div class="acu-row" style="align-items: flex-start; gap: 8px">
+                          <div style="flex: 0 0 140px">
+                            <label class="acu-label-with-help">目标标签</label>
+                            <select v-model="rule.targetTag" class="acu-input" style="width: 100%">
+                              <option
+                                v-for="tag in assistantChatExtractTags"
+                                :key="tag"
+                                :value="tag"
+                                :disabled="isChatBodyReplaceTagUsedByOther(tag, rule.id)"
+                              >
+                                {{ tag }}
+                              </option>
+                            </select>
+                          </div>
+                          <div style="flex: 1">
+                            <label class="acu-label-with-help">写入模板</label>
+                            <textarea
+                              v-model="rule.template"
+                              class="acu-textarea"
+                              rows="3"
+                              placeholder="替换为该模板渲染后的内文，可用 {{task:任务名}} 与 {{标签名}}"
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            class="acu-btn acu-btn--sm acu-icon-btn"
+                            title="删除规则"
+                            aria-label="删除规则"
+                            style="margin-top: 22px"
+                            @click="confirmRemoveChatBodyTagReplaceRule(rule.id)"
                           >
-                            {{ tag }}
-                          </option>
-                        </select>
+                            <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                          </button>
+                        </div>
                       </div>
-                      <div style="flex: 1">
-                        <label class="acu-label-with-help">写入模板</label>
-                        <textarea
-                          v-model="rule.template"
-                          class="acu-textarea"
-                          rows="3"
-                          placeholder="替换为该模板渲染后的内文，可用 {{task:任务名}} 与 {{标签名}}"
-                        />
-                      </div>
-                      <button
-                        type="button"
-                        class="acu-btn acu-btn--sm acu-icon-btn"
-                        title="删除规则"
-                        aria-label="删除规则"
-                        style="margin-top: 22px"
-                        @click="confirmRemoveChatBodyTagReplaceRule(rule.id)"
-                      >
-                        <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
-                      </button>
-                    </div>
+                    </details>
                   </div>
-                </details>
-              </div>
-              <button
-                type="button"
-                class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
-                title="添加规则"
-                aria-label="添加规则"
-                :disabled="!availableChatBodyReplaceTags.length"
-                @click="addChatBodyTagReplaceRule"
-              >
-                <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
-              </button>
-            </template>
+                  <button
+                    type="button"
+                    class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
+                    title="添加规则"
+                    aria-label="添加规则"
+                    :disabled="!availableChatBodyReplaceTags.length"
+                    @click="addChatBodyTagReplaceRule"
+                  >
+                    <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+                  </button>
+                </template>
               </div>
             </div>
           </div>
@@ -3417,22 +3405,40 @@ function saveRunLogTaskTags(taskId: string): void {
               label="世界书写入规则说明"
             >
               <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-                与「聊天正文标签替换」独立：阶段任务产出匹配标签后，将写入模板渲染结果 upsert 到世界书条目（默认角色卡主世界书）。典型用于副本族任务 + 绿灯条目，属性值（如 <code>item@name=圣剑</code>）可自动作为 keyword。
+                与「聊天正文标签替换」独立：阶段任务产出匹配标签后，将写入模板渲染结果 upsert
+                到世界书条目（默认角色卡主世界书）。典型用于副本族任务 + 绿灯条目，属性值（如
+                <code>item@name=圣剑</code>）可自动作为 keyword。
               </p>
               <p class="acu-notes acu-notes--sm">
-                同一标签可配置多条规则。写入结果保存在 assistant 楼 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑 / 滑楼（切换候选回复，Swipe）本层会先回放到上一层状态再重新写入，并同步恢复对应的任务副本。
+                同一标签可配置多条规则。写入结果保存在 assistant 楼
+                message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑 /
+                滑楼（切换候选回复，Swipe）本层会先回放到上一层状态再重新写入，并同步恢复对应的任务副本。
               </p>
               <p class="acu-notes acu-notes--sm">
-                托管条目名前缀固定为 <code>WorkflowHelper-</code>；仅这些条目会被自动清理/重放。「清理全部世界书条目」会扫描本机<strong>全部</strong>世界书，数量可能大于当前规则条数（例如曾写入「写卡」等其它书、或旧规则留下的孤儿）。<strong>副本族清理</strong> 或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
+                托管条目名前缀固定为
+                <code>WorkflowHelper-</code
+                >；仅这些条目会被自动清理/重放。「清理全部世界书条目」会扫描本机<strong>全部</strong>世界书，数量可能大于当前规则条数（例如曾写入「写卡」等其它书、或旧规则留下的孤儿）。<strong
+                  >副本族清理</strong
+                >
+                或在任务列表手动删除副本时，会一并删除该副本对应的世界书条目并从楼层账本移除，避免下次重算又被重放。模板占位符同正文替换。
               </p>
               <p class="acu-notes acu-notes--sm">
                 切换「目标世界书」或手动指定书名时，该规则已写入的托管条目会自动从旧书迁移到新书（含账本重放与孤儿清理），无需手动删旧条目。
               </p>
               <p class="acu-notes acu-notes--sm">
-                注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong> 仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong>防止递归触发</strong> 对应世界书条目「禁止本条目递归激活其他条目」，默认开启。
+                注入位置：<strong>系统深度</strong> 对应酒馆 @D 系统消息深度；<strong>插入深度</strong>
+                仅系统深度时生效；<strong>插入顺序</strong> 为同位置段内的排序，数值越小越靠前（默认 10000）。<strong
+                  >防止递归触发</strong
+                >
+                对应世界书条目「禁止本条目递归激活其他条目」，默认开启。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-                条目名固定为默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为 <code>WorkflowHelper-标签 属性-属性值</code>（如 <code>WorkflowHelper-item name-断剑</code>）。写入内容保留完整标签块。开启按属性拆分且实际写出属性条目时，会额外维护两条独立恒定条目 <code>{base}-包裹-上</code> / <code>{base}-包裹-下</code>（正文为可配置的开/闭标签，插入顺序分别为规则 order±1）。
+                条目名固定为默认：<code>WorkflowHelper-标签名</code>；按属性拆分时为
+                <code>WorkflowHelper-标签 属性-属性值</code>（如
+                <code>WorkflowHelper-item name-断剑</code
+                >）。写入内容保留完整标签块。开启按属性拆分且实际写出属性条目时，会额外维护两条独立恒定条目
+                <code>{base}-包裹-上</code> / <code>{base}-包裹-下</code>（正文为可配置的开/闭标签，插入顺序分别为规则
+                order±1）。
               </p>
             </AcuHelpPanel>
             <div class="acu-subsection acu-collapsible-subsection acu-config-rules-section__collapse">
@@ -3451,185 +3457,185 @@ function saveRunLogTaskTags(taskId: string): void {
                 />
               </button>
               <div v-show="chatWorldbookWriteExpanded" class="acu-collapsible-subsection__body">
-            <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
-              请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
-            </p>
-            <template v-if="worldbookWriteTargetTagOptions.length">
-              <div class="acu-config-rules-list">
-                <details
-                  v-for="rule in settings.chatWorldbookWriteRules ?? []"
-                  :key="rule.id"
-                  class="acu-config-rule-item acu-config-rule-item--wb"
+                <p v-if="!worldbookWriteTargetTagOptions.length" class="acu-notes acu-notes--sm">
+                  请配置「聊天摘取标签」或任务「提取写入标签」后再添加规则。
+                </p>
+                <template v-if="worldbookWriteTargetTagOptions.length">
+                  <div class="acu-config-rules-list">
+                    <details
+                      v-for="rule in settings.chatWorldbookWriteRules ?? []"
+                      :key="rule.id"
+                      class="acu-config-rule-item acu-config-rule-item--wb"
+                    >
+                      <summary class="acu-config-rule-item__summary">
+                        <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
+                        <span class="acu-config-rule-item__meta">
+                          {{ worldbookWriteRuleEntryTypeLabel(rule.entryType) }} ·
+                          {{ worldbookWriteRuleBookLabel(rule) }} ·
+                          {{ truncateRulePreview(rule.template) }}
+                        </span>
+                      </summary>
+                      <div class="acu-config-rule-item__body">
+                        <div class="acu-wb-write-rule">
+                          <div class="acu-wb-write-rule__field acu-wb-write-rule__field--tag">
+                            <label class="acu-label-with-help">目标标签</label>
+                            <select v-model="rule.targetTag" class="acu-input">
+                              <option v-for="tag in worldbookWriteTargetTagOptions" :key="tag" :value="tag">
+                                {{ tag }}
+                              </option>
+                            </select>
+                          </div>
+                          <div class="acu-wb-write-rule__field acu-wb-write-rule__field--template">
+                            <label class="acu-label-with-help">写入模板</label>
+                            <textarea
+                              v-model="rule.template"
+                              class="acu-textarea acu-wb-write-rule__template-input"
+                              rows="2"
+                              placeholder="可用 {{task:任务名}} 与 {{标签名}}"
+                            />
+                          </div>
+                          <div class="acu-wb-write-rule__side">
+                            <div class="acu-wb-write-rule__row acu-wb-write-rule__row--main">
+                              <div class="acu-wb-write-rule__field acu-wb-write-rule__field--type">
+                                <label class="acu-label-with-help">条目类型</label>
+                                <select v-model="rule.entryType" class="acu-input">
+                                  <option value="keyword">绿灯 keyword</option>
+                                  <option value="constant">蓝灯 constant</option>
+                                </select>
+                              </div>
+                              <div class="acu-wb-write-rule__field acu-wb-write-rule__field--keywords">
+                                <label class="acu-label-with-help">关键字</label>
+                                <input
+                                  v-model="rule.keywords"
+                                  class="acu-input"
+                                  placeholder="静态 key，逗号分隔"
+                                  :disabled="rule.entryType !== 'keyword'"
+                                />
+                              </div>
+                              <div class="acu-wb-write-rule__checks">
+                                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                                  <label class="acu-label-with-help">按属性拆分</label>
+                                  <label class="acu-checkbox-row acu-wb-write-rule__check">
+                                    <input v-model="rule.splitByAttr" type="checkbox" />
+                                    <span>启用</span>
+                                  </label>
+                                </div>
+                                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
+                                  <label class="acu-label-with-help">防止递归触发</label>
+                                  <label class="acu-checkbox-row acu-wb-write-rule__check">
+                                    <input v-model="rule.preventRecursion" type="checkbox" />
+                                    <span>启用</span>
+                                  </label>
+                                </div>
+                              </div>
+                              <div
+                                v-if="rule.splitByAttr"
+                                class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
+                              >
+                                <label class="acu-label-with-help">包裹标签名</label>
+                                <input
+                                  v-model="rule.wrapTagName"
+                                  class="acu-input"
+                                  :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
+                                />
+                              </div>
+                            </div>
+                            <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
+                              <div class="acu-wb-write-rule__field acu-wb-write-rule__field--book">
+                                <label class="acu-label-with-help">目标世界书</label>
+                                <select
+                                  v-model="rule.bookSource"
+                                  class="acu-input"
+                                  :disabled="isRuleBookTargetMigrating(rule.id)"
+                                  @focus="rememberRuleBookTargetSnapshot(rule)"
+                                  @change="onRuleBookSourceChanged(rule)"
+                                >
+                                  <option value="character">角色主世界书</option>
+                                  <option value="manual">手动指定</option>
+                                </select>
+                              </div>
+                              <div
+                                v-if="rule.bookSource === 'manual'"
+                                class="acu-wb-write-rule__field acu-wb-write-rule__field--book-name"
+                              >
+                                <label class="acu-label-with-help">世界书名</label>
+                                <select
+                                  v-model="rule.manualBookName"
+                                  class="acu-input"
+                                  :disabled="isRuleBookTargetMigrating(rule.id)"
+                                  @focus="onManualBookNameFocus(rule)"
+                                  @change="onRuleBookTargetChanged(rule)"
+                                >
+                                  <option value="">请选择</option>
+                                  <option v-for="name in allWorldbookNames" :key="name" :value="name">
+                                    {{ name }}
+                                  </option>
+                                </select>
+                              </div>
+                              <div class="acu-wb-write-rule__field acu-wb-write-rule__field--position">
+                                <label class="acu-label-with-help">位置</label>
+                                <select
+                                  v-model="rule.placement.position"
+                                  class="acu-input"
+                                  @focus="ensureWorldbookWritePlacement(rule)"
+                                  @change="syncWorldbookWritePlacement(rule)"
+                                >
+                                  <option value="at_depth_as_system">系统深度</option>
+                                  <option value="before_character_definition">角色定义前</option>
+                                  <option value="after_character_definition">角色定义后</option>
+                                </select>
+                              </div>
+                              <div
+                                v-if="isWorldbookWriteAtDepth(rule)"
+                                class="acu-wb-write-rule__field acu-wb-write-rule__field--num acu-wb-write-rule__field--depth"
+                              >
+                                <label class="acu-label-with-help">插入深度</label>
+                                <input
+                                  v-model.number="rule.placement.depth"
+                                  type="number"
+                                  class="acu-input"
+                                  step="1"
+                                  @focus="ensureWorldbookWritePlacement(rule)"
+                                />
+                              </div>
+                              <div class="acu-wb-write-rule__field acu-wb-write-rule__field--num">
+                                <label class="acu-label-with-help">插入顺序</label>
+                                <input
+                                  v-model.number="rule.placement.order"
+                                  type="number"
+                                  class="acu-input"
+                                  min="1"
+                                  step="1"
+                                  @focus="ensureWorldbookWritePlacement(rule)"
+                                  @change="syncWorldbookWritePlacement(rule)"
+                                />
+                              </div>
+                              <button
+                                type="button"
+                                class="acu-btn acu-btn--sm acu-icon-btn acu-wb-write-rule__delete"
+                                title="删除规则"
+                                aria-label="删除规则"
+                                @click="removeChatWorldbookWriteRule(rule.id)"
+                              >
+                                <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </details>
+                  </div>
+                </template>
+                <button
+                  v-if="worldbookWriteTargetTagOptions.length"
+                  type="button"
+                  class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
+                  title="添加规则"
+                  aria-label="添加规则"
+                  @click="addChatWorldbookWriteRule"
                 >
-                  <summary class="acu-config-rule-item__summary">
-                    <strong class="acu-config-rule-item__name">{{ rule.targetTag || '未命名标签' }}</strong>
-                    <span class="acu-config-rule-item__meta">
-                      {{ worldbookWriteRuleEntryTypeLabel(rule.entryType) }} ·
-                      {{ worldbookWriteRuleBookLabel(rule) }} ·
-                      {{ truncateRulePreview(rule.template) }}
-                    </span>
-                  </summary>
-                  <div class="acu-config-rule-item__body">
-              <div class="acu-wb-write-rule">
-                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--tag">
-                  <label class="acu-label-with-help">目标标签</label>
-                  <select v-model="rule.targetTag" class="acu-input">
-                    <option v-for="tag in worldbookWriteTargetTagOptions" :key="tag" :value="tag">
-                      {{ tag }}
-                    </option>
-                  </select>
-                </div>
-                <div class="acu-wb-write-rule__field acu-wb-write-rule__field--template">
-                  <label class="acu-label-with-help">写入模板</label>
-                  <textarea
-                    v-model="rule.template"
-                    class="acu-textarea acu-wb-write-rule__template-input"
-                    rows="2"
-                    placeholder="可用 {{task:任务名}} 与 {{标签名}}"
-                  />
-                </div>
-                <div class="acu-wb-write-rule__side">
-                  <div class="acu-wb-write-rule__row acu-wb-write-rule__row--main">
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--type">
-                      <label class="acu-label-with-help">条目类型</label>
-                      <select v-model="rule.entryType" class="acu-input">
-                        <option value="keyword">绿灯 keyword</option>
-                        <option value="constant">蓝灯 constant</option>
-                      </select>
-                    </div>
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--keywords">
-                      <label class="acu-label-with-help">关键字</label>
-                      <input
-                        v-model="rule.keywords"
-                        class="acu-input"
-                        placeholder="静态 key，逗号分隔"
-                        :disabled="rule.entryType !== 'keyword'"
-                      />
-                    </div>
-                    <div class="acu-wb-write-rule__checks">
-                      <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                        <label class="acu-label-with-help">按属性拆分</label>
-                        <label class="acu-checkbox-row acu-wb-write-rule__check">
-                          <input v-model="rule.splitByAttr" type="checkbox" />
-                          <span>启用</span>
-                        </label>
-                      </div>
-                      <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
-                        <label class="acu-label-with-help">防止递归触发</label>
-                        <label class="acu-checkbox-row acu-wb-write-rule__check">
-                          <input v-model="rule.preventRecursion" type="checkbox" />
-                          <span>启用</span>
-                        </label>
-                      </div>
-                    </div>
-                    <div
-                      v-if="rule.splitByAttr"
-                      class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
-                    >
-                      <label class="acu-label-with-help">包裹标签名</label>
-                      <input
-                        v-model="rule.wrapTagName"
-                        class="acu-input"
-                        :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
-                      />
-                    </div>
-                  </div>
-                  <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--book">
-                      <label class="acu-label-with-help">目标世界书</label>
-                      <select
-                        v-model="rule.bookSource"
-                        class="acu-input"
-                        :disabled="isRuleBookTargetMigrating(rule.id)"
-                        @focus="rememberRuleBookTargetSnapshot(rule)"
-                        @change="onRuleBookSourceChanged(rule)"
-                      >
-                        <option value="character">角色主世界书</option>
-                        <option value="manual">手动指定</option>
-                      </select>
-                    </div>
-                    <div
-                      v-if="rule.bookSource === 'manual'"
-                      class="acu-wb-write-rule__field acu-wb-write-rule__field--book-name"
-                    >
-                      <label class="acu-label-with-help">世界书名</label>
-                      <select
-                        v-model="rule.manualBookName"
-                        class="acu-input"
-                        :disabled="isRuleBookTargetMigrating(rule.id)"
-                        @focus="onManualBookNameFocus(rule)"
-                        @change="onRuleBookTargetChanged(rule)"
-                      >
-                        <option value="">请选择</option>
-                        <option v-for="name in allWorldbookNames" :key="name" :value="name">
-                          {{ name }}
-                        </option>
-                      </select>
-                    </div>
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--position">
-                      <label class="acu-label-with-help">位置</label>
-                      <select
-                        v-model="rule.placement.position"
-                        class="acu-input"
-                        @focus="ensureWorldbookWritePlacement(rule)"
-                        @change="syncWorldbookWritePlacement(rule)"
-                      >
-                        <option value="at_depth_as_system">系统深度</option>
-                        <option value="before_character_definition">角色定义前</option>
-                        <option value="after_character_definition">角色定义后</option>
-                      </select>
-                    </div>
-                    <div
-                      v-if="isWorldbookWriteAtDepth(rule)"
-                      class="acu-wb-write-rule__field acu-wb-write-rule__field--num acu-wb-write-rule__field--depth"
-                    >
-                      <label class="acu-label-with-help">插入深度</label>
-                      <input
-                        v-model.number="rule.placement.depth"
-                        type="number"
-                        class="acu-input"
-                        step="1"
-                        @focus="ensureWorldbookWritePlacement(rule)"
-                      />
-                    </div>
-                    <div class="acu-wb-write-rule__field acu-wb-write-rule__field--num">
-                      <label class="acu-label-with-help">插入顺序</label>
-                      <input
-                        v-model.number="rule.placement.order"
-                        type="number"
-                        class="acu-input"
-                        min="1"
-                        step="1"
-                        @focus="ensureWorldbookWritePlacement(rule)"
-                        @change="syncWorldbookWritePlacement(rule)"
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      class="acu-btn acu-btn--sm acu-icon-btn acu-wb-write-rule__delete"
-                      title="删除规则"
-                      aria-label="删除规则"
-                      @click="removeChatWorldbookWriteRule(rule.id)"
-                    >
-                      <i class="fa-fw fa-solid fa-trash" aria-hidden="true"></i>
-                    </button>
-                  </div>
-                </div>
-              </div>
-                  </div>
-                </details>
-              </div>
-            </template>
-            <button
-              v-if="worldbookWriteTargetTagOptions.length"
-              type="button"
-              class="acu-btn acu-btn--sm acu-icon-btn acu-config-rules-list__add"
-              title="添加规则"
-              aria-label="添加规则"
-              @click="addChatWorldbookWriteRule"
-            >
-              <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
-            </button>
+                  <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+                </button>
               </div>
             </div>
           </div>
@@ -3663,11 +3669,7 @@ function saveRunLogTaskTags(taskId: string): void {
               </div>
             </div>
             <div v-if="settings.lastRunStatus.taskResults?.length" class="acu-run-log-task-list">
-              <details
-                v-for="r in settings.lastRunStatus.taskResults"
-                :key="r.taskId"
-                class="acu-run-log-task"
-              >
+              <details v-for="r in settings.lastRunStatus.taskResults" :key="r.taskId" class="acu-run-log-task">
                 <summary class="acu-run-log-task__summary">
                   <strong class="acu-run-log-task__name">{{ r.taskName }}</strong>
                   <span v-if="r.stage != null" class="acu-notes acu-run-log-task__meta">阶段 {{ r.stage }}</span>
@@ -3677,7 +3679,9 @@ function saveRunLogTaskTags(taskId: string): void {
                   >
                     {{ runLogStatusText(r) }}
                   </span>
-                  <span v-if="r.durationMs != null" class="acu-notes acu-run-log-task__meta">{{ runLogDurationText(r.durationMs) }}</span>
+                  <span v-if="r.durationMs != null" class="acu-notes acu-run-log-task__meta">{{
+                    runLogDurationText(r.durationMs)
+                  }}</span>
                   <button
                     type="button"
                     class="acu-btn acu-btn--sm acu-icon-btn acu-run-log-task__export"
@@ -3715,14 +3719,11 @@ function saveRunLogTaskTags(taskId: string): void {
                       </div>
                     </div>
                     <p class="acu-notes acu-run-log-tags__hint">
-                      保存后仅更新本层 <code>post_process_tags</code> 中「消息楼层标签变量注入」模板声明的标签，不修改 AI 楼文末注入块与正文标签替换区域。
+                      保存后仅更新本层 <code>post_process_tags</code> 中「消息楼层标签变量注入」模板声明的标签，不修改
+                      AI 楼文末注入块与正文标签替换区域。
                     </p>
                     <div class="acu-run-log-tags">
-                      <details
-                        v-for="[tag] in runLogWritableTagEntries(r)"
-                        :key="tag"
-                        class="acu-run-log-tags__item"
-                      >
+                      <details v-for="[tag] in runLogWritableTagEntries(r)" :key="tag" class="acu-run-log-tags__item">
                         <summary class="acu-run-log-tags__summary">{{ tag }}</summary>
                         <div class="acu-run-log-tags__body">
                           <textarea
@@ -3738,7 +3739,9 @@ function saveRunLogTaskTags(taskId: string): void {
                     </div>
                   </template>
                   <template v-if="runLogOtherTagEntries(r).length">
-                    <div class="acu-run-log-label acu-run-log-tags--other__title">其他摘取（不写入 post_process_tags）</div>
+                    <div class="acu-run-log-label acu-run-log-tags--other__title">
+                      其他摘取（不写入 post_process_tags）
+                    </div>
                     <p class="acu-notes acu-run-log-tags__hint acu-run-log-tags--other__hint">
                       以下标签仅用于文末注入或同轮中转，不会写入本层消息变量。
                     </p>
@@ -3755,11 +3758,7 @@ function saveRunLogTaskTags(taskId: string): void {
                   </template>
                   <template v-if="r.promptMessages?.length">
                     <div class="acu-run-log-label">请求提示词</div>
-                    <details
-                      v-for="(msg, idx) in r.promptMessages"
-                      :key="idx"
-                      class="acu-run-log-prompt"
-                    >
+                    <details v-for="(msg, idx) in r.promptMessages" :key="idx" class="acu-run-log-prompt">
                       <summary class="acu-run-log-prompt__summary">
                         {{ runLogPromptSegmentTitle(msg) }}
                       </summary>
@@ -3774,7 +3773,9 @@ function saveRunLogTaskTags(taskId: string): void {
                     <div class="acu-run-log-label">AI 输出</div>
                     <details class="acu-run-log-prompt">
                       <summary class="acu-run-log-prompt__summary">展开查看</summary>
-                      <pre v-if="runLogAiOutputText(r)" class="acu-run-log-pre acu-run-log-prompt__body">{{ runLogAiOutputText(r) }}</pre>
+                      <pre v-if="runLogAiOutputText(r)" class="acu-run-log-pre acu-run-log-prompt__body">{{
+                        runLogAiOutputText(r)
+                      }}</pre>
                       <div v-else class="acu-notes acu-run-log-prompt__body">（无输出内容）</div>
                     </details>
                   </template>
@@ -3782,7 +3783,9 @@ function saveRunLogTaskTags(taskId: string): void {
                     <div class="acu-run-log-label">推理内容 (reasoning_content)</div>
                     <details class="acu-run-log-prompt">
                       <summary class="acu-run-log-prompt__summary">展开查看</summary>
-                      <pre class="acu-run-log-pre acu-run-log-pre--reasoning acu-run-log-prompt__body">{{ runLogAiReasoningText(r) }}</pre>
+                      <pre class="acu-run-log-pre acu-run-log-pre--reasoning acu-run-log-prompt__body">{{
+                        runLogAiReasoningText(r)
+                      }}</pre>
                     </details>
                   </template>
                 </div>
@@ -3794,9 +3797,13 @@ function saveRunLogTaskTags(taskId: string): void {
       </div>
       <div class="acu-window-footer">
         <div class="acu-footer-nav">
-          <button class="acu-btn" type="button" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">上一页</button>
+          <button class="acu-btn" type="button" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+            上一页
+          </button>
           <span class="acu-page-indicator">{{ currentPage }} / 4</span>
-          <button class="acu-btn" type="button" :disabled="currentPage >= 4" @click="goToPage(currentPage + 1)">下一页</button>
+          <button class="acu-btn" type="button" :disabled="currentPage >= 4" @click="goToPage(currentPage + 1)">
+            下一页
+          </button>
         </div>
         <div class="acu-footer-actions">
           <button class="acu-btn" type="button" @click="handleRerun">{{ RERUN_BUTTON_LABEL }}</button>

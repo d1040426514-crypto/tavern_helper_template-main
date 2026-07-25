@@ -58,7 +58,8 @@ export const TaskScheduleSchema = z.object({
       unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']).default('hour'),
       timeSource: TimeSourceSchema,
       parseFormat: z.string().optional(),
-      onParseFail: z.enum(['skip', 'run', 'wall_clock']).default('skip'),
+      /** @deprecated 读不到/解析失败一律跳过；保留字段仅兼容旧配置 */
+      onParseFail: z.enum(['skip', 'run', 'wall_clock']).optional(),
     })
     .optional(),
 });
