@@ -81,14 +81,53 @@ export function substituteDynamicPlaceholder(text: string, spec: string, attrVal
   return String(text ?? '').split(dynamicToken).join(preciseToken);
 }
 
-function cloneAutoSegmentsFromRoot(
+/** 修剪 overrides：去掉已不存在的段 id，以及与原本当前 inserted 相同的项（视为跟随原本） */
+export function prunePromptAutoSegmentInsertedOverrides(
+  overrides: Record<string, boolean> | undefined,
+  rootSegments: PostProcessTask['promptAutoSegments'] | undefined,
+): Record<string, boolean> | undefined {
+  if (!overrides || !Object.keys(overrides).length) return undefined;
+  const byId = new Map((rootSegments ?? []).map(s => [s.id, s]));
+  const next: Record<string, boolean> = {};
+  for (const [id, inserted] of Object.entries(overrides)) {
+    const rootSeg = byId.get(id);
+    if (!rootSeg) continue;
+    if (inserted === rootSeg.inserted) continue;
+    next[id] = inserted;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
+/**
+ * 写入/清除单段启用覆盖：next 与原本相同则删除该 key，否则写入；结果经 prune。
+ */
+export function patchPromptAutoSegmentInsertedOverride(
+  overrides: Record<string, boolean> | undefined,
+  rootSegments: PostProcessTask['promptAutoSegments'] | undefined,
+  segId: string,
+  nextInserted: boolean,
+): Record<string, boolean> | undefined {
+  const draft: Record<string, boolean> = { ...(overrides ?? {}) };
+  const rootSeg = (rootSegments ?? []).find(s => s.id === segId);
+  if (rootSeg && nextInserted === rootSeg.inserted) {
+    delete draft[segId];
+  } else {
+    draft[segId] = nextInserted;
+  }
+  return prunePromptAutoSegmentInsertedOverrides(draft, rootSegments);
+}
+
+/** 从原本克隆自动段，并按副本 overrides 覆盖 inserted */
+export function cloneAutoSegmentsFromRoot(
   root: PostProcessTask,
   spec: string,
   attrValue: string,
+  overrides?: Record<string, boolean>,
 ): PostProcessTask['promptAutoSegments'] {
   return (root.promptAutoSegments ?? []).map(s => ({
     ...s,
     content: substituteDynamicPlaceholder(s.content, spec, attrValue),
+    inserted: overrides?.[s.id] !== undefined ? overrides[s.id]! : s.inserted,
   }));
 }
 
@@ -203,6 +242,10 @@ export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessT
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
   const plotWorldbook = resolveReplicaPlotWorldbookFields(replica, root);
   const apiFields = resolveReplicaApiFields(replica, root);
+  const insertedOverrides = prunePromptAutoSegmentInsertedOverrides(
+    replica.promptAutoSegmentInsertedOverrides,
+    root.promptAutoSegments,
+  );
 
   return PostProcessTaskSchema.parse({
     ..._.cloneDeep(root),
@@ -216,7 +259,8 @@ export function syncReplicaFromRoot(replica: PostProcessTask, root: PostProcessT
     enabled: replica.enabled,
     taskWorkflowPresets: [],
     promptGroups: clonePromptGroupsFromRoot(root, spec, attrValue),
-    promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue),
+    promptAutoSegments: cloneAutoSegmentsFromRoot(root, spec, attrValue, insertedOverrides),
+    promptAutoSegmentInsertedOverrides: insertedOverrides,
     structuredOutputRules: substituteStructuredOutputRules(root.structuredOutputRules, spec, attrValue),
     ...plotWorldbook,
     ...apiFields,
@@ -369,6 +413,7 @@ export const REPLICA_MEMBER_WRITABLE_KEYS = new Set<keyof PostProcessTask>([
   'apiPresetFallbackNames',
   'apiPrimaryMaxConcurrency',
   'apiFallbackMaxConcurrencies',
+  'promptAutoSegmentInsertedOverrides',
 ]);
 
 const REPLICA_MEMBER_PATCH_DENIED_MSG = '副本为原本镜像，请编辑「原本」';
@@ -786,6 +831,7 @@ export function clearReplicaFamilyFieldsOnClone(task: PostProcessTask): PostProc
     replicaFamilyBaseName: undefined,
     replicaFamilyScheduleMode: undefined,
     replicaFamilyLaunched: undefined,
+    promptAutoSegmentInsertedOverrides: undefined,
   };
 }
 

@@ -2586,7 +2586,8 @@ function saveRunLogTaskTags(taskId: string): void {
                 </button>
               </div>
               <p v-if="isViewingReplicaMember" class="acu-notes replica-family-bar__hint">
-                当前为副本预览（占位符已替换为精确属性值）；提示词等请切回「原本」编辑。API 预设可在下方对本副本单独配置。
+                当前为副本预览（占位符已替换为精确属性值）；提示词段内容请切回「原本」编辑。API
+                预设与提示词自动段启用可在下方对本副本单独配置。
               </p>
               <div
                 v-if="isViewingReplicaMember && editorTask"
@@ -3034,6 +3035,12 @@ function saveRunLogTaskTags(taskId: string): void {
               <TaskPromptAutoSegmentsPanel
                 v-if="selectedTask && !isViewingReplicaMember"
                 :task="selectedTask"
+              />
+              <TaskPromptAutoSegmentsPanel
+                v-else-if="isViewingReplicaMember && editorTask"
+                :task="editorTask"
+                inserted-only
+                :root-task="selectedTask"
               />
               <div class="acu-subsection acu-collapsible-subsection acu-prompt-section">
                 <button

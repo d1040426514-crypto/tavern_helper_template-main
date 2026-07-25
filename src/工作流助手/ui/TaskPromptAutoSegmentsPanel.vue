@@ -9,11 +9,16 @@ import {
   removePromptAutoSlotAt,
   sortSegmentsInSlot,
 } from '../tasks/prompt-auto-segment-ops';
+import { cloneAutoSegmentsFromRoot, patchPromptAutoSegmentInsertedOverride } from '../tasks/replica-family';
 import { acuConfirm } from './composables/useAcuConfirm';
 
 const props = defineProps<{
   task: PostProcessTask;
   readonly?: boolean;
+  /** 副本视图：仅可切换 inserted，结构/正文只读 */
+  insertedOnly?: boolean;
+  /** insertedOnly 时用于「恢复跟随原本」的对照根任务 */
+  rootTask?: PostProcessTask | null;
 }>();
 
 const panelExpanded = ref(false);
@@ -27,6 +32,12 @@ const insertedCount = computed(() => countInsertedPromptAutoSegments(segments.va
 
 const sortedSlots = computed(() =>
   [...slots.value].sort((a, b) => a.order - b.order || a.id.localeCompare(b.id)),
+);
+
+const structureReadonly = computed(() => props.readonly || props.insertedOnly);
+
+const hasInsertedOverrides = computed(
+  () => Object.keys(props.task.promptAutoSegmentInsertedOverrides ?? {}).length > 0,
 );
 
 function ensureArrays() {
@@ -55,13 +66,13 @@ function segmentIndex(segId: string) {
 }
 
 function addSlot() {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   ensureArrays();
   props.task.promptAutoSlots = appendPromptAutoSlot(props.task.promptAutoSlots);
 }
 
 async function removeSlot(slotIndex: number) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   ensureArrays();
   const slot = slots.value[slotIndex];
   if (!slot) return;
@@ -78,7 +89,7 @@ async function removeSlot(slotIndex: number) {
 }
 
 function addSegment(slotId: string) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   ensureArrays();
   const before = props.task.promptAutoSegments?.length ?? 0;
   props.task.promptAutoSegments = appendPromptAutoSegment(props.task.promptAutoSegments, slotId);
@@ -89,7 +100,7 @@ function addSegment(slotId: string) {
 }
 
 async function removeSegment(segId: string) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   ensureArrays();
   const idx = segmentIndex(segId);
   if (idx < 0) return;
@@ -109,7 +120,33 @@ function toggleInserted(segId: string) {
   if (props.readonly) return;
   const seg = segments.value.find(s => s.id === segId);
   if (!seg) return;
-  seg.inserted = !seg.inserted;
+  const next = !seg.inserted;
+  seg.inserted = next;
+  if (props.insertedOnly) {
+    const rootSegs = props.rootTask?.promptAutoSegments;
+    if (rootSegs) {
+      props.task.promptAutoSegmentInsertedOverrides = patchPromptAutoSegmentInsertedOverride(
+        props.task.promptAutoSegmentInsertedOverrides,
+        rootSegs,
+        segId,
+        next,
+      );
+    } else {
+      const overrides = { ...(props.task.promptAutoSegmentInsertedOverrides ?? {}) };
+      overrides[segId] = next;
+      props.task.promptAutoSegmentInsertedOverrides = overrides;
+    }
+  }
+}
+
+function restoreFollowRoot() {
+  if (!props.insertedOnly || props.readonly) return;
+  const root = props.rootTask;
+  if (!root) return;
+  props.task.promptAutoSegmentInsertedOverrides = undefined;
+  const spec = root.replicaFamilySpec ?? '';
+  const attrValue = props.task.replicaFamilyAttrValue ?? '';
+  props.task.promptAutoSegments = cloneAutoSegmentsFromRoot(root, spec, attrValue, undefined);
 }
 
 function selectedSegmentId(slotId: string) {
@@ -130,12 +167,12 @@ function onChipClick(slotId: string, segId: string) {
 }
 
 function startEdit(segId: string) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   editingSegmentId.value = editingSegmentId.value === segId ? null : segId;
 }
 
 function editSelectedSegment(slotId: string) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   const segId = resolveSelectedSegmentId(slotId);
   if (!segId) return;
   selectedSegmentBySlot.value = { ...selectedSegmentBySlot.value, [slotId]: segId };
@@ -143,7 +180,7 @@ function editSelectedSegment(slotId: string) {
 }
 
 function deleteSelectedSegment(slotId: string) {
-  if (props.readonly) return;
+  if (structureReadonly.value) return;
   const segId = resolveSelectedSegmentId(slotId);
   if (!segId) return;
   void removeSegment(segId);
@@ -169,6 +206,7 @@ function slotIndexById(slotId: string) {
       <span class="acu-auto-segments-section__title">任务级提示词自动段</span>
       <span class="acu-auto-segments-section__summary">
         {{ insertedCount > 0 ? `已启用 ${insertedCount} 段` : '未启用自动段' }}
+        <template v-if="insertedOnly && hasInsertedOverrides"> · 已覆盖</template>
       </span>
       <i
         class="fa-fw fa-solid acu-auto-segments-section__chevron"
@@ -179,11 +217,31 @@ function slotIndexById(slotId: string) {
 
     <div v-show="panelExpanded" class="acu-auto-segments-section__body">
       <p class="acu-notes acu-notes--sm acu-auto-segments-section__intro">
-        风味块/风格块：按插入位 order 自动插入总提示词。order=0 在首段手动提示词之前，order=N（N=手动段数）在末尾。
+        <template v-if="insertedOnly">
+          副本视图：插入位与段内容跟随原本；点击芯片可独立启用/停用本副本的自动段。
+        </template>
+        <template v-else>
+          风味块/风格块：按插入位 order 自动插入总提示词。order=0 在首段手动提示词之前，order=N（N=手动段数）在末尾。
+        </template>
       </p>
 
+      <div
+        v-if="insertedOnly && rootTask && !readonly"
+        class="acu-row acu-auto-segments-section__restore-row"
+      >
+        <button
+          class="acu-btn acu-btn--sm"
+          type="button"
+          :disabled="!hasInsertedOverrides"
+          title="清除本副本覆盖，恢复与原本一致的启用状态"
+          @click="restoreFollowRoot"
+        >
+          恢复跟随原本
+        </button>
+      </div>
+
       <div v-if="!sortedSlots.length" class="acu-notes acu-notes--sm acu-auto-segments-section__empty">
-        暂无插入位，请先添加。
+        {{ insertedOnly ? '原本尚未配置插入位。' : '暂无插入位，请先添加。' }}
       </div>
 
       <div v-for="slot in sortedSlots" :key="slot.id" class="acu-auto-segment-slot">
@@ -193,8 +251,8 @@ function slotIndexById(slotId: string) {
             class="acu-input acu-auto-segment-slot__name"
             type="text"
             placeholder="插入位名称"
-            :readonly="readonly"
-            :disabled="readonly"
+            :readonly="structureReadonly"
+            :disabled="structureReadonly"
           />
           <label class="acu-auto-segment-slot__order-label">
             order
@@ -204,12 +262,12 @@ function slotIndexById(slotId: string) {
               type="number"
               min="0"
               step="1"
-              :readonly="readonly"
-              :disabled="readonly"
+              :readonly="structureReadonly"
+              :disabled="structureReadonly"
             />
           </label>
           <button
-            v-if="!readonly"
+            v-if="!structureReadonly"
             class="acu-btn acu-btn--sm danger acu-auto-segment-slot__delete"
             type="button"
             title="删除插入位"
@@ -240,17 +298,23 @@ function slotIndexById(slotId: string) {
 
         <div
           v-for="seg in segmentsForSlot(slot.id)"
-          v-show="editingSegmentId === seg.id"
+          v-show="!insertedOnly && editingSegmentId === seg.id"
           :key="`edit-${seg.id}`"
           class="acu-auto-segment-editor"
         >
           <div class="acu-row">
             <label class="acu-field-label">段名称</label>
-            <input v-model="seg.name" class="acu-input" type="text" :readonly="readonly" :disabled="readonly" />
+            <input
+              v-model="seg.name"
+              class="acu-input"
+              type="text"
+              :readonly="structureReadonly"
+              :disabled="structureReadonly"
+            />
           </div>
           <div class="acu-row">
             <label class="acu-field-label">role</label>
-            <select v-model="seg.role" class="acu-select" :disabled="readonly">
+            <select v-model="seg.role" class="acu-select" :disabled="structureReadonly">
               <option value="system">system</option>
               <option value="user">user</option>
               <option value="assistant">assistant</option>
@@ -260,12 +324,12 @@ function slotIndexById(slotId: string) {
             v-model="seg.content"
             class="acu-textarea"
             placeholder="提示词正文"
-            :readonly="readonly"
-            :disabled="readonly"
+            :readonly="structureReadonly"
+            :disabled="structureReadonly"
           />
         </div>
 
-        <div v-if="!readonly" class="acu-auto-segment-slot__actions">
+        <div v-if="!structureReadonly" class="acu-auto-segment-slot__actions">
           <button class="acu-btn acu-btn--sm acu-auto-segment-slot__add" type="button" @click="addSegment(slot.id)">
             + 自动段
           </button>
@@ -291,7 +355,12 @@ function slotIndexById(slotId: string) {
         </div>
       </div>
 
-      <button v-if="!readonly" class="acu-btn acu-btn--sm acu-auto-segments-section__add-slot" type="button" @click="addSlot">
+      <button
+        v-if="!structureReadonly"
+        class="acu-btn acu-btn--sm acu-auto-segments-section__add-slot"
+        type="button"
+        @click="addSlot"
+      >
         + 插入位
       </button>
     </div>

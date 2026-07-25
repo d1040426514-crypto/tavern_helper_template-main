@@ -11,6 +11,7 @@ import {
 } from './task-workflow-preset';
 import {
   assertReplicaMemberPatchAllowed,
+  cloneAutoSegmentsFromRoot,
   expandEnabledTasksForRuntime,
   findReplicaFamilyRootByAttrSpec,
   findReplicaFamilyRootByRef,
@@ -22,6 +23,8 @@ import {
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
   promoteReplicaApiPatchToCustom,
+  prunePromptAutoSegmentInsertedOverrides,
+  patchPromptAutoSegmentInsertedOverride,
   resolveReplicaLaunchedPlaceholder,
   scanDynamicAttrPlaceholders,
   substituteDynamicPlaceholder,
@@ -693,6 +696,192 @@ test('resolveReplicaLaunchedPlaceholder falls back to last-launched list', () =>
     }),
     '2',
   );
+});
+
+test('prunePromptAutoSegmentInsertedOverrides drops unknown segment ids', () => {
+  const pruned = prunePromptAutoSegmentInsertedOverrides(
+    { keep: true, gone: false },
+    [{ id: 'keep', slotId: 's', name: 'a', role: 'system', content: '', inserted: false, sortOrder: 0 }],
+  );
+  assert.deepEqual(pruned, { keep: true });
+});
+
+test('prunePromptAutoSegmentInsertedOverrides drops keys equal to root inserted', () => {
+  const rootSegs = [
+    { id: 'a', slotId: 's', name: 'A', role: 'system' as const, content: '', inserted: false, sortOrder: 0 },
+    { id: 'b', slotId: 's', name: 'B', role: 'system' as const, content: '', inserted: true, sortOrder: 1 },
+  ];
+  const pruned = prunePromptAutoSegmentInsertedOverrides(
+    { a: false, b: false, gone: true },
+    rootSegs,
+  );
+  assert.deepEqual(pruned, { b: false });
+});
+
+test('patchPromptAutoSegmentInsertedOverride clears when matching root', () => {
+  const rootSegs = [
+    { id: 'a', slotId: 's', name: 'A', role: 'system' as const, content: '', inserted: false, sortOrder: 0 },
+  ];
+  const on = patchPromptAutoSegmentInsertedOverride(undefined, rootSegs, 'a', true);
+  assert.deepEqual(on, { a: true });
+  const off = patchPromptAutoSegmentInsertedOverride(on, rootSegs, 'a', false);
+  assert.equal(off, undefined);
+});
+
+test('cloneAutoSegmentsFromRoot applies inserted overrides by id', () => {
+  const root = baseTask({
+    promptAutoSegments: [
+      {
+        id: 'seg-on',
+        slotId: 'slot-1',
+        name: 'A',
+        role: 'system',
+        content: 'hello {{item@id}}',
+        inserted: false,
+        sortOrder: 0,
+      },
+      {
+        id: 'seg-off',
+        slotId: 'slot-1',
+        name: 'B',
+        role: 'system',
+        content: 'bye',
+        inserted: true,
+        sortOrder: 1,
+      },
+    ],
+  });
+  const cloned = cloneAutoSegmentsFromRoot(root, 'item@id', '1', {
+    'seg-on': true,
+    'seg-off': false,
+  });
+  assert.equal(cloned.find(s => s.id === 'seg-on')?.inserted, true);
+  assert.equal(cloned.find(s => s.id === 'seg-off')?.inserted, false);
+  assert.equal(cloned.find(s => s.id === 'seg-on')?.content, 'hello {{item@id=1}}');
+});
+
+test('syncReplicaFromRoot applies and preserves promptAutoSegmentInsertedOverrides', () => {
+  const root = baseTask({
+    promptAutoSlots: [{ id: 'slot-1', name: '风味', order: 0 }],
+    promptAutoSegments: [
+      {
+        id: 'seg-a',
+        slotId: 'slot-1',
+        name: 'A',
+        role: 'system',
+        content: 'root {{item@id}}',
+        inserted: false,
+        sortOrder: 0,
+      },
+      {
+        id: 'seg-b',
+        slotId: 'slot-1',
+        name: 'B',
+        role: 'system',
+        content: 'other',
+        inserted: true,
+        sortOrder: 1,
+      },
+    ],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+    promptAutoSegmentInsertedOverrides: { 'seg-a': true, 'seg-b': false, 'stale': true },
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.deepEqual(synced.promptAutoSegmentInsertedOverrides, { 'seg-a': true, 'seg-b': false });
+  assert.equal(synced.promptAutoSegments.find(s => s.id === 'seg-a')?.inserted, true);
+  assert.equal(synced.promptAutoSegments.find(s => s.id === 'seg-b')?.inserted, false);
+  assert.equal(synced.promptAutoSegments.find(s => s.id === 'seg-a')?.content, 'root {{item@id=1}}');
+
+  const again = syncReplicaFromRoot(synced, {
+    ...root,
+    promptGroups: [{ name: '', role: 'user', content: 'v2 {{item@id}}', enabled: true }],
+  });
+  assert.deepEqual(again.promptAutoSegmentInsertedOverrides, { 'seg-a': true, 'seg-b': false });
+  assert.equal(again.promptAutoSegments.find(s => s.id === 'seg-a')?.inserted, true);
+});
+
+test('syncReplicaFromRoot prunes overrides when root deletes a segment', () => {
+  const root = baseTask({
+    promptAutoSegments: [
+      {
+        id: 'seg-a',
+        slotId: 'slot-1',
+        name: 'A',
+        role: 'system',
+        content: 'x',
+        inserted: false,
+        sortOrder: 0,
+      },
+    ],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    promptAutoSegmentInsertedOverrides: { 'seg-a': true, 'seg-gone': false },
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.deepEqual(synced.promptAutoSegmentInsertedOverrides, { 'seg-a': true });
+
+  const rootWithoutSeg = baseTask({ promptAutoSegments: [] });
+  const pruned = syncReplicaFromRoot(synced, rootWithoutSeg);
+  assert.equal(pruned.promptAutoSegmentInsertedOverrides, undefined);
+  assert.deepEqual(pruned.promptAutoSegments, []);
+});
+
+test('syncReplicaFromRoot clears sticky overrides that equal root inserted', () => {
+  const root = baseTask({
+    promptAutoSegments: [
+      {
+        id: 'seg-a',
+        slotId: 'slot-1',
+        name: 'A',
+        role: 'system',
+        content: 'x',
+        inserted: true,
+        sortOrder: 0,
+      },
+    ],
+  });
+  const replica = {
+    id: 'rep-1',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    // 粘住但与原本相同
+    promptAutoSegmentInsertedOverrides: { 'seg-a': true },
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.promptAutoSegmentInsertedOverrides, undefined);
+  assert.equal(synced.promptAutoSegments.find(s => s.id === 'seg-a')?.inserted, true);
+});
+
+test('assertReplicaMemberPatchAllowed allows promptAutoSegmentInsertedOverrides', () => {
+  const member = {
+    id: 'rep-1',
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+  } as PostProcessTask;
+  assert.doesNotThrow(() =>
+    assertReplicaMemberPatchAllowed(member, { promptAutoSegmentInsertedOverrides: { a: true } }),
+  );
+  assert.throws(() => assertReplicaMemberPatchAllowed(member, { promptGroups: [] }));
 });
 
 if (process.exitCode) process.exit(process.exitCode);

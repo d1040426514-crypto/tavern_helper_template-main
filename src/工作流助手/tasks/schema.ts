@@ -182,6 +182,11 @@ const PostProcessTaskShape = z.object({
   promptAutoSlots: z.array(PromptAutoSlotSchema).default([]),
   /** 任务级自动提示词段（风味块） */
   promptAutoSegments: z.array(PromptAutoSegmentSchema).default([]),
+  /**
+   * 副本族成员：按自动段 id 覆盖 `inserted`；缺 key 则跟随原本该段。
+   * 原本任务忽略此字段。
+   */
+  promptAutoSegmentInsertedOverrides: z.record(z.string(), z.boolean()).optional(),
   extractInjectTags: z.array(z.string()).default(['result']),
   mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
   maxRetries: z.number().int().min(1).default(3),
