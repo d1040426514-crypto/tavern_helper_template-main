@@ -1,6 +1,14 @@
 import _ from 'lodash';
 import { findLatestAssistantFloorId } from './message-floor';
-import { formatRemainingDuration, intervalToMs, normalizeGameTimeRaw, parseGameTimeToMs } from './parse-game-time';
+import {
+  formatGameTimeFields,
+  formatRemainingDuration,
+  intervalToMs,
+  normalizeGameTimeRaw,
+  parseGameTime,
+  parseGameTimeToMs,
+  peelRangeEnd,
+} from './parse-game-time';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
 import { extractLastTagContent } from './utils';
 
@@ -73,6 +81,7 @@ export type GameTimeProbeResult = {
   stage: 'source' | 'parse';
   raw?: string;
   normalized?: string;
+  rule?: string;
   message: string;
 };
 
@@ -129,9 +138,9 @@ export function probeTaskGameTime(task: PostProcessTask): GameTimeProbeResult {
     };
   }
 
-  const normalized = normalizeGameTimeRaw(raw);
-  const ms = parseGameTimeToMs(raw, ti.parseFormat);
-  if (ms == null) {
+  const parsed = parseGameTime(raw);
+  if (!parsed) {
+    const normalized = peelRangeEnd(normalizeGameTimeRaw(raw));
     return {
       ok: false,
       stage: 'parse',
@@ -145,8 +154,9 @@ export function probeTaskGameTime(task: PostProcessTask): GameTimeProbeResult {
     ok: true,
     stage: 'parse',
     raw,
-    normalized,
-    message: `解析成功：${normalized || raw}`,
+    normalized: parsed.normalized,
+    rule: parsed.rule,
+    message: `解析成功〔${parsed.rule}〕：${formatGameTimeFields(parsed)}`,
   };
 }
 
@@ -185,11 +195,16 @@ export function shouldRunTask(
   if (fail || !raw) {
     return { run: false, reason: '读不到游戏时间，已跳过' };
   }
-  const nowMs = parseGameTimeToMs(raw, ti.parseFormat);
+  const nowMs = parseGameTimeToMs(raw);
   if (nowMs == null) {
     return { run: false, reason: '游戏时间格式无法解析，已跳过' };
   }
-  const lastMs = state?.lastRunGameTimeMs;
+  // 优先用 raw 重解析，避免编码升级后旧 lastRunGameTimeMs 与新区不一致
+  let lastMs: number | undefined;
+  if (state?.lastRunGameTimeRaw) {
+    lastMs = parseGameTimeToMs(state.lastRunGameTimeRaw) ?? undefined;
+  }
+  if (lastMs == null) lastMs = state?.lastRunGameTimeMs;
   if (lastMs != null) {
     const need = intervalToMs(ti.value, ti.unit);
     const elapsed = nowMs - lastMs;
@@ -222,7 +237,7 @@ export function updateScheduleStateAfterRun(
       const { raw } = resolveTimeRaw(task, ctx);
       if (raw) {
         entry.lastRunGameTimeRaw = raw;
-        const ms = parseGameTimeToMs(raw, ti.parseFormat);
+        const ms = parseGameTimeToMs(raw);
         if (ms != null) entry.lastRunGameTimeMs = ms;
       }
     }

@@ -9,7 +9,36 @@ const UNIT_MS: Record<string, number> = {
 
 const MS_PER_MIN = UNIT_MS.minute;
 
-/** 将年月日时分编码为可比较的毫秒值（用于虚构历法 / 游戏内日历，非 Unix 时间戳） */
+const CN_NUM_CHARS = '一二三四五六七八九十百千万两零〇';
+const CN_NUM_CLASS = `[${CN_NUM_CHARS}]`;
+
+export type GameTimeKind = 'calendar' | 'day_count' | 'time_only';
+
+export interface GameTimeFields {
+  year?: number;
+  month?: number;
+  day?: number;
+  hour?: number;
+  minute?: number;
+  /** day_count 用：第 N 天 */
+  dayIndex?: number;
+}
+
+export interface GameTimeParseResult {
+  ms: number;
+  kind: GameTimeKind;
+  fields: GameTimeFields;
+  rule: string;
+  normalized: string;
+}
+
+type MatcherHit = {
+  kind: GameTimeKind;
+  fields: GameTimeFields;
+  rule: string;
+};
+
+/** 将年月日时分编码为可比较的毫秒值（游戏内日历轴，非 Unix 时间戳） */
 function encodeCalendarMs(year: number, month: number, day: number, hour = 0, minute = 0): number {
   const y = Math.max(0, Math.floor(year));
   const mo = Math.min(12, Math.max(1, Math.floor(month)));
@@ -20,7 +49,31 @@ function encodeCalendarMs(year: number, month: number, day: number, hour = 0, mi
   return ((dayIndex * 24 + h) * 60 + mi) * MS_PER_MIN;
 }
 
-/** 清洗变量/标签中的时间文本：取首行、去掉 @ 后地点、折叠空白 */
+function encodeHit(hit: MatcherHit): number {
+  const { kind, fields } = hit;
+  if (kind === 'day_count') {
+    const day = fields.dayIndex ?? 0;
+    const hour = fields.hour ?? 0;
+    const minute = fields.minute ?? 0;
+    return day * UNIT_MS.day + hour * UNIT_MS.hour + minute * UNIT_MS.minute;
+  }
+  if (kind === 'time_only') {
+    return (fields.hour ?? 0) * UNIT_MS.hour + (fields.minute ?? 0) * UNIT_MS.minute;
+  }
+  return encodeCalendarMs(
+    fields.year ?? 0,
+    fields.month ?? 1,
+    fields.day ?? 1,
+    fields.hour ?? 0,
+    fields.minute ?? 0,
+  );
+}
+
+function toHalfWidthDigits(text: string): string {
+  return text.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30));
+}
+
+/** 清洗变量/标签中的时间文本：取首行、去掉 @ 后地点、折叠空白、全角数字 */
 export function normalizeGameTimeRaw(raw: string): string {
   let text = String(raw ?? '')
     .replace(/\r\n/g, '\n')
@@ -31,7 +84,22 @@ export function normalizeGameTimeRaw(raw: string): string {
   if (at >= 0) text = text.slice(0, at).trim();
   const pipe = text.indexOf('|');
   if (pipe >= 0) text = text.slice(0, pipe).trim();
+  text = toHalfWidthDigits(text);
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** 区间写法取右端（结束端）作为当前时间 */
+export function peelRangeEnd(text: string): string {
+  const seps = [/\s*[~～]\s+/, /\s+—\s+/, /\s+-\s+/];
+  for (const re of seps) {
+    if (!re.test(text)) continue;
+    const parts = text
+      .split(re)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) return parts[parts.length - 1]!;
+  }
+  return text;
 }
 
 const CN_DIGIT: Record<string, number> = {
@@ -98,13 +166,28 @@ export function chineseNumeralToInt(raw: string): number | null {
   return total + section + num;
 }
 
-const YEAR_TOKEN_RE = /(?:(\d+)|([一二三四五六七八九十百千万两零〇]+))\s*年/;
+function parseMonthToken(tok: string): number | null {
+  if (tok === '正') return 1;
+  if (tok === '腊') return 12;
+  return chineseNumeralToInt(tok);
+}
+
+function parseDayToken(tok: string): number | null {
+  if (tok.startsWith('初')) {
+    const rest = tok.slice(1);
+    if (rest === '十') return 10;
+    return chineseNumeralToInt(rest);
+  }
+  return chineseNumeralToInt(tok);
+}
+
+const YEAR_TOKEN_RE = new RegExp(`(?:(\\d+)|(${CN_NUM_CLASS}+))\\s*年`);
 
 function parseYearFromText(text: string): number | null {
   const m = text.match(YEAR_TOKEN_RE);
   if (!m) return null;
   if (m[1] != null) return Number(m[1]);
-  return chineseNumeralToInt(m[2]);
+  return chineseNumeralToInt(m[2]!);
 }
 
 function extractClock(text: string): { hour: number; minute: number } | null {
@@ -115,127 +198,211 @@ function extractClock(text: string): { hour: number; minute: number } | null {
   return null;
 }
 
-function tryParseExplicitYmd(text: string, parseFormat?: string): number | null {
-  if (!parseFormat) return null;
-  const m = text.match(/(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?)?/);
-  if (!m) return null;
-  const [, y, mo, d, h = '0', mi = '0', s = '0'] = m;
-  return new Date(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(s)).getTime();
+function withClock(fields: GameTimeFields, text: string): GameTimeFields {
+  const clock = extractClock(text);
+  if (!clock) return fields;
+  return { ...fields, hour: clock.hour, minute: clock.minute };
 }
 
-function tryParseIso(text: string): number | null {
-  if (/年|星期|纪元|第\s*\d+\s*天/.test(text)) return null;
-  if (!/^\d{4}[-/.T\s]/.test(text)) return null;
-  const iso = Date.parse(text);
-  if (!Number.isNaN(iso)) return iso;
-  return null;
-}
+/** 公历/数字年月日：2026-06-30 15:48、2026/06/30、2026-06-30T15:48 */
+function matchNumericYmd(text: string): MatcherHit | null {
+  if (/年|星期|纪元|第\s*\d+\s*天/.test(text) && !/^\d{4}\s*年/.test(text)) return null;
 
-/** 2026-06-30 15:48 / 2026/06/30 15:48 */
-function tryParseNumericDate(text: string): number | null {
-  const m = text.match(
-    /(\d{4})\s*[-/.年]\s*(\d{1,2})\s*[-/.月]\s*(\d{1,2})\s*日?(?:\s+(\d{1,2})\s*[:：]\s*(\d{2})(?::(\d{2}))?)?/,
+  const isoLike = text.match(
+    /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})(?:[ T](\d{1,2})\s*[:：]\s*(\d{2})(?::(\d{2}))?)?/,
   );
-  if (!m) return null;
-  const [, y, mo, d, h, mi, s] = m;
-  if (h != null) {
-    return new Date(
-      Number(y),
-      Number(mo) - 1,
-      Number(d),
-      Number(h),
-      Number(mi),
-      s != null ? Number(s) : 0,
-    ).getTime();
+  if (isoLike) {
+    const fields: GameTimeFields = {
+      year: Number(isoLike[1]),
+      month: Number(isoLike[2]),
+      day: Number(isoLike[3]),
+      hour: isoLike[4] != null ? Number(isoLike[4]) : 0,
+      minute: isoLike[5] != null ? Number(isoLike[5]) : 0,
+    };
+    return { kind: 'calendar', fields, rule: 'numeric_ymd' };
   }
-  return encodeCalendarMs(Number(y), Number(mo), Number(d));
+
+  const cnYmd = text.match(
+    /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日(?:\s*(\d{1,2})\s*[:：时]\s*(\d{1,2})\s*分?)?/,
+  );
+  if (cnYmd) {
+    const fields: GameTimeFields = {
+      year: Number(cnYmd[1]),
+      month: Number(cnYmd[2]),
+      day: Number(cnYmd[3]),
+      hour: cnYmd[4] != null ? Number(cnYmd[4]) : 0,
+      minute: cnYmd[5] != null ? Number(cnYmd[5]) : 0,
+    };
+    if (cnYmd[4] == null) {
+      return { kind: 'calendar', fields: withClock(fields, text), rule: 'numeric_ymd' };
+    }
+    return { kind: 'calendar', fields, rule: 'numeric_ymd' };
+  }
+
+  return null;
 }
 
 /**
- * 中文/架空历法：
- * - 复兴纪元488年-5月-14日-星期三-15:48、2026年6月30日15时30分
- * - 新王国历十年-01/01/10:15、新王国历十年-01/01 10:15
- * - 复兴纪元488年-5-14-15:48
+ * 年 + 斜杠/点/横杠月日（可无「月」「日」字）
+ * 新王国历十年-01/01/10:15、复兴纪元488年-5-14-15:48
  */
-function tryParseChineseCalendar(text: string): number | null {
+function matchChineseSlash(text: string): MatcherHit | null {
   const year = parseYearFromText(text);
   if (year == null || Number.isNaN(year)) return null;
 
-  // 年 + 斜杠/点/横杠月日（可无「月」「日」字），时刻可选：十年-01/01/10:15、488年-5-14-15:48
   const slashM = text.match(
-    /(?:(?:\d+)|(?:[一二三四五六七八九十百千万两零〇]+))\s*年\s*[-/]?\s*(\d{1,2})\s*[/.-]\s*(\d{1,2})(?:\s*[/.\-\s]\s*(\d{1,2})\s*[:：]\s*(\d{2}))?/,
+    new RegExp(
+      `(?:(?:\\d+)|(?:${CN_NUM_CLASS}+))\\s*年\\s*[-/]?\\s*(\\d{1,2})\\s*[/.-]\\s*(\\d{1,2})(?:\\s*[/.\\-\\s]\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{2}))?`,
+    ),
   );
-  if (slashM) {
-    const month = Number(slashM[1]);
-    const day = Number(slashM[2]);
-    if (slashM[3] != null && slashM[4] != null) {
-      return encodeCalendarMs(year, month, day, Number(slashM[3]), Number(slashM[4]));
-    }
-    const clock = extractClock(text);
-    if (clock) return encodeCalendarMs(year, month, day, clock.hour, clock.minute);
-    return encodeCalendarMs(year, month, day);
+  if (!slashM) return null;
+
+  let fields: GameTimeFields = {
+    year,
+    month: Number(slashM[1]),
+    day: Number(slashM[2]),
+    hour: 0,
+    minute: 0,
+  };
+  if (slashM[3] != null && slashM[4] != null) {
+    fields.hour = Number(slashM[3]);
+    fields.minute = Number(slashM[4]);
+  } else {
+    fields = withClock(fields, text);
   }
+  return { kind: 'calendar', fields, rule: 'chinese_slash' };
+}
 
-  const monthM = text.match(/(\d{1,2})\s*月/);
-  const dayM = text.match(/(\d{1,2})\s*日/);
-  if (!monthM || !dayM) return null;
+/**
+ * 中文/架空历法带「月」「日」：
+ * 复兴纪元488年-5月-14日-星期三-15:48、十月十四日、五月初一 / 正月初一
+ */
+function matchChineseYmd(text: string): MatcherHit | null {
+  const year = parseYearFromText(text);
+  if (year == null || Number.isNaN(year)) return null;
 
-  const month = Number(monthM[1]);
-  const day = Number(dayM[1]);
-  const clock = extractClock(text);
-  if (clock) return encodeCalendarMs(year, month, day, clock.hour, clock.minute);
-  return encodeCalendarMs(year, month, day);
+  const monthM = text.match(new RegExp(`(正|腊|\\d+|${CN_NUM_CLASS}+)\\s*月`));
+  if (!monthM) return null;
+  const month = parseMonthToken(monthM[1]!);
+  if (month == null || Number.isNaN(month)) return null;
+
+  // 初一…初十 可省略「日」；其余需「日」
+  const chuM = text.match(/初([一二三四五六七八九]|十)/);
+  let day: number | null = null;
+  if (chuM) {
+    day = parseDayToken(`初${chuM[1]}`);
+  } else {
+    const dayM = text.match(new RegExp(`(\\d+|${CN_NUM_CLASS}+)\\s*日`));
+    if (dayM) day = parseDayToken(dayM[1]!);
+  }
+  if (day == null || Number.isNaN(day)) return null;
+
+  const fields = withClock({ year, month, day, hour: 0, minute: 0 }, text);
+  return { kind: 'calendar', fields, rule: 'chinese_ymd' };
 }
 
 /** 简写：488-5-14 15:48（无「年月日」汉字） */
-function tryParseDashDate(text: string): number | null {
+function matchDashYmd(text: string): MatcherHit | null {
   const m = text.match(/^(\d{3,})\s*-\s*(\d{1,2})\s*-\s*(\d{1,2})(?:\s+(\d{1,2})\s*[:：]\s*(\d{2}))?$/);
   if (!m) return null;
-  const [, y, mo, d, h, mi] = m;
-  if (h != null && mi != null) {
-    return encodeCalendarMs(Number(y), Number(mo), Number(d), Number(h), Number(mi));
-  }
-  return encodeCalendarMs(Number(y), Number(mo), Number(d));
+  const fields: GameTimeFields = {
+    year: Number(m[1]),
+    month: Number(m[2]),
+    day: Number(m[3]),
+    hour: m[4] != null ? Number(m[4]) : 0,
+    minute: m[5] != null ? Number(m[5]) : 0,
+  };
+  return { kind: 'calendar', fields, rule: 'dash_ymd' };
 }
 
-function tryParseDayCount(text: string): number | null {
+function matchDayCount(text: string): MatcherHit | null {
   const cn = text.match(/第?\s*(\d+)\s*天(?:\s*(\d{1,2})\s*[:：时]\s*(\d{1,2}))?/);
   if (!cn) return null;
-  const day = Number(cn[1]);
-  const hour = cn[2] != null ? Number(cn[2]) : 0;
-  const minute = cn[3] != null ? Number(cn[3]) : 0;
-  return day * UNIT_MS.day + hour * UNIT_MS.hour + minute * UNIT_MS.minute;
+  return {
+    kind: 'day_count',
+    rule: 'day_count',
+    fields: {
+      dayIndex: Number(cn[1]),
+      hour: cn[2] != null ? Number(cn[2]) : 0,
+      minute: cn[3] != null ? Number(cn[3]) : 0,
+    },
+  };
 }
 
-/** 仅当整段文本就是 HH:mm / H时mm分 时使用，避免在长文本中误匹配 */
-function tryParseTimeOnly(text: string): number | null {
+/** 仅当整段文本就是 HH:mm / H时mm分 时使用 */
+function matchTimeOnly(text: string): MatcherHit | null {
   const hm = text.match(/^(\d{1,2})\s*[:：]\s*(\d{2})$/);
-  if (hm) return Number(hm[1]) * UNIT_MS.hour + Number(hm[2]) * UNIT_MS.minute;
+  if (hm) {
+    return {
+      kind: 'time_only',
+      rule: 'time_only',
+      fields: { hour: Number(hm[1]), minute: Number(hm[2]) },
+    };
+  }
   const hmCn = text.match(/^(\d{1,2})\s*时\s*(\d{1,2})\s*分?$/);
-  if (hmCn) return Number(hmCn[1]) * UNIT_MS.hour + Number(hmCn[2]) * UNIT_MS.minute;
+  if (hmCn) {
+    return {
+      kind: 'time_only',
+      rule: 'time_only',
+      fields: { hour: Number(hmCn[1]), minute: Number(hmCn[2]) },
+    };
+  }
   return null;
 }
 
-export function parseGameTimeToMs(raw: string, parseFormat?: string): number | null {
-  const text = normalizeGameTimeRaw(raw);
+const MATCHERS: Array<(text: string) => MatcherHit | null> = [
+  matchNumericYmd,
+  matchChineseSlash,
+  matchChineseYmd,
+  matchDashYmd,
+  matchDayCount,
+  matchTimeOnly,
+];
+
+function pad2(n: number): string {
+  return String(Math.floor(n)).padStart(2, '0');
+}
+
+/** 将解析字段格式化为探针可读短串 */
+export function formatGameTimeFields(result: Pick<GameTimeParseResult, 'kind' | 'fields'>): string {
+  const { kind, fields } = result;
+  if (kind === 'day_count') {
+    const t =
+      fields.hour != null || fields.minute != null
+        ? ` ${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}`
+        : '';
+    return `第${fields.dayIndex ?? 0}天${t}`;
+  }
+  if (kind === 'time_only') {
+    return `${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}`;
+  }
+  return `${fields.year ?? 0}年${fields.month ?? 1}月${fields.day ?? 1}日 ${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}`;
+}
+
+export function parseGameTime(raw: string): GameTimeParseResult | null {
+  const normalized = normalizeGameTimeRaw(raw);
+  if (!normalized) return null;
+  const text = peelRangeEnd(normalized);
   if (!text) return null;
 
-  const parsers = [
-    () => tryParseExplicitYmd(text, parseFormat),
-    () => tryParseIso(text),
-    () => tryParseNumericDate(text),
-    () => tryParseChineseCalendar(text),
-    () => tryParseDashDate(text),
-    () => tryParseDayCount(text),
-    () => tryParseTimeOnly(text),
-  ];
-
-  for (const parse of parsers) {
-    const ms = parse();
-    if (ms != null && !Number.isNaN(ms)) return ms;
+  for (const match of MATCHERS) {
+    const hit = match(text);
+    if (!hit) continue;
+    const ms = encodeHit(hit);
+    if (Number.isNaN(ms)) continue;
+    return {
+      ms,
+      kind: hit.kind,
+      fields: hit.fields,
+      rule: hit.rule,
+      normalized: text,
+    };
   }
-
   return null;
+}
+
+export function parseGameTimeToMs(raw: string): number | null {
+  return parseGameTime(raw)?.ms ?? null;
 }
 
 export function intervalToMs(value: number, unit: keyof typeof UNIT_MS): number {
@@ -270,17 +437,17 @@ export function formatRemainingDuration(remainingMs: number): string {
 
 export const GAME_TIME_FORMAT_HELP = {
   preprocess:
-    '解析前仅取首行；@ 之后视为地点、| 之后视为天气/备注并自动剥离。例：复兴纪元488年-5月-14日-15:48 @ 某地| 天气 → 只解析日期时间部分。',
+    '解析前仅取首行；全角数字转半角；@ 之后视为地点、| 之后视为天气/备注并自动剥离。区间写法（A ~ B / A — B）取右端作为当前时间。',
   examples: [
-    '中文/架空历法：复兴纪元488年5月14日15:48、2026年6月30日15时30分',
+    '中文/架空历法：复兴纪元488年5月14日15:48、自由纪元-427年-07月-12日',
+    '中文月日：复兴纪元十年十月十四日、五月初一（需带年份）',
     '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15',
     '横杠月日时：复兴纪元488年-5-14-15:48',
     '横杠简写：488-5-14 15:48',
-    '公历数字：2026-06-30 15:48、2026/06/30 15:48',
-    'ISO 类：以四位年份开头的 2026-06-30T15:48 等',
+    '公历数字：2026-06-30 15:48、2026/06/30 15:48、2026年6月30日15时30分',
     '天数计数：第12天、第 3 天 8:30',
     '仅时刻（整段无日期）：15:48、15时30分',
   ],
   footnote:
-    '含「年/月/日」的架空历法按游戏内日历比较间隔，不是 Unix 真实时间戳；无法识别时跳过本任务，原因见运行日志。',
+    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；无法识别时跳过本任务，原因见运行日志。',
 } as const;

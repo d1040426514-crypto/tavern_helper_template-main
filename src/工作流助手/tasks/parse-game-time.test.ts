@@ -4,7 +4,9 @@ import {
   formatRemainingDuration,
   intervalToMs,
   normalizeGameTimeRaw,
+  parseGameTime,
   parseGameTimeToMs,
+  peelRangeEnd,
 } from './parse-game-time';
 
 function test(name: string, fn: () => void): void {
@@ -44,42 +46,155 @@ test('chineseNumeralToInt common years', () => {
   assert.equal(chineseNumeralToInt('488'), 488);
 });
 
-test('normalizeGameTimeRaw strips location and weather', () => {
+test('normalizeGameTimeRaw strips location weather and fullwidth digits', () => {
   assert.equal(
     normalizeGameTimeRaw('复兴纪元488年-5月-14日-15:48 @ 某地| 晴'),
     '复兴纪元488年-5月-14日-15:48',
   );
+  assert.equal(normalizeGameTimeRaw('２０２６-０６-３０ １５:４８'), '2026-06-30 15:48');
 });
 
-test('parseGameTimeToMs slash calendar with chinese year', () => {
-  const a = parseGameTimeToMs('新王国历十年-01/01/10:15');
-  const b = parseGameTimeToMs('新王国历10年-01/01/10:15');
-  assert.ok(a != null);
-  assert.equal(a, b);
+test('peelRangeEnd takes right segment', () => {
+  assert.equal(
+    peelRangeEnd('自由纪元-427年-07月-12日 ~ 自由纪元-428年-01月-01日'),
+    '自由纪元-428年-01月-01日',
+  );
+  assert.equal(peelRangeEnd('A — B'), 'B');
+  assert.equal(peelRangeEnd('左端 - 右端'), '右端');
+  assert.equal(peelRangeEnd('单端日期'), '单端日期');
 });
 
-test('parseGameTimeToMs slash calendar with spaced time', () => {
+test('numeric_ymd gregorian uses calendar axis not Date.getTime', () => {
+  const a = parseGameTime('2026-06-30 15:48');
+  const b = parseGameTime('2026/06/30 15:48');
+  assert.ok(a);
+  assert.equal(a.rule, 'numeric_ymd');
+  assert.equal(a.fields.year, 2026);
+  assert.equal(a.fields.month, 6);
+  assert.equal(a.fields.day, 30);
+  assert.equal(a.fields.hour, 15);
+  assert.equal(a.fields.minute, 48);
+  assert.equal(a.ms, b?.ms);
+  assert.notEqual(a.ms, new Date(2026, 5, 30, 15, 48, 0).getTime());
+});
+
+test('numeric_ymd chinese style leading year', () => {
+  const r = parseGameTime('2026年6月30日15时30分');
+  assert.ok(r);
+  assert.equal(r.rule, 'numeric_ymd');
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 30);
+});
+
+test('chinese_slash with chinese year', () => {
+  const a = parseGameTime('新王国历十年-01/01/10:15');
+  const b = parseGameTime('新王国历10年-01/01/10:15');
+  assert.ok(a);
+  assert.equal(a.rule, 'chinese_slash');
+  assert.equal(a.fields.year, 10);
+  assert.equal(a.fields.month, 1);
+  assert.equal(a.fields.day, 1);
+  assert.equal(a.fields.hour, 10);
+  assert.equal(a.fields.minute, 15);
+  assert.equal(a.ms, b?.ms);
+});
+
+test('chinese_slash spaced time equals slash time', () => {
   const a = parseGameTimeToMs('新王国历十年-01/01 10:15');
   const b = parseGameTimeToMs('新王国历十年-01/01/10:15');
   assert.ok(a != null);
   assert.equal(a, b);
 });
 
-test('parseGameTimeToMs dash month-day after year', () => {
-  const ms = parseGameTimeToMs('复兴纪元488年-5-14-15:48');
-  assert.ok(ms != null);
-  assert.equal(ms, parseGameTimeToMs('复兴纪元488年-5月-14日-15:48'));
+test('chinese_slash dash month-day after year', () => {
+  const a = parseGameTime('复兴纪元488年-5-14-15:48');
+  const b = parseGameTime('复兴纪元488年-5月-14日-15:48');
+  assert.ok(a);
+  assert.equal(a.rule, 'chinese_slash');
+  assert.ok(b);
+  assert.equal(b.rule, 'chinese_ymd');
+  assert.equal(a.ms, b.ms);
 });
 
-test('parseGameTimeToMs classic chinese calendar still works', () => {
-  const ms = parseGameTimeToMs('复兴纪元488年-5月-14日-星期三-15:48');
-  assert.ok(ms != null);
+test('chinese_ymd classic fantasy calendar', () => {
+  const r = parseGameTime('复兴纪元488年-5月-14日-星期三-15:48');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.fields.year, 488);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.day, 14);
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 48);
 });
 
-test('parseGameTimeToMs numeric gregorian still works', () => {
-  const ms = parseGameTimeToMs('2026-06-30 15:48');
-  assert.ok(ms != null);
-  assert.equal(ms, new Date(2026, 5, 30, 15, 48, 0).getTime());
+test('chinese_ymd addon journal date', () => {
+  const r = parseGameTime('自由纪元-427年-07月-12日');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.fields.year, 427);
+  assert.equal(r.fields.month, 7);
+  assert.equal(r.fields.day, 12);
+});
+
+test('chinese_ymd chinese month and day', () => {
+  const r = parseGameTime('复兴纪元十年十月十四日');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.fields.year, 10);
+  assert.equal(r.fields.month, 10);
+  assert.equal(r.fields.day, 14);
+});
+
+test('chinese_ymd 正月初一', () => {
+  const r = parseGameTime('新王国历十年正月初一');
+  assert.ok(r);
+  assert.equal(r.fields.year, 10);
+  assert.equal(r.fields.month, 1);
+  assert.equal(r.fields.day, 1);
+});
+
+test('dash_ymd shorthand', () => {
+  const r = parseGameTime('488-5-14 15:48');
+  assert.ok(r);
+  assert.equal(r.rule, 'dash_ymd');
+  assert.equal(r.fields.year, 488);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.day, 14);
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 48);
+});
+
+test('day_count', () => {
+  const r = parseGameTime('第 3 天 8:30');
+  assert.ok(r);
+  assert.equal(r.rule, 'day_count');
+  assert.equal(r.fields.dayIndex, 3);
+  assert.equal(r.fields.hour, 8);
+  assert.equal(r.fields.minute, 30);
+  assert.equal(r.ms, 3 * intervalToMs(1, 'day') + 8 * intervalToMs(1, 'hour') + 30 * intervalToMs(1, 'minute'));
+});
+
+test('time_only', () => {
+  const a = parseGameTime('15:48');
+  const b = parseGameTime('15时30分');
+  assert.ok(a);
+  assert.equal(a.rule, 'time_only');
+  assert.equal(a.ms, 15 * intervalToMs(1, 'hour') + 48 * intervalToMs(1, 'minute'));
+  assert.ok(b);
+  assert.equal(b.fields.minute, 30);
+});
+
+test('range peel then parse uses right end', () => {
+  const r = parseGameTime('自由纪元-427年-07月-12日 ~ 自由纪元-428年-01月-01日');
+  assert.ok(r);
+  assert.equal(r.fields.year, 428);
+  assert.equal(r.fields.month, 1);
+  assert.equal(r.fields.day, 1);
+});
+
+test('unparseable returns null', () => {
+  assert.equal(parseGameTimeToMs('不是时间'), null);
+  assert.equal(parseGameTimeToMs(''), null);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

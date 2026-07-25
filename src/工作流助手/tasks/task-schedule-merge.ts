@@ -36,8 +36,7 @@ export function mergeTaskSchedule(existing: TaskSchedule | undefined, patch: Tas
     if (p.enabled !== undefined) ti.enabled = p.enabled;
     if (p.value !== undefined) ti.value = p.value;
     if (p.unit !== undefined) ti.unit = p.unit;
-    if (p.parseFormat !== undefined) ti.parseFormat = p.parseFormat;
-    // onParseFail 已废弃：读不到/解析失败一律跳过，读入旧配置时忽略
+    // onParseFail / parseFormat 已废弃：读入旧配置时忽略
     if (p.timeSource !== undefined) {
       ti.timeSource = _.cloneDeep(p.timeSource) as typeof ti.timeSource;
     }
