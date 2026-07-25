@@ -7,6 +7,7 @@ import {
   replaceBareTagLastInner,
   replaceTagInnersInMessage,
   shouldClearStalePostProcessRunMarkers,
+  shouldRecaptureBodyReplaceOrigin,
 } from './chat-body-tag-replace';
 import type { TaskRunResult } from './runtime';
 import type { ChatWorldbookWriteRule, ScriptSettings } from './schema';
@@ -141,6 +142,54 @@ test('shouldClearStalePostProcessRunMarkers skips explicit rerun', () => {
       message: 'fresh',
       inject: '<资产账本/>',
       explicitIsRerun: true,
+    }),
+    false,
+  );
+});
+
+test('shouldRecaptureBodyReplaceOrigin captures when missing', () => {
+  assert.equal(
+    shouldRecaptureBodyReplaceOrigin({
+      existing: undefined,
+      message: 'floor2',
+      hadDone: false,
+      inject: undefined,
+    }),
+    true,
+  );
+});
+
+test('shouldRecaptureBodyReplaceOrigin rebuilds inherited origin != message', () => {
+  assert.equal(
+    shouldRecaptureBodyReplaceOrigin({
+      existing: 'prev floor origin',
+      message: 'current floor text',
+      hadDone: false,
+      inject: undefined,
+    }),
+    true,
+  );
+});
+
+test('shouldRecaptureBodyReplaceOrigin keeps when origin equals message', () => {
+  assert.equal(
+    shouldRecaptureBodyReplaceOrigin({
+      existing: 'same',
+      message: 'same',
+      hadDone: false,
+      inject: undefined,
+    }),
+    false,
+  );
+});
+
+test('shouldRecaptureBodyReplaceOrigin keeps processed floor origin', () => {
+  assert.equal(
+    shouldRecaptureBodyReplaceOrigin({
+      existing: 'original before replace',
+      message: 'replaced body\n<资产账本/>',
+      hadDone: true,
+      inject: '<资产账本/>',
     }),
     false,
   );

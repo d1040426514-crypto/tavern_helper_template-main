@@ -219,6 +219,51 @@ export function shouldClearStalePostProcessRunMarkers(options: {
   return !isPostProcessInjectSuffixPresent(options.message, options.inject);
 }
 
+/**
+ * 是否应（重新）写入本楼 `_post_process_body_replace_origin`。
+ * origin 不应随其它楼层变量继承；每层 AI 楼应在首次处理时用本楼正文重建。
+ */
+export function shouldRecaptureBodyReplaceOrigin(options: {
+  existing: unknown;
+  message: string;
+  hadDone: boolean;
+  inject: unknown;
+}): boolean {
+  if (typeof options.existing !== 'string') return true;
+  // 与当前正文一致：本楼刚捕获，或重跑 restore 到正确 origin 之后
+  if (options.existing === options.message) return false;
+  // 本楼已合法处理完（done + inject 仍在）：保留 origin 供重跑 restore
+  if (options.hadDone && isPostProcessInjectSuffixPresent(options.message, options.inject)) {
+    return false;
+  }
+  // 其余（典型：继承自上一楼且与本楼正文不同）→ 按本楼正文重建
+  return true;
+}
+
+function findPreviousAssistantMessage(messageId: number): ChatMessage | undefined {
+  for (let i = messageId - 1; i >= 0; i--) {
+    try {
+      const m = getChatMessages(i)[0];
+      if (m?.role === 'assistant') return m;
+    } catch {
+      /* continue */
+    }
+  }
+  return undefined;
+}
+
+/** origin 是否与上一 AI 楼的 origin/正文相同（继承残留） */
+export function isBodyReplaceOriginInheritedFromPreviousFloor(
+  messageId: number,
+  origin: string,
+): boolean {
+  const prev = findPreviousAssistantMessage(messageId);
+  if (!prev) return false;
+  const prevOrigin = (prev.data as Record<string, unknown> | undefined)?.[BODY_REPLACE_ORIGIN_KEY];
+  if (typeof prevOrigin === 'string' && prevOrigin === origin) return true;
+  return (prev.message ?? '') === origin;
+}
+
 /** 清除陈旧的 done / inject / body-replace origin，避免误 restore 上一楼正文 */
 export async function clearStalePostProcessRunMarkers(messageId: number): Promise<boolean> {
   const msg = getChatMessages(messageId)[0];
@@ -248,7 +293,18 @@ export async function ensureBodyReplaceOriginCaptured(messageId: number): Promis
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return;
   const data = (msg.data ?? {}) as Record<string, unknown>;
-  if (typeof data[BODY_REPLACE_ORIGIN_KEY] === 'string') return;
+  const existing = data[BODY_REPLACE_ORIGIN_KEY];
+  const message = msg.message ?? '';
+  if (
+    !shouldRecaptureBodyReplaceOrigin({
+      existing,
+      message,
+      hadDone: !!data._post_process_done,
+      inject: data._post_process_inject_block,
+    })
+  ) {
+    return;
+  }
 
   await setChatMessages(
     [
@@ -256,7 +312,7 @@ export async function ensureBodyReplaceOriginCaptured(messageId: number): Promis
         message_id: messageId,
         data: {
           ...data,
-          [BODY_REPLACE_ORIGIN_KEY]: msg.message ?? '',
+          [BODY_REPLACE_ORIGIN_KEY]: message,
         },
       },
     ],
@@ -270,6 +326,23 @@ export async function restoreBodyReplaceOrigin(messageId: number): Promise<void>
   const data = (msg.data ?? {}) as Record<string, unknown>;
   const origin = data[BODY_REPLACE_ORIGIN_KEY];
   if (typeof origin !== 'string') return;
+
+  if (isBodyReplaceOriginInheritedFromPreviousFloor(messageId, origin)) {
+    // 丢弃继承残留，避免把上一楼原文写进本楼；以当前正文作为本楼新 origin
+    await setChatMessages(
+      [
+        {
+          message_id: messageId,
+          data: {
+            ...data,
+            [BODY_REPLACE_ORIGIN_KEY]: msg.message ?? '',
+          },
+        },
+      ],
+      { refresh: 'none' },
+    );
+    return;
+  }
 
   await setChatMessages(
     [
