@@ -19,6 +19,10 @@
         <button type="button" class="ac-tab" :class="{ active: tab === 'control' }" @click="tab = 'control'">
           控制
         </button>
+        <button type="button" class="ac-tab" :class="{ active: tab === 'changelog' }" @click="onOpenChangelog">
+          变更
+          <span v-if="patchErrorCount" class="ac-tab-badge">{{ patchErrorCount }}</span>
+        </button>
       </div>
       <div class="ac-header-actions">
         <button
@@ -95,6 +99,18 @@
           <SingularityPanel :items="singularities" @toggle="onSingularity" />
         </div>
       </div>
+
+      <div v-show="tab === 'changelog'" class="ac-main-scroll">
+        <ChangeLogPanel
+          :log="patchLog"
+          :busy="changelogBusy"
+          :action-error="changelogError"
+          @clear="onClearPatchLog"
+          @reprocess="onReprocessFloor"
+          @apply-op="onApplyManualOp"
+          @apply-error="changelogError = $event"
+        />
+      </div>
     </div>
   </div>
 </template>
@@ -103,7 +119,8 @@
 import './styles/tokens.scss';
 import './styles/shell.scss';
 import './styles/worldpaper.scss';
-import { latestOpts, waitAddon, type AddonConsoleApi } from './bridge';
+import { latestOpts, waitAddon, type AddonConsoleApi, type AddonPatchLogEntry } from './bridge';
+import ChangeLogPanel from './components/ChangeLogPanel.vue';
 import PlaneMergeToggle from './components/PlaneMergeToggle.vue';
 import SingularityPanel from './components/SingularityPanel.vue';
 import StatusBoard from './components/StatusBoard.vue';
@@ -116,8 +133,11 @@ const theme = ref<'light' | 'dark'>('light');
 const planeMerge = ref(false);
 const worlds = ref<Record<string, any>>({});
 const selectedWorld = ref<string | null>(null);
-const tab = ref<'brief' | 'control'>('brief');
+const tab = ref<'brief' | 'control' | 'changelog'>('brief');
 const briefPage = ref<'era' | 'plot' | 'econ'>('era');
+const patchLog = ref<AddonPatchLogEntry | null>(null);
+const changelogBusy = ref(false);
+const changelogError = ref('');
 
 const briefPages = [
   { id: 'era' as const, label: '时代快讯', icon: '🕰️' },
@@ -132,6 +152,10 @@ const eventStops: Array<{ stop: () => void }> = [];
 let refreshHook: (() => void) | null = null;
 
 const worldNames = computed(() => Object.keys(worlds.value));
+
+const patchErrorCount = computed(
+  () => (patchLog.value?.issues ?? []).filter(i => i.kind === 'parse' || i.kind === 'apply').length,
+);
 
 const selectedWorldData = computed(() => {
   if (!selectedWorld.value) return null;
@@ -181,9 +205,68 @@ async function reload() {
     if (!selectedWorld.value || !names.includes(selectedWorld.value)) {
       selectedWorld.value = names[0] ?? null;
     }
+    refreshPatchLog();
     error.value = '';
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
+  }
+}
+
+function refreshPatchLog() {
+  if (!api?.getLastPatchLog) {
+    patchLog.value = null;
+    return;
+  }
+  try {
+    patchLog.value = api.getLastPatchLog() ?? null;
+  } catch {
+    patchLog.value = null;
+  }
+}
+
+function onOpenChangelog() {
+  tab.value = 'changelog';
+  refreshPatchLog();
+}
+
+function onClearPatchLog() {
+  api?.clearPatchLog?.();
+  patchLog.value = null;
+  changelogError.value = '';
+}
+
+async function onReprocessFloor() {
+  if (!api?.processFloor) {
+    changelogError.value = 'Addon.processFloor 不可用';
+    return;
+  }
+  changelogBusy.value = true;
+  changelogError.value = '';
+  try {
+    await api.processFloor('latest');
+    await reload();
+  } catch (e) {
+    changelogError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    changelogBusy.value = false;
+  }
+}
+
+async function onApplyManualOp(op: unknown) {
+  if (!api?.applyManualPatchOps) {
+    changelogError.value = 'Addon.applyManualPatchOps 不可用';
+    return;
+  }
+  changelogBusy.value = true;
+  changelogError.value = '';
+  try {
+    await api.applyManualPatchOps([op], latestOpts());
+    await reload();
+  } catch (e) {
+    changelogError.value = e instanceof Error ? e.message : String(e);
+    refreshPatchLog();
+  } finally {
+    changelogBusy.value = false;
   }
 }
 
@@ -244,6 +327,13 @@ function bindAutoReload() {
       scheduleReload();
     }),
   );
+  if (api.events.PATCH_LOG_UPDATED) {
+    eventStops.push(
+      eventOn(api.events.PATCH_LOG_UPDATED, () => {
+        refreshPatchLog();
+      }),
+    );
+  }
   eventStops.push(
     eventOn(tavern_events.CHAT_CHANGED, () => {
       void reload();

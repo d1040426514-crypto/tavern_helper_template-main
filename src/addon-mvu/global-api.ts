@@ -20,10 +20,13 @@ import {
   writeAddonData,
 } from './store';
 import { stripAddonHiddenFieldsForDisplay } from './display';
+import { clearPatchLog, getLastPatchLog } from './patch-log';
+import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
+import type { MvuJsonPatchOp } from './patch';
 import { syncReplicaLaunched } from './replica-sync';
 import { AddonData, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
 import { getAddonUi, writeAddonUi, type AddonUiState, type AddonUiTheme } from './ui-state';
-import { wrapAddonData, AddonWrapper } from './update';
+import { applyOpsToFloor, wrapAddonData, AddonWrapper } from './update';
 
 type AddonMessageOption = Extract<VariableOption, { type: 'message' }>;
 
@@ -78,6 +81,35 @@ export const Addon = {
 
   applyAddonUpdateFromMessage,
   ensureAddonData,
+
+  getLastPatchLog,
+  clearPatchLog,
+
+  async applyManualPatchOps(
+    ops: MvuJsonPatchOp[],
+    options: AddonMessageOption = { type: 'message', message_id: 'latest' },
+  ) {
+    if (!hasChatMessages()) {
+      throw new Error('当前无聊天楼层，无法应用 patch');
+    }
+    if (!Array.isArray(ops) || ops.length === 0) {
+      throw new Error('ops 必须是非空数组');
+    }
+    const message_id = resolveAddonMessageId(options);
+    const base = requireFloorData(message_id);
+    const result = await applyOpsToFloor(ops, base, { message_id, emitEvents: true });
+    const refreshed = refreshNarrativeGuidanceDetails(result.data);
+    if (!_.isEqual(refreshed, base)) {
+      writeAddonData(message_id, refreshed);
+    }
+    return {
+      data: refreshed,
+      changed: result.changed || !_.isEqual(refreshed, base),
+      ops: result.ops,
+      issues: result.issues,
+      failedFragments: result.failedFragments,
+    };
+  },
 
   getArchive(options: AddonMessageOption = { type: 'message', message_id: 'latest' }) {
     if (!hasChatMessages()) {

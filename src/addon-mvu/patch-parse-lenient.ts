@@ -2,11 +2,17 @@ import { extractBalancedJsonSlice, parseJsonPatchArrayLenient } from '@util/comm
 import JSON5 from 'json5';
 import { jsonrepair } from 'jsonrepair';
 
+import type { AddonPatchFailedFragment } from './patch-log';
 import type { MvuJsonPatchOp, PatchIssue } from './patch';
 
 function snippet(text: string, max = 80): string {
   const oneLine = text.replace(/\s+/g, ' ').trim();
   return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max)}…`;
+}
+
+function keepSnippet(text: string, max = 4000): string {
+  const trimmed = String(text || '').trim();
+  return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -25,20 +31,28 @@ export function isLikelyPatchOp(value: unknown): value is MvuJsonPatchOp {
   return false;
 }
 
-function filterValidOps(parsed: unknown[]): { ops: MvuJsonPatchOp[]; issues: PatchIssue[] } {
+function filterValidOps(parsed: unknown[]): {
+  ops: MvuJsonPatchOp[];
+  issues: PatchIssue[];
+  failedFragments: AddonPatchFailedFragment[];
+} {
   const ops: MvuJsonPatchOp[] = [];
   const issues: PatchIssue[] = [];
+  const failedFragments: AddonPatchFailedFragment[] = [];
   parsed.forEach((item, index) => {
     if (isLikelyPatchOp(item)) {
       ops.push(item);
       return;
     }
-    issues.push({
-      kind: 'parse',
-      message: `第 ${index + 1} 条不是合法 patch op: ${snippet(JSON.stringify(item) ?? String(item))}`,
+    const message = `第 ${index + 1} 条不是合法 patch op: ${snippet(JSON.stringify(item) ?? String(item))}`;
+    issues.push({ kind: 'parse', message });
+    failedFragments.push({
+      index: index + 1,
+      snippet: keepSnippet(JSON.stringify(item, null, 2) ?? String(item)),
+      message,
     });
   });
-  return { ops, issues };
+  return { ops, issues, failedFragments };
 }
 
 function tryParseOpSlice(slice: string): { ok: true; repaired: boolean } | { ok: false } {
@@ -55,11 +69,11 @@ function tryParseOpSlice(slice: string): { ok: true; repaired: boolean } | { ok:
   }
 }
 
-/** 按出现顺序为无法解析的 op 生成带序号的 parse issue */
-function collectUnparseableOpIssues(patchArrayText: string): PatchIssue[] {
+/** 按出现顺序收集无法解析的 op 原文 */
+function collectUnparseableOpFragments(patchArrayText: string): AddonPatchFailedFragment[] {
   const text = String(patchArrayText || '').trim();
   if (!text.startsWith('[')) return [];
-  const issues: PatchIssue[] = [];
+  const fragments: AddonPatchFailedFragment[] = [];
   let opIndex = 0;
   let i = 1;
   while (i < text.length) {
@@ -75,24 +89,21 @@ function collectUnparseableOpIssues(patchArrayText: string): PatchIssue[] {
     try {
       const slice = extractBalancedJsonSlice(text, i);
       if (!tryParseOpSlice(slice).ok) {
-        issues.push({
-          kind: 'parse',
-          message: `第 ${opIndex} 条 op 无法修复: ${snippet(slice)}`,
-        });
+        const message = `第 ${opIndex} 条 op 无法修复: ${snippet(slice)}`;
+        fragments.push({ index: opIndex, snippet: keepSnippet(slice), message });
       }
       i += slice.length;
     } catch {
-      const roughEnd = Math.min(i + 100, text.length);
-      issues.push({
-        kind: 'parse',
-        message: `第 ${opIndex} 条 op 括号不匹配，已跳过: ${snippet(text.slice(i, roughEnd))}`,
-      });
+      const roughEnd = Math.min(i + 500, text.length);
+      const slice = text.slice(i, roughEnd);
+      const message = `第 ${opIndex} 条 op 括号不匹配，已跳过: ${snippet(slice)}`;
+      fragments.push({ index: opIndex, snippet: keepSnippet(slice), message });
       const next = text.slice(i + 1).search(/\{\s*"op"\s*:/);
       if (next < 0) break;
       i = i + 1 + next;
     }
   }
-  return issues;
+  return fragments;
 }
 
 function tryParseArrayStrict(trimmed: string): unknown[] | null {
@@ -110,15 +121,21 @@ function tryParseArrayStrict(trimmed: string): unknown[] | null {
   }
 }
 
+export type ParseJsonPatchResult = {
+  ops: MvuJsonPatchOp[];
+  issues: PatchIssue[];
+  failedFragments: AddonPatchFailedFragment[];
+};
+
 /**
  * 解析 AddonJSONPatch 数组文本。
  * 先严格 JSON/JSON5；失败再逐条 parse/jsonrepair。
  * 不用整段 jsonrepair，以免静默捏造伪 op。
  */
-export function parseJsonPatchOpsWithIssues(raw: string): { ops: MvuJsonPatchOp[]; issues: PatchIssue[] } {
+export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
   const trimmed = String(raw || '').trim();
   if (!trimmed) {
-    return { ops: [], issues: [] };
+    return { ops: [], issues: [], failedFragments: [] };
   }
 
   const strictArray = tryParseArrayStrict(trimmed);
@@ -127,7 +144,7 @@ export function parseJsonPatchOpsWithIssues(raw: string): { ops: MvuJsonPatchOp[
   }
 
   const { ops: rawOps, skipped, repaired } = parseJsonPatchArrayLenient(trimmed, { repairOp: true });
-  const { ops, issues } = filterValidOps(rawOps);
+  const { ops, issues, failedFragments } = filterValidOps(rawOps);
 
   if (repaired > 0) {
     issues.unshift({
@@ -136,28 +153,38 @@ export function parseJsonPatchOpsWithIssues(raw: string): { ops: MvuJsonPatchOp[
     });
   }
 
-  if (ops.length === 0) {
+  const skipFragments = collectUnparseableOpFragments(trimmed);
+  for (const frag of skipFragments) {
+    issues.push({ kind: 'parse', message: frag.message });
+    failedFragments.push(frag);
+  }
+
+  if (ops.length === 0 && issues.every(i => i.kind !== 'parse' || !i.message.includes('无法解析出任何'))) {
     issues.push({
       kind: 'parse',
       message: 'AddonJSONPatch 无法解析出任何有效操作',
     });
-    return { ops: [], issues };
-  }
-
-  const parseSkipIssues = collectUnparseableOpIssues(trimmed);
-  if (parseSkipIssues.length > 0) {
-    issues.push(...parseSkipIssues);
-  } else if (skipped > 0) {
+  } else if (
+    ops.length > 0 &&
+    skipFragments.length === 0 &&
+    skipped > 0 &&
+    failedFragments.length === 0
+  ) {
     issues.push({
       kind: 'parse',
       message: `跳过 ${skipped} 条无法修复的 patch op`,
     });
-  } else if (repaired === 0 && issues.every(i => i.kind !== 'heal')) {
+  } else if (
+    ops.length > 0 &&
+    repaired === 0 &&
+    skipFragments.length === 0 &&
+    issues.every(i => i.kind !== 'heal')
+  ) {
     issues.push({
       kind: 'heal',
       message: 'AddonJSONPatch 整段非法，已按单条 op 容错解析',
     });
   }
 
-  return { ops, issues };
+  return { ops, issues, failedFragments };
 }

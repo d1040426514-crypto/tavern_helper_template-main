@@ -3,7 +3,18 @@ import { shouldShowAddonUpdateErrors } from './config';
 import { reconcileSingularityAfterPatch } from './control';
 import { AddonEvent } from './events';
 import { canonicalizePatchOps, verifyCanonicalWrites } from './patch-canonicalize';
-import { applyMvuLikePatch, extractAddonJsonPatchOpsWithIssues, MvuJsonPatchOp, PatchIssue } from './patch';
+import {
+  applyMvuLikePatch,
+  extractAddonJsonPatchOpsWithIssues,
+  MvuJsonPatchOp,
+  PatchIssue,
+} from './patch';
+import {
+  createPatchLogEntry,
+  setLastPatchLog,
+  type AddonPatchFailedFragment,
+  type AddonPatchLogEntry,
+} from './patch-log';
 import { syncReplicaLaunched } from './replica-sync';
 import { AddonData, normalizeAddonData } from './schema';
 
@@ -16,6 +27,7 @@ export type AddonUpdateResult = {
   changed: boolean;
   ops: MvuJsonPatchOp[];
   issues: PatchIssue[];
+  failedFragments: AddonPatchFailedFragment[];
 };
 
 export type AddonUpdateOptions = {
@@ -46,27 +58,131 @@ function notifyIssues(issues: PatchIssue[]): void {
     parseCount > 1
       ? `跳过 ${parseCount} 条无法修复的 patch op\n${lines.join('\n')}`
       : lines.join('\n');
-  toastr.warning(body, '[addon-mvu] 变量更新存在问题');
+  const hint = '\n（可在 addon 控制台 → 变更 查看详情）';
+  toastr.warning(body + hint, '[addon-mvu] 变量更新存在问题');
+}
+
+async function publishPatchLog(entry: AddonPatchLogEntry, emitEvents: boolean): Promise<void> {
+  setLastPatchLog(entry);
+  if (emitEvents) {
+    await eventEmit(AddonEvent.PATCH_LOG_UPDATED, entry);
+  }
+}
+
+async function reconcileAfterPatch(
+  base: AddonData,
+  data: AddonData,
+  message_id: number | undefined,
+): Promise<{ data: AddonData; warnings: string[] }> {
+  if (message_id !== undefined && isAccessibleFloor(message_id)) {
+    const archive = getAddonArchive(message_id);
+    const reconciled = reconcileSingularityAfterPatch(base, data, archive);
+    writeAddonArchive(message_id, reconciled.archive);
+    const sync_warnings = await syncReplicaLaunched(reconciled.data);
+    return { data: reconciled.data, warnings: [...reconciled.warnings, ...sync_warnings] };
+  }
+  const archive = { activeKey: null as string | null, snapshots: {} as Record<string, AddonData> };
+  const reconciled = reconcileSingularityAfterPatch(base, data, archive);
+  return { data: reconciled.data, warnings: reconciled.warnings };
+}
+
+/**
+ * 对楼层 addon_data 直接应用 ops（不依赖消息 XML）。
+ * 供控制台「应用此条」与内部复用。
+ */
+export async function applyOpsToFloor(
+  ops: MvuJsonPatchOp[],
+  base: AddonData,
+  options: { message_id?: number; emitEvents?: boolean } = {},
+): Promise<AddonUpdateResult> {
+  const emitEvents = options.emitEvents !== false;
+  const old_wrapper = wrapAddonData(base);
+  const issues: PatchIssue[] = [];
+  const failedFragments: AddonPatchFailedFragment[] = [];
+
+  if (emitEvents) {
+    await eventEmit(AddonEvent.VARIABLE_UPDATE_STARTED, old_wrapper);
+  }
+
+  const { ops: canon_ops, issues: canon_issues } = canonicalizePatchOps(ops, base);
+  issues.push(...canon_issues);
+
+  if (emitEvents) {
+    await eventEmit(AddonEvent.PATCH_PARSED, old_wrapper, canon_ops, '');
+  }
+
+  const { data: patched, issues: apply_issues } = applyMvuLikePatch(_.cloneDeep(base), canon_ops);
+  issues.push(...apply_issues);
+
+  let new_wrapper = wrapAddonData(normalizeAddonData(patched));
+  issues.push(...verifyCanonicalWrites(canon_ops, new_wrapper.addon_data));
+
+  if (emitEvents) {
+    await eventEmit(AddonEvent.VARIABLE_UPDATE_ENDED, new_wrapper, old_wrapper);
+    new_wrapper = wrapAddonData(normalizeAddonData(new_wrapper.addon_data));
+  }
+
+  const reconciled = await reconcileAfterPatch(base, new_wrapper.addon_data, options.message_id);
+  new_wrapper = wrapAddonData(reconciled.data);
+  for (const w of reconciled.warnings) {
+    issues.push({ kind: 'apply', message: w });
+  }
+
+  const changed = !_.isEqual(new_wrapper.addon_data, base);
+  const entry = createPatchLogEntry({
+    messageId: options.message_id,
+    ops: canon_ops,
+    issues,
+    failedFragments,
+    changed,
+  });
+  await publishPatchLog(entry, emitEvents);
+  notifyIssues(issues);
+
+  return {
+    data: new_wrapper.addon_data,
+    changed,
+    ops: canon_ops,
+    issues,
+    failedFragments,
+  };
 }
 
 /**
  * 从消息解析 `<AddonJSONPatch>` 并应用 patch.
- * 无 patch 块或 patch 后无变化时返回 undefined (对齐 MVU parseMessage 语义).
+ * 无有效变更时仍可能写入 patch log（解析/应用 issues）。
+ * 无 patch 块且无 issue 时返回 undefined (对齐 MVU parseMessage 语义).
  */
 export async function updateAddonFromMessage(
   message: string,
   base: AddonData,
   options: AddonUpdateOptions = {},
 ): Promise<AddonUpdateResult | undefined> {
+  const emitEvents = !!options.emitEvents;
   const old_wrapper = wrapAddonData(base);
 
-  if (options.emitEvents) {
+  if (emitEvents) {
     await eventEmit(AddonEvent.VARIABLE_UPDATE_STARTED, old_wrapper);
   }
 
-  const { ops: extracted_ops, issues: parse_issues } = extractAddonJsonPatchOpsWithIssues(message);
+  const {
+    ops: extracted_ops,
+    issues: parse_issues,
+    failedFragments,
+  } = extractAddonJsonPatchOpsWithIssues(message);
+
   if (extracted_ops.length === 0) {
-    notifyIssues(parse_issues);
+    if (parse_issues.length > 0 || failedFragments.length > 0) {
+      const entry = createPatchLogEntry({
+        messageId: options.message_id,
+        ops: [],
+        issues: parse_issues,
+        failedFragments,
+        changed: false,
+      });
+      await publishPatchLog(entry, emitEvents);
+      notifyIssues(parse_issues);
+    }
     return undefined;
   }
 
@@ -78,7 +194,7 @@ export async function updateAddonFromMessage(
   const { ops: canon_ops, issues: canon_issues } = canonicalizePatchOps(ops, base);
   ops = canon_ops;
 
-  if (options.emitEvents) {
+  if (emitEvents) {
     await eventEmit(AddonEvent.PATCH_PARSED, old_wrapper, ops, options.message_content ?? message);
   }
 
@@ -88,30 +204,29 @@ export async function updateAddonFromMessage(
   let new_wrapper = wrapAddonData(normalizeAddonData(patched));
   issues.push(...verifyCanonicalWrites(ops, new_wrapper.addon_data));
 
-  if (options.emitEvents) {
+  if (emitEvents) {
     await eventEmit(AddonEvent.VARIABLE_UPDATE_ENDED, new_wrapper, old_wrapper);
     new_wrapper = wrapAddonData(normalizeAddonData(new_wrapper.addon_data));
   }
 
-  // patch 后特异点状态机 + 可选写回 archive / 副本族
-  if (options.message_id !== undefined && isAccessibleFloor(options.message_id)) {
-    const archive = getAddonArchive(options.message_id);
-    const reconciled = reconcileSingularityAfterPatch(base, new_wrapper.addon_data, archive);
-    new_wrapper = wrapAddonData(reconciled.data);
-    writeAddonArchive(options.message_id, reconciled.archive);
-    const sync_warnings = await syncReplicaLaunched(reconciled.data);
-    for (const w of [...reconciled.warnings, ...sync_warnings]) {
-      issues.push({ kind: 'apply', message: w });
-    }
-  } else {
-    const archive = { activeKey: null as string | null, snapshots: {} as Record<string, AddonData> };
-    const reconciled = reconcileSingularityAfterPatch(base, new_wrapper.addon_data, archive);
-    new_wrapper = wrapAddonData(reconciled.data);
+  const reconciled = await reconcileAfterPatch(base, new_wrapper.addon_data, options.message_id);
+  new_wrapper = wrapAddonData(reconciled.data);
+  for (const w of reconciled.warnings) {
+    issues.push({ kind: 'apply', message: w });
   }
 
+  const changed = !_.isEqual(new_wrapper.addon_data, base);
+  const entry = createPatchLogEntry({
+    messageId: options.message_id,
+    ops,
+    issues,
+    failedFragments,
+    changed,
+  });
+  await publishPatchLog(entry, emitEvents);
   notifyIssues(issues);
 
-  if (_.isEqual(new_wrapper.addon_data, base)) {
+  if (!changed) {
     return undefined;
   }
 
@@ -120,6 +235,7 @@ export async function updateAddonFromMessage(
     changed: true,
     ops,
     issues,
+    failedFragments,
   };
 }
 

@@ -19,8 +19,10 @@ export {
   parseJsonPatchOpsWithIssues,
 } from './patch';
 export type { MvuJsonPatchOp, PatchIssue } from './patch';
-export { updateAddonFromMessage, wrapAddonData } from './update';
+export { updateAddonFromMessage, wrapAddonData, applyOpsToFloor } from './update';
 export type { AddonUpdateResult, AddonUpdateOptions, AddonWrapper } from './update';
+export { getLastPatchLog, clearPatchLog, setLastPatchLog, createPatchLogEntry } from './patch-log';
+export type { AddonPatchLogEntry, AddonPatchFailedFragment } from './patch-log';
 export { Addon } from './global-api';
 export {
   applyAddonUpdateFromMessage,

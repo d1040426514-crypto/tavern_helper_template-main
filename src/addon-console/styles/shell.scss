@@ -579,3 +579,174 @@
     transform: translateX(20px);
   }
 }
+
+/* 变更日志页签 */
+.addon-console .ac-tab-badge {
+  display: inline-block;
+  margin-left: 4px;
+  min-width: 16px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #c45c26;
+  color: #fff;
+  font-size: 11px;
+  line-height: 16px;
+  vertical-align: text-top;
+}
+
+.addon-console .ac-changelog {
+  padding: 12px 14px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.addon-console .ac-changelog-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.addon-console .ac-changelog-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  font-size: 12px;
+  color: var(--muted, #888);
+}
+
+.addon-console .ac-changelog-err {
+  color: #c45c26;
+  font-weight: 600;
+}
+
+.addon-console .ac-changelog-ok {
+  color: #2f7d4a;
+  font-weight: 600;
+}
+
+.addon-console .ac-changelog-muted {
+  opacity: 0.8;
+}
+
+.addon-console .ac-changelog-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.addon-console .ac-changelog-h {
+  margin: 0 0 8px;
+  font-size: 13px;
+  letter-spacing: 0.04em;
+  color: var(--gold, #c9a227);
+}
+
+.addon-console .ac-changelog-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addon-console .ac-cmd-card {
+  border: 1px solid var(--border, #333);
+  border-left-width: 4px;
+  border-radius: 6px;
+  padding: 10px 12px;
+  background: var(--card-bg, rgba(255, 255, 255, 0.03));
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.addon-console .ac-cmd-card.replace {
+  border-left-color: #6b8cae;
+}
+.addon-console .ac-cmd-card.insert {
+  border-left-color: #2f7d4a;
+}
+.addon-console .ac-cmd-card.remove {
+  border-left-color: #a33;
+}
+.addon-console .ac-cmd-card.delta,
+.addon-console .ac-cmd-card.move,
+.addon-console .ac-cmd-card.other {
+  border-left-color: #888;
+}
+.addon-console .ac-cmd-card.parse {
+  border-left-color: #c45c26;
+}
+.addon-console .ac-cmd-card.heal {
+  border-left-color: #2f7d4a;
+}
+
+.addon-console .ac-cmd-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.addon-console .ac-cmd-badge {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: lowercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(127, 127, 127, 0.2);
+}
+
+.addon-console .ac-cmd-badge.insert {
+  color: #2f7d4a;
+}
+.addon-console .ac-cmd-badge.replace {
+  color: #6b8cae;
+}
+.addon-console .ac-cmd-badge.remove {
+  color: #a33;
+}
+.addon-console .ac-cmd-badge.parse {
+  color: #c45c26;
+}
+.addon-console .ac-cmd-badge.heal {
+  color: #2f7d4a;
+}
+
+.addon-console .ac-cmd-path {
+  font-size: 12px;
+  word-break: break-all;
+}
+
+.addon-console .ac-cmd-json,
+.addon-console .ac-cmd-body {
+  margin: 0;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  opacity: 0.92;
+}
+
+.addon-console .ac-cmd-warn {
+  font-size: 12px;
+  color: #c45c26;
+}
+
+.addon-console .ac-cmd-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid var(--border, #444);
+  background: var(--input-bg, rgba(0, 0, 0, 0.2));
+  color: inherit;
+  resize: vertical;
+}
+
+.addon-console .ac-cmd-edit summary {
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 6px;
+}

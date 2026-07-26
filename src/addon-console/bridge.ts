@@ -3,6 +3,16 @@ export type AddonConsoleEvents = {
   VARIABLE_UPDATE_STARTED: string;
   PATCH_PARSED: string;
   VARIABLE_UPDATE_ENDED: string;
+  PATCH_LOG_UPDATED: string;
+};
+
+export type AddonPatchLogEntry = {
+  messageId?: number;
+  timestamp: number;
+  ops: unknown[];
+  issues: Array<{ kind: 'parse' | 'apply' | 'heal'; message: string; op?: unknown }>;
+  failedFragments: Array<{ index: number; snippet: string; message: string }>;
+  changed: boolean;
 };
 
 export type AddonConsoleApi = {
@@ -43,6 +53,19 @@ export type AddonConsoleApi = {
     value: boolean,
     options?: { type: 'message'; message_id: number | 'latest' },
   ) => Promise<{ data: Record<string, any>; warnings?: string[] }>;
+  getLastPatchLog?: () => AddonPatchLogEntry | null;
+  clearPatchLog?: () => void;
+  applyManualPatchOps?: (
+    ops: unknown[],
+    options?: { type: 'message'; message_id: number | 'latest' },
+  ) => Promise<{
+    data: Record<string, any>;
+    changed: boolean;
+    ops: unknown[];
+    issues: AddonPatchLogEntry['issues'];
+    failedFragments: AddonPatchLogEntry['failedFragments'];
+  }>;
+  processFloor?: (message_id?: number | 'latest') => Promise<void>;
 };
 
 function parentAddon(): AddonConsoleApi | undefined {

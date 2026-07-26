@@ -1,5 +1,6 @@
 import { getAtPath, resolveParentForWrite, resolveParentStrict } from './patch-heal';
 import { parseJsonPatchOpsWithIssues } from './patch-parse-lenient';
+import type { AddonPatchFailedFragment } from './patch-log';
 
 /** 与 MVU 变量输出格式兼容的 JSON Patch 操作 */
 export type MvuJsonPatchOp =
@@ -189,9 +190,14 @@ export function parseJsonPatchOps(raw: string): MvuJsonPatchOp[] {
 }
 
 /** 从消息中提取所有 <AddonJSONPatch> 块并解析为 op 列表（含逐条容错） */
-export function extractAddonJsonPatchOpsWithIssues(message: string): { ops: MvuJsonPatchOp[]; issues: PatchIssue[] } {
+export function extractAddonJsonPatchOpsWithIssues(message: string): {
+  ops: MvuJsonPatchOp[];
+  issues: PatchIssue[];
+  failedFragments: AddonPatchFailedFragment[];
+} {
   const ops: MvuJsonPatchOp[] = [];
   const issues: PatchIssue[] = [];
+  const failedFragments: AddonPatchFailedFragment[] = [];
   for (const match of message.matchAll(ADDON_JSON_PATCH_RE)) {
     const patchText = match[1]?.trim();
     if (!patchText) {
@@ -200,14 +206,16 @@ export function extractAddonJsonPatchOpsWithIssues(message: string): { ops: MvuJ
     const parsed = parseJsonPatchOpsWithIssues(patchText);
     ops.push(...parsed.ops);
     issues.push(...parsed.issues);
+    failedFragments.push(...parsed.failedFragments);
     if (parsed.issues.some(issue => issue.kind === 'parse')) {
       console.warn('[addon-mvu] AddonJSONPatch 存在无法修复的 op，已跳过坏条:', parsed.issues);
     }
   }
-  return { ops, issues };
+  return { ops, issues, failedFragments };
 }
 
 export { parseJsonPatchOpsWithIssues } from './patch-parse-lenient';
+export type { ParseJsonPatchResult } from './patch-parse-lenient';
 
 /** @deprecated 请使用 extractAddonJsonPatchOpsWithIssues */
 export function extractAddonJsonPatchOps(message: string): MvuJsonPatchOp[] {
