@@ -87,6 +87,22 @@ test('missing patch fails validation', () => {
   assert.match(result.error!, /patch/);
 });
 
+test('lenient recovery when analysis contains raw quotes', () => {
+  const broken = `{
+  "analysis": "确认[刊报日期]: ""（空）。后续仍有内容",
+  "patch": [
+    { "op": "replace", "path": "/x", "value": 1 }
+  ]
+}`;
+  assert.throws(() => JSON.parse(broken));
+  const result = extractStrictVariableResponse(broken, 'addon_json_patch');
+  assert.ok(result.ok);
+  assert.equal(result.recovered, true);
+  assert.match(result.normalizedXml!, /<AddonJSONPatch>/);
+  assert.match(result.normalizedXml!, /"path": "\/x"/);
+  assert.match(result.normalizedXml!, /刊报日期/);
+});
+
 test('enrichApiConfig injects json_object only when missing', () => {
   const base: ApiConfig = {
     url: 'https://api.example.com',

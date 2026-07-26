@@ -26,6 +26,77 @@ export function tryParseJsonObject(text: string): unknown {
   }
 }
 
+/** 从 start（必须是 `[` 或 `{`）提取括号平衡的子串 */
+export function extractBalancedJsonSlice(text: string, start: number): string {
+  const open = text[start];
+  const close = open === '[' ? ']' : open === '{' ? '}' : '';
+  if (!close) throw new Error('extractBalancedJsonSlice: start 必须指向 [ 或 {');
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  throw new Error('JSON 括号不匹配。');
+}
+
+/**
+ * 当 analysis 字段含未转义引号导致整段 JSON.parse 失败时，
+ * 仍尝试按键位切割取出 analysis 文本与 patch 数组。
+ */
+export function tryParseStrictVariableObjectLenient(text: string): {
+  analysis: string;
+  patch: unknown[];
+} {
+  const cleaned = stripCodeFence(text);
+  const patchKey = /"patch"\s*:\s*\[/.exec(cleaned);
+  if (!patchKey || patchKey.index == null) {
+    throw new Error('回复中未找到 patch 数组。');
+  }
+  const arrayStart = patchKey.index + patchKey[0].length - 1;
+  const patch = JSON.parse(extractBalancedJsonSlice(cleaned, arrayStart));
+  if (!Array.isArray(patch)) throw new Error('patch 必须是数组。');
+
+  const analysisKey = /"analysis"\s*:\s*/.exec(cleaned);
+  if (!analysisKey || analysisKey.index == null || analysisKey.index > patchKey.index) {
+    throw new Error('analysis 必须是非空字符串。');
+  }
+  let analysisRaw = cleaned.slice(analysisKey.index + analysisKey[0].length, patchKey.index).trim();
+  analysisRaw = analysisRaw.replace(/,\s*$/, '').trim();
+  if (analysisRaw.startsWith('"') && analysisRaw.endsWith('"')) {
+    analysisRaw = analysisRaw.slice(1, -1);
+  }
+  analysisRaw = analysisRaw
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\"/g, '"')
+    .replace(/\\\\/g, '\\');
+  if (!analysisRaw.trim()) throw new Error('analysis 必须是非空字符串。');
+  return { analysis: analysisRaw, patch };
+}
+
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
 }
@@ -80,6 +151,8 @@ export interface StrictVariableExtractionResult {
   normalizedXml?: string;
   error?: string;
   retryHint?: string;
+  /** 严格 JSON.parse 失败后，经键位切割恢复 */
+  recovered?: boolean;
 }
 
 function normalizePatchArray(patch: unknown): string {
@@ -97,6 +170,20 @@ ${patchJson}
 </UpdateVariable>`;
 }
 
+function buildFromAnalysisAndPatch(
+  mode: ActiveStructuredOutputMode,
+  analysis: unknown,
+  patch: unknown,
+  recovered?: boolean,
+): StrictVariableExtractionResult {
+  if (typeof analysis !== 'string' || !analysis.trim()) {
+    throw new Error('analysis 必须是非空字符串。');
+  }
+  const patchJson = normalizePatchArray(patch);
+  const normalizedXml = buildNormalizedVariableXml(mode, analysis, patchJson);
+  return { ok: true, normalizedXml, recovered };
+}
+
 export function extractStrictVariableResponse(
   text: string,
   mode: ActiveStructuredOutputMode,
@@ -104,18 +191,16 @@ export function extractStrictVariableResponse(
   try {
     const parsed = tryParseJsonObject(text);
     if (!isPlainObject(parsed)) throw new Error('回复 JSON 根节点必须是对象。');
-
-    const analysis = parsed.analysis;
-    if (typeof analysis !== 'string' || !analysis.trim()) {
-      throw new Error('analysis 必须是非空字符串。');
+    return buildFromAnalysisAndPatch(mode, parsed.analysis, parsed.patch);
+  } catch (strictError) {
+    try {
+      const lenient = tryParseStrictVariableObjectLenient(text);
+      return buildFromAnalysisAndPatch(mode, lenient.analysis, lenient.patch, true);
+    } catch {
+      const message =
+        strictError instanceof Error ? strictError.message : '严格 JSON 变量响应解析失败。';
+      return { ok: false, error: message, retryHint: message };
     }
-
-    const patchJson = normalizePatchArray(parsed.patch);
-    const normalizedXml = buildNormalizedVariableXml(mode, analysis, patchJson);
-    return { ok: true, normalizedXml };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : '严格 JSON 变量响应解析失败。';
-    return { ok: false, error: message, retryHint: message };
   }
 }
 

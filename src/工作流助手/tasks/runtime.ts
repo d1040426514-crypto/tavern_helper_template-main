@@ -122,10 +122,10 @@ function getStructuredOutputMode(task: PostProcessTask): ActiveStructuredOutputM
 function resolveStructuredResponse(
   rawResponse: string,
   mode: ActiveStructuredOutputMode,
-): { ok: true; text: string } | { ok: false; error: string } {
+): { ok: true; text: string; recovered?: boolean } | { ok: false; error: string } {
   const strict = extractStrictVariableResponse(rawResponse, mode);
   if (strict.ok && strict.normalizedXml) {
-    return { ok: true, text: strict.normalizedXml };
+    return { ok: true, text: strict.normalizedXml, recovered: strict.recovered };
   }
   if (hasCompleteVariableXml(rawResponse, mode)) {
     return { ok: true, text: rawResponse.trim() };
