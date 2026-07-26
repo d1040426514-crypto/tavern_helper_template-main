@@ -252,7 +252,7 @@ async function onReprocessFloor() {
   }
 }
 
-async function onApplyManualOp(op: unknown) {
+async function onApplyManualOp(op: unknown, meta?: { fragmentIndex?: number }) {
   if (!api?.applyManualPatchOps) {
     changelogError.value = 'Addon.applyManualPatchOps 不可用';
     return;
@@ -260,7 +260,10 @@ async function onApplyManualOp(op: unknown) {
   changelogBusy.value = true;
   changelogError.value = '';
   try {
-    await api.applyManualPatchOps([op], latestOpts());
+    await api.applyManualPatchOps([op], {
+      ...latestOpts(),
+      fragmentIndexes: meta?.fragmentIndex != null ? [meta.fragmentIndex] : undefined,
+    });
     await reload();
   } catch (e) {
     changelogError.value = e instanceof Error ? e.message : String(e);

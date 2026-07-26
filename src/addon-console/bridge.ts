@@ -12,6 +12,7 @@ export type AddonPatchLogEntry = {
   ops: unknown[];
   issues: Array<{ kind: 'parse' | 'apply' | 'heal'; message: string; op?: unknown }>;
   failedFragments: Array<{ index: number; snippet: string; message: string }>;
+  manualFixedOps?: unknown[];
   changed: boolean;
 };
 
@@ -57,7 +58,11 @@ export type AddonConsoleApi = {
   clearPatchLog?: () => void;
   applyManualPatchOps?: (
     ops: unknown[],
-    options?: { type: 'message'; message_id: number | 'latest' },
+    options?: {
+      type: 'message';
+      message_id: number | 'latest';
+      fragmentIndexes?: number[];
+    },
   ) => Promise<{
     data: Record<string, any>;
     changed: boolean;

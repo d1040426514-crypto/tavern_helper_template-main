@@ -14,6 +14,8 @@ export type AddonPatchLogEntry = {
   ops: MvuJsonPatchOp[];
   issues: PatchIssue[];
   failedFragments: AddonPatchFailedFragment[];
+  /** 控制台手动「应用此条」成功的 op，单独分区展示 */
+  manualFixedOps: MvuJsonPatchOp[];
   changed: boolean;
 };
 
@@ -32,7 +34,10 @@ export function clearPatchLog(): void {
 }
 
 export function createPatchLogEntry(
-  partial: Omit<AddonPatchLogEntry, 'timestamp'> & { timestamp?: number },
+  partial: Omit<AddonPatchLogEntry, 'timestamp' | 'manualFixedOps'> & {
+    timestamp?: number;
+    manualFixedOps?: MvuJsonPatchOp[];
+  },
 ): AddonPatchLogEntry {
   return {
     messageId: partial.messageId,
@@ -40,6 +45,113 @@ export function createPatchLogEntry(
     ops: partial.ops,
     issues: partial.issues,
     failedFragments: partial.failedFragments,
+    manualFixedOps: partial.manualFixedOps ?? [],
     changed: partial.changed,
   };
+}
+
+export function opTargetPath(op: MvuJsonPatchOp): string | undefined {
+  if (op.op === 'move') return op.to;
+  if ('path' in op) return op.path;
+  return undefined;
+}
+
+function fragmentPath(snippet: string): string | undefined {
+  const m = String(snippet || '').match(/"path"\s*:\s*"((?:\\.|[^"\\])*)"/);
+  if (!m?.[1]) return undefined;
+  try {
+    return JSON.parse(`"${m[1]}"`);
+  } catch {
+    return m[1];
+  }
+}
+
+function issueOpPath(issue: PatchIssue): string | undefined {
+  if (!issue.op) return undefined;
+  return opTargetPath(issue.op);
+}
+
+function successfulManualOps(ops: MvuJsonPatchOp[], issues: PatchIssue[]): MvuJsonPatchOp[] {
+  const failedPaths = new Set(
+    issues
+      .filter(i => i.kind === 'apply')
+      .map(issueOpPath)
+      .filter((p): p is string => typeof p === 'string' && p.length > 0),
+  );
+  return ops.filter(op => {
+    const p = opTargetPath(op);
+    return !(p && failedPaths.has(p));
+  });
+}
+
+/**
+ * 手动应用单条/少量 op 后，合并进上一份变更日志，避免整表被替换成仅本次 ops。
+ * 成功应用的 op 写入 manualFixedOps，供「手动修复」分区展示。
+ */
+export function mergePatchLogAfterManualApply(
+  prev: AddonPatchLogEntry | null,
+  next: {
+    ops: MvuJsonPatchOp[];
+    issues: PatchIssue[];
+    failedFragments?: AddonPatchFailedFragment[];
+    changed: boolean;
+    messageId?: number;
+    resolvedFragmentIndexes?: number[];
+  },
+): AddonPatchLogEntry {
+  const fixedThisRound = successfulManualOps(next.ops, next.issues);
+
+  if (!prev) {
+    return createPatchLogEntry({
+      messageId: next.messageId,
+      ops: next.ops,
+      issues: next.issues,
+      failedFragments: next.failedFragments ?? [],
+      manualFixedOps: fixedThisRound,
+      changed: next.changed,
+    });
+  }
+
+  const pathSet = new Set(
+    next.ops.map(opTargetPath).filter((p): p is string => typeof p === 'string' && p.length > 0),
+  );
+  const resolvedIdx = new Set(next.resolvedFragmentIndexes ?? []);
+
+  const keptFragments = prev.failedFragments.filter(frag => {
+    if (resolvedIdx.has(frag.index)) return false;
+    const p = fragmentPath(frag.snippet);
+    if (p && pathSet.has(p)) return false;
+    return true;
+  });
+  const removedFragMessages = new Set(
+    prev.failedFragments.filter(f => !keptFragments.includes(f)).map(f => f.message),
+  );
+
+  const keptPrevOps = prev.ops.filter(op => {
+    const p = opTargetPath(op);
+    return !(p && pathSet.has(p));
+  });
+
+  const keptPrevManual = (prev.manualFixedOps ?? []).filter(op => {
+    const p = opTargetPath(op);
+    return !(p && pathSet.has(p));
+  });
+
+  const keptPrevIssues = prev.issues.filter(issue => {
+    if (issue.kind === 'parse' && removedFragMessages.has(issue.message)) return false;
+    if (issue.kind === 'apply') {
+      const p = issueOpPath(issue);
+      if (p && pathSet.has(p)) return false;
+    }
+    return true;
+  });
+
+  return createPatchLogEntry({
+    messageId: prev.messageId ?? next.messageId,
+    ops: [...keptPrevOps, ...next.ops],
+    issues: [...keptPrevIssues, ...next.issues],
+    failedFragments: keptFragments,
+    manualFixedOps: [...keptPrevManual, ...fixedThisRound],
+    changed: prev.changed || next.changed,
+  });
 }

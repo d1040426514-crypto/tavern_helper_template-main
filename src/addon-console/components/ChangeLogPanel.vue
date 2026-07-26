@@ -57,7 +57,7 @@
           <div class="ac-cmd-detail">
             <div class="ac-cmd-warn">{{ frag.message }}</div>
             <textarea v-model="fragEditors[i]" class="ac-cmd-textarea" rows="8" spellcheck="false" />
-            <button type="button" class="ac-btn" :disabled="busy" @click="applyEdited(fragEditors[i])">
+            <button type="button" class="ac-btn" :disabled="busy" @click="applyEdited(fragEditors[i], { fragmentIndex: frag.index })">
               应用此条
             </button>
           </div>
@@ -80,7 +80,29 @@
         </details>
       </section>
 
-      <!-- 2. heal / parse 标记 -->
+      <!-- 2. 手动修复 -->
+      <section v-if="manualFixedOps.length" class="ac-changelog-section ac-changelog-section--fixed">
+        <h3 class="ac-changelog-h ac-changelog-h--fixed">手动修复</h3>
+        <details
+          v-for="(item, i) in manualFixedOps"
+          :key="'mf' + i"
+          class="ac-cmd-card"
+          :class="opClass(item.op.op)"
+        >
+          <summary class="ac-cmd-summary">
+            <span class="ac-cmd-badge fixed">已修复</span>
+            <span class="ac-cmd-badge" :class="item.op.op">{{ item.op.op }}</span>
+            <span class="ac-cmd-title">{{ lastPathSegment(opPath(item.op)) }}</span>
+            <span class="ac-cmd-chevron" aria-hidden="true" />
+          </summary>
+          <div class="ac-cmd-detail">
+            <code class="ac-cmd-path-full">{{ opPath(item.op) }}</code>
+            <pre class="ac-cmd-json">{{ formatOp(item.op) }}</pre>
+          </div>
+        </details>
+      </section>
+
+      <!-- 3. heal / parse 标记 -->
       <section v-if="hasMarkSection" class="ac-changelog-section ac-changelog-section--mark">
         <h3 class="ac-changelog-h ac-changelog-h--mark">自动修正 / 标记</h3>
 
@@ -115,7 +137,7 @@
         </details>
       </section>
 
-      <!-- 3. 正常更新 -->
+      <!-- 4. 正常更新（不含手动修复） -->
       <section v-if="successOps.length" class="ac-changelog-section ac-changelog-section--ok">
         <h3 class="ac-changelog-h">正常更新</h3>
         <details
@@ -152,6 +174,7 @@ export type PatchLogEntry = {
   ops: any[];
   issues: PatchLogIssue[];
   failedFragments: PatchLogFragment[];
+  manualFixedOps?: any[];
   changed: boolean;
 };
 
@@ -164,7 +187,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   clear: [];
   reprocess: [];
-  applyOp: [op: unknown];
+  applyOp: [op: unknown, meta?: { fragmentIndex?: number }];
   applyError: [message: string];
 }>();
 
@@ -198,12 +221,33 @@ const failedOps = computed(() => {
   return out;
 });
 
+function manualFixedPathSet(log: PatchLogEntry): Set<string> {
+  const set = new Set<string>();
+  for (const op of log.manualFixedOps ?? []) {
+    const p = op?.op === 'move' ? op.to : op?.path;
+    if (typeof p === 'string' && p) set.add(p);
+  }
+  return set;
+}
+
+const manualFixedOps = computed(() => {
+  const log = props.log;
+  if (!log) return [] as Array<{ op: any; index: number }>;
+  return (log.manualFixedOps ?? []).map((op, index) => ({ op, index }));
+});
+
 const successOps = computed(() => {
   const log = props.log;
   if (!log) return [] as Array<{ op: any; index: number }>;
+  const fixedPaths = manualFixedPathSet(log);
   return log.ops
     .map((op, index) => ({ op, index }))
-    .filter(({ op }) => !applyIssueFor(op));
+    .filter(({ op }) => {
+      if (applyIssueFor(op)) return false;
+      const p = op?.op === 'move' ? op.to : op?.path;
+      if (typeof p === 'string' && fixedPaths.has(p)) return false;
+      return true;
+    });
 });
 
 const orphanErrorIssues = computed(() => {
@@ -302,14 +346,14 @@ function formatOp(op: any): string {
   return JSON.stringify(op, null, 2);
 }
 
-function applyEdited(raw: string) {
+function applyEdited(raw: string, meta?: { fragmentIndex?: number }) {
   try {
     const parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       emit('applyError', 'op 必须是单个 JSON 对象');
       return;
     }
-    emit('applyOp', parsed);
+    emit('applyOp', parsed, meta);
   } catch (e) {
     emit('applyError', e instanceof Error ? e.message : String(e));
   }

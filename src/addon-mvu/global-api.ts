@@ -87,7 +87,10 @@ export const Addon = {
 
   async applyManualPatchOps(
     ops: MvuJsonPatchOp[],
-    options: AddonMessageOption = { type: 'message', message_id: 'latest' },
+    options: AddonMessageOption & { fragmentIndexes?: number[] } = {
+      type: 'message',
+      message_id: 'latest',
+    },
   ) {
     if (!hasChatMessages()) {
       throw new Error('当前无聊天楼层，无法应用 patch');
@@ -97,7 +100,12 @@ export const Addon = {
     }
     const message_id = resolveAddonMessageId(options);
     const base = requireFloorData(message_id);
-    const result = await applyOpsToFloor(ops, base, { message_id, emitEvents: true });
+    const result = await applyOpsToFloor(ops, base, {
+      message_id,
+      emitEvents: true,
+      mergeIntoLastLog: true,
+      resolvedFragmentIndexes: options.fragmentIndexes,
+    });
     const refreshed = refreshNarrativeGuidanceDetails(result.data);
     if (!_.isEqual(refreshed, base)) {
       writeAddonData(message_id, refreshed);

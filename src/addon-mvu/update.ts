@@ -11,6 +11,8 @@ import {
 } from './patch';
 import {
   createPatchLogEntry,
+  getLastPatchLog,
+  mergePatchLogAfterManualApply,
   setLastPatchLog,
   type AddonPatchFailedFragment,
   type AddonPatchLogEntry,
@@ -93,7 +95,13 @@ async function reconcileAfterPatch(
 export async function applyOpsToFloor(
   ops: MvuJsonPatchOp[],
   base: AddonData,
-  options: { message_id?: number; emitEvents?: boolean } = {},
+  options: {
+    message_id?: number;
+    emitEvents?: boolean;
+    /** 为 true 时合并进上一份变更日志，避免单条应用清空其它条目 */
+    mergeIntoLastLog?: boolean;
+    resolvedFragmentIndexes?: number[];
+  } = {},
 ): Promise<AddonUpdateResult> {
   const emitEvents = options.emitEvents !== false;
   const old_wrapper = wrapAddonData(base);
@@ -129,13 +137,17 @@ export async function applyOpsToFloor(
   }
 
   const changed = !_.isEqual(new_wrapper.addon_data, base);
-  const entry = createPatchLogEntry({
+  const partial = {
     messageId: options.message_id,
     ops: canon_ops,
     issues,
     failedFragments,
     changed,
-  });
+    resolvedFragmentIndexes: options.resolvedFragmentIndexes,
+  };
+  const entry = options.mergeIntoLastLog
+    ? mergePatchLogAfterManualApply(getLastPatchLog(), partial)
+    : createPatchLogEntry(partial);
   await publishPatchLog(entry, emitEvents);
   notifyIssues(issues);
 
