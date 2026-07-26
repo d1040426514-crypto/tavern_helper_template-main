@@ -48,14 +48,18 @@ export function openSettingsWindow(): void {
     $root = createScriptIdDiv()
       .addClass('acu-pp-root')
       .css({
+        // 不用 inset/height:100%：ST html 有 transform 时 fixed 相对 html，矮屏 html 高度可为 0
         position: 'fixed',
-        inset: '0',
-        width: '100%',
-        height: '100%',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
         zIndex: '10040',
         pointerEvents: 'auto',
-      })
-      .appendTo('body');
+      });
+    // dvh 优先（支持时覆盖 vh），避免移动端浏览器工具栏导致可视高度偏差
+    $root[0].style.setProperty('height', '100dvh');
+    $root.appendTo('body');
 
     const uiThemeId = loadSettings().uiThemeId;
     updateGlobalTheme(uiThemeId);

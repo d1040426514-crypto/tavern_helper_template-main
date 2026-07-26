@@ -15,9 +15,16 @@
 }
 
 /* ── 遮罩与窗口 ── */
+/* ST 的 html 带 transform/perspective 时，fixed 的包含块是 html 而非视口；
+   矮屏下 html 高度可为 0，inset/height:100% 会塌成 0，导致 align-items:center 把窗口顶出视口。
+   用 vw/vh(dvh) 相对视口定尺寸，避免依赖包含块高度。 */
 .acu-overlay {
   position: fixed;
-  inset: 0;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
   background: var(--acu-overlay-bg);
   backdrop-filter: blur(var(--acu-overlay-backdrop-blur));
   -webkit-backdrop-filter: blur(var(--acu-overlay-backdrop-blur));

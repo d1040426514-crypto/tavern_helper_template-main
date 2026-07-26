@@ -41,14 +41,17 @@ export function showReplicaFamilyCleanupDialog(
     const $root = createScriptIdDiv()
       .addClass('acu-pp-root')
       .css({
+        // 与 mount-ui 一致：视口单位，避免 ST html transform 下百分比高度塌缩
         position: 'fixed',
-        inset: '0',
-        width: '100%',
-        height: '100%',
+        top: '0',
+        left: '0',
+        width: '100vw',
+        height: '100vh',
         zIndex: '10050',
         pointerEvents: 'auto',
-      })
-      .appendTo('body');
+      });
+    $root[0].style.setProperty('height', '100dvh');
+    $root.appendTo('body');
 
     const uiThemeId = loadSettings().uiThemeId;
     updateGlobalTheme(uiThemeId);
