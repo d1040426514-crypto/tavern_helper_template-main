@@ -52,7 +52,7 @@ export {
 } from './control';
 export { injectAddonConsoleFab, openAddonConsole, closeAddonConsole, toggleAddonConsole, syncFabOrbitPlanets } from './fab';
 
-export const REPROCESS_ADDON_BUTTON_NAME = '重新处理addon变量';
+const LEGACY_REPROCESS_ADDON_BUTTON_NAME = '重新处理addon变量';
 
 function parentHasSillyTavern(): boolean {
   try {
@@ -85,10 +85,10 @@ function initAddonMvu(): void {
     errorCatched(backfillChatAddonData)();
   });
 
-  appendInexistentScriptButtons([{ name: REPROCESS_ADDON_BUTTON_NAME, visible: true }]);
-  eventOn(getButtonEvent(REPROCESS_ADDON_BUTTON_NAME), () => {
-    errorCatched(() => processFloor(getLastMessageId()))();
-  });
+  // 详情与重跑已迁至控制台「变更」；清理老用户脚本栏上的同名按钮
+  updateScriptButtonsWith(buttons =>
+    buttons.filter(b => b.name !== LEGACY_REPROCESS_ADDON_BUTTON_NAME),
+  );
 
   reloadOnChatChange({ beforeReload: markAddonConsoleSoftUnload });
   initializeGlobal('Addon', Addon);

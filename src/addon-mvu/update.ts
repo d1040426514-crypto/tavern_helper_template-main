@@ -51,17 +51,11 @@ function notifyIssues(issues: PatchIssue[]): void {
   if (visible.length === 0 || !shouldShowAddonUpdateErrors()) {
     return;
   }
-  const parseCount = visible.filter(issue => issue.kind === 'parse').length;
-  const lines = visible.map(issue => {
-    const op_hint = issue.op ? ` [${issue.op.op} ${'path' in issue.op ? issue.op.path : ''}]` : '';
-    return `${issue.kind === 'parse' ? '解析' : '应用'}: ${issue.message}${op_hint}`;
-  });
-  const body =
-    parseCount > 1
-      ? `跳过 ${parseCount} 条无法修复的 patch op\n${lines.join('\n')}`
-      : lines.join('\n');
-  const hint = '\n（可在 addon 控制台 → 变更 查看详情）';
-  toastr.warning(body + hint, '[addon-mvu] 变量更新存在问题');
+  const hasParse = visible.some(issue => issue.kind === 'parse');
+  const body = hasParse
+    ? '部分 patch 未能应用，请打开 addon 控制台 →「变更」查看并修改'
+    : '变量应用存在问题，请打开 addon 控制台 →「变更」查看并修改';
+  toastr.warning(body, '[addon-mvu] 变量更新存在问题');
 }
 
 async function publishPatchLog(entry: AddonPatchLogEntry, emitEvents: boolean): Promise<void> {
