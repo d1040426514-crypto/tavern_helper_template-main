@@ -1,3 +1,5 @@
+import { toSimplified } from 'chinese-simple2traditional';
+import 'chinese-simple2traditional/enhance';
 import type {
   AttrMap,
   BusinessData,
@@ -11,9 +13,14 @@ import type {
   ProjectData,
 } from './types';
 
-/** 去掉 HTML 注释；修正标签名与属性粘连 */
+/** 繁转简（启用短语库）；帐本→账本，与模板简体键一致 */
+function toLedgerSimplified(text: string): string {
+  return toSimplified(String(text ?? ''), true).replace(/帐本/g, '账本');
+}
+
+/** 繁转简后去掉 HTML 注释；修正标签名与属性粘连 */
 function normalizeMarkup(text: string): string {
-  return String(text ?? '')
+  return toLedgerSimplified(text)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(
       /<(本期结算|外因|内因|产业流动资金|流动资金|实体|经营|运营|基建|基础设施|仓库|人员|收入|支出|产能|订单|履约|在途|本期可交付|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,

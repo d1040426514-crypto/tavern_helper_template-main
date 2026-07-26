@@ -338,6 +338,61 @@ test('findAllPairs self-closing', () => {
   assert.equal(hits[0].attrs.type, 'A');
 });
 
+test('parseLedgerBody accepts Traditional Chinese tags and attrs', () => {
+  const body = parseLedgerBody(`
+<資產帳本>
+  <本期結算>
+    歷時: 24h
+    損益: 盈利 (Δ +10 銀盾)
+  </本期結算>
+  <經營 name="霧晶學院-咸魚同好會" 週期="月">
+    <收入 total="0" 週期="月" 合計金額="0">
+      <條目 name="愛欲共鳴收益" amount="+0" type="偶發" recurring="false">
+        原因:上週結算 | 來源:莉絲互動
+      </條目>
+    </收入>
+    <支出 total="0" 週期="月">
+      <條目 name="設施維護費" amount="-0" type="維護" recurring="true">
+        計算:0×0=0
+      </條目>
+    </支出>
+    <產能>
+      <產線 production="魔晶石精煉" count="1" run="Idle">
+        停工因由:历时不足1h
+        分流: 已售0→收入; 入庫0→倉庫; 自用0
+      </產線>
+    </產能>
+  </經營>
+  <運營 name="霧晶學院-咸魚同好會">
+    <主管 name="bAosi">重點:農村自產自銷 | 風險:低</主管>
+    <項目 name="農村自產自銷" progress="40%">
+      階段:筹备 | 投入:0 | 預計完工:下月
+    </項目>
+  </運營>
+</資產帳本>
+`);
+  assert.equal(body.businesses.length, 1);
+  const biz = body.businesses[0]!;
+  assert.equal(biz.name, '雾晶学院-咸鱼同好会');
+  assert.equal(biz.period, '月');
+  assert.equal(biz.revenuePeriod, '月');
+  assert.equal(biz.revenueItems.length, 1);
+  assert.equal(biz.revenueItems[0]?.attrs.name, '爱欲共鸣收益');
+  assert.equal(biz.expenseItems.length, 1);
+  assert.equal(biz.expenseItems[0]?.attrs.name, '设施维护费');
+  assert.equal(biz.lines.length, 1);
+  assert.equal(biz.lines[0]?.attrs.production, '魔晶石精炼');
+  const split = parseProductionSplit(biz.lines[0]!.text);
+  assert.ok(split);
+  assert.equal(split?.sold, '0');
+  assert.equal(split?.stock, '0');
+  assert.equal(body.operations.length, 1);
+  assert.equal(body.operations[0]?.managerName, 'bAosi');
+  assert.equal(body.operations[0]?.projects.length, 1);
+  assert.equal(body.operations[0]?.projects[0]?.name, '农村自产自销');
+  assert.match(body.headline.duration, /24h/);
+});
+
 test('parseCashMetrics extracts total and delta', () => {
   const m = parseCashMetrics(
     '期初100 +流入20 -流出5 ±重估0 =期末115\n(Δ +15 | 原因:售货)',

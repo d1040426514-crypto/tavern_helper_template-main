@@ -29,6 +29,9 @@ importers:
       axios:
         specifier: 1.14.0
         version: 1.14.0
+      chinese-simple2traditional:
+        specifier: ^2.3.2
+        version: 2.3.2
       compare-versions:
         specifier: ^6.1.1
         version: 6.1.1
@@ -1597,6 +1600,9 @@ packages:
   cheerio@1.2.0:
     resolution: {integrity: sha512-WDrybc/gKFpTYQutKIK6UvfcuxijIZfMfXaYm8NMsPQxSYvf+13fXUJ4rztGGbJcBQ/GF55gvrZ0Bc0bj/mqvg==}
     engines: {node: '>=20.18.1'}
+
+  chinese-simple2traditional@2.3.2:
+    resolution: {integrity: sha512-zgvXTpDelAOtM6GIqLLWTe3Ot2a3WrV1ZJvnXhz+Nz1flnMRaBi602UOg8u/elsHbIVIOgT2jRpa2TbnHaXdYg==}
 
   chokidar@3.6.0:
     resolution: {integrity: sha512-7VT13fmjotKpGipCW9JEQAusEPE+Ei8nl6/g4FBAmIm0GOOLMua9NDDo/DWp0ZAxCr3cPq5ZpBqmPAQgDda2Pw==}
@@ -5638,6 +5644,8 @@ snapshots:
       parse5-parser-stream: 7.1.2
       undici: 7.28.0
       whatwg-mimetype: 4.0.0
+
+  chinese-simple2traditional@2.3.2: {}
 
   chokidar@3.6.0:
     dependencies:

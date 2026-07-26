@@ -18,12 +18,15 @@
 </template>
 
 <script setup lang="ts">
+import { toSimplified } from 'chinese-simple2traditional';
+import 'chinese-simple2traditional/enhance';
 import './theme.scss';
 import LedgerView from './components/LedgerView.vue';
 import { isLedgerEmpty, parseLedger } from './parse';
 import type { LedgerData } from './types';
 
 const THEME_KEY = 'ledgerTheme';
+const LEDGER_BODY_KEY = '资产账本';
 
 const loading = ref(true);
 const empty = ref(false);
@@ -52,6 +55,22 @@ function toggleTheme() {
   }
 }
 
+function normalizeTagKey(key: string): string {
+  return toSimplified(key, true).replace(/帐本/g, '账本');
+}
+
+/** 读账本正文：优先简体键，兼容繁体/异体键名 */
+function readLedgerBody(tags: Record<string, unknown>): string {
+  const direct = tags[LEDGER_BODY_KEY] ?? tags['資產帳本'] ?? tags['资产帐本'];
+  if (direct != null && String(direct).trim()) return String(direct).trim();
+  for (const [key, value] of Object.entries(tags)) {
+    if (normalizeTagKey(key) === LEDGER_BODY_KEY && value != null && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return '';
+}
+
 function readTags(): { time: string; body: string } {
   try {
     const message_id = getCurrentMessageId();
@@ -59,7 +78,7 @@ function readTags(): { time: string; body: string } {
     const tags = (vars.post_process_tags ?? {}) as Record<string, unknown>;
     return {
       time: String(tags.LedgerTime ?? '').trim(),
-      body: String(tags['资产账本'] ?? '').trim(),
+      body: readLedgerBody(tags),
     };
   } catch {
     return { time: '', body: '' };
