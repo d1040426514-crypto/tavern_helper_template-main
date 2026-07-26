@@ -33,10 +33,12 @@ WorldPaper_Update_Format: |-
   - 自检：analysis 写「新建事件/传闻」却只有深层脉络/历程 insert → 违规；写「新增节点/演变纪/传奇」却整路径 replace → 违规，改为 insert 新键
   
   ## analysis
-  - 语言：中文
+  - 语言：中文；换行只用 \n
   - 必须完整执行 `<analysis_format>` 思维步骤，不得删减
   - Step 0 须检查 `<上期世界状态>`：若目标世界不存在，Step 9 输出空 patch，勿规划 `insert /世界名`
-  - 允许较长文本；换行用 \n；引号按 JSON 转义
+  - analysis 是 JSON 字符串：正文里禁止出现未转义的 ASCII 双引号 "
+  - 空值/空字段在 analysis 中写「空」或「空字符串」，禁止写 ""
+  - 需要引用原文时用中文引号「」或『』；若必须用 "，写成 \"
   
   ## 根对象结构
   
