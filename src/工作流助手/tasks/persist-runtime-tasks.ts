@@ -28,12 +28,15 @@ export async function persistRuntimeTaskChanges(
   const chatOverride = isChatOverrideActive(scope) && !!scope?.snapshot;
 
   if (chatOverride) {
+    // 有快照：只写 snapshot；若曾在 global 视图，写回后切回 snapshot，避免视图与数据错位
     await writeChatTaskScope({
       ...scope!,
       snapshot: {
         ...scope!.snapshot!,
         tasks: _.cloneDeep(effectiveSettings.tasks),
       },
+      activeView: 'snapshot',
+      boundGlobalPresetName: '',
       updatedAt: Date.now(),
     });
   } else if (shouldWriteRuntimeTasksToGlobal(chatOverride)) {

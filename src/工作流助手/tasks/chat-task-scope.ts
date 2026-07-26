@@ -48,6 +48,20 @@ export function isChatOverrideActive(scope?: ChatTaskScopeState | null): boolean
   return scope?.mode === 'chat_override' && !!scope.snapshot;
 }
 
+export function hasChatSnapshot(scope?: ChatTaskScopeState | null): boolean {
+  return isChatOverrideActive(scope);
+}
+
+/** 下拉当前选中值：有快照时为哨兵或绑定的全局预设名 */
+export function getChatScopeDropdownValue(scope?: ChatTaskScopeState | null): string {
+  const s = scope === undefined ? readChatTaskScope() : scope;
+  if (!hasChatSnapshot(s) || !s) return '';
+  if (s.activeView === 'global' && s.boundGlobalPresetName.trim()) {
+    return s.boundGlobalPresetName.trim();
+  }
+  return CHAT_SNAPSHOT_PRESET_NAME;
+}
+
 export function readChatTaskScope(): ChatTaskScopeState | null {
   const ctx = getStContext();
   if (!ctx) return null;
@@ -122,7 +136,58 @@ export async function ensureChatOverride(
     originPresetName: settings.activePresetName || '',
     updatedAt: Date.now(),
     source,
+    activeView: 'snapshot',
+    boundGlobalPresetName: '',
   });
   await writeChatTaskScope(state);
   return state;
+}
+
+/**
+ * 切换本聊天下拉视图：不清快照、不改全局 settings。
+ * presets 用于校验全局预设是否存在。
+ */
+export async function setChatScopeActiveView(
+  input: { view: 'snapshot' } | { view: 'global'; presetName: string },
+  presets: Array<{ name: string }>,
+): Promise<ChatTaskScopeState | null> {
+  const scope = readChatTaskScope();
+  if (!scope?.snapshot) return null;
+
+  if (input.view === 'snapshot') {
+    return writeChatTaskScope({
+      ...scope,
+      activeView: 'snapshot',
+      boundGlobalPresetName: '',
+      updatedAt: Date.now(),
+    });
+  }
+
+  const name = input.presetName.trim();
+  if (!name || name === CHAT_SNAPSHOT_PRESET_NAME) return null;
+  if (!presets.some(p => p.name === name)) return null;
+
+  return writeChatTaskScope({
+    ...scope,
+    activeView: 'global',
+    boundGlobalPresetName: name,
+    updatedAt: Date.now(),
+  });
+}
+
+/** 绑定的全局预设已删除时，纠正为 snapshot 视图 */
+export async function repairChatScopeBoundPreset(
+  presets: Array<{ name: string }>,
+): Promise<ChatTaskScopeState | null> {
+  const scope = readChatTaskScope();
+  if (!scope?.snapshot) return null;
+  if (scope.activeView !== 'global') return scope;
+  const name = scope.boundGlobalPresetName.trim();
+  if (name && presets.some(p => p.name === name)) return scope;
+  return writeChatTaskScope({
+    ...scope,
+    activeView: 'snapshot',
+    boundGlobalPresetName: '',
+    updatedAt: Date.now(),
+  });
 }

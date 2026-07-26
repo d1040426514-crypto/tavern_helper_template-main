@@ -25,6 +25,8 @@ import {
   replaceTasks,
   resetTaskScheduleState,
   resolveTaskApiPresetName,
+  saveChatSnapshotAsGlobalPreset,
+  setChatScopeActiveView,
   setTaskEnabled,
   updatePresetFields,
   updatePromptAutoSegment,
@@ -97,6 +99,10 @@ export interface AcuPostProcessTaskAPI {
   getChatScopeState(): ChatTaskScopeState | null;
   clearChatScope(): Promise<void>;
   promoteChatScopeToPreset(name?: string): Promise<string | null>;
+  saveChatSnapshotAsGlobalPreset(name?: string): Promise<string | null>;
+  setChatScopeActiveView(
+    input: { view: 'snapshot' } | { view: 'global'; presetName: string },
+  ): Promise<ChatTaskScopeState | null>;
   updatePresetFields(fields: PresetFieldsPatch): Promise<void>;
   updateTaskPlotWorldbook(
     taskId: string,
@@ -185,6 +191,10 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
   clearChatScope: () => apiCall(() => clearChatScope('api')) as Promise<void>,
   promoteChatScopeToPreset: (name?: string) =>
     apiCall(() => promoteChatScopeToPreset(name)) as Promise<string | null>,
+  saveChatSnapshotAsGlobalPreset: (name?: string) =>
+    apiCall(() => saveChatSnapshotAsGlobalPreset(name)) as Promise<string | null>,
+  setChatScopeActiveView: input =>
+    apiCall(() => setChatScopeActiveView(input)) as Promise<ChatTaskScopeState | null>,
   updatePresetFields: (fields: PresetFieldsPatch) =>
     apiCall(() => updatePresetFields(fields, 'api')) as Promise<void>,
   updateTaskPlotWorldbook: (taskId, input) =>

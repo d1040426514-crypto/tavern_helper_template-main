@@ -5,7 +5,11 @@ import {
   buildChatSnapshotFromSettings,
   clearChatTaskScope,
   ensureChatOverride,
+  getChatScopeDropdownValue,
+  hasChatSnapshot,
   readChatTaskScope,
+  repairChatScopeBoundPreset,
+  setChatScopeActiveView as setChatScopeActiveViewInScope,
   writeChatTaskScope,
   isChatOverrideActive,
 } from './chat-task-scope';
@@ -17,6 +21,7 @@ import {
   PostProcessPresetSchema,
   PostProcessTaskSchema,
   ChatTaskScopeStateSchema,
+  CHAT_SNAPSHOT_PRESET_NAME,
   type ApiPresetMode,
   type ChatTaskScopeState,
   type PostProcessTask,
@@ -141,6 +146,9 @@ async function persistSnapshotTasks(
   const next = ChatTaskScopeStateSchema.parse({
     ...scope,
     snapshot,
+    // 任何写入落盘到快照后，视图回到 snapshot，避免 global 视图与数据错位
+    activeView: 'snapshot',
+    boundGlobalPresetName: '',
     updatedAt: Date.now(),
     source,
   });
@@ -247,6 +255,60 @@ export function getChatScopeState(): ChatTaskScopeState | null {
   return readChatTaskScope();
 }
 
+export function getChatPresetDropdownValue(): string {
+  const scope = readChatTaskScope();
+  if (!hasChatSnapshot(scope)) {
+    return String(loadSettings().activePresetName ?? '').trim();
+  }
+  return getChatScopeDropdownValue(scope);
+}
+
+export async function setChatScopeActiveView(
+  input: { view: 'snapshot' } | { view: 'global'; presetName: string },
+): Promise<ChatTaskScopeState | null> {
+  const settings = loadSettings();
+  const next = await setChatScopeActiveViewInScope(input, settings.presets);
+  if (next) {
+    await emitChatScopeChanged('chat_override', next.originPresetName);
+    await emitTasksChanged('preset', 'ui');
+  }
+  return next;
+}
+
+export async function repairChatScopeIfNeeded(): Promise<void> {
+  const settings = loadSettings();
+  const before = readChatTaskScope();
+  if (!before || before.activeView !== 'global') return;
+  const next = await repairChatScopeBoundPreset(settings.presets);
+  if (next && next.activeView === 'snapshot' && before.activeView === 'global') {
+    await emitChatScopeChanged('chat_override', next.originPresetName);
+    await emitTasksChanged('preset', 'ui');
+  }
+}
+
+/**
+ * 将当前 effective 整份写入聊天快照并切到 snapshot 视图（用于 global 视图下开始编辑前）。
+ */
+export async function forkEffectiveIntoChatSnapshot(source: TaskWriteSource = 'ui'): Promise<void> {
+  const settings = loadSettings();
+  const scope = readChatTaskScope();
+  if (!scope?.snapshot) return;
+  const effective = resolveEffectiveSettings(settings);
+  const snapshot = buildChatSnapshotFromSettings(effective);
+  await writeChatTaskScope(
+    ChatTaskScopeStateSchema.parse({
+      ...scope,
+      snapshot,
+      activeView: 'snapshot',
+      boundGlobalPresetName: '',
+      updatedAt: Date.now(),
+      source,
+    }),
+  );
+  await emitChatScopeChanged('chat_override', scope.originPresetName);
+  await emitTasksChanged('preset', source);
+}
+
 export async function clearChatScope(source: TaskWriteSource = 'api'): Promise<void> {
   const prev = readChatTaskScope();
   await clearChatTaskScope();
@@ -254,11 +316,13 @@ export async function clearChatScope(source: TaskWriteSource = 'api'): Promise<v
   await emitTasksChanged('clear', source);
 }
 
+/** 桥接兼容：另存为全局并清除聊天快照 */
 export async function promoteChatScopeToPreset(name?: string): Promise<string | null> {
   const scope = readChatTaskScope();
   if (!scope?.snapshot) return null;
   const settings = loadSettings();
   const presetName = name?.trim() || `聊天快照-${new Date().toLocaleString('zh-CN')}`;
+  if (!presetName || presetName === CHAT_SNAPSHOT_PRESET_NAME) return null;
   if (settings.presets.some(p => p.name === presetName)) return null;
 
   const preset = PostProcessPresetSchema.parse({
@@ -286,6 +350,25 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   return presetName;
 }
 
+/** UI：从聊天快照另存为新全局预设，保留快照与当前视图 */
+export async function saveChatSnapshotAsGlobalPreset(name?: string): Promise<string | null> {
+  const scope = readChatTaskScope();
+  if (!scope?.snapshot) return null;
+  const settings = loadSettings();
+  const presetName = name?.trim() || `聊天快照-${new Date().toLocaleString('zh-CN')}`;
+  if (!presetName || presetName === CHAT_SNAPSHOT_PRESET_NAME) return null;
+  if (settings.presets.some(p => p.name === presetName)) return null;
+
+  const preset = PostProcessPresetSchema.parse({
+    ...scope.snapshot,
+    name: presetName,
+  });
+  settings.presets.push(_.cloneDeep(preset));
+  saveSettings(settings);
+  await emitTasksChanged('preset', 'ui');
+  return presetName;
+}
+
 /** 将当前 effective 预设字段同步回聊天快照（UI 编辑上下文等字段时） */
 export async function syncEffectivePresetFieldsToChatScope(
   fields: Partial<ReturnType<typeof buildChatSnapshotFromSettings>>,
@@ -302,6 +385,8 @@ export async function syncEffectivePresetFieldsToChatScope(
     ChatTaskScopeStateSchema.parse({
       ...scope,
       snapshot,
+      activeView: 'snapshot',
+      boundGlobalPresetName: '',
       updatedAt: Date.now(),
       source,
     }),
@@ -330,6 +415,8 @@ export async function updatePresetFields(
     const next = ChatTaskScopeStateSchema.parse({
       ...scope,
       snapshot,
+      activeView: 'snapshot',
+      boundGlobalPresetName: '',
       updatedAt: Date.now(),
       source,
     });

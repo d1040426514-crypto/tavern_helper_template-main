@@ -331,6 +331,10 @@ export const ChatTaskScopeStateSchema = z.object({
   originPresetName: z.string().default(''),
   updatedAt: z.number().default(0),
   source: z.enum(['api', 'ui', 'inherit']).default('inherit'),
+  /** 有快照时：用 snapshot 还是临时套用某全局预设（不改全局 settings） */
+  activeView: z.enum(['snapshot', 'global']).default('snapshot'),
+  /** activeView === 'global' 时绑定的全局预设名 */
+  boundGlobalPresetName: z.string().default(''),
 });
 
 export const ScriptSettingsSchema = z

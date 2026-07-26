@@ -10,6 +10,8 @@ const expectedMethods = [
   'getChatScopeState',
   'clearChatScope',
   'promoteChatScopeToPreset',
+  'saveChatSnapshotAsGlobalPreset',
+  'setChatScopeActiveView',
   'updatePresetFields',
   'updateTaskPlotWorldbook',
   'updateTaskContext',

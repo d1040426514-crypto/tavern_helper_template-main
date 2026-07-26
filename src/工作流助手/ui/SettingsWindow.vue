@@ -33,14 +33,15 @@ import {
   type RemovedReplicaCleanupInfo,
 } from '../tasks/replica-family-cleanup';
 import { probeTaskGameTime } from '../tasks/schedule';
-import type {
-  ChatWorldbookWriteRule,
-  PlotWorldbookConfig,
-  PostProcessTask,
-  ReplicaFamilyScheduleMode,
-  RunLogTaskResult,
-  TaskContextConfig,
-  TaskWorkflowPresetEntry,
+import {
+  CHAT_SNAPSHOT_PRESET_NAME,
+  type ChatWorldbookWriteRule,
+  type PlotWorldbookConfig,
+  type PostProcessTask,
+  type ReplicaFamilyScheduleMode,
+  type RunLogTaskResult,
+  type TaskContextConfig,
+  type TaskWorkflowPresetEntry,
 } from '../tasks/schema';
 import { STRUCTURED_OUTPUT_MODE_HELP } from '../tasks/strict-variable-response';
 import {
@@ -65,13 +66,17 @@ import {
   deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
   duplicateTask as duplicateTaskInStore,
   ensureReplicaFamilyMember as ensureReplicaFamilyMemberInStore,
+  forkEffectiveIntoChatSnapshot,
+  getChatPresetDropdownValue,
   getChatScopeState,
   listTasks,
   moveTask as moveTaskInStore,
-  promoteChatScopeToPreset,
   removePromptGroup as removePromptGroupInStore,
+  repairChatScopeIfNeeded,
   replaceTasks,
+  saveChatSnapshotAsGlobalPreset,
   saveTaskWorkflowPreset as saveTaskWorkflowPresetInStore,
+  setChatScopeActiveView,
   setTaskEnabled as setTaskEnabledInStore,
   updatePresetFields,
   updateReplicaFamilyScheduleMode as updateReplicaFamilyScheduleModeInStore,
@@ -114,8 +119,15 @@ const { clipboard, hasClipboard, copyTask: copyTaskToClipboard } = useTaskClipbo
 const selectedTaskId = ref(settings.value.tasks[0]?.id ?? '');
 const viewTasks = ref<PostProcessTask[]>([]);
 const chatScopeInfo = ref(getChatScopeState());
-const chatScopeActive = ref(!!getChatScopeState());
+/** 本聊天是否存在快照（与下拉当前是 snapshot 还是 global 视图无关） */
+const hasChatSnapshot = ref(!!getChatScopeState());
+const presetDropdownValue = ref(getChatPresetDropdownValue());
 const windowFullscreen = ref(false);
+
+/** 兼容旧分支名：有快照时任务展示走 viewTasks */
+const chatScopeActive = hasChatSnapshot;
+
+const displayTasks = computed(() => (hasChatSnapshot.value ? viewTasks.value : settings.value.tasks));
 
 function toggleWindowFullscreen(): void {
   windowFullscreen.value = !windowFullscreen.value;
@@ -127,7 +139,22 @@ function onFullscreenKeydown(event: KeyboardEvent): void {
   windowFullscreen.value = false;
 }
 
-const displayTasks = computed(() => (chatScopeActive.value ? viewTasks.value : settings.value.tasks));
+async function ensureSnapshotViewForEdit(): Promise<boolean> {
+  if (!hasChatSnapshot.value) return true;
+  const scope = getChatScopeState();
+  if (!scope || scope.activeView !== 'global') return true;
+  if (
+    !(await acuConfirm({
+      message:
+        '当前下拉正在查看全局预设。继续编辑将把当前生效内容写入「当前聊天快照」并切换到该快照，是否继续？',
+    }))
+  ) {
+    return false;
+  }
+  await forkEffectiveIntoChatSnapshot('ui');
+  await refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });
+  return true;
+}
 
 const showReplicaFamilyCleanupPanel = computed(() => hasReplicaFamilyTasks(settings.value.tasks));
 
@@ -452,9 +479,11 @@ async function flushPendingWrites(options?: FlushPendingWritesOptions): Promise<
 
 async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> {
   await flushPendingWrites(options);
+  await repairChatScopeIfNeeded();
   const scope = getChatScopeState();
   chatScopeInfo.value = scope;
-  chatScopeActive.value = !!scope;
+  hasChatSnapshot.value = !!scope;
+  presetDropdownValue.value = getChatPresetDropdownValue();
   if (scope && !options?.skipTaskReload) {
     viewTasks.value = listTasks();
     if (!viewTasks.value.some(t => t.id === selectedTaskId.value)) {
@@ -515,7 +544,11 @@ function onPlotWorldbookConfigUpdate(v: PlotWorldbookConfig): void {
 }
 
 async function persistPresetFieldsNow(): Promise<void> {
-  if (syncingPresetView || !chatScopeActive.value) return;
+  if (syncingPresetView || !hasChatSnapshot.value) return;
+  if (!(await ensureSnapshotViewForEdit())) {
+    await refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });
+    return;
+  }
   if (persistPresetFieldsTimer) {
     clearTimeout(persistPresetFieldsTimer);
     persistPresetFieldsTimer = null;
@@ -599,12 +632,18 @@ function ensureReplicasMirroredInPlace(tasks: PostProcessTask[]): void {
 
 let persistViewTasksTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersistViewTasks() {
-  if (!chatScopeActive.value) return;
+  if (!hasChatSnapshot.value) return;
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
   persistViewTasksTimer = setTimeout(() => {
     persistViewTasksTimer = null;
-    ensureReplicasMirroredInPlace(viewTasks.value);
-    void replaceTasks(viewTasks.value, 'ui');
+    void (async () => {
+      if (!(await ensureSnapshotViewForEdit())) {
+        await refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });
+        return;
+      }
+      ensureReplicasMirroredInPlace(viewTasks.value);
+      await replaceTasks(viewTasks.value, 'ui');
+    })();
   }, 300);
 }
 
@@ -614,7 +653,8 @@ let persistGlobalSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressGlobalSettingsPersist = false;
 
 function schedulePersistGlobalSettings() {
-  if (chatScopeActive.value || suppressGlobalSettingsPersist) return;
+  // 有快照期间禁止把展示态写回全局（即使下拉在看全局预设）
+  if (hasChatSnapshot.value || suppressGlobalSettingsPersist) return;
   if (persistGlobalSettingsTimer) clearTimeout(persistGlobalSettingsTimer);
   persistGlobalSettingsTimer = setTimeout(() => {
     persistGlobalSettingsTimer = null;
@@ -1653,19 +1693,24 @@ async function addPromptGroup(): Promise<void> {
 }
 
 async function applyBuiltinPreset(name: string) {
-  if (chatScopeActive.value) {
-    if (
-      !(await acuConfirm({
-        message: '切换预设将清除当前聊天的临时快照，是否继续？',
-      }))
-    ) {
-      return;
+  if (hasChatSnapshot.value) {
+    if (name === CHAT_SNAPSHOT_PRESET_NAME) {
+      await setChatScopeActiveView({ view: 'snapshot' });
+    } else {
+      const ok = await setChatScopeActiveView({ view: 'global', presetName: name });
+      if (!ok) {
+        acuToast('warning', `无法切换到预设「${name}」`);
+        presetDropdownValue.value = getChatPresetDropdownValue();
+        return;
+      }
     }
-    await clearChatScope('ui');
-    void refreshTaskView();
+    await refreshTaskView();
+    selectedTaskId.value = displayTasks.value[0]?.id ?? '';
+    return;
   }
   store.applyPreset(name);
   selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+  presetDropdownValue.value = getChatPresetDropdownValue();
 }
 
 async function handleClearChatScope() {
@@ -1680,38 +1725,6 @@ async function handleClearChatScope() {
   void refreshTaskView();
   selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
   acuToast('success', '已清除聊天快照');
-}
-
-async function handlePromoteChatScopeToPreset() {
-  if (!chatScopeActive.value) return;
-  const origin = chatScopeInfo.value?.originPresetName?.trim();
-  const defaultName = origin
-    ? `聊天快照-${origin}`
-    : `聊天快照-${new Date().toLocaleString('zh-CN')}`;
-  const name = await acuPrompt({
-    title: '保存为全局预设',
-    message: '将把当前聊天快照另存为新的全局预设，并切换为该预设、清除本聊天快照。',
-    confirmText: '保存',
-    danger: false,
-    prompt: {
-      placeholder: '新预设名称',
-      defaultValue: defaultName,
-    },
-  });
-  if (!name?.trim()) return;
-  if (settings.value.presets.some(p => p.name === name.trim())) {
-    acuToast('warning', `预设「${name.trim()}」已存在，请换一个名称`);
-    return;
-  }
-  const saved = await promoteChatScopeToPreset(name.trim());
-  if (!saved) {
-    acuToast('warning', '保存失败：无可用聊天快照或名称冲突');
-    return;
-  }
-  store.reload();
-  await refreshTaskView();
-  selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
-  acuToast('success', `已保存为全局预设「${saved}」并清除聊天快照`);
 }
 
 let offTasksChanged: EventOnReturn | null = null;
@@ -1828,22 +1841,45 @@ async function confirmRenameSelectedTask(): Promise<void> {
 }
 
 async function confirmSaveTaskPresetAsNew(): Promise<void> {
+  const origin = chatScopeInfo.value?.originPresetName?.trim();
+  const defaultName = hasChatSnapshot.value
+    ? origin
+      ? `聊天快照-${origin}`
+      : `聊天快照-${new Date().toLocaleString('zh-CN')}`
+    : settings.value.activePresetName;
   const name = await acuPrompt({
-    title: '保存为新预设',
-    message: '请输入新预设名称：',
+    title: hasChatSnapshot.value ? '将聊天快照另存为全局预设' : '保存为新预设',
+    message: hasChatSnapshot.value
+      ? '将从「当前聊天快照」创建新的全局预设，并保留本聊天快照。'
+      : '请输入新预设名称：',
     confirmText: '保存',
     danger: false,
     prompt: {
       placeholder: '新预设名称',
-      defaultValue: settings.value.activePresetName,
+      defaultValue: defaultName,
     },
   });
-  if (!name) return;
-  if (settings.value.presets.some(p => p.name === name)) {
-    acuToast('warning', `预设「${name}」已存在，请换一个名称`);
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (trimmed === CHAT_SNAPSHOT_PRESET_NAME) {
+    acuToast('warning', '不能使用保留名称');
     return;
   }
-  const saved = store.saveAsNewPreset(name);
+  if (settings.value.presets.some(p => p.name === trimmed)) {
+    acuToast('warning', `预设「${trimmed}」已存在，请换一个名称`);
+    return;
+  }
+  if (hasChatSnapshot.value) {
+    const saved = await saveChatSnapshotAsGlobalPreset(trimmed);
+    if (!saved) {
+      acuToast('warning', '另存失败：无可用聊天快照或名称冲突');
+      return;
+    }
+    store.reload();
+    acuToast('success', `已将聊天快照另存为全局预设「${saved}」`);
+    return;
+  }
+  const saved = store.saveAsNewPreset(trimmed);
   if (saved) {
     acuToast('success', `已保存为新预设「${saved}」`);
   }
@@ -2351,28 +2387,17 @@ function saveRunLogTaskTags(taskId: string): void {
 
         <div v-show="currentPage === 3" class="acu-page">
           <div class="acu-section acu-preset-section">
-            <h4>全局预设</h4>
-            <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
-              当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API
-              或本页任务编辑仅影响此聊天，不会修改全局活动预设。若要写入全局请用「保存为全局预设」。
-              <button
-                class="acu-btn acu-btn--sm primary"
-                type="button"
-                style="margin-left: 8px"
-                @click="handlePromoteChatScopeToPreset"
-              >
-                保存为全局预设
-              </button>
-              <button class="acu-btn acu-btn--sm" type="button" style="margin-left: 8px" @click="handleClearChatScope">
-                清除快照
-              </button>
-            </div>
+            <h4>任务预设</h4>
+            <p v-if="hasChatSnapshot" class="acu-notes acu-notes--sm" style="margin-top: 0">
+              本聊天有独立快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。可在下拉中于「当前聊天快照」与全局预设间切换（不清快照、不改全局）。编辑会写入聊天快照；另存可将快照拷贝为新的全局预设。
+            </p>
             <div class="acu-row acu-preset-toolbar">
               <select
-                :value="settings.activePresetName"
+                :value="presetDropdownValue"
                 class="acu-select acu-preset-select"
                 @change="applyBuiltinPreset(($event.target as HTMLSelectElement).value)"
               >
+                <option v-if="hasChatSnapshot" :value="CHAT_SNAPSHOT_PRESET_NAME">「当前聊天快照」</option>
                 <option v-for="p in settings.presets" :key="p.name" :value="p.name">{{ p.name }}</option>
               </select>
               <div class="acu-preset-actions">
@@ -2398,10 +2423,10 @@ function saveRunLogTaskTags(taskId: string): void {
                   class="acu-btn acu-btn--sm acu-icon-btn primary"
                   type="button"
                   :title="
-                    chatScopeActive ? '聊天快照模式下请使用横幅「保存为全局预设」' : '保存预设'
+                    hasChatSnapshot ? '有聊天快照时请用「另存为」将快照存为全局预设' : '保存预设'
                   "
                   aria-label="保存预设"
-                  :disabled="chatScopeActive"
+                  :disabled="hasChatSnapshot"
                   @click="saveTaskPreset"
                 >
                   <i class="fa-fw fa-solid fa-floppy-disk" aria-hidden="true"></i>
@@ -2409,14 +2434,20 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn"
                   type="button"
-                  :title="
-                    chatScopeActive ? '聊天快照模式下请使用横幅「保存为全局预设」' : '另存为新预设'
-                  "
+                  :title="hasChatSnapshot ? '将聊天快照另存为新的全局预设（保留快照）' : '另存为新预设'"
                   aria-label="另存为新预设"
-                  :disabled="chatScopeActive"
                   @click="confirmSaveTaskPresetAsNew"
                 >
                   <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
+                </button>
+                <button
+                  v-if="hasChatSnapshot"
+                  class="acu-btn acu-btn--sm"
+                  type="button"
+                  title="清除本聊天快照"
+                  @click="handleClearChatScope"
+                >
+                  清除快照
                 </button>
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn danger"
