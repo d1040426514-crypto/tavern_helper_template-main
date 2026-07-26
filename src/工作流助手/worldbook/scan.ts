@@ -12,11 +12,13 @@ function getEntryKeywords(entry: WorldbookEntry): string[] {
 export function scanTriggeredWorldbookEntries(
   entries: WorldbookEntry[],
   baseScanText: string,
-  options?: { includeConstantInBaseScan?: boolean },
+  options?: { includeConstantInBaseScan?: boolean; allowDisabled?: boolean },
 ): WorldbookEntry[] {
   const lowerBase = baseScanText.toLowerCase();
-  const constantEntries = entries.filter(e => e.strategy?.type === 'constant' && e.enabled);
-  const keywordEntries = entries.filter(e => e.strategy?.type === 'selective' && e.enabled);
+  const allowDisabled = options?.allowDisabled === true;
+  const passEnabled = (e: WorldbookEntry) => allowDisabled || e.enabled;
+  const constantEntries = entries.filter(e => e.strategy?.type === 'constant' && passEnabled(e));
+  const keywordEntries = entries.filter(e => e.strategy?.type === 'selective' && passEnabled(e));
 
   let scanBase = lowerBase;
   if (options?.includeConstantInBaseScan !== false) {

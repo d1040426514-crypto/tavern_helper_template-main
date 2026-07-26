@@ -5,7 +5,7 @@ import { resolveEffectiveSettings } from '../tasks/effective-settings';
 import type { ChatWorldbookWriteRule, PlotWorldbookConfig } from '../tasks/schema';
 import { shouldShowEntryInUi } from '../worldbook/blocked';
 import {
-  isPlotWorldbookEntrySelectable,
+  isStWorldbookEntryEnabled,
   sanitizePlotWorldbookEnabledUids,
   selectablePlotWorldbookEntryUids,
 } from '../worldbook/plot-entry-select';
@@ -28,7 +28,10 @@ const entryFilter = ref('');
 const loading = ref(false);
 const writeRules = ref<ChatWorldbookWriteRule[]>([]);
 const entryGroups = ref<
-  { bookName: string; entries: { uid: number; label: string; checked: boolean; disabled: boolean }[] }[]
+  {
+    bookName: string;
+    entries: { uid: number; label: string; checked: boolean; stDisabled: boolean }[];
+  }[]
 >([]);
 
 function refreshWriteRules() {
@@ -145,7 +148,7 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
           uid: entry.uid,
           label: entry.name || `条目 ${entry.uid}`,
           checked: enabled.includes(entry.uid),
-          disabled: !isPlotWorldbookEntrySelectable(entry, rules),
+          stDisabled: !isStWorldbookEntryEnabled(entry),
         }));
       if (visible.length) groups.push({ bookName, entries: visible });
     }
@@ -164,9 +167,6 @@ async function refreshEntries(snapshot?: { manualSelection?: string[]; source?: 
 }
 
 function toggleEntry(bookName: string, uid: number, checked: boolean) {
-  const group = entryGroups.value.find(g => g.bookName === bookName);
-  const entry = group?.entries.find(e => e.uid === uid);
-  if (entry?.disabled) return;
   const list = [...(cfg.value.enabledEntries[bookName] ?? [])];
   if (checked) {
     if (!list.includes(uid)) list.push(uid);
@@ -184,9 +184,9 @@ function selectAllEntries(select: boolean) {
   const next = { ...cfg.value.enabledEntries };
   for (const g of entryGroups.value) {
     next[g.bookName] = select
-      ? g.entries.filter(e => !e.disabled).map(e => e.uid)
+      ? g.entries.filter(e => !e.stDisabled).map(e => e.uid)
       : [];
-    for (const e of g.entries) e.checked = select && !e.disabled;
+    for (const e of g.entries) e.checked = select && !e.stDisabled;
   }
   config.value = { ...config.value, enabledEntries: next };
 }
@@ -257,6 +257,9 @@ onMounted(async () => {
       <button class="acu-btn" type="button" @click="selectAllEntries(true)">全选</button>
       <button class="acu-btn" type="button" @click="selectAllEntries(false)">全不选</button>
     </div>
+    <p class="acu-notes acu-notes--sm" style="margin: 0 0 8px">
+      划线表示该条目在酒馆世界书设置中未启用；仍可勾选以供本助手 $1 使用，不会改写酒馆设置。全选默认只勾选酒馆已启用的条目。
+    </p>
     <input v-model="entryFilter" class="acu-input" placeholder="筛选条目/世界书..." style="width: 100%; margin-bottom: 8px" />
     <div v-if="loading" class="acu-notes">加载中...</div>
     <div v-else class="qrf_worldbook_entry_list">
@@ -266,19 +269,17 @@ onMounted(async () => {
           v-for="entry in group.entries"
           :key="entry.uid"
           class="acu-row acu-row--inline qrf_worldbook_entry_row"
-          :class="{ 'qrf_worldbook_entry_row--locked': entry.disabled }"
+          :class="{ 'qrf_worldbook_entry_row--st-disabled': entry.stDisabled }"
         >
           <input
             type="checkbox"
-            class="qrf_worldbook_entry_cb"
-            :class="entry.disabled ? 'qrf_worldbook_entry_cb--locked' : 'qrf_worldbook_entry_cb--active'"
+            class="qrf_worldbook_entry_cb qrf_worldbook_entry_cb--active"
             :checked="(cfg.enabledEntries[group.bookName] ?? []).includes(entry.uid)"
-            :disabled="entry.disabled"
             @change="toggleEntry(group.bookName, entry.uid, ($event.target as HTMLInputElement).checked)"
           />
           <span
             class="qrf_worldbook_entry_label"
-            :class="{ 'qrf_worldbook_entry_label--locked': entry.disabled }"
+            :class="{ 'qrf_worldbook_entry_label--st-disabled': entry.stDisabled }"
           >{{ entry.label }}</span>
         </label>
       </div>

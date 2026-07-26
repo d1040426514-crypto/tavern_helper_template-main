@@ -16,7 +16,7 @@ import {
   prepareRawPlaceholderEntryContent,
   shouldOmitEntryTitleInPlaceholder,
 } from './entry-placeholder-format';
-import { isPlotWorldbookEntrySelectable } from './plot-entry-select';
+import { shouldIncludePlotWorldbookEntryInDollar1 } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { sortPlotWorldbookEntries } from './entry-order';
@@ -155,8 +155,15 @@ export async function getWorldbookContentForPostProcess(
         if (isProtagonistInfoWorldbookEntry(decorated.normalizedComment, protagonistEntryName)) continue;
         const autoIncluded = isPlotDollar1AutoIncludedEntry(decorated.normalizedComment, protagonistEntryName);
         if (!autoIncluded && isEntryBlocked(entry)) continue;
-        if (!autoIncluded && !isPlotWorldbookEntrySelectable(entry, writeRules)) continue;
-        if (!isSelectedPlotWorldbookEntry(decorated, config, protagonistEntryName)) continue;
+        const selected = isSelectedPlotWorldbookEntry(decorated, config, protagonistEntryName);
+        if (
+          !shouldIncludePlotWorldbookEntryInDollar1(entry, decorated, config, writeRules, {
+            autoIncluded,
+            isSelected: selected,
+          })
+        ) {
+          continue;
+        }
         if (decorated.normalizedComment === READABLE_DATATABLE_COMMENT) {
           const sanitizedContent =
             removeMarkdownSection(entry.content || '', protagonistTableName) ||
@@ -173,7 +180,9 @@ export async function getWorldbookContentForPostProcess(
   }
 
   if (allEntries.length === 0) return '';
-  const triggered = sortPlotWorldbookEntries(scanTriggeredWorldbookEntries(allEntries, baseScanText));
+  const triggered = sortPlotWorldbookEntries(
+    scanTriggeredWorldbookEntries(allEntries, baseScanText, { allowDisabled: true }),
+  );
   return formatWorldbookEntries(triggered, messageId);
 }
 
