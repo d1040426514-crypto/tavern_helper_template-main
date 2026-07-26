@@ -37,11 +37,16 @@ function notifyIssues(issues: PatchIssue[]): void {
   if (visible.length === 0 || !shouldShowAddonUpdateErrors()) {
     return;
   }
+  const parseCount = visible.filter(issue => issue.kind === 'parse').length;
   const lines = visible.map(issue => {
     const op_hint = issue.op ? ` [${issue.op.op} ${'path' in issue.op ? issue.op.path : ''}]` : '';
     return `${issue.kind === 'parse' ? '解析' : '应用'}: ${issue.message}${op_hint}`;
   });
-  toastr.warning(lines.join('\n'), '[addon-mvu] 变量更新存在问题');
+  const body =
+    parseCount > 1
+      ? `跳过 ${parseCount} 条无法修复的 patch op\n${lines.join('\n')}`
+      : lines.join('\n');
+  toastr.warning(body, '[addon-mvu] 变量更新存在问题');
 }
 
 /**

@@ -1,6 +1,5 @@
-import { parseString } from '@util/common';
-
 import { getAtPath, resolveParentForWrite, resolveParentStrict } from './patch-heal';
+import { parseJsonPatchOpsWithIssues } from './patch-parse-lenient';
 
 /** 与 MVU 变量输出格式兼容的 JSON Patch 操作 */
 export type MvuJsonPatchOp =
@@ -181,14 +180,15 @@ function applyOp(root: Record<string, unknown>, op: MvuJsonPatchOp): void {
 }
 
 export function parseJsonPatchOps(raw: string): MvuJsonPatchOp[] {
-  const parsed = parseString(raw);
-  if (!Array.isArray(parsed)) {
-    throw new Error('AddonJSONPatch 必须是 JSON 数组');
+  const { ops, issues } = parseJsonPatchOpsWithIssues(raw);
+  const fatal = issues.find(issue => issue.kind === 'parse' && ops.length === 0);
+  if (fatal) {
+    throw new Error(fatal.message);
   }
-  return parsed as MvuJsonPatchOp[];
+  return ops;
 }
 
-/** 从消息中提取所有 <AddonJSONPatch> 块并解析为 op 列表 */
+/** 从消息中提取所有 <AddonJSONPatch> 块并解析为 op 列表（含逐条容错） */
 export function extractAddonJsonPatchOpsWithIssues(message: string): { ops: MvuJsonPatchOp[]; issues: PatchIssue[] } {
   const ops: MvuJsonPatchOp[] = [];
   const issues: PatchIssue[] = [];
@@ -197,16 +197,17 @@ export function extractAddonJsonPatchOpsWithIssues(message: string): { ops: MvuJ
     if (!patchText) {
       continue;
     }
-    try {
-      ops.push(...parseJsonPatchOps(patchText));
-    } catch (error) {
-      const message_text = error instanceof Error ? error.message : String(error);
-      issues.push({ kind: 'parse', message: message_text });
-      console.warn('[addon-mvu] AddonJSONPatch 解析失败, 已跳过:', error);
+    const parsed = parseJsonPatchOpsWithIssues(patchText);
+    ops.push(...parsed.ops);
+    issues.push(...parsed.issues);
+    if (parsed.issues.some(issue => issue.kind === 'parse')) {
+      console.warn('[addon-mvu] AddonJSONPatch 存在无法修复的 op，已跳过坏条:', parsed.issues);
     }
   }
   return { ops, issues };
 }
+
+export { parseJsonPatchOpsWithIssues } from './patch-parse-lenient';
 
 /** @deprecated 请使用 extractAddonJsonPatchOpsWithIssues */
 export function extractAddonJsonPatchOps(message: string): MvuJsonPatchOp[] {

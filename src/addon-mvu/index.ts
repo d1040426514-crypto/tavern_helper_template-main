@@ -11,7 +11,13 @@ export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA, normalizeAddonData } from '
 export { coerceAddonData, LOOSE_NUMERIC_STRING_KEYS, STRICT_BOOLEAN_KEYS } from './coerce';
 export type { AddonData } from './schema';
 export { AddonEvent } from './events';
-export { applyMvuLikePatch, extractAddonJsonPatchOps, extractAddonJsonPatchOpsWithIssues, parseJsonPatchOps } from './patch';
+export {
+  applyMvuLikePatch,
+  extractAddonJsonPatchOps,
+  extractAddonJsonPatchOpsWithIssues,
+  parseJsonPatchOps,
+  parseJsonPatchOpsWithIssues,
+} from './patch';
 export type { MvuJsonPatchOp, PatchIssue } from './patch';
 export { updateAddonFromMessage, wrapAddonData } from './update';
 export type { AddonUpdateResult, AddonUpdateOptions, AddonWrapper } from './update';

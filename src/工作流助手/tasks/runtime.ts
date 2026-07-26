@@ -32,6 +32,7 @@ import {
   hasCompleteVariableXml,
   type ActiveStructuredOutputMode,
 } from './strict-variable-response';
+import { acuToast } from '../ui/toast';
 import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
@@ -122,10 +123,20 @@ function getStructuredOutputMode(task: PostProcessTask): ActiveStructuredOutputM
 function resolveStructuredResponse(
   rawResponse: string,
   mode: ActiveStructuredOutputMode,
-): { ok: true; text: string; recovered?: boolean } | { ok: false; error: string } {
+): {
+  ok: true;
+  text: string;
+  recovered?: boolean;
+  skippedOpCount?: number;
+} | { ok: false; error: string } {
   const strict = extractStrictVariableResponse(rawResponse, mode);
   if (strict.ok && strict.normalizedXml) {
-    return { ok: true, text: strict.normalizedXml, recovered: strict.recovered };
+    return {
+      ok: true,
+      text: strict.normalizedXml,
+      recovered: strict.recovered,
+      skippedOpCount: strict.skippedOpCount,
+    };
   }
   if (hasCompleteVariableXml(rawResponse, mode)) {
     return { ok: true, text: rawResponse.trim() };
@@ -269,6 +280,16 @@ async function runSingleTask(
       const resolved = resolveStructuredResponse(rawResponse, structuredMode);
       if (resolved.ok) {
         processedResponse = resolved.text;
+        // MVU：坏 op 已在工作流过滤，需显式提示；Addon 交由 addon-mvu notifyIssues
+        if (
+          structuredMode === 'mvu_json_patch' &&
+          (resolved.skippedOpCount ?? 0) > 0
+        ) {
+          acuToast(
+            'warning',
+            `变量更新：已跳过 ${resolved.skippedOpCount} 条无法解析的 MVU patch op`,
+          );
+        }
         break;
       }
       lastError = resolved.error;

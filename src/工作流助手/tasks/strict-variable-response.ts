@@ -1,3 +1,5 @@
+import { extractBalancedJsonSlice, parseJsonPatchArrayLenient } from '@util/common';
+
 import type { ApiConfig } from './schema';
 
 export type StructuredOutputMode = 'off' | 'mvu_json_patch' | 'addon_json_patch';
@@ -5,6 +7,8 @@ export type ActiveStructuredOutputMode = Exclude<StructuredOutputMode, 'off'>;
 
 const JSON_PATCH_RE = /<JSONPatch>\s*[\s\S]*?\s*<\/JSONPatch>/i;
 const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*[\s\S]*?\s*<\/AddonJSONPatch>/i;
+
+export { extractBalancedJsonSlice } from '@util/common';
 
 export function stripCodeFence(text: string): string {
   const trimmed = String(text || '').trim();
@@ -26,41 +30,6 @@ export function tryParseJsonObject(text: string): unknown {
   }
 }
 
-/** 从 start（必须是 `[` 或 `{`）提取括号平衡的子串 */
-export function extractBalancedJsonSlice(text: string, start: number): string {
-  const open = text[start];
-  const close = open === '[' ? ']' : open === '{' ? '}' : '';
-  if (!close) throw new Error('extractBalancedJsonSlice: start 必须指向 [ 或 {');
-  let depth = 0;
-  let inString = false;
-  let escape = false;
-  for (let i = start; i < text.length; i++) {
-    const ch = text[i]!;
-    if (inString) {
-      if (escape) {
-        escape = false;
-        continue;
-      }
-      if (ch === '\\') {
-        escape = true;
-        continue;
-      }
-      if (ch === '"') inString = false;
-      continue;
-    }
-    if (ch === '"') {
-      inString = true;
-      continue;
-    }
-    if (ch === open) depth++;
-    else if (ch === close) {
-      depth--;
-      if (depth === 0) return text.slice(start, i + 1);
-    }
-  }
-  throw new Error('JSON 括号不匹配。');
-}
-
 /**
  * 当 analysis 字段含未转义引号导致整段 JSON.parse 失败时，
  * 仍尝试按键位切割取出 analysis 文本与 patch 数组。
@@ -69,6 +38,8 @@ export function extractBalancedJsonSlice(text: string, start: number): string {
 export function tryParseStrictVariableObjectLenient(text: string): {
   analysis: string;
   patch: unknown[];
+  patchSlice: string;
+  skippedOpCount: number;
 } {
   const cleaned = stripCodeFence(text);
   const patchKey = /"patch"\s*:\s*\[/.exec(cleaned);
@@ -85,12 +56,15 @@ export function tryParseStrictVariableObjectLenient(text: string): {
   }
 
   let patch: unknown[];
+  let skippedOpCount = 0;
   try {
     const parsed = JSON.parse(patchSlice);
     if (!Array.isArray(parsed)) throw new Error('patch 必须是数组。');
     patch = parsed;
   } catch {
-    patch = tryParsePatchArrayLenient(patchSlice);
+    const lenient = parseJsonPatchArrayLenient(patchSlice);
+    patch = lenient.ops;
+    skippedOpCount = lenient.skipped;
   }
   if (!patch.length) throw new Error('patch 数组无法解析出任何有效操作。');
 
@@ -110,7 +84,7 @@ export function tryParseStrictVariableObjectLenient(text: string): {
     .replace(/\\"/g, '"')
     .replace(/\\\\/g, '\\');
   if (!analysisRaw.trim()) throw new Error('analysis 必须是非空字符串。');
-  return { analysis: analysisRaw, patch };
+  return { analysis: analysisRaw, patch, patchSlice, skippedOpCount };
 }
 
 /**
@@ -118,34 +92,7 @@ export function tryParseStrictVariableObjectLenient(text: string): {
  * 括号不配或单条 JSON 坏掉则跳到下一条 `"op"`，保留其余有效操作。
  */
 export function tryParsePatchArrayLenient(patchArrayText: string): unknown[] {
-  const text = String(patchArrayText || '').trim();
-  if (!text.startsWith('[')) return [];
-  const ops: unknown[] = [];
-  let i = 1;
-  while (i < text.length) {
-    while (i < text.length && /[\s,]/.test(text[i]!)) i++;
-    if (i >= text.length || text[i] === ']') break;
-    if (text[i] !== '{') {
-      const next = text.slice(i).search(/\{\s*"op"\s*:/);
-      if (next < 0) break;
-      i += next;
-      continue;
-    }
-    try {
-      const slice = extractBalancedJsonSlice(text, i);
-      try {
-        ops.push(JSON.parse(slice));
-      } catch {
-        // 单条内容非法，跳过
-      }
-      i += slice.length;
-    } catch {
-      const next = text.slice(i + 1).search(/\{\s*"op"\s*:/);
-      if (next < 0) break;
-      i = i + 1 + next;
-    }
-  }
-  return ops;
+  return parseJsonPatchArrayLenient(patchArrayText).ops;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -204,6 +151,8 @@ export interface StrictVariableExtractionResult {
   retryHint?: string;
   /** 严格 JSON.parse 失败后，经键位切割恢复 */
   recovered?: boolean;
+  /** MVU 路径：lenient 时跳过的坏 op 数；Addon 路径由 addon-mvu 报错 */
+  skippedOpCount?: number;
 }
 
 function normalizePatchArray(patch: unknown): string {
@@ -226,13 +175,14 @@ function buildFromAnalysisAndPatch(
   analysis: unknown,
   patch: unknown,
   recovered?: boolean,
+  skippedOpCount?: number,
 ): StrictVariableExtractionResult {
   if (typeof analysis !== 'string' || !analysis.trim()) {
     throw new Error('analysis 必须是非空字符串。');
   }
   const patchJson = normalizePatchArray(patch);
   const normalizedXml = buildNormalizedVariableXml(mode, analysis, patchJson);
-  return { ok: true, normalizedXml, recovered };
+  return { ok: true, normalizedXml, recovered, skippedOpCount };
 }
 
 export function extractStrictVariableResponse(
@@ -246,7 +196,24 @@ export function extractStrictVariableResponse(
   } catch (strictError) {
     try {
       const lenient = tryParseStrictVariableObjectLenient(text);
-      return buildFromAnalysisAndPatch(mode, lenient.analysis, lenient.patch, true);
+      if (mode === 'addon_json_patch') {
+        // 原始 patch 文本交给 addon-mvu 统一修复/报错
+        const normalizedXml = buildNormalizedVariableXml(mode, lenient.analysis, lenient.patchSlice);
+        return {
+          ok: true,
+          normalizedXml,
+          recovered: true,
+          skippedOpCount: lenient.skippedOpCount,
+        };
+      }
+      // MVU：只写入可解析 op，跳过数供工作流 toast
+      return buildFromAnalysisAndPatch(
+        mode,
+        lenient.analysis,
+        lenient.patch,
+        true,
+        lenient.skippedOpCount,
+      );
     } catch {
       const message =
         strictError instanceof Error ? strictError.message : '严格 JSON 变量响应解析失败。';
