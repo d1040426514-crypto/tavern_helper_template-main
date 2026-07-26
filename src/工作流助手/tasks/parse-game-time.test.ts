@@ -46,12 +46,17 @@ test('chineseNumeralToInt common years', () => {
   assert.equal(chineseNumeralToInt('488'), 488);
 });
 
-test('normalizeGameTimeRaw strips location weather and fullwidth digits', () => {
+test('normalizeGameTimeRaw strips location and fullwidth digits, keeps pipe segment', () => {
   assert.equal(
     normalizeGameTimeRaw('复兴纪元488年-5月-14日-15:48 @ 某地| 晴'),
     '复兴纪元488年-5月-14日-15:48',
   );
   assert.equal(normalizeGameTimeRaw('２０２６-０６-３０ １５:４８'), '2026-06-30 15:48');
+  assert.equal(
+    normalizeGameTimeRaw('时间：2024-05-07 | 周二 15:30-18:00'),
+    '2024-05-07 | 周二 15:30-18:00',
+  );
+  assert.equal(normalizeGameTimeRaw('2024-05-07\n15:30-18:00'), '2024-05-07 15:30-18:00');
 });
 
 test('peelRangeEnd takes right segment', () => {
@@ -195,6 +200,51 @@ test('range peel then parse uses right end', () => {
 test('unparseable returns null', () => {
   assert.equal(parseGameTimeToMs('不是时间'), null);
   assert.equal(parseGameTimeToMs(''), null);
+});
+
+test('mixed title with weekday and compact time range uses end clock', () => {
+  const r = parseGameTime('时间：2024-05-07 | 周二 15:30-18:00');
+  assert.ok(r);
+  assert.equal(r.fields.year, 2024);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.day, 7);
+  assert.equal(r.fields.hour, 18);
+  assert.equal(r.fields.minute, 0);
+  assert.match(r.rule, /^numeric_ymd/);
+});
+
+test('multiline date then time range', () => {
+  const r = parseGameTime('2024-05-07\n15:30-18:00');
+  assert.ok(r);
+  assert.equal(r.fields.day, 7);
+  assert.equal(r.fields.hour, 18);
+  assert.equal(r.fields.minute, 0);
+});
+
+test('time_only allows pipe weather residue', () => {
+  const r = parseGameTime('15:48 | 晴');
+  assert.ok(r);
+  assert.equal(r.kind, 'time_only');
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 48);
+});
+
+test('numeric_ymd prefers last date when multiple present', () => {
+  const r = parseGameTime('记录 2020-01-01 当前 2024-05-07 | 18:00');
+  assert.ok(r);
+  assert.equal(r.fields.year, 2024);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.day, 7);
+  assert.equal(r.fields.hour, 18);
+  assert.equal(r.fields.minute, 0);
+});
+
+test('location after at-sign still strips before parse', () => {
+  const r = parseGameTime('复兴纪元488年-5月-14日-15:48 @ 某地| 晴');
+  assert.ok(r);
+  assert.equal(r.fields.year, 488);
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 48);
 });
 
 if (process.exitCode) process.exit(process.exitCode);
