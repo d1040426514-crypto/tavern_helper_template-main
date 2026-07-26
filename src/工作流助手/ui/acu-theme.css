@@ -981,7 +981,7 @@
   white-space: nowrap;
 }
 
-.acu-prompt-group--auto-preview .acu-textarea,
+/* textarea 需可滚动查看全文，仅禁改 name/role */
 .acu-prompt-group--auto-preview .acu-input,
 .acu-prompt-group--auto-preview .acu-select {
   pointer-events: none;
@@ -1152,7 +1152,6 @@
   margin-top: 6px;
 }
 
-.acu-prompt-group--collapsible.acu-prompt-group--auto-preview .acu-textarea,
 .acu-prompt-group--collapsible.acu-prompt-group--auto-preview .acu-input,
 .acu-prompt-group--collapsible.acu-prompt-group--auto-preview .acu-select {
   pointer-events: none;

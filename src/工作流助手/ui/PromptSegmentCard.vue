@@ -175,7 +175,7 @@ function onDragHandlePointerDown(e: PointerEvent) {
         v-model="group.content"
         class="acu-textarea acu-prompt-group__textarea"
         :readonly="readonly || disabled"
-        :disabled="readonly || disabled"
+        :disabled="!readonly && disabled"
       />
     </div>
   </div>
