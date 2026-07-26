@@ -35,6 +35,7 @@ WorldPaper_Update_Rules:
     }
   check:
     - 仅在后台世界演化、世界切换或跨世界事件推进时更新
+    - patch 选 op / path 纪律以 `WorldPaper_Update_Format`「硬纪律 + op 决策表」为准，勿与之矛盾
     - 禁止 Weaver 创建新世界键（禁止 insert/replace/remove/move 作用在 /{世界名}）
     - 目标世界不存在于<上期世界状态>时，不要对该世界写任何 patch
     - 深层 insert 前父级 map 须已存在；判定对象是 path 末段键：末段不存在用 insert，末段已存在才 replace
