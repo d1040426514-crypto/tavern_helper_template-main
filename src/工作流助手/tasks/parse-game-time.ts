@@ -476,6 +476,43 @@ export function parseGameTimeToMs(raw: string): number | null {
   return parseGameTime(raw)?.ms ?? null;
 }
 
+export type GameTimeIntervalUnit = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+
+const UNIT_LABEL_ZH: Record<GameTimeIntervalUnit, string> = {
+  minute: '分钟',
+  hour: '小时',
+  day: '天',
+  week: '周',
+  month: '月',
+  year: '年',
+};
+
+export function gameTimeIntervalUnitLabel(unit: GameTimeIntervalUnit): string {
+  return UNIT_LABEL_ZH[unit] ?? unit;
+}
+
+/**
+ * 解析结果是否足以支撑所选间隔单位。
+ * 仅时刻（time_only）只能用于分钟/小时间隔。
+ */
+export function isGameTimeAdequateForUnit(
+  parsed: GameTimeParseResult,
+  unit: GameTimeIntervalUnit,
+): boolean {
+  if (unit === 'minute' || unit === 'hour') return true;
+  if (parsed.kind === 'time_only') return false;
+  if (unit === 'day' || unit === 'week') {
+    if (parsed.kind === 'day_count') return parsed.fields.dayIndex != null;
+    return parsed.fields.year != null && parsed.fields.month != null && parsed.fields.day != null;
+  }
+  if (unit === 'month') {
+    if (parsed.kind === 'day_count') return true;
+    return parsed.fields.year != null && parsed.fields.month != null;
+  }
+  if (parsed.kind === 'day_count') return true;
+  return parsed.fields.year != null;
+}
+
 export function intervalToMs(value: number, unit: keyof typeof UNIT_MS): number {
   return value * (UNIT_MS[unit] ?? UNIT_MS.hour);
 }
@@ -521,5 +558,5 @@ export const GAME_TIME_FORMAT_HELP = {
     '仅时刻（可带 | 备注）：15:48、15:48 | 晴、15时30分',
   ],
   footnote:
-    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；无法识别时跳过本任务，原因见运行日志。',
+    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；仅时刻仅适用于分钟/小时间隔；精度不足或无法识别时跳过本任务，原因见运行日志。',
 } as const;

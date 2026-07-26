@@ -3,6 +3,7 @@ import {
   chineseNumeralToInt,
   formatRemainingDuration,
   intervalToMs,
+  isGameTimeAdequateForUnit,
   normalizeGameTimeRaw,
   parseGameTime,
   parseGameTimeToMs,
@@ -187,6 +188,25 @@ test('time_only', () => {
   assert.equal(a.ms, 15 * intervalToMs(1, 'hour') + 48 * intervalToMs(1, 'minute'));
   assert.ok(b);
   assert.equal(b.fields.minute, 30);
+});
+
+test('isGameTimeAdequateForUnit: time_only only for minute/hour', () => {
+  const clock = parseGameTime('15:48');
+  assert.ok(clock);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'minute'), true);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'hour'), true);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'day'), false);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'week'), false);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'month'), false);
+  assert.equal(isGameTimeAdequateForUnit(clock, 'year'), false);
+});
+
+test('isGameTimeAdequateForUnit: chinese_ymd adequate for week', () => {
+  const cal = parseGameTime('复兴纪元488年-5月-14日-15:48');
+  assert.ok(cal);
+  assert.equal(isGameTimeAdequateForUnit(cal, 'week'), true);
+  assert.equal(isGameTimeAdequateForUnit(cal, 'day'), true);
+  assert.equal(isGameTimeAdequateForUnit(cal, 'year'), true);
 });
 
 test('range peel then parse uses right end', () => {

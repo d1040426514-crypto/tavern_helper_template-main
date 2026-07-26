@@ -148,6 +148,25 @@ test('time mode skip when format unparseable', () => {
   assert.equal(check.reason, '游戏时间格式无法解析，已跳过');
 });
 
+test('time mode skip when time_only inadequate for week unit', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 1,
+      unit: 'week',
+      timeSource: { type: 'message_tag', tagNames: ['time'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<time>15:48</time>',
+    currentPairText: '<time>15:48</time>',
+  });
+  const check = shouldRunTask(task, undefined, ctx);
+  assert.equal(check.run, false);
+  assert.equal(check.reason, '游戏时间精度不足（当前间隔单位：周），已跳过');
+});
+
 test('updateScheduleStateAfterRun records round and game time', () => {
   const settings = { scheduleState: {} } as ScriptSettings;
   const task = makeTask({
