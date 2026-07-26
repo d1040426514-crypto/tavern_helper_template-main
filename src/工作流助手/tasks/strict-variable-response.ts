@@ -64,6 +64,7 @@ export function extractBalancedJsonSlice(text: string, start: number): string {
 /**
  * 当 analysis 字段含未转义引号导致整段 JSON.parse 失败时，
  * 仍尝试按键位切割取出 analysis 文本与 patch 数组。
+ * 若 patch 数组整体非法，再按单条 op 尽力挽救可解析条目。
  */
 export function tryParseStrictVariableObjectLenient(text: string): {
   analysis: string;
@@ -75,8 +76,23 @@ export function tryParseStrictVariableObjectLenient(text: string): {
     throw new Error('回复中未找到 patch 数组。');
   }
   const arrayStart = patchKey.index + patchKey[0].length - 1;
-  const patch = JSON.parse(extractBalancedJsonSlice(cleaned, arrayStart));
-  if (!Array.isArray(patch)) throw new Error('patch 必须是数组。');
+  let patchSlice: string;
+  try {
+    patchSlice = extractBalancedJsonSlice(cleaned, arrayStart);
+  } catch {
+    // 缺收尾 ] 时仍尝试从 [ 扫到文末
+    patchSlice = cleaned.slice(arrayStart);
+  }
+
+  let patch: unknown[];
+  try {
+    const parsed = JSON.parse(patchSlice);
+    if (!Array.isArray(parsed)) throw new Error('patch 必须是数组。');
+    patch = parsed;
+  } catch {
+    patch = tryParsePatchArrayLenient(patchSlice);
+  }
+  if (!patch.length) throw new Error('patch 数组无法解析出任何有效操作。');
 
   const analysisKey = /"analysis"\s*:\s*/.exec(cleaned);
   if (!analysisKey || analysisKey.index == null || analysisKey.index > patchKey.index) {
@@ -95,6 +111,41 @@ export function tryParseStrictVariableObjectLenient(text: string): {
     .replace(/\\\\/g, '\\');
   if (!analysisRaw.trim()) throw new Error('analysis 必须是非空字符串。');
   return { analysis: analysisRaw, patch };
+}
+
+/**
+ * patch 数组整体非法时，按对象括号逐条解析；
+ * 括号不配或单条 JSON 坏掉则跳到下一条 `"op"`，保留其余有效操作。
+ */
+export function tryParsePatchArrayLenient(patchArrayText: string): unknown[] {
+  const text = String(patchArrayText || '').trim();
+  if (!text.startsWith('[')) return [];
+  const ops: unknown[] = [];
+  let i = 1;
+  while (i < text.length) {
+    while (i < text.length && /[\s,]/.test(text[i]!)) i++;
+    if (i >= text.length || text[i] === ']') break;
+    if (text[i] !== '{') {
+      const next = text.slice(i).search(/\{\s*"op"\s*:/);
+      if (next < 0) break;
+      i += next;
+      continue;
+    }
+    try {
+      const slice = extractBalancedJsonSlice(text, i);
+      try {
+        ops.push(JSON.parse(slice));
+      } catch {
+        // 单条内容非法，跳过
+      }
+      i += slice.length;
+    } catch {
+      const next = text.slice(i + 1).search(/\{\s*"op"\s*:/);
+      if (next < 0) break;
+      i = i + 1 + next;
+    }
+  }
+  return ops;
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {

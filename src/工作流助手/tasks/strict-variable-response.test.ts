@@ -103,6 +103,23 @@ test('lenient recovery when analysis contains raw quotes', () => {
   assert.match(result.normalizedXml!, /刊报日期/);
 });
 
+test('lenient recovery skips broken patch op missing closing brace', () => {
+  // 第一条缺闭合 }，第二条完好 —— 应跳过坏条并保留好条
+  const broken = `{
+  "analysis": "ok",
+  "patch": [
+    { "op": "insert", "path": "/w/rumor/bad", "value": { "影响力": "圈内谈资", "流变历程": { "1": { "真相": "x" } } },
+    { "op": "replace", "path": "/w/date", "value": "d1" }
+  ]
+}`;
+  assert.throws(() => JSON.parse(broken));
+  const result = extractStrictVariableResponse(broken, 'addon_json_patch');
+  assert.ok(result.ok);
+  assert.equal(result.recovered, true);
+  assert.match(result.normalizedXml!, /"path": "\/w\/date"/);
+  assert.equal((result.normalizedXml!.match(/"op":/g) || []).length, 1);
+});
+
 test('enrichApiConfig injects json_object only when missing', () => {
   const base: ApiConfig = {
     url: 'https://api.example.com',
