@@ -797,9 +797,11 @@
 .addon-console .ac-cmd-badge.heal {
   background: var(--sage, #5a7d5a);
 }
-.addon-console .ac-cmd-badge.fixed {
+.addon-console .ac-cmd-badge.ac-fixed {
   background: #8a6b2e;
   text-transform: none;
+  /* 避免被酒馆全局 .fixed { position:fixed } 命中 */
+  position: static !important;
 }
 
 .addon-console .ac-cmd-path-full {

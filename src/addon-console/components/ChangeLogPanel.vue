@@ -89,7 +89,7 @@
           :class="opClass(item.op.op)"
         >
           <summary class="ac-cmd-summary">
-            <span class="ac-cmd-badge fixed">已修复</span>
+            <span class="ac-cmd-badge ac-fixed">已修复</span>
             <span class="ac-cmd-badge" :class="item.op.op">{{ item.op.op }}</span>
             <span class="ac-cmd-title">{{ lastPathSegment(opPath(item.op)) }}</span>
             <span class="ac-cmd-chevron" aria-hidden="true" />
