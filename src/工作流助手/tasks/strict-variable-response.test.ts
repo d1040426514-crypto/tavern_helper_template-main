@@ -103,8 +103,8 @@ test('lenient recovery when analysis contains raw quotes', () => {
   assert.match(result.normalizedXml!, /刊报日期/);
 });
 
-test('lenient recovery skips broken patch op missing closing brace', () => {
-  // 第一条缺闭合 }，第二条完好 —— addon 写入原始 slice，由 addon-mvu 再修
+test('lenient recovery heals patch op missing closing brace (addon keeps raw slice)', () => {
+  // 第一条缺闭合 }，L1 可 heal；addon 仍写入原始 slice，由 addon-mvu 统一修/记 heal
   const broken = `{
   "analysis": "ok",
   "patch": [
@@ -118,12 +118,11 @@ test('lenient recovery skips broken patch op missing closing brace', () => {
   assert.equal(result.recovered, true);
   assert.match(result.normalizedXml!, /<AddonJSONPatch>/);
   assert.match(result.normalizedXml!, /"path": "\/w\/date"/);
-  // 原始残缺文本保留（含坏 op 片段）
   assert.match(result.normalizedXml!, /\/w\/rumor\/bad/);
-  assert.ok((result.skippedOpCount ?? 0) >= 1);
+  assert.equal(result.skippedOpCount ?? 0, 0);
 });
 
-test('mvu lenient recovery writes filtered JSONPatch only', () => {
+test('mvu lenient recovery heals missing braces into JSONPatch', () => {
   const broken = `{
   "analysis": "ok",
   "patch": [
@@ -136,9 +135,9 @@ test('mvu lenient recovery writes filtered JSONPatch only', () => {
   assert.equal(result.recovered, true);
   assert.match(result.normalizedXml!, /<JSONPatch>/);
   assert.match(result.normalizedXml!, /"path": "\/w\/date"/);
-  assert.equal((result.normalizedXml!.match(/"op":/g) || []).length, 1);
-  assert.ok(!result.normalizedXml!.includes('/w/rumor/bad'));
-  assert.ok((result.skippedOpCount ?? 0) >= 1);
+  assert.match(result.normalizedXml!, /\/w\/rumor\/bad/);
+  assert.equal((result.normalizedXml!.match(/"op":/g) || []).length, 2);
+  assert.equal(result.skippedOpCount ?? 0, 0);
 });
 
 test('enrichApiConfig injects json_object only when missing', () => {

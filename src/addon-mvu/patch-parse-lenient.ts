@@ -1,6 +1,5 @@
-import { extractBalancedJsonSlice, parseJsonPatchArrayLenient } from '@util/common';
+import { parseJsonPatchArrayLenient } from '@util/common';
 import JSON5 from 'json5';
-import { jsonrepair } from 'jsonrepair';
 
 import type { AddonPatchFailedFragment } from './patch-log';
 import type { MvuJsonPatchOp, PatchIssue } from './patch';
@@ -55,58 +54,6 @@ function filterValidOps(parsed: unknown[]): {
   return { ops, issues, failedFragments };
 }
 
-function tryParseOpSlice(slice: string): { ok: true; repaired: boolean } | { ok: false } {
-  try {
-    JSON.parse(slice);
-    return { ok: true, repaired: false };
-  } catch {
-    try {
-      JSON.parse(jsonrepair(slice));
-      return { ok: true, repaired: true };
-    } catch {
-      return { ok: false };
-    }
-  }
-}
-
-/** 按出现顺序收集无法解析的 op 原文 */
-function collectUnparseableOpFragments(patchArrayText: string): AddonPatchFailedFragment[] {
-  const text = String(patchArrayText || '').trim();
-  if (!text.startsWith('[')) return [];
-  const fragments: AddonPatchFailedFragment[] = [];
-  let opIndex = 0;
-  let i = 1;
-  while (i < text.length) {
-    while (i < text.length && /[\s,]/.test(text[i]!)) i++;
-    if (i >= text.length || text[i] === ']') break;
-    if (text[i] !== '{') {
-      const next = text.slice(i).search(/\{\s*"op"\s*:/);
-      if (next < 0) break;
-      i += next;
-      continue;
-    }
-    opIndex += 1;
-    try {
-      const slice = extractBalancedJsonSlice(text, i);
-      if (!tryParseOpSlice(slice).ok) {
-        const message = `第 ${opIndex} 条 op 无法修复: ${snippet(slice)}`;
-        fragments.push({ index: opIndex, snippet: keepSnippet(slice), message });
-      }
-      i += slice.length;
-    } catch {
-      // 切到下一条 { "op":，避免固定 500 字截断并粘进下一条
-      const nextRel = text.slice(i + 1).search(/\{\s*"op"\s*:/);
-      const end = nextRel < 0 ? text.length : i + 1 + nextRel;
-      const slice = text.slice(i, end).replace(/,?\s*$/, '').trim();
-      const message = `第 ${opIndex} 条 op 括号不匹配，已跳过: ${snippet(slice)}`;
-      fragments.push({ index: opIndex, snippet: keepSnippet(slice), message });
-      if (nextRel < 0) break;
-      i = i + 1 + nextRel;
-    }
-  }
-  return fragments;
-}
-
 function tryParseArrayStrict(trimmed: string): unknown[] | null {
   try {
     const parsed = JSON.parse(trimmed);
@@ -130,8 +77,9 @@ export type ParseJsonPatchResult = {
 
 /**
  * 解析 AddonJSONPatch 数组文本。
- * 先严格 JSON/JSON5；失败再逐条 parse/jsonrepair。
+ * 先严格 JSON/JSON5；失败再逐条 parse / 补 `}` / jsonrepair。
  * 不用整段 jsonrepair，以免静默捏造伪 op。
+ * 失败区仅收录仍无法 heal 的残片（与 lenient 路径一致）。
  */
 export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
   const trimmed = String(raw || '').trim();
@@ -144,7 +92,9 @@ export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
     return filterValidOps(strictArray);
   }
 
-  const { ops: rawOps, skipped, repaired } = parseJsonPatchArrayLenient(trimmed, { repairOp: true });
+  const { ops: rawOps, skipped, repaired, failedSlices } = parseJsonPatchArrayLenient(trimmed, {
+    repairOp: true,
+  });
   const { ops, issues, failedFragments } = filterValidOps(rawOps);
 
   if (repaired > 0) {
@@ -154,10 +104,10 @@ export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
     });
   }
 
-  const skipFragments = collectUnparseableOpFragments(trimmed);
-  for (const frag of skipFragments) {
-    issues.push({ kind: 'parse', message: frag.message });
-    failedFragments.push(frag);
+  for (const { index, slice } of failedSlices) {
+    const message = `第 ${index} 条 op 无法修复: ${snippet(slice)}`;
+    issues.push({ kind: 'parse', message });
+    failedFragments.push({ index, snippet: keepSnippet(slice), message });
   }
 
   if (ops.length === 0 && issues.every(i => i.kind !== 'parse' || !i.message.includes('无法解析出任何'))) {
@@ -165,12 +115,7 @@ export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
       kind: 'parse',
       message: 'AddonJSONPatch 无法解析出任何有效操作',
     });
-  } else if (
-    ops.length > 0 &&
-    skipFragments.length === 0 &&
-    skipped > 0 &&
-    failedFragments.length === 0
-  ) {
+  } else if (ops.length > 0 && skipped > 0 && failedSlices.length === 0 && failedFragments.length === 0) {
     issues.push({
       kind: 'parse',
       message: `跳过 ${skipped} 条无法修复的 patch op`,
@@ -178,7 +123,7 @@ export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
   } else if (
     ops.length > 0 &&
     repaired === 0 &&
-    skipFragments.length === 0 &&
+    failedSlices.length === 0 &&
     issues.every(i => i.kind !== 'heal')
   ) {
     issues.push({

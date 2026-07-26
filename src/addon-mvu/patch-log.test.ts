@@ -39,10 +39,10 @@ async function main() {
     { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "d2" }
   ]`;
     const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
-    assert.equal(ops.length, 1);
-    assert.ok(failedFragments.length >= 1);
-    assert.ok(issues.some(i => i.kind === 'parse'));
-    console.log('ok parse failedFragments for broken op');
+    assert.equal(ops.length, 2);
+    assert.equal(failedFragments.length, 0);
+    assert.ok(issues.some(i => i.kind === 'heal'));
+    console.log('ok parse heals missing braces (no failedFragments)');
   }
 
   {
@@ -66,8 +66,7 @@ async function main() {
     clearPatchLog();
     const message = `<AddonJSONPatch>
 [
-  { "op": "insert", "path": "/a", "value": { "x": 1 },
-  { "op": "replace", "path": "/b", "value": { "y": 2 }
+  { "op": "insert", "path": "/a", "value": { "x": "未闭合
 ]
 </AddonJSONPatch>`;
     const result = await updateAddonFromMessage(message, baseWorld(), { emitEvents: false });

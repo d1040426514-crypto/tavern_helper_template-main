@@ -39,18 +39,21 @@ test('parseJsonPatchOpsWithIssues: valid array unchanged', () => {
   assert.equal((ops[0] as { path: string }).path, '/阿斯塔利亚/刊报日期');
 });
 
-test('parseJsonPatchOpsWithIssues: skips broken op keeps good ones', () => {
+test('parseJsonPatchOpsWithIssues: heals missing trailing braces on insert', () => {
   const raw = `[
     { "op": "insert", "path": "/阿斯塔利亚/rumor/bad", "value": { "影响力": "圈内谈资", "流变历程": { "1": { "真相": "x" } } },
     { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "d1" }
   ]`;
-  const { ops, issues } = parseJsonPatchOpsWithIssues(raw);
-  assert.equal(ops.length, 1);
-  assert.equal((ops[0] as { op: string; path: string }).op, 'replace');
-  assert.ok(issues.some(i => i.kind === 'parse'));
+  const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
+  assert.equal(ops.length, 2);
+  assert.equal((ops[0] as { op: string; path: string }).op, 'insert');
+  assert.equal((ops[0] as { path: string }).path, '/阿斯塔利亚/rumor/bad');
+  assert.equal((ops[1] as { op: string }).op, 'replace');
+  assert.ok(issues.some(i => i.kind === 'heal'));
+  assert.equal(failedFragments.length, 0);
 });
 
-test('extractAddonJsonPatchOpsWithIssues: plain XML without UpdateVariable or structured mode', () => {
+test('extractAddonJsonPatchOpsWithIssues: heals missing braces in XML patch', () => {
   const message = `前文
 <AddonJSONPatch>
 [
@@ -59,37 +62,65 @@ test('extractAddonJsonPatchOpsWithIssues: plain XML without UpdateVariable or st
 ]
 </AddonJSONPatch>
 后文`;
-  const { ops, issues } = extractAddonJsonPatchOpsWithIssues(message);
-  assert.equal(ops.length, 1);
-  assert.equal((ops[0] as { path: string }).path, '/阿斯塔利亚/刊报日期');
-  assert.ok(issues.some(i => i.kind === 'parse'));
+  const { ops, issues, failedFragments } = extractAddonJsonPatchOpsWithIssues(message);
+  assert.equal(ops.length, 2);
+  assert.ok(issues.some(i => i.kind === 'heal'));
+  assert.equal(failedFragments.length, 0);
 
   const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
   assert.equal(_.get(data, '阿斯塔利亚.刊报日期'), 'd2');
+  assert.deepEqual(_.get(data, '阿斯塔利亚.x'), { a: 1 });
 });
 
-test('all bad ops yields empty and parse issue', () => {
+test('all ops with only missing braces heal successfully', () => {
   const raw = `[
     { "op": "insert", "path": "/a", "value": { "x": 1 },
     { "op": "replace", "path": "/b", "value": { "y": 2 }
   ]`;
-  const { ops, issues } = parseJsonPatchOpsWithIssues(raw);
-  assert.equal(ops.length, 0);
-  assert.ok(issues.some(i => i.kind === 'parse'));
+  const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
+  assert.equal(ops.length, 2);
+  assert.ok(issues.some(i => i.kind === 'heal'));
+  assert.equal(failedFragments.length, 0);
 });
 
-test('bracket-mismatch fragment cuts at next op (no 500-char bleed)', () => {
+test('unclosed string still fails and snippet does not bleed', () => {
   const longValue = '字'.repeat(200);
   const raw = `[
     { "op": "insert", "path": "/阿斯塔利亚/传闻/坏条", "value": { "描述": "${longValue}", "流变历程": { "1": { "真相": "未闭合
     { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "d-ok" }
   ]`;
-  const { ops, failedFragments } = parseJsonPatchOpsWithIssues(raw);
+  const { ops, failedFragments, issues } = parseJsonPatchOpsWithIssues(raw);
   assert.equal(ops.length, 1);
   assert.ok(failedFragments.length >= 1);
+  assert.ok(issues.some(i => i.kind === 'parse'));
   const frag = failedFragments[0]!;
   const opKeys = frag.snippet.match(/"op"\s*:/g) || [];
   assert.equal(opKeys.length, 1, `snippet should be single op, got: ${frag.snippet.slice(0, 120)}`);
   assert.ok(!frag.snippet.includes('/阿斯塔利亚/刊报日期'), 'snippet must not bleed into next op');
   assert.ok(frag.snippet.includes('/阿斯塔利亚/传闻/坏条'));
+});
+
+test('shape-invalid op still rejected by isLikelyPatchOp', () => {
+  const raw = `[
+    { "op": "insert", "path": "/阿斯塔利亚/a" },
+    { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "ok" }
+  ]`;
+  const { ops, failedFragments, issues } = parseJsonPatchOpsWithIssues(raw);
+  assert.equal(ops.length, 1);
+  assert.equal((ops[0] as { path: string }).path, '/阿斯塔利亚/刊报日期');
+  assert.ok(failedFragments.length >= 1 || issues.some(i => i.kind === 'parse'));
+});
+
+test('healed deep insert (multiple missing braces) applies', () => {
+  const raw = `[
+    { "op": "insert", "path": "/阿斯塔利亚/传闻/珍珠湾夜影", "value": { "影响力": "街头巷议", "流变历程": { "1": { "真相": "夜影初现", "流传": "码头" } },
+    { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "新日" }
+  ]`;
+  const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
+  assert.equal(ops.length, 2);
+  assert.ok(issues.some(i => i.kind === 'heal'));
+  assert.equal(failedFragments.length, 0);
+  const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
+  assert.equal(_.get(data, '阿斯塔利亚.刊报日期'), '新日');
+  assert.equal(_.get(data, '阿斯塔利亚.传闻.珍珠湾夜影.影响力'), '街头巷议');
 });

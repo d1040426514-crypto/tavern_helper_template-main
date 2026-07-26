@@ -93,6 +93,8 @@ export function literalYamlify(value: any) {
   return YAML.stringify(value, { blockQuote: 'literal' });
 }
 
+const MAX_TRAILING_BRACE_HEAL = 32;
+
 /** 从 start（必须是 `[` 或 `{`）提取括号平衡的子串 */
 export function extractBalancedJsonSlice(text: string, start: number): string {
   const open = text[start];
@@ -129,18 +131,111 @@ export function extractBalancedJsonSlice(text: string, start: number): string {
 }
 
 /**
+ * 字符串感知扫描对象片段：剩余 `{}` 深度，以及是否仍落在未闭合字符串内。
+ * 非以 `{` 开头时 depth 为 0；字符串内括号不计。
+ */
+export function scanJsonObjectSlice(text: string): { depth: number; inString: boolean } {
+  const s = String(text || '').trim();
+  if (!s.startsWith('{')) return { depth: 0, inString: false };
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (inString) {
+      if (escape) {
+        escape = false;
+        continue;
+      }
+      if (ch === '\\') {
+        escape = true;
+        continue;
+      }
+      if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '{') depth++;
+    else if (ch === '}') depth = Math.max(0, depth - 1);
+  }
+  return { depth, inString };
+}
+
+/** 从首字符 `{` 扫完后的剩余对象深度（字符串内括号不计）。 */
+export function jsonObjectDepth(text: string): number {
+  return scanJsonObjectSlice(text).depth;
+}
+
+/**
+ * L1：去掉尾逗号后，若对象括号未闭合（depth ∈ (0, max]）且字符串已闭合，则在末尾补 `}`。
+ * 字符串未闭合时不补，避免把后续内容糊进字符串后再被 jsonrepair 造伪 op。
+ */
+export function closeTrailingObjectBraces(
+  text: string,
+  maxHeal = MAX_TRAILING_BRACE_HEAL,
+): { text: string; added: number; inString: boolean } {
+  const s = String(text || '')
+    .replace(/,?\s*$/, '')
+    .trim();
+  const { depth, inString } = scanJsonObjectSlice(s);
+  if (inString || depth <= 0 || depth > maxHeal) return { text: s, added: 0, inString };
+  return { text: s + '}'.repeat(depth), added: depth, inString: false };
+}
+
+function tryParseOpSlice(
+  slice: string,
+  options?: { repairOp?: boolean },
+): { parsed?: unknown; repaired: boolean } {
+  try {
+    return { parsed: JSON.parse(slice), repaired: false };
+  } catch {
+    /* fall through to heal */
+  }
+
+  const closed = closeTrailingObjectBraces(slice);
+  // 未闭合字符串：不 L1/L2，避免 jsonrepair 瞎补造伪 op
+  if (closed.inString) return { repaired: false };
+
+  if (closed.added > 0) {
+    try {
+      return { parsed: JSON.parse(closed.text), repaired: true };
+    } catch {
+      /* fall through */
+    }
+  }
+
+  if (options?.repairOp) {
+    try {
+      const parsed = JSON.parse(jsonrepair(closed.text));
+      return { parsed, repaired: true };
+    } catch {
+      return { repaired: false };
+    }
+  }
+  return { repaired: false };
+}
+
+export type LenientFailedSlice = { index: number; slice: string };
+
+/**
  * 将残缺的 JSON Patch 数组文本按单条 op 尽力解析。
- * 括号不配或单条非法时跳到下一条 `"op"`；可选对单条再用 jsonrepair。
+ * 括号不配时：切到下一条 op，先补 `}`（L1），可选再 jsonrepair（L2）。
+ * `failedSlices` 为仍无法解析的残片（供失败区展示，与 apply 路径一致）。
  */
 export function parseJsonPatchArrayLenient(
   patchArrayText: string,
   options?: { repairOp?: boolean },
-): { ops: unknown[]; skipped: number; repaired: number } {
+): { ops: unknown[]; skipped: number; repaired: number; failedSlices: LenientFailedSlice[] } {
   const text = String(patchArrayText || '').trim();
-  if (!text.startsWith('[')) return { ops: [], skipped: 0, repaired: 0 };
+  if (!text.startsWith('[')) return { ops: [], skipped: 0, repaired: 0, failedSlices: [] };
   const ops: unknown[] = [];
+  const failedSlices: LenientFailedSlice[] = [];
   let skipped = 0;
   let repaired = 0;
+  let opIndex = 0;
   let i = 1;
   while (i < text.length) {
     while (i < text.length && /[\s,]/.test(text[i]!)) i++;
@@ -151,33 +246,40 @@ export function parseJsonPatchArrayLenient(
       i += next;
       continue;
     }
+    opIndex += 1;
     try {
       const slice = extractBalancedJsonSlice(text, i);
-      let parsed: unknown | undefined;
-      try {
-        parsed = JSON.parse(slice);
-      } catch {
-        if (options?.repairOp) {
-          try {
-            parsed = JSON.parse(jsonrepair(slice));
-            repaired++;
-          } catch {
-            skipped++;
-          }
-        } else {
-          skipped++;
-        }
+      const result = tryParseOpSlice(slice, options);
+      if (result.parsed !== undefined) {
+        ops.push(result.parsed);
+        if (result.repaired) repaired++;
+      } else {
+        skipped++;
+        failedSlices.push({ index: opIndex, slice });
       }
-      if (parsed !== undefined) ops.push(parsed);
       i += slice.length;
     } catch {
-      skipped++;
-      const next = text.slice(i + 1).search(/\{\s*"op"\s*:/);
-      if (next < 0) break;
-      i = i + 1 + next;
+      const nextRel = text.slice(i + 1).search(/\{\s*"op"\s*:/);
+      const end = nextRel < 0 ? text.length : i + 1 + nextRel;
+      const rawSlice = text
+        .slice(i, end)
+        .replace(/,?\s*$/, '')
+        .trim()
+        .replace(/\s*\]\s*$/, '')
+        .trim();
+      const result = tryParseOpSlice(rawSlice, options);
+      if (result.parsed !== undefined) {
+        ops.push(result.parsed);
+        if (result.repaired) repaired++;
+      } else {
+        skipped++;
+        if (rawSlice) failedSlices.push({ index: opIndex, slice: rawSlice });
+      }
+      if (nextRel < 0) break;
+      i = i + 1 + nextRel;
     }
   }
-  return { ops, skipped, repaired };
+  return { ops, skipped, repaired, failedSlices };
 }
 
 export function parseString(content: string): any {
