@@ -78,12 +78,18 @@ test('all bad ops yields empty and parse issue', () => {
   assert.ok(issues.some(i => i.kind === 'parse'));
 });
 
-test('invalid shaped op filtered with parse issue', () => {
+test('bracket-mismatch fragment cuts at next op (no 500-char bleed)', () => {
+  const longValue = '字'.repeat(200);
   const raw = `[
-    { "foo": 1 },
-    { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "ok" }
+    { "op": "insert", "path": "/阿斯塔利亚/传闻/坏条", "value": { "描述": "${longValue}", "流变历程": { "1": { "真相": "未闭合
+    { "op": "replace", "path": "/阿斯塔利亚/刊报日期", "value": "d-ok" }
   ]`;
-  const { ops, issues } = parseJsonPatchOpsWithIssues(raw);
+  const { ops, failedFragments } = parseJsonPatchOpsWithIssues(raw);
   assert.equal(ops.length, 1);
-  assert.ok(issues.some(i => i.kind === 'parse' && /第 1 条/.test(i.message)));
+  assert.ok(failedFragments.length >= 1);
+  const frag = failedFragments[0]!;
+  const opKeys = frag.snippet.match(/"op"\s*:/g) || [];
+  assert.equal(opKeys.length, 1, `snippet should be single op, got: ${frag.snippet.slice(0, 120)}`);
+  assert.ok(!frag.snippet.includes('/阿斯塔利亚/刊报日期'), 'snippet must not bleed into next op');
+  assert.ok(frag.snippet.includes('/阿斯塔利亚/传闻/坏条'));
 });

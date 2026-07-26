@@ -94,13 +94,14 @@ function collectUnparseableOpFragments(patchArrayText: string): AddonPatchFailed
       }
       i += slice.length;
     } catch {
-      const roughEnd = Math.min(i + 500, text.length);
-      const slice = text.slice(i, roughEnd);
+      // 切到下一条 { "op":，避免固定 500 字截断并粘进下一条
+      const nextRel = text.slice(i + 1).search(/\{\s*"op"\s*:/);
+      const end = nextRel < 0 ? text.length : i + 1 + nextRel;
+      const slice = text.slice(i, end).replace(/,?\s*$/, '').trim();
       const message = `第 ${opIndex} 条 op 括号不匹配，已跳过: ${snippet(slice)}`;
       fragments.push({ index: opIndex, snippet: keepSnippet(slice), message });
-      const next = text.slice(i + 1).search(/\{\s*"op"\s*:/);
-      if (next < 0) break;
-      i = i + 1 + next;
+      if (nextRel < 0) break;
+      i = i + 1 + nextRel;
     }
   }
   return fragments;

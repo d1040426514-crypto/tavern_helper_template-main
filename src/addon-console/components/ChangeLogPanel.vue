@@ -36,7 +36,6 @@
           <div class="ac-cmd-detail">
             <code class="ac-cmd-path-full">{{ opPath(item.op) }}</code>
             <div class="ac-cmd-warn">{{ item.message }}</div>
-            <pre class="ac-cmd-json">{{ formatOp(item.op) }}</pre>
             <textarea v-model="failedOpEditors[i]" class="ac-cmd-textarea" rows="6" spellcheck="false" />
             <button type="button" class="ac-btn" :disabled="busy" @click="applyEdited(failedOpEditors[i])">
               应用此条
@@ -153,7 +152,6 @@
           </summary>
           <div class="ac-cmd-detail">
             <code class="ac-cmd-path-full">{{ opPath(item.op) }}</code>
-            <pre class="ac-cmd-json">{{ formatOp(item.op) }}</pre>
             <textarea v-model="successOpEditors[i]" class="ac-cmd-textarea" rows="6" spellcheck="false" />
             <button type="button" class="ac-btn" :disabled="busy" @click="applyEdited(successOpEditors[i])">
               应用此条
