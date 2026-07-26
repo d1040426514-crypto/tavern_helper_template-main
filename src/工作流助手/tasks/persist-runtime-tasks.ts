@@ -1,7 +1,10 @@
-import { loadSettings, saveSettings } from '../settings';
+import { saveSettings } from '../settings';
 import { isChatOverrideActive, readChatTaskScope, writeChatTaskScope } from './chat-task-scope';
 import { emitTasksChanged } from './events';
+import { shouldWriteRuntimeTasksToGlobal } from './persist-runtime-tasks-logic';
 import type { ScriptSettings } from './schema';
+
+export { shouldWriteRuntimeTasksToGlobal } from './persist-runtime-tasks-logic';
 
 /** 将运行时 tasks 同步进当前活动任务预设，避免清理后预设仍保留已删副本。 */
 export function syncActivePresetTasksFromRuntime(settings: ScriptSettings): void {
@@ -22,21 +25,22 @@ export async function persistRuntimeTaskChanges(
 ): Promise<void> {
   baseSettings.replicaFamilyCleanup = _.cloneDeep(effectiveSettings.replicaFamilyCleanup);
   const scope = readChatTaskScope();
-  if (isChatOverrideActive(scope) && scope?.snapshot) {
-    const nextSnapshot = {
-      ...scope.snapshot,
-      tasks: _.cloneDeep(effectiveSettings.tasks),
-    };
+  const chatOverride = isChatOverrideActive(scope) && !!scope?.snapshot;
+
+  if (chatOverride) {
     await writeChatTaskScope({
-      ...scope,
-      snapshot: nextSnapshot,
+      ...scope!,
+      snapshot: {
+        ...scope!.snapshot!,
+        tasks: _.cloneDeep(effectiveSettings.tasks),
+      },
       updatedAt: Date.now(),
     });
+  } else if (shouldWriteRuntimeTasksToGlobal(chatOverride)) {
     baseSettings.tasks = _.cloneDeep(effectiveSettings.tasks);
-  } else {
-    baseSettings.tasks = _.cloneDeep(effectiveSettings.tasks);
+    syncActivePresetTasksFromRuntime(baseSettings);
   }
-  syncActivePresetTasksFromRuntime(baseSettings);
+
   saveSettings(baseSettings);
   await emitTasksChanged('replace', 'api');
 }

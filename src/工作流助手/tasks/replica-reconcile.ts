@@ -117,7 +117,7 @@ function hasReplicaFamilyRoot(tasks: PostProcessTask[]): boolean {
   return tasks.some(isReplicaFamilyRootTemplate);
 }
 
-/** 按聊天历史重放副本任务列表，并写回全局 + chat 快照 */
+/** 按聊天历史重放副本任务列表；快照激活时仅写 chat，否则写回全局 */
 export async function reconcileReplicaTasksFromChat(options: ReconcileReplicaOptions = {}): Promise<void> {
   if (reconcileInFlight) return;
   reconcileInFlight = true;

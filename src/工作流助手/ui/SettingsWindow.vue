@@ -68,6 +68,7 @@ import {
   getChatScopeState,
   listTasks,
   moveTask as moveTaskInStore,
+  promoteChatScopeToPreset,
   removePromptGroup as removePromptGroupInStore,
   replaceTasks,
   saveTaskWorkflowPreset as saveTaskWorkflowPresetInStore,
@@ -1681,6 +1682,38 @@ async function handleClearChatScope() {
   acuToast('success', '已清除聊天快照');
 }
 
+async function handlePromoteChatScopeToPreset() {
+  if (!chatScopeActive.value) return;
+  const origin = chatScopeInfo.value?.originPresetName?.trim();
+  const defaultName = origin
+    ? `聊天快照-${origin}`
+    : `聊天快照-${new Date().toLocaleString('zh-CN')}`;
+  const name = await acuPrompt({
+    title: '保存为全局预设',
+    message: '将把当前聊天快照另存为新的全局预设，并切换为该预设、清除本聊天快照。',
+    confirmText: '保存',
+    danger: false,
+    prompt: {
+      placeholder: '新预设名称',
+      defaultValue: defaultName,
+    },
+  });
+  if (!name?.trim()) return;
+  if (settings.value.presets.some(p => p.name === name.trim())) {
+    acuToast('warning', `预设「${name.trim()}」已存在，请换一个名称`);
+    return;
+  }
+  const saved = await promoteChatScopeToPreset(name.trim());
+  if (!saved) {
+    acuToast('warning', '保存失败：无可用聊天快照或名称冲突');
+    return;
+  }
+  store.reload();
+  await refreshTaskView();
+  selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+  acuToast('success', `已保存为全局预设「${saved}」并清除聊天快照`);
+}
+
 let offTasksChanged: EventOnReturn | null = null;
 let offChatScopeChanged: EventOnReturn | null = null;
 
@@ -2321,7 +2354,15 @@ function saveRunLogTaskTags(taskId: string): void {
             <h4>全局预设</h4>
             <div v-if="chatScopeActive" class="acu-chat-scope-banner acu-notes">
               当前聊天使用临时快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。API
-              或本页任务编辑仅影响此聊天，不会修改全局活动预设。
+              或本页任务编辑仅影响此聊天，不会修改全局活动预设。若要写入全局请用「保存为全局预设」。
+              <button
+                class="acu-btn acu-btn--sm primary"
+                type="button"
+                style="margin-left: 8px"
+                @click="handlePromoteChatScopeToPreset"
+              >
+                保存为全局预设
+              </button>
               <button class="acu-btn acu-btn--sm" type="button" style="margin-left: 8px" @click="handleClearChatScope">
                 清除快照
               </button>
@@ -2356,8 +2397,11 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn primary"
                   type="button"
-                  title="保存预设"
+                  :title="
+                    chatScopeActive ? '聊天快照模式下请使用横幅「保存为全局预设」' : '保存预设'
+                  "
                   aria-label="保存预设"
+                  :disabled="chatScopeActive"
                   @click="saveTaskPreset"
                 >
                   <i class="fa-fw fa-solid fa-floppy-disk" aria-hidden="true"></i>
@@ -2365,8 +2409,11 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn"
                   type="button"
-                  title="另存为新预设"
+                  :title="
+                    chatScopeActive ? '聊天快照模式下请使用横幅「保存为全局预设」' : '另存为新预设'
+                  "
                   aria-label="另存为新预设"
+                  :disabled="chatScopeActive"
                   @click="confirmSaveTaskPresetAsNew"
                 >
                   <i class="fa-fw fa-solid fa-clone" aria-hidden="true"></i>
