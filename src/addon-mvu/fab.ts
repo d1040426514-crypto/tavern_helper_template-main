@@ -308,11 +308,18 @@ function ensureStyles(): void {
 }
 
 #${SHELL_ID}{
-  /* ST 常给 html 加 transform 且 height:0；仅 inset:0 会让 fixed 壳高度塌成 0 */
-  position:fixed;inset:0;z-index:9995;pointer-events:none;
-  width:100%;
+  /* ST 的 html 带 transform/perspective 时，fixed 包含块是 html 而非视口；
+     矮屏下 html 高度可为 0，inset/height:100% 会塌成 0，align-items:center 把面板顶出视口（只剩奶油色空白）。
+     对齐工作流助手 acu-overlay：用 top/left + vw/vh(dvh)，不用 inset/%。 */
+  position:fixed;
+  top:0;
+  left:0;
+  z-index:9995;
+  pointer-events:none;
+  width:100vw;
   height:100vh;
   height:100dvh;
+  max-width:100vw;
   max-height:100vh;
   max-height:100dvh;
   box-sizing:border-box;
@@ -321,7 +328,7 @@ function ensureStyles(): void {
 }
 #${SHELL_ID}.open{pointer-events:auto}
 #${SHELL_ID} .ac-mask{
-  position:absolute;inset:0;
+  position:absolute;top:0;right:0;bottom:0;left:0;
   background:rgba(12,16,28,.52);
   opacity:0;transition:opacity .22s ease;
   backdrop-filter:blur(2px);
@@ -332,7 +339,9 @@ function ensureStyles(): void {
   z-index:1;
   width:min(1080px,94vw);
   height:min(92vh,920px);
+  height:min(92dvh,920px);
   max-height:92vh;
+  max-height:92dvh;
   background:#fdf9f2;
   border-radius:16px;
   box-shadow:0 16px 48px rgba(12,16,28,.28);
@@ -353,8 +362,15 @@ function ensureStyles(): void {
 }
 #${SHELL_ID} .ac-panel-body iframe,
 #${SHELL_ID} .ac-panel-body .ac-mount{
-  width:100%;height:100%;border:0;display:block;background:transparent;
-  min-height:0;flex:1;
+  width:100%;
+  height:auto;
+  border:0;
+  display:flex;
+  flex-direction:column;
+  background:transparent;
+  min-height:0;
+  flex:1 1 auto;
+  align-self:stretch;
 }
 @media (max-width:640px){
   #${SHELL_ID}{
@@ -366,14 +382,17 @@ function ensureStyles(): void {
     justify-content:stretch;
   }
   #${SHELL_ID} .ac-panel{
+    /* shell 已是 100dvh；此处用 flex 填满内容盒，避免再套一层 100dvh 与 safe-area 叠加溢出 */
     width:100%;
-    height:100%;
+    max-width:none;
+    height:auto;
+    max-height:none;
     flex:1 1 auto;
     align-self:stretch;
     min-height:0;
-    max-height:none;
     border-radius:0;
     border:0;
+    box-sizing:border-box;
   }
 }
 `;
@@ -677,6 +696,71 @@ function requestConsoleRefresh(): void {
   }
 }
 
+/** 打开后采样布局，用于诊断移动端空白面板（ST html transform + 高度塌缩） */
+function debugLogConsoleLayout(runId: string, hypothesisId: string, message: string): void {
+  // #region agent log
+  try {
+    const doc = hostDoc();
+    const win = hostWin();
+    const html = doc.documentElement;
+    const shell = doc.getElementById(SHELL_ID);
+    const panel = shell?.querySelector('.ac-panel') as HTMLElement | null;
+    const body = shell?.querySelector('.ac-panel-body') as HTMLElement | null;
+    const mount = shell?.querySelector('.ac-mount') as HTMLElement | null;
+    const app = shell?.querySelector('.addon-console') as HTMLElement | null;
+    const header = shell?.querySelector('.ac-header') as HTMLElement | null;
+    const rect = (el: Element | null) => {
+      if (!el) return null;
+      const r = el.getBoundingClientRect();
+      return {
+        w: Math.round(r.width),
+        h: Math.round(r.height),
+        t: Math.round(r.top),
+        b: Math.round(r.bottom),
+        inView: r.bottom > 0 && r.top < win.innerHeight && r.height > 1,
+      };
+    };
+    const payload = {
+      sessionId: 'd217f7',
+      runId,
+      hypothesisId,
+      location: 'fab.ts:openAddonConsole',
+      message,
+      timestamp: Date.now(),
+      data: {
+        vw: win.innerWidth,
+        vh: win.innerHeight,
+        htmlOffsetHeight: html.offsetHeight,
+        htmlClientHeight: html.clientHeight,
+        htmlTransform: win.getComputedStyle(html).transform,
+        htmlPerspective: win.getComputedStyle(html).perspective,
+        shellOpen: shell?.classList.contains('open') === true,
+        shellCsHeight: shell ? win.getComputedStyle(shell).height : null,
+        shellCsWidth: shell ? win.getComputedStyle(shell).width : null,
+        panelCsHeight: panel ? win.getComputedStyle(panel).height : null,
+        appCsHeight: app ? win.getComputedStyle(app).height : null,
+        shell: rect(shell),
+        panel: rect(panel),
+        body: rect(body),
+        mount: rect(mount),
+        app: rect(app),
+        header: rect(header),
+        mountChildCount: mount?.childElementCount ?? 0,
+        hasAddonConsole: !!app,
+      },
+    };
+    (win as Window & { __addonConsoleDebugLayout?: unknown }).__addonConsoleDebugLayout = payload;
+    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd217f7' },
+      body: JSON.stringify(payload),
+    }).catch(() => {});
+  } catch {
+    /* ignore */
+  }
+  // #endregion
+}
+
 export function openAddonConsole(): void {
   ensureStyles();
   ensureShell();
@@ -688,6 +772,12 @@ export function openAddonConsole(): void {
   setOpen(true);
   exposeHostApi();
   requestConsoleRefresh();
+  // #region agent log
+  requestAnimationFrame(() => {
+    debugLogConsoleLayout('post-fix', 'A-D', 'console opened layout sample');
+    setTimeout(() => debugLogConsoleLayout('post-fix', 'A-D', 'console opened layout sample+300ms'), 300);
+  });
+  // #endregion
 }
 
 export function closeAddonConsole(): void {
