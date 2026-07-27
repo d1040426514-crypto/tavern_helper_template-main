@@ -10,7 +10,8 @@ import { loadSettings, useSettingsStore } from '../settings';
 import { buildShareablePresetExport } from '../settings-security';
 import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-replace';
 import { commaSeparatedListsEqual, formatCommaSeparatedList, parseCommaSeparatedList } from '../tasks/comma-separated';
-import { resolveEffectiveSettings } from '../tasks/effective-settings';
+import { applyPresetFieldsToSettings, resolveEffectiveSettings } from '../tasks/effective-settings';
+import { buildChatSnapshotFromSettings } from '../tasks/chat-task-scope';
 import { ACU_PP_CHAT_SCOPE_CHANGED, ACU_PP_TASKS_CHANGED, type TasksChangedPayload } from '../tasks/events';
 import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
@@ -156,7 +157,7 @@ async function ensureSnapshotViewForEdit(): Promise<boolean> {
   return true;
 }
 
-const showReplicaFamilyCleanupPanel = computed(() => hasReplicaFamilyTasks(settings.value.tasks));
+const showReplicaFamilyCleanupPanel = computed(() => hasReplicaFamilyTasks(displayTasks.value));
 
 /** 任务 tab 列表：隐藏副本族副本（仅显示原本与普通任务） */
 const taskTabTasks = computed(() => displayTasks.value.filter(t => !t.replicaFamilyRootId));
@@ -460,64 +461,71 @@ type RefreshTaskViewOptions = FlushPendingWritesOptions & {
   skipPresetSync?: boolean;
 };
 
+/** 下拉在查看全局预设时，禁止把 debounce 写入刷回快照（否则会强制 activeView=snapshot） */
+let refreshingTaskView = false;
+
 async function flushPendingWrites(options?: FlushPendingWritesOptions): Promise<void> {
+  const viewingGlobal = getChatScopeState()?.activeView === 'global';
   if (persistViewTasksTimer) {
     clearTimeout(persistViewTasksTimer);
     persistViewTasksTimer = null;
-    if (chatScopeActive.value && !options?.skipTasksFlush) {
+    if (chatScopeActive.value && !options?.skipTasksFlush && !viewingGlobal) {
       await replaceTasks(viewTasks.value, 'ui');
     }
   }
   if (persistPresetFieldsTimer) {
     clearTimeout(persistPresetFieldsTimer);
     persistPresetFieldsTimer = null;
-    if (chatScopeActive.value && !options?.skipPresetFlush) {
+    if (chatScopeActive.value && !options?.skipPresetFlush && !viewingGlobal) {
       await updatePresetFields(buildPresetFieldsPatch(), 'ui');
     }
   }
 }
 
 async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> {
-  await flushPendingWrites(options);
-  await repairChatScopeIfNeeded();
-  const scope = getChatScopeState();
-  chatScopeInfo.value = scope;
-  hasChatSnapshot.value = !!scope;
-  presetDropdownValue.value = getChatPresetDropdownValue();
-  if (scope && !options?.skipTaskReload) {
-    viewTasks.value = listTasks();
-    if (!viewTasks.value.some(t => t.id === selectedTaskId.value)) {
-      selectedTaskId.value = viewTasks.value[0]?.id ?? '';
+  refreshingTaskView = true;
+  try {
+    await flushPendingWrites(options);
+    await repairChatScopeIfNeeded();
+    const scope = getChatScopeState();
+    chatScopeInfo.value = scope;
+    hasChatSnapshot.value = !!scope;
+    presetDropdownValue.value = getChatPresetDropdownValue();
+    if (scope && !options?.skipTaskReload) {
+      viewTasks.value = listTasks();
+      if (!viewTasks.value.some(t => t.id === selectedTaskId.value)) {
+        selectedTaskId.value = viewTasks.value[0]?.id ?? '';
+      }
+    } else if (!scope) {
+      viewTasks.value = [];
     }
-  } else if (!scope) {
-    viewTasks.value = [];
-  }
-  if (!options?.skipPresetSync) {
-    suppressGlobalSettingsPersist = true;
-    try {
-      syncPresetFieldsFromEffective();
-    } finally {
-      suppressGlobalSettingsPersist = false;
+    if (!options?.skipPresetSync) {
+      suppressGlobalSettingsPersist = true;
+      try {
+        syncPresetFieldsFromEffective();
+      } finally {
+        suppressGlobalSettingsPersist = false;
+      }
     }
+  } finally {
+    refreshingTaskView = false;
   }
 }
 
 function syncPresetFieldsFromEffective() {
   syncingPresetView = true;
-  const effective = resolveEffectiveSettings(loadSettings());
-  settings.value.contextTurnCount = effective.contextTurnCount;
-  settings.value.contextExtractRules = _.cloneDeep(effective.contextExtractRules);
-  settings.value.contextExcludeRules = _.cloneDeep(effective.contextExcludeRules);
-  settings.value.plotWorldbookConfig = _.cloneDeep(effective.plotWorldbookConfig);
-  settings.value.taskPlotWorldbookOverridesEnabled = effective.taskPlotWorldbookOverridesEnabled;
-  settings.value.taskContextOverridesEnabled = effective.taskContextOverridesEnabled;
-  settings.value.memoryRecallRecentCount = effective.memoryRecallRecentCount ?? 10;
-  defaultContextConfigRef.value = {
-    contextTurnCount: effective.contextTurnCount,
-    contextExtractRules: _.cloneDeep(effective.contextExtractRules),
-    contextExcludeRules: _.cloneDeep(effective.contextExcludeRules),
-  };
-  syncingPresetView = false;
+  try {
+    const effective = resolveEffectiveSettings(loadSettings());
+    // 有聊天快照时下拉切换只改展示：把 effective 的全部预设字段同步到 UI（含注入模板与规则）
+    applyPresetFieldsToSettings(settings.value, buildChatSnapshotFromSettings(effective));
+    defaultContextConfigRef.value = {
+      contextTurnCount: effective.contextTurnCount,
+      contextExtractRules: _.cloneDeep(effective.contextExtractRules),
+      contextExcludeRules: _.cloneDeep(effective.contextExcludeRules),
+    };
+  } finally {
+    syncingPresetView = false;
+  }
 }
 
 let persistPresetFieldsTimer: ReturnType<typeof setTimeout> | null = null;
@@ -557,7 +565,9 @@ async function persistPresetFieldsNow(): Promise<void> {
 }
 
 function schedulePersistPresetFields() {
-  if (syncingPresetView || !chatScopeActive.value) return;
+  if (syncingPresetView || refreshingTaskView || !chatScopeActive.value) return;
+  // 浏览全局预设时，同步展示字段不应 debounce 写回快照
+  if (getChatScopeState()?.activeView === 'global') return;
   if (persistPresetFieldsTimer) clearTimeout(persistPresetFieldsTimer);
   persistPresetFieldsTimer = setTimeout(() => {
     persistPresetFieldsTimer = null;
@@ -632,7 +642,9 @@ function ensureReplicasMirroredInPlace(tasks: PostProcessTask[]): void {
 
 let persistViewTasksTimer: ReturnType<typeof setTimeout> | null = null;
 function schedulePersistViewTasks() {
-  if (!hasChatSnapshot.value) return;
+  if (!hasChatSnapshot.value || refreshingTaskView || syncingPresetView) return;
+  // 浏览全局预设时，任务列表重载不应触发写回快照
+  if (getChatScopeState()?.activeView === 'global') return;
   if (persistViewTasksTimer) clearTimeout(persistViewTasksTimer);
   persistViewTasksTimer = setTimeout(() => {
     persistViewTasksTimer = null;
@@ -1694,6 +1706,8 @@ async function addPromptGroup(): Promise<void> {
 
 async function applyBuiltinPreset(name: string) {
   if (hasChatSnapshot.value) {
+    // 切换前先落盘 snapshot 视图下的 debounce，避免后续 refresh 在 global 视图误写回快照
+    await flushPendingWrites();
     if (name === CHAT_SNAPSHOT_PRESET_NAME) {
       await setChatScopeActiveView({ view: 'snapshot' });
     } else {
