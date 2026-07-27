@@ -1,6 +1,7 @@
 import { createApp, type App as VueApp } from 'vue';
 import { createPinia } from 'pinia';
 import { teleportStyle } from '@util/script';
+import { ensureVueFeatureFlags } from '@util/vue-feature-flags';
 
 import ConsoleApp from '../addon-console/App.vue';
 import { AddonEvent } from './events';
@@ -695,6 +696,12 @@ function mountConsoleInProcess(container: HTMLElement): void {
   container.innerHTML = '';
   lastMountError = '';
   lastMountMode = 'inprocess';
+  ensureVueFeatureFlags();
+  try {
+    ensureVueFeatureFlags(hostWin() as unknown as typeof globalThis);
+  } catch {
+    /* ignore */
+  }
   const mount = hostDoc().createElement('div');
   mount.className = 'ac-mount';
   container.appendChild(mount);
@@ -883,7 +890,7 @@ function updateDebugHud(payload: {
     }
     const d = payload.data ?? {};
     const lines = [
-      'AC-DEBUG d217f7 fix3-mount',
+      'AC-DEBUG d217f7 fix4-vueflags',
       `run=${payload.runId ?? '?'} msg=${payload.message ?? ''}`,
       `mode=${d.mountMode} url=${d.consoleUrl || '(empty)'}`,
       `hasIframe=${d.hasIframe} hasMount=${d.hasMount} err=${d.mountError || '-'}`,
@@ -1002,10 +1009,10 @@ export function openAddonConsole(): void {
   requestConsoleRefresh();
   // #region agent log
   requestAnimationFrame(() => {
-    debugLogConsoleLayout('fix3', 'H11', 'console opened layout sample');
-    setTimeout(() => debugLogConsoleLayout('fix3', 'H11', 'console opened layout sample+300ms'), 300);
-    setTimeout(() => debugLogConsoleLayout('fix3', 'H11', 'console opened layout sample+800ms'), 800);
-    setTimeout(() => debugLogConsoleLayout('fix3', 'H11', 'console opened layout sample+1500ms'), 1500);
+    debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample');
+    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+300ms'), 300);
+    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+800ms'), 800);
+    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+1500ms'), 1500);
   });
   // #endregion
 }

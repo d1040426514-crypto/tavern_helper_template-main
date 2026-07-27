@@ -1,5 +1,6 @@
 import { waitUntil } from 'async-wait-until';
 import { reloadOnChatChange } from '@util/script';
+import { ensureVueFeatureFlags } from '@util/vue-feature-flags';
 
 import { injectAddonConsoleFab, markAddonConsoleSoftUnload, teardownAddonConsoleHostOnUnload } from './fab';
 import { Addon } from './global-api';
@@ -71,6 +72,7 @@ function exposeAddonOnParent(): void {
 }
 
 function initAddonMvu(): void {
+  ensureVueFeatureFlags();
   backfillChatAddonData();
 
   eventMakeLast(tavern_events.MESSAGE_SENT, (message_id: number) => {
