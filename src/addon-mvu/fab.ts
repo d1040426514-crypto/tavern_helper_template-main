@@ -100,8 +100,6 @@ function resolveConsoleMountMode(url: string): 'iframe' | 'inprocess' {
 }
 
 let lastMountError = '';
-let lastMountMode: 'iframe' | 'inprocess' | 'skip-healthy' | 'skip-stale-cleared' | '' = '';
-let lastConsoleUrl = '';
 
 function panelContentHealthy(body: HTMLElement): boolean {
   if (body.querySelector('.addon-console')) return true;
@@ -461,22 +459,6 @@ function ensureStyles(): void {
 #${SHELL_ID} .addon-console .ac-hint{
   color:#2c2416;
 }
-#${SHELL_ID} .ac-debug-hud{
-  position:absolute;
-  left:8px;
-  right:8px;
-  bottom:8px;
-  z-index:50;
-  padding:8px 10px;
-  border-radius:8px;
-  background:rgba(8,12,24,.92);
-  color:#9ef0c2;
-  font:11px/1.45 ui-monospace,Consolas,monospace;
-  white-space:pre-wrap;
-  pointer-events:none;
-  max-height:40%;
-  overflow:auto;
-}
 @media (max-width:640px){
   #${SHELL_ID}{
     padding-top:env(safe-area-inset-top,0px);
@@ -674,7 +656,6 @@ function syncTeleportedStyles(): void {
   styleDestroy?.();
   const { destroy } = teleportStyle();
   styleDestroy = destroy;
-  // #region agent log
   // 剥离 teleported style 中的阻塞型 @import（Google Fonts 等），避免整表样式不生效
   try {
     hostDoc()
@@ -688,14 +669,12 @@ function syncTeleportedStyles(): void {
   } catch {
     /* ignore */
   }
-  // #endregion
 }
 
 function mountConsoleInProcess(container: HTMLElement): void {
   unmountConsole();
   container.innerHTML = '';
   lastMountError = '';
-  lastMountMode = 'inprocess';
   ensureVueFeatureFlags();
   try {
     ensureVueFeatureFlags(hostWin() as unknown as typeof globalThis);
@@ -731,7 +710,6 @@ function mountConsoleIframe(container: HTMLElement, url: string): void {
   unmountConsole();
   container.innerHTML = '';
   lastMountError = '';
-  lastMountMode = 'iframe';
   const iframe = hostDoc().createElement('iframe');
   iframe.src = url;
   iframe.title = 'addon-console';
@@ -762,24 +740,22 @@ function loadConsoleContent(): void {
   const body = shell.querySelector('.ac-panel-body') as HTMLElement | null;
   if (!body) return;
 
-  lastConsoleUrl = readConsoleUrl();
-  const mode = resolveConsoleMountMode(lastConsoleUrl);
+  const consoleUrl = readConsoleUrl();
+  const mode = resolveConsoleMountMode(consoleUrl);
 
   // 已有健康内容且进程内 Vue 仍在，跳过
   if (panelContentHealthy(body) && (mode === 'iframe' || vueApp)) {
-    lastMountMode = 'skip-healthy';
     return;
   }
 
-  // 清空空壳 .ac-mount / 坏 iframe，允许重挂（真机常见：localhost iframe 空白后被 early-return 锁死）
+  // 清空空壳 .ac-mount / 坏 iframe，允许重挂
   if (body.querySelector('.ac-mount, iframe')) {
-    lastMountMode = 'skip-stale-cleared';
     unmountConsole();
     body.innerHTML = '';
   }
 
   if (mode === 'iframe') {
-    mountConsoleIframe(body, lastConsoleUrl);
+    mountConsoleIframe(body, consoleUrl);
   } else {
     mountConsoleInProcess(body);
   }
@@ -871,129 +847,8 @@ function requestConsoleRefresh(): void {
   }
 }
 
-function updateDebugHud(payload: {
-  runId?: string;
-  hypothesisId?: string;
-  data?: Record<string, unknown>;
-  message?: string;
-}): void {
-  // #region agent log
-  try {
-    const shell = hostDoc().getElementById(SHELL_ID);
-    const panel = shell?.querySelector('.ac-panel') as HTMLElement | null;
-    if (!panel) return;
-    let hud = panel.querySelector('.ac-debug-hud') as HTMLElement | null;
-    if (!hud) {
-      hud = hostDoc().createElement('div');
-      hud.className = 'ac-debug-hud';
-      panel.appendChild(hud);
-    }
-    const d = payload.data ?? {};
-    const lines = [
-      'AC-DEBUG d217f7 fix4-vueflags',
-      `run=${payload.runId ?? '?'} msg=${payload.message ?? ''}`,
-      `mode=${d.mountMode} url=${d.consoleUrl || '(empty)'}`,
-      `hasIframe=${d.hasIframe} hasMount=${d.hasMount} err=${d.mountError || '-'}`,
-      `vw=${d.vw} vh=${d.vh} htmlH0=${d.htmlOffsetHeight}`,
-      `shell=${JSON.stringify(d.shell)}`,
-      `header=${JSON.stringify(d.header)} inView=${(d.header as { inView?: boolean } | null)?.inView}`,
-      `hasApp=${d.hasAddonConsole} mountKids=${d.mountChildCount}`,
-      `teleportStyles=${d.teleportStyleCount} style100vw=${d.styleHas100vw}`,
-    ];
-    hud.textContent = lines.join('\n');
-  } catch {
-    /* ignore */
-  }
-  // #endregion
-}
-
 function isOpen(): boolean {
   return hostDoc().getElementById(SHELL_ID)?.classList.contains('open') === true;
-}
-
-/** 打开后采样布局，用于诊断移动端空白面板 */
-function debugLogConsoleLayout(runId: string, hypothesisId: string, message: string): void {
-  // #region agent log
-  try {
-    const doc = hostDoc();
-    const win = hostWin();
-    const html = doc.documentElement;
-    const shell = doc.getElementById(SHELL_ID);
-    const panel = shell?.querySelector('.ac-panel') as HTMLElement | null;
-    const body = shell?.querySelector('.ac-panel-body') as HTMLElement | null;
-    const mount = shell?.querySelector('.ac-mount') as HTMLElement | null;
-    const iframe = shell?.querySelector('.ac-panel-body iframe') as HTMLIFrameElement | null;
-    const app = shell?.querySelector('.addon-console') as HTMLElement | null;
-    const header = shell?.querySelector('.ac-header') as HTMLElement | null;
-    const title = header?.querySelector('.ac-header-main-title, h1') as HTMLElement | null;
-    const styleText = doc.getElementById(STYLE_ID)?.textContent || '';
-    const teleported = [...doc.querySelectorAll('div[script_id] style')];
-    const rect = (el: Element | null) => {
-      if (!el) return null;
-      const r = el.getBoundingClientRect();
-      return {
-        w: Math.round(r.width),
-        h: Math.round(r.height),
-        t: Math.round(r.top),
-        b: Math.round(r.bottom),
-        inView: r.bottom > 0 && r.top < win.innerHeight && r.height > 1,
-      };
-    };
-    const payload = {
-      sessionId: 'd217f7',
-      runId,
-      hypothesisId,
-      location: 'fab.ts:openAddonConsole',
-      message,
-      timestamp: Date.now(),
-      data: {
-        vw: win.innerWidth,
-        vh: win.innerHeight,
-        htmlOffsetHeight: html.offsetHeight,
-        htmlClientHeight: html.clientHeight,
-        htmlTransform: win.getComputedStyle(html).transform,
-        htmlPerspective: win.getComputedStyle(html).perspective,
-        shellOpen: shell?.classList.contains('open') === true,
-        shellCsHeight: shell ? win.getComputedStyle(shell).height : null,
-        shellCsWidth: shell ? win.getComputedStyle(shell).width : null,
-        panelCsHeight: panel ? win.getComputedStyle(panel).height : null,
-        appCsHeight: app ? win.getComputedStyle(app).height : null,
-        shell: rect(shell),
-        panel: rect(panel),
-        body: rect(body),
-        mount: rect(mount),
-        app: rect(app),
-        header: rect(header),
-        mountChildCount: mount?.childElementCount ?? 0,
-        hasAddonConsole: !!app,
-        hasMount: !!mount,
-        hasIframe: !!iframe,
-        iframeSrc: iframe?.src ?? null,
-        consoleUrl: lastConsoleUrl,
-        mountMode: lastMountMode,
-        mountError: lastMountError,
-        teleportStyleCount: teleported.length,
-        stylesWithGoogleFontsImport: teleported.filter(s => /fonts\.googleapis|@import/i.test(s.textContent || ''))
-          .length,
-        creamVar: app ? win.getComputedStyle(app).getPropertyValue('--cream-bg').trim() : null,
-        titleColor: title ? win.getComputedStyle(title).color : null,
-        headerBgImage: header ? win.getComputedStyle(header).backgroundImage.slice(0, 60) : null,
-        bodyColor: win.getComputedStyle(doc.body).color,
-        styleHas100vw: styleText.includes('width:100vw'),
-        styleHasInsetOnShell: /#addon-console-shell\{[\s\S]*?inset:0/.test(styleText),
-      },
-    };
-    (win as Window & { __addonConsoleDebugLayout?: unknown }).__addonConsoleDebugLayout = payload;
-    updateDebugHud(payload);
-    fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd217f7' },
-      body: JSON.stringify(payload),
-    }).catch(() => {});
-  } catch {
-    /* ignore */
-  }
-  // #endregion
 }
 
 export function openAddonConsole(): void {
@@ -1007,14 +862,6 @@ export function openAddonConsole(): void {
   setOpen(true);
   exposeHostApi();
   requestConsoleRefresh();
-  // #region agent log
-  requestAnimationFrame(() => {
-    debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample');
-    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+300ms'), 300);
-    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+800ms'), 800);
-    setTimeout(() => debugLogConsoleLayout('fix4', 'H12', 'console opened layout sample+1500ms'), 1500);
-  });
-  // #endregion
 }
 
 export function closeAddonConsole(): void {
