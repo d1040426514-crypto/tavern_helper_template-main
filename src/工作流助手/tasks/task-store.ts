@@ -1,5 +1,6 @@
 import { findApiPreset, normalizeApiPresetFallbackNames, resolveTaskApiPreset } from '../api/resolve';
 import { alignFallbackMaxConcurrencies, normalizeRouteMaxConcurrency } from '../api/route-concurrency-limits';
+import { buildPresetFromSettings } from '../settings-security';
 import { loadSettings, saveSettings } from '../settings';
 import {
   buildChatSnapshotFromSettings,
@@ -13,7 +14,7 @@ import {
   writeChatTaskScope,
   isChatOverrideActive,
 } from './chat-task-scope';
-import { resolveEffectiveSettings } from './effective-settings';
+import { applyPresetFieldsToSettings, resolveEffectiveSettings } from './effective-settings';
 import { emitChatScopeChanged, emitTasksChanged } from './events';
 import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
 import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
@@ -146,7 +147,7 @@ async function persistSnapshotTasks(
   const next = ChatTaskScopeStateSchema.parse({
     ...scope,
     snapshot,
-    // 任何写入落盘到快照后，视图回到 snapshot，避免 global 视图与数据错位
+    // 快照写回后视图回到 snapshot，避免与数据错位
     activeView: 'snapshot',
     boundGlobalPresetName: '',
     updatedAt: Date.now(),
@@ -164,11 +165,62 @@ async function persistGlobalTasks(settings: ScriptSettings, tasks: PostProcessTa
   saveSettings(settings);
 }
 
+/** UI 浏览全局预设时：写回绑定的全局预设槽，不动聊天快照 */
+function getBoundGlobalPresetNameForUiWrite(): string | null {
+  const scope = readChatTaskScope();
+  if (!isChatOverrideActive(scope) || scope?.activeView !== 'global') return null;
+  const name = scope.boundGlobalPresetName?.trim() ?? '';
+  return name || null;
+}
+
+function persistBoundGlobalTasks(settings: ScriptSettings, tasks: PostProcessTask[], boundName: string): void {
+  const idx = settings.presets.findIndex(p => p.name === boundName);
+  if (idx < 0) {
+    throw new Error(`绑定的全局预设不存在: ${boundName}`);
+  }
+  const prev = settings.presets[idx]!;
+  settings.presets[idx] = PostProcessPresetSchema.parse({
+    ...prev,
+    name: boundName,
+    tasks: _.cloneDeep(tasks),
+  });
+  if (settings.activePresetName.trim() === boundName) {
+    settings.tasks = _.cloneDeep(tasks);
+  }
+  saveSettings(settings);
+}
+
+function persistBoundGlobalPresetFields(
+  settings: ScriptSettings,
+  fields: PresetFieldsPatch,
+  boundName: string,
+): void {
+  const idx = settings.presets.findIndex(p => p.name === boundName);
+  if (idx < 0) {
+    throw new Error(`绑定的全局预设不存在: ${boundName}`);
+  }
+  const prev = settings.presets[idx]!;
+  settings.presets[idx] = PostProcessPresetSchema.parse({
+    ...prev,
+    ..._.cloneDeep(fields),
+    name: boundName,
+  });
+  if (settings.activePresetName.trim() === boundName) {
+    Object.assign(settings, _.cloneDeep(fields));
+  }
+  saveSettings(settings);
+}
+
 async function writeTasks(
   settings: ScriptSettings,
   tasks: PostProcessTask[],
   source: TaskWriteSource,
 ): Promise<void> {
+  const boundName = source === 'ui' ? getBoundGlobalPresetNameForUiWrite() : null;
+  if (boundName) {
+    persistBoundGlobalTasks(settings, tasks, boundName);
+    return;
+  }
   const useSnapshot = source === 'api' || isChatOverrideActive(readChatTaskScope());
   if (useSnapshot) {
     await persistSnapshotTasks(settings, tasks, source);
@@ -287,7 +339,8 @@ export async function repairChatScopeIfNeeded(): Promise<void> {
 }
 
 /**
- * 将当前 effective 整份写入聊天快照并切到 snapshot 视图（用于 global 视图下开始编辑前）。
+ * 用当前 effective（下拉所看内容）覆盖聊天快照并切到 snapshot 视图。
+ * 供 UI「覆盖快照」显式调用；浏览全局时的普通编辑不应再走这里。
  */
 export async function forkEffectiveIntoChatSnapshot(source: TaskWriteSource = 'ui'): Promise<void> {
   const settings = loadSettings();
@@ -307,6 +360,25 @@ export async function forkEffectiveIntoChatSnapshot(source: TaskWriteSource = 'u
   );
   await emitChatScopeChanged('chat_override', scope.originPresetName);
   await emitTasksChanged('preset', source);
+}
+
+/**
+ * 将 UI 展示态整份保存到指定全局预设名（有快照且浏览全局时的「保存」）。
+ * 不改 activePresetName，不动聊天快照。
+ */
+export function saveNamedGlobalPresetFromDisplay(display: ScriptSettings, presetName: string): boolean {
+  const name = presetName.trim();
+  if (!name || name === CHAT_SNAPSHOT_PRESET_NAME) return false;
+  const settings = loadSettings();
+  const idx = settings.presets.findIndex(p => p.name === name);
+  if (idx < 0) return false;
+  const preset = PostProcessPresetSchema.parse(buildPresetFromSettings(display, name));
+  settings.presets[idx] = preset;
+  if (settings.activePresetName.trim() === name) {
+    applyPresetFieldsToSettings(settings, preset);
+  }
+  saveSettings(settings);
+  return true;
 }
 
 export async function clearChatScope(source: TaskWriteSource = 'api'): Promise<void> {
@@ -402,6 +474,13 @@ export async function updatePresetFields(
   source: TaskWriteSource = 'api',
 ): Promise<void> {
   const settings = loadSettings();
+  const boundName = source === 'ui' ? getBoundGlobalPresetNameForUiWrite() : null;
+  if (boundName) {
+    persistBoundGlobalPresetFields(settings, fields, boundName);
+    await emitTasksChanged('preset', source);
+    return;
+  }
+
   const useSnapshot = source === 'api' || isChatOverrideActive(readChatTaskScope());
 
   if (useSnapshot) {

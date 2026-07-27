@@ -205,12 +205,22 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
   }
 
   function addOrUpdatePreset(preset: PostProcessPreset): string {
+    const name = upsertPresetWithoutApply(preset);
+    applyPreset(name);
+    return name;
+  }
+
+  /** 只写入/更新 presets[]，不改 activePresetName / 顶层工作副本（有聊天快照时导入用） */
+  function upsertPresetWithoutApply(preset: PostProcessPreset): string {
     const cloned = _.cloneDeep(preset);
-    const idx = settings.value.presets.findIndex(p => p.name === cloned.name);
+    const name = cloned.name.trim();
+    if (!name) throw new Error('预设名称不能为空');
+    cloned.name = name;
+    const idx = settings.value.presets.findIndex(p => p.name === name);
     if (idx >= 0) settings.value.presets[idx] = cloned;
     else settings.value.presets.push(cloned);
-    applyPreset(cloned.name);
-    return cloned.name;
+    persist();
+    return name;
   }
 
   function deleteTaskPreset(name: string): boolean {
@@ -231,14 +241,14 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     return base || `导入预设-${new Date().toLocaleString('zh-CN')}`;
   }
 
-  function importPresetFromJson(raw: unknown, fileName?: string): ImportPresetResult {
+  function parseImportedPreset(raw: unknown, fileName?: string): {
+    preset: PostProcessPreset;
+    strippedApiSecrets: boolean;
+  } {
     const migrated = migrateImportedPreset(raw);
     const presetOnly = PostProcessPresetSchema.safeParse(migrated);
     if (presetOnly.success) {
-      return {
-        name: addOrUpdatePreset(presetOnly.data),
-        strippedApiSecrets: false,
-      };
+      return { preset: presetOnly.data, strippedApiSecrets: false };
     }
 
     const fullSettings = ScriptSettingsSchema.safeParse(migrated);
@@ -261,16 +271,22 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
         taskContextOverridesEnabled: s.taskContextOverridesEnabled ?? false,
         memoryRecallRecentCount: s.memoryRecallRecentCount ?? 10,
       };
-
       const hadApiInFile = importedSettingsHadApiConfig(s) || detectSecretsInImportRaw(raw);
-
-      return {
-        name: addOrUpdatePreset(preset),
-        strippedApiSecrets: hadApiInFile,
-      };
+      return { preset, strippedApiSecrets: hadApiInFile };
     }
 
     throw new Error('无法识别的预设 JSON 格式（需为预设对象或完整设置导出文件）');
+  }
+
+  function importPresetFromJson(
+    raw: unknown,
+    fileName?: string,
+    options?: { apply?: boolean },
+  ): ImportPresetResult {
+    const { preset, strippedApiSecrets } = parseImportedPreset(raw, fileName);
+    const apply = options?.apply !== false;
+    const name = apply ? addOrUpdatePreset(preset) : upsertPresetWithoutApply(preset);
+    return { name, strippedApiSecrets };
   }
 
   watchEffect(() => {
@@ -281,5 +297,15 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     }
   });
 
-  return { settings, persist, reload, applyPreset, importPresetFromJson, saveActivePreset, saveAsNewPreset, deleteTaskPreset };
+  return {
+    settings,
+    persist,
+    reload,
+    applyPreset,
+    importPresetFromJson,
+    upsertPresetWithoutApply,
+    saveActivePreset,
+    saveAsNewPreset,
+    deleteTaskPreset,
+  };
 });
