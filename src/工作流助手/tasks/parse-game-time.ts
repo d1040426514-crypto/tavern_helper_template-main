@@ -83,9 +83,12 @@ function toHalfWidthDigits(text: string): string {
   return text.replace(/[０-９]/g, ch => String.fromCharCode(ch.charCodeAt(0) - 0xff10 + 0x30));
 }
 
+/** 行首「时间/当前时间/游戏时间：」后内容（多行块优先截取该行） */
+const TIME_LABELED_LINE_RE = /(?:^|\n)\s*(?:时间|当前时间|游戏时间)\s*[:：]\s*(.+)/;
+
 /**
  * 最小清洗：全角数字、折叠空白（含换行）、剥时间标签前缀、@ 后当地点截断。
- * 不取首行、不截断 `|`（周几/时段/天气留给抽取器忽略）。
+ * 多行块若含「时间：」行则只保留该行内容。不截断 `|`（周几/时段/天气留给抽取器忽略）。
  */
 export function normalizeGameTimeRaw(raw: string): string {
   let text = String(raw ?? '')
@@ -93,6 +96,10 @@ export function normalizeGameTimeRaw(raw: string): string {
     .trim();
   if (!text) return '';
   text = toHalfWidthDigits(text);
+  const labeled = text.match(TIME_LABELED_LINE_RE);
+  if (labeled?.[1]) {
+    text = labeled[1].replace(/\n[\s\S]*$/, '').trim();
+  }
   text = text.replace(/\s+/g, ' ').trim();
   text = text.replace(TIME_LABEL_PREFIX_RE, '').trim();
   const at = text.indexOf('@');
@@ -100,16 +107,45 @@ export function normalizeGameTimeRaw(raw: string): string {
   return text;
 }
 
-/** 整段日期区间取右端（结束端）；不含无空格的 HH:mm-HH:mm */
+/** 轻量判断片段是否像日期/时刻（供空格短横线区间剥离） */
+function looksLikeTemporal(segment: string): boolean {
+  const s = segment.trim();
+  if (!s) return false;
+  return (
+    /\d{4}\s*年/.test(s) ||
+    /(?:\d+|[一二三四五六七八九十百千万两零〇]+)\s*年/.test(s) ||
+    /第?\s*\d+\s*天/.test(s) ||
+    /\d{1,2}\s*[:：时]\s*\d{1,2}/.test(s) ||
+    /\d{3,}\s*-\s*\d{1,2}\s*-\s*\d{1,2}/.test(s) ||
+    /\d{4}\s*[-/.]\s*\d{1,2}\s*[-/.]\s*\d{1,2}/.test(s)
+  );
+}
+
+/**
+ * 整段日期区间取右端（结束端）；不含无空格的 HH:mm-HH:mm。
+ * `~`/`～`/`—` 直接取右段；空格短横线仅当相邻两端都像时间时才切（避免 Markdown 列表 `- item`）。
+ */
 export function peelRangeEnd(text: string): string {
-  const seps = [/\s*[~～]\s+/, /\s+—\s+/, /\s+-\s+/];
-  for (const re of seps) {
+  for (const re of [/\s*[~～]\s+/, /\s+—\s+/]) {
     if (!re.test(text)) continue;
     const parts = text
       .split(re)
       .map(s => s.trim())
       .filter(Boolean);
     if (parts.length >= 2) return parts[parts.length - 1]!;
+  }
+
+  const dashRe = /\s+-\s+/;
+  if (dashRe.test(text)) {
+    const parts = text
+      .split(dashRe)
+      .map(s => s.trim())
+      .filter(Boolean);
+    if (parts.length >= 2) {
+      const last = parts[parts.length - 1]!;
+      const prev = parts[parts.length - 2]!;
+      if (looksLikeTemporal(last) && looksLikeTemporal(prev)) return last;
+    }
   }
   return text;
 }
@@ -545,9 +581,10 @@ export function formatRemainingDuration(remainingMs: number): string {
 
 export const GAME_TIME_FORMAT_HELP = {
   preprocess:
-    '解析前：全角数字转半角；折叠空白（含换行）；去掉开头「时间/当前时间/游戏时间」标签；@ 之后视为地点并截断。不截断 |。先识别时间段（取结束时刻）再识别日期；整段日期区间（A ~ B / A — B）取右端。',
+    '解析前：全角数字转半角；多行块若含「时间/当前时间/游戏时间：」行则只取该行；折叠空白；去掉开头同名标签；@ 之后视为地点并截断。不截断 |。先识别时间段（取结束时刻）再识别日期；整段日期区间（A ~ B / A — B）取右端；空格短横线 A - B 仅当两端都像时间时才取右端（避免列表 - 项）。',
   examples: [
     '混排：时间：2024-05-07 | 周二 15:30-18:00（取 2024-05-07 18:00）',
+    '多行标签块：地点…\\n时间：2026年04月10日 周五 下午 17:05\\n在场角色：\\n- 角色|服装（只取时间行）',
     '中文/架空历法：复兴纪元488年5月14日15:48、自由纪元-427年-07月-12日',
     '中文月日：复兴纪元十年十月十四日、五月初一（需带年份）',
     '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15',

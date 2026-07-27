@@ -60,14 +60,47 @@ test('normalizeGameTimeRaw strips location and fullwidth digits, keeps pipe segm
   assert.equal(normalizeGameTimeRaw('2024-05-07\n15:30-18:00'), '2024-05-07 15:30-18:00');
 });
 
+test('normalizeGameTimeRaw prefers time-labeled line in multiline block', () => {
+  const block = [
+    '地点：县一中高二教室 & 校门口',
+    '时间：2026年04月10日 周五 下午 17:05',
+    '场景类型：SFW',
+    '在场角色：',
+    '- 珞珈|制服',
+  ].join('\n');
+  assert.equal(normalizeGameTimeRaw(block), '2026年04月10日 周五 下午 17:05');
+});
+
 test('peelRangeEnd takes right segment', () => {
   assert.equal(
     peelRangeEnd('自由纪元-427年-07月-12日 ~ 自由纪元-428年-01月-01日'),
     '自由纪元-428年-01月-01日',
   );
   assert.equal(peelRangeEnd('A — B'), 'B');
-  assert.equal(peelRangeEnd('左端 - 右端'), '右端');
+  assert.equal(peelRangeEnd('左端 - 右端'), '左端 - 右端');
+  assert.equal(peelRangeEnd('在场角色： - 珞珈|制服'), '在场角色： - 珞珈|制服');
+  assert.equal(
+    peelRangeEnd('2024-05-07 15:00 - 2024-05-08 18:00'),
+    '2024-05-08 18:00',
+  );
   assert.equal(peelRangeEnd('单端日期'), '单端日期');
+});
+
+test('parseGameTime SceneInfo block with list dash', () => {
+  const block = [
+    '地点：县一中高二教室 & 校门口',
+    '时间：2026年04月10日 周五 下午 17:05',
+    '场景类型：SFW',
+    '在场角色：',
+    '- 珞珈|制服',
+  ].join('\n');
+  const r = parseGameTime(block);
+  assert.ok(r);
+  assert.equal(r.fields.year, 2026);
+  assert.equal(r.fields.month, 4);
+  assert.equal(r.fields.day, 10);
+  assert.equal(r.fields.hour, 17);
+  assert.equal(r.fields.minute, 5);
 });
 
 test('numeric_ymd gregorian uses calendar axis not Date.getTime', () => {
