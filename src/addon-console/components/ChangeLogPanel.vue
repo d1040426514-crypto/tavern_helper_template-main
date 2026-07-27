@@ -106,7 +106,28 @@
         <h3 class="ac-changelog-h ac-changelog-h--mark">自动修正 / 标记</h3>
 
         <details
-          v-for="(issue, i) in healIssues"
+          v-for="(item, i) in healedOps"
+          :key="'ho' + i"
+          class="ac-cmd-card heal"
+          :class="opClass(item.op.op)"
+        >
+          <summary class="ac-cmd-summary">
+            <span class="ac-cmd-badge heal">heal</span>
+            <span class="ac-cmd-title">{{ truncate(item.message, 40) }} · {{ lastPathSegment(opPath(item.op)) }}</span>
+            <span class="ac-cmd-chevron" aria-hidden="true" />
+          </summary>
+          <div class="ac-cmd-detail">
+            <div class="ac-cmd-body">{{ item.message }}</div>
+            <code class="ac-cmd-path-full">{{ opPath(item.op) }}</code>
+            <textarea v-model="healedOpEditors[i]" class="ac-cmd-textarea" rows="6" spellcheck="false" />
+            <button type="button" class="ac-btn" :disabled="busy" @click="applyEdited(healedOpEditors[i])">
+              应用此条
+            </button>
+          </div>
+        </details>
+
+        <details
+          v-for="(issue, i) in healTextIssues"
           :key="'h' + i"
           class="ac-cmd-card heal"
         >
@@ -190,6 +211,7 @@ const emit = defineEmits<{
 }>();
 
 const successOpEditors = ref<string[]>([]);
+const healedOpEditors = ref<string[]>([]);
 const failedOpEditors = ref<string[]>([]);
 const fragEditors = ref<string[]>([]);
 
@@ -198,6 +220,14 @@ const errorCount = computed(
 );
 
 const healIssues = computed(() => (props.log?.issues ?? []).filter(i => i.kind === 'heal'));
+
+const healedOps = computed(() =>
+  healIssues.value
+    .filter((i): i is PatchLogIssue & { op: any } => !!i.op)
+    .map(i => ({ op: i.op, message: i.message })),
+);
+
+const healTextIssues = computed(() => healIssues.value.filter(i => !i.op));
 
 function opKey(op: any): string {
   return JSON.stringify(op);
@@ -238,10 +268,14 @@ const successOps = computed(() => {
   const log = props.log;
   if (!log) return [] as Array<{ op: any; index: number }>;
   const fixedPaths = manualFixedPathSet(log);
+  const healedKeys = new Set(
+    healIssues.value.filter(i => i.op).map(i => opKey(i.op)),
+  );
   return log.ops
     .map((op, index) => ({ op, index }))
     .filter(({ op }) => {
       if (applyIssueFor(op)) return false;
+      if (healedKeys.has(opKey(op))) return false;
       const p = op?.op === 'move' ? op.to : op?.path;
       if (typeof p === 'string' && fixedPaths.has(p)) return false;
       return true;
@@ -289,6 +323,7 @@ watch(
     fragEditors.value = (log?.failedFragments ?? []).map(f => f.snippet);
     failedOpEditors.value = failedOps.value.map(item => JSON.stringify(item.op, null, 2));
     successOpEditors.value = successOps.value.map(item => JSON.stringify(item.op, null, 2));
+    healedOpEditors.value = healedOps.value.map(item => JSON.stringify(item.op, null, 2));
   },
   { immediate: true },
 );
@@ -299,6 +334,10 @@ watch(failedOps, ops => {
 
 watch(successOps, ops => {
   successOpEditors.value = ops.map(item => JSON.stringify(item.op, null, 2));
+});
+
+watch(healedOps, ops => {
+  healedOpEditors.value = ops.map(item => JSON.stringify(item.op, null, 2));
 });
 
 function formatTime(ts: number): string {

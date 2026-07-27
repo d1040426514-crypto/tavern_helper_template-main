@@ -190,25 +190,27 @@ export function canonicalizePatchOps(
       const from = canonicalizeJsonPointer(op.from, base);
       const to = canonicalizeJsonPointer(op.to, base);
       const rewrites = [...from.rewrites, ...to.rewrites];
+      const canonOp = { ...op, from: from.path, to: to.path };
       if (rewrites.length > 0) {
         issues.push({
           kind: 'heal',
           message: `路径规范化: ${op.from} → ${from.path}; ${op.to} → ${to.path}`,
-          op,
+          op: canonOp,
         });
       }
-      return { ...op, from: from.path, to: to.path };
+      return canonOp;
     }
 
     const { path, rewrites } = canonicalizeJsonPointer(op.path, base);
+    const canonOp = { ...op, path };
     if (rewrites.length > 0) {
       issues.push({
         kind: 'heal',
         message: `路径规范化: ${op.path} → ${path}`,
-        op,
+        op: canonOp,
       });
     }
-    return { ...op, path };
+    return canonOp;
   });
 
   return { ops: canonOps, issues };

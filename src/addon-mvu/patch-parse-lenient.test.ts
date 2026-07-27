@@ -49,7 +49,10 @@ test('parseJsonPatchOpsWithIssues: heals missing trailing braces on insert', () 
   assert.equal((ops[0] as { op: string; path: string }).op, 'insert');
   assert.equal((ops[0] as { path: string }).path, '/阿斯塔利亚/rumor/bad');
   assert.equal((ops[1] as { op: string }).op, 'replace');
-  assert.ok(issues.some(i => i.kind === 'heal'));
+  const healWithOp = issues.filter(i => i.kind === 'heal' && i.op);
+  assert.equal(healWithOp.length, 1);
+  assert.equal((healWithOp[0]!.op as { path: string }).path, '/阿斯塔利亚/rumor/bad');
+  assert.match(healWithOp[0]!.message, /语法修复/);
   assert.equal(failedFragments.length, 0);
 });
 
@@ -64,7 +67,9 @@ test('extractAddonJsonPatchOpsWithIssues: heals missing braces in XML patch', ()
 后文`;
   const { ops, issues, failedFragments } = extractAddonJsonPatchOpsWithIssues(message);
   assert.equal(ops.length, 2);
-  assert.ok(issues.some(i => i.kind === 'heal'));
+  const healWithOp = issues.filter(i => i.kind === 'heal' && i.op);
+  assert.equal(healWithOp.length, 1);
+  assert.equal((healWithOp[0]!.op as { path: string }).path, '/阿斯塔利亚/x');
   assert.equal(failedFragments.length, 0);
 
   const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
@@ -79,7 +84,9 @@ test('all ops with only missing braces heal successfully', () => {
   ]`;
   const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
   assert.equal(ops.length, 2);
-  assert.ok(issues.some(i => i.kind === 'heal'));
+  const healWithOp = issues.filter(i => i.kind === 'heal' && i.op);
+  assert.equal(healWithOp.length, 2);
+  assert.ok(!issues.some(i => i.kind === 'heal' && !i.op && /已对\s*\d+\s*条/.test(i.message)));
   assert.equal(failedFragments.length, 0);
 });
 
@@ -118,7 +125,9 @@ test('healed deep insert (multiple missing braces) applies', () => {
   ]`;
   const { ops, issues, failedFragments } = parseJsonPatchOpsWithIssues(raw);
   assert.equal(ops.length, 2);
-  assert.ok(issues.some(i => i.kind === 'heal'));
+  const healWithOp = issues.filter(i => i.kind === 'heal' && i.op);
+  assert.equal(healWithOp.length, 1);
+  assert.equal((healWithOp[0]!.op as { path: string }).path, '/阿斯塔利亚/传闻/珍珠湾夜影');
   assert.equal(failedFragments.length, 0);
   const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
   assert.equal(_.get(data, '阿斯塔利亚.刊报日期'), '新日');

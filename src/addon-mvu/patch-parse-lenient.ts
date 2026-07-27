@@ -92,15 +92,21 @@ export function parseJsonPatchOpsWithIssues(raw: string): ParseJsonPatchResult {
     return filterValidOps(strictArray);
   }
 
-  const { ops: rawOps, skipped, repaired, failedSlices } = parseJsonPatchArrayLenient(trimmed, {
-    repairOp: true,
-  });
+  const { ops: rawOps, skipped, repaired, repairedOps, failedSlices } = parseJsonPatchArrayLenient(
+    trimmed,
+    {
+      repairOp: true,
+    },
+  );
   const { ops, issues, failedFragments } = filterValidOps(rawOps);
 
-  if (repaired > 0) {
-    issues.unshift({
+  const repairedSet = new Set(repairedOps);
+  for (const op of ops) {
+    if (!repairedSet.has(op)) continue;
+    issues.push({
       kind: 'heal',
-      message: `已对 ${repaired} 条残缺 patch op 做语法修复`,
+      message: '语法修复: 补全残缺 JSON',
+      op,
     });
   }
 

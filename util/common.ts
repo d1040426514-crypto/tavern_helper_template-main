@@ -228,10 +228,19 @@ export type LenientFailedSlice = { index: number; slice: string };
 export function parseJsonPatchArrayLenient(
   patchArrayText: string,
   options?: { repairOp?: boolean },
-): { ops: unknown[]; skipped: number; repaired: number; failedSlices: LenientFailedSlice[] } {
+): {
+  ops: unknown[];
+  skipped: number;
+  repaired: number;
+  repairedOps: unknown[];
+  failedSlices: LenientFailedSlice[];
+} {
   const text = String(patchArrayText || '').trim();
-  if (!text.startsWith('[')) return { ops: [], skipped: 0, repaired: 0, failedSlices: [] };
+  if (!text.startsWith('[')) {
+    return { ops: [], skipped: 0, repaired: 0, repairedOps: [], failedSlices: [] };
+  }
   const ops: unknown[] = [];
+  const repairedOps: unknown[] = [];
   const failedSlices: LenientFailedSlice[] = [];
   let skipped = 0;
   let repaired = 0;
@@ -252,7 +261,10 @@ export function parseJsonPatchArrayLenient(
       const result = tryParseOpSlice(slice, options);
       if (result.parsed !== undefined) {
         ops.push(result.parsed);
-        if (result.repaired) repaired++;
+        if (result.repaired) {
+          repaired++;
+          repairedOps.push(result.parsed);
+        }
       } else {
         skipped++;
         failedSlices.push({ index: opIndex, slice });
@@ -270,7 +282,10 @@ export function parseJsonPatchArrayLenient(
       const result = tryParseOpSlice(rawSlice, options);
       if (result.parsed !== undefined) {
         ops.push(result.parsed);
-        if (result.repaired) repaired++;
+        if (result.repaired) {
+          repaired++;
+          repairedOps.push(result.parsed);
+        }
       } else {
         skipped++;
         if (rawSlice) failedSlices.push({ index: opIndex, slice: rawSlice });
@@ -279,7 +294,7 @@ export function parseJsonPatchArrayLenient(
       i = i + 1 + nextRel;
     }
   }
-  return { ops, skipped, repaired, failedSlices };
+  return { ops, skipped, repaired, repairedOps, failedSlices };
 }
 
 export function parseString(content: string): any {

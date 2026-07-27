@@ -129,9 +129,15 @@ test('canonicalizeSegments preserves world name', () => {
 });
 
 test('canonicalizePatchOps emits heal issue on rewrite', () => {
-  const { issues } = canonicalizePatchOps(
+  const { ops, issues } = canonicalizePatchOps(
     [{ op: 'replace', path: '/阿斯塔利亚/世界经济简报/贸易政策/帝国', value: 'x' }],
     baseWorld(),
   );
-  assert.ok(issues.some(i => i.kind === 'heal' && i.message.includes('路径规范化')));
+  const heal = issues.find(i => i.kind === 'heal' && i.message.includes('路径规范化'));
+  assert.ok(heal);
+  assert.equal(
+    (heal!.op as { path: string }).path,
+    '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/帝国',
+  );
+  assert.deepEqual(heal!.op, ops[0]);
 });
