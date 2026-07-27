@@ -372,6 +372,75 @@ function ensureStyles(): void {
   flex:1 1 auto;
   align-self:stretch;
 }
+/* Vue 样式若因外网 @import 阻塞未生效，宿主兜底保证顶栏可见（对齐工作流助手：关键 chrome 不依赖 teleport） */
+#${SHELL_ID} .addon-console{
+  flex:1 1 auto;
+  align-self:stretch;
+  width:100%;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  color:#2c2416;
+  background:#fdf9f2;
+  font-family:'PingFang SC','Microsoft YaHei',sans-serif;
+}
+#${SHELL_ID} .addon-console .ac-header{
+  flex-shrink:0;
+  display:flex;
+  flex-wrap:wrap;
+  align-items:center;
+  gap:8px 10px;
+  padding:10px 12px;
+  background:#1a2740;
+  color:#e8d5b0;
+  border-bottom:2px solid #c8a45c;
+  position:relative;
+  z-index:3;
+}
+#${SHELL_ID} .addon-console .ac-header-main-title,
+#${SHELL_ID} .addon-console .ac-header h1{
+  margin:0;
+  font-size:16px;
+  font-weight:700;
+  color:#e8d5b0;
+}
+#${SHELL_ID} .addon-console .ac-tab,
+#${SHELL_ID} .addon-console .ac-btn{
+  border:1px solid rgba(232,213,176,.35);
+  background:rgba(255,255,255,.08);
+  color:inherit;
+  border-radius:999px;
+  padding:6px 12px;
+  min-height:36px;
+  font-size:12px;
+}
+#${SHELL_ID} .addon-console .ac-tab.active{
+  background:#c8a45c;
+  color:#1a1208;
+  font-weight:650;
+}
+#${SHELL_ID} .addon-console .ac-main,
+#${SHELL_ID} .addon-console .ac-main-scroll,
+#${SHELL_ID} .addon-console .ac-hint{
+  color:#2c2416;
+}
+#${SHELL_ID} .ac-debug-hud{
+  position:absolute;
+  left:8px;
+  right:8px;
+  bottom:8px;
+  z-index:50;
+  padding:8px 10px;
+  border-radius:8px;
+  background:rgba(8,12,24,.92);
+  color:#9ef0c2;
+  font:11px/1.45 ui-monospace,Consolas,monospace;
+  white-space:pre-wrap;
+  pointer-events:none;
+  max-height:40%;
+  overflow:auto;
+}
 @media (max-width:640px){
   #${SHELL_ID}{
     padding-top:env(safe-area-inset-top,0px);
@@ -569,6 +638,21 @@ function syncTeleportedStyles(): void {
   styleDestroy?.();
   const { destroy } = teleportStyle();
   styleDestroy = destroy;
+  // #region agent log
+  // 剥离 teleported style 中的阻塞型 @import（Google Fonts 等），避免整表样式不生效
+  try {
+    hostDoc()
+      .querySelectorAll('div[script_id] style')
+      .forEach(el => {
+        const text = el.textContent || '';
+        if (/@import/i.test(text)) {
+          el.textContent = text.replace(/@import\s+url\([^)]+\)\s*;?/gi, '/* stripped @import */');
+        }
+      });
+  } catch {
+    /* ignore */
+  }
+  // #endregion
 }
 
 function mountConsoleInProcess(container: HTMLElement): void {
@@ -579,8 +663,52 @@ function mountConsoleInProcess(container: HTMLElement): void {
   container.appendChild(mount);
   vueApp = createApp(ConsoleApp);
   vueApp.use(createPinia());
+  vueApp.config.errorHandler = (err, _instance, info) => {
+    console.error('[addon-console] render error:', err, info);
+  };
   vueApp.mount(mount);
+  // 多次补传：移动端样式注入可能晚于首帧
+  syncTeleportedStyles();
   requestAnimationFrame(() => syncTeleportedStyles());
+  setTimeout(() => syncTeleportedStyles(), 120);
+  setTimeout(() => syncTeleportedStyles(), 500);
+}
+
+function updateDebugHud(payload: {
+  runId?: string;
+  hypothesisId?: string;
+  data?: Record<string, unknown>;
+  message?: string;
+}): void {
+  // #region agent log
+  try {
+    const shell = hostDoc().getElementById(SHELL_ID);
+    const panel = shell?.querySelector('.ac-panel') as HTMLElement | null;
+    if (!panel) return;
+    let hud = panel.querySelector('.ac-debug-hud') as HTMLElement | null;
+    if (!hud) {
+      hud = hostDoc().createElement('div');
+      hud.className = 'ac-debug-hud';
+      panel.appendChild(hud);
+    }
+    const d = payload.data ?? {};
+    const lines = [
+      'AC-DEBUG d217f7 fix2-fonts',
+      `run=${payload.runId ?? '?'} msg=${payload.message ?? ''}`,
+      `vw=${d.vw} vh=${d.vh} htmlH0=${d.htmlOffsetHeight}`,
+      `shell=${JSON.stringify(d.shell)}`,
+      `panel=${JSON.stringify(d.panel)}`,
+      `header=${JSON.stringify(d.header)} inView=${(d.header as { inView?: boolean } | null)?.inView}`,
+      `hasApp=${d.hasAddonConsole} mountKids=${d.mountChildCount}`,
+      `teleportStyles=${d.teleportStyleCount} fontsImport=${d.stylesWithGoogleFontsImport}`,
+      `creamVar=${d.creamVar} titleColor=${d.titleColor}`,
+      `style100vw=${d.styleHas100vw} styleInset=${d.styleHasInsetOnShell}`,
+    ];
+    hud.textContent = lines.join('\n');
+  } catch {
+    /* ignore */
+  }
+  // #endregion
 }
 
 function mountConsoleIframe(container: HTMLElement, url: string): void {
@@ -696,7 +824,7 @@ function requestConsoleRefresh(): void {
   }
 }
 
-/** 打开后采样布局，用于诊断移动端空白面板（ST html transform + 高度塌缩） */
+/** 打开后采样布局，用于诊断移动端空白面板 */
 function debugLogConsoleLayout(runId: string, hypothesisId: string, message: string): void {
   // #region agent log
   try {
@@ -709,6 +837,9 @@ function debugLogConsoleLayout(runId: string, hypothesisId: string, message: str
     const mount = shell?.querySelector('.ac-mount') as HTMLElement | null;
     const app = shell?.querySelector('.addon-console') as HTMLElement | null;
     const header = shell?.querySelector('.ac-header') as HTMLElement | null;
+    const title = header?.querySelector('.ac-header-main-title, h1') as HTMLElement | null;
+    const styleText = doc.getElementById(STYLE_ID)?.textContent || '';
+    const teleported = [...doc.querySelectorAll('div[script_id] style')];
     const rect = (el: Element | null) => {
       if (!el) return null;
       const r = el.getBoundingClientRect();
@@ -747,9 +878,19 @@ function debugLogConsoleLayout(runId: string, hypothesisId: string, message: str
         header: rect(header),
         mountChildCount: mount?.childElementCount ?? 0,
         hasAddonConsole: !!app,
+        teleportStyleCount: teleported.length,
+        stylesWithGoogleFontsImport: teleported.filter(s => /fonts\.googleapis|@import/i.test(s.textContent || ''))
+          .length,
+        creamVar: app ? win.getComputedStyle(app).getPropertyValue('--cream-bg').trim() : null,
+        titleColor: title ? win.getComputedStyle(title).color : null,
+        headerBgImage: header ? win.getComputedStyle(header).backgroundImage.slice(0, 60) : null,
+        bodyColor: win.getComputedStyle(doc.body).color,
+        styleHas100vw: styleText.includes('width:100vw'),
+        styleHasInsetOnShell: /#addon-console-shell\{[\s\S]*?inset:0/.test(styleText),
       },
     };
     (win as Window & { __addonConsoleDebugLayout?: unknown }).__addonConsoleDebugLayout = payload;
+    updateDebugHud(payload);
     fetch('http://127.0.0.1:7323/ingest/62d419e6-ef16-4bd7-aa5c-ccd26b4e7782', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-Debug-Session-Id': 'd217f7' },
@@ -774,8 +915,9 @@ export function openAddonConsole(): void {
   requestConsoleRefresh();
   // #region agent log
   requestAnimationFrame(() => {
-    debugLogConsoleLayout('post-fix', 'A-D', 'console opened layout sample');
-    setTimeout(() => debugLogConsoleLayout('post-fix', 'A-D', 'console opened layout sample+300ms'), 300);
+    debugLogConsoleLayout('fix2', 'H10', 'console opened layout sample');
+    setTimeout(() => debugLogConsoleLayout('fix2', 'H10', 'console opened layout sample+300ms'), 300);
+    setTimeout(() => debugLogConsoleLayout('fix2', 'H10', 'console opened layout sample+800ms'), 800);
   });
   // #endregion
 }

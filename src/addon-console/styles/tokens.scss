@@ -1,5 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=Special+Elite&family=Playfair+Display:wght@500;600;700&display=swap');
-
+/* 勿用 @import 拉取 Google Fonts：国内移动网络常超时，会阻塞整段 style（含变量/布局）导致面板空白 */
 .addon-console,
 .addon-console[data-theme='light'] {
   --deep-navy: #1a2740;
@@ -72,9 +71,9 @@
   --header-text: var(--gold-pale);
   --toggle-on: var(--sage);
   --danger: var(--rust);
-  --font-display: 'Special Elite', 'Cormorant Garamond', 'Playfair Display', 'Noto Serif SC', serif;
-  --font-serif: 'Cormorant Garamond', 'Playfair Display', 'Noto Serif SC', serif;
-  --font-body: 'Inter', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-display: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-body: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', sans-serif;
   --section-header-bg: linear-gradient(180deg, rgba(245, 236, 215, 0.6) 0%, rgba(250, 243, 228, 0.3) 100%);
   --section-header-color: #5a3e28;
   --stat-label-color: #6b4226;
