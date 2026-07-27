@@ -247,13 +247,14 @@ function parseDayToken(tok: string): number | null {
   return chineseNumeralToInt(tok);
 }
 
-const YEAR_TOKEN_RE = new RegExp(`(?:(\\d+)|(${CN_NUM_CLASS}+))\\s*年`);
+const YEAR_TOKEN_RE = new RegExp(`(?:(\\d+)|(元)|(${CN_NUM_CLASS}+))\\s*年`);
 
 function parseYearFromText(text: string): number | null {
   const m = text.match(YEAR_TOKEN_RE);
   if (!m) return null;
   if (m[1] != null) return Number(m[1]);
-  return chineseNumeralToInt(m[2]!);
+  if (m[2] != null) return 1;
+  return chineseNumeralToInt(m[3]!);
 }
 
 /** 先抽时间段（取右端），否则取最后一个单时刻 */
@@ -362,7 +363,7 @@ function matchChineseSlash(text: string, clock: ClockHit | null): MatcherHit | n
 
   const slashM = text.match(
     new RegExp(
-      `(?:(?:\\d+)|(?:${CN_NUM_CLASS}+))\\s*年\\s*[-/]?\\s*(\\d{1,2})\\s*[/.-]\\s*(\\d{1,2})(?:\\s*[/.\\-\\s]\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{2}))?`,
+      `(?:(?:\\d+)|(?:元)|(?:${CN_NUM_CLASS}+))\\s*年\\s*[-/]?\\s*(\\d{1,2})\\s*[/.-]\\s*(\\d{1,2})(?:\\s*[/.\\-\\s]\\s*(\\d{1,2})\\s*[:：]\\s*(\\d{2}))?`,
     ),
   );
   if (!slashM) return null;
@@ -379,30 +380,40 @@ function matchChineseSlash(text: string, clock: ClockHit | null): MatcherHit | n
 }
 
 /**
- * 中文/架空历法带「月」「日」：
- * 复兴纪元488年-5月-14日-星期三-15:48、十月十四日、五月初一 / 正月初一
+ * 中文/架空历法：年/月/日各自可选，至少一项命中。
+ * 复兴纪元488年-5月-14日-星期三-15:48、十月十四日、五月初一 / 正月初一、元年-01月-01日
  */
 function matchChineseYmd(text: string, clock: ClockHit | null): MatcherHit | null {
+  const fields: GameTimeFields = {};
+
   const year = parseYearFromText(text);
-  if (year == null || Number.isNaN(year)) return null;
+  if (year != null && !Number.isNaN(year)) fields.year = year;
 
   const monthM = text.match(new RegExp(`(正|腊|\\d+|${CN_NUM_CLASS}+)\\s*月`));
-  if (!monthM) return null;
-  const month = parseMonthToken(monthM[1]!);
-  if (month == null || Number.isNaN(month)) return null;
+  if (monthM) {
+    const month = parseMonthToken(monthM[1]!);
+    if (month != null && !Number.isNaN(month)) fields.month = month;
+  }
 
   const chuM = text.match(/初([一二三四五六七八九]|十)/);
-  let day: number | null = null;
   if (chuM) {
-    day = parseDayToken(`初${chuM[1]}`);
+    const day = parseDayToken(`初${chuM[1]}`);
+    if (day != null && !Number.isNaN(day)) fields.day = day;
   } else {
     const dayM = text.match(new RegExp(`(\\d+|${CN_NUM_CLASS}+)\\s*日`));
-    if (dayM) day = parseDayToken(dayM[1]!);
+    if (dayM) {
+      const day = parseDayToken(dayM[1]!);
+      if (day != null && !Number.isNaN(day)) fields.day = day;
+    }
   }
-  if (day == null || Number.isNaN(day)) return null;
 
-  const fields = applyPreferredClock({ year, month, day, hour: 0, minute: 0 }, clock);
-  return { kind: 'calendar', fields, rule: withRuleSuffix('chinese_ymd', clock) };
+  if (fields.year == null && fields.month == null && fields.day == null) return null;
+
+  return {
+    kind: 'calendar',
+    fields: applyPreferredClock(fields, clock),
+    rule: withRuleSuffix('chinese_ymd', clock),
+  };
 }
 
 /** 简写：488-5-14 15:48（无「年月日」汉字）；串内取最后一次 */
@@ -451,7 +462,7 @@ function pad2(n: number): string {
   return String(Math.floor(n)).padStart(2, '0');
 }
 
-/** 将解析字段格式化为探针可读短串 */
+/** 将解析字段格式化为探针可读短串（只展示已解析到的字段） */
 export function formatGameTimeFields(result: Pick<GameTimeParseResult, 'kind' | 'fields'>): string {
   const { kind, fields } = result;
   if (kind === 'day_count') {
@@ -464,7 +475,13 @@ export function formatGameTimeFields(result: Pick<GameTimeParseResult, 'kind' | 
   if (kind === 'time_only') {
     return `${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}`;
   }
-  return `${fields.year ?? 0}年${fields.month ?? 1}月${fields.day ?? 1}日 ${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}`;
+  const dateParts: string[] = [];
+  if (fields.year != null) dateParts.push(`${fields.year}年`);
+  if (fields.month != null) dateParts.push(`${fields.month}月`);
+  if (fields.day != null) dateParts.push(`${fields.day}日`);
+  const hasClock = fields.hour != null || fields.minute != null;
+  const time = hasClock ? `${pad2(fields.hour ?? 0)}:${pad2(fields.minute ?? 0)}` : '';
+  return [dateParts.join(''), time].filter(Boolean).join(' ');
 }
 
 export function parseGameTime(raw: string): GameTimeParseResult | null {
@@ -529,7 +546,8 @@ export function gameTimeIntervalUnitLabel(unit: GameTimeIntervalUnit): string {
 
 /**
  * 解析结果是否足以支撑所选间隔单位。
- * 仅时刻（time_only）只能用于分钟/小时间隔。
+ * 与天数计数对齐：有线性日序（dayIndex，或 calendar 的月+日）则全部单位充足；
+ * 仅时刻只能用于分钟/小时。
  */
 export function isGameTimeAdequateForUnit(
   parsed: GameTimeParseResult,
@@ -537,16 +555,19 @@ export function isGameTimeAdequateForUnit(
 ): boolean {
   if (unit === 'minute' || unit === 'hour') return true;
   if (parsed.kind === 'time_only') return false;
-  if (unit === 'day' || unit === 'week') {
-    if (parsed.kind === 'day_count') return parsed.fields.dayIndex != null;
-    return parsed.fields.year != null && parsed.fields.month != null && parsed.fields.day != null;
+
+  if (parsed.kind === 'day_count') {
+    return parsed.fields.dayIndex != null;
   }
-  if (unit === 'month') {
-    if (parsed.kind === 'day_count') return true;
-    return parsed.fields.year != null && parsed.fields.month != null;
-  }
-  if (parsed.kind === 'day_count') return true;
-  return parsed.fields.year != null;
+
+  const { year, month, day } = parsed.fields;
+  const hasDayLevel = month != null && day != null;
+  const hasMonthLevel = year != null && month != null;
+  const hasYearLevel = year != null;
+
+  if (unit === 'day' || unit === 'week') return hasDayLevel;
+  if (unit === 'month') return hasDayLevel || hasMonthLevel;
+  return hasDayLevel || hasYearLevel;
 }
 
 export function intervalToMs(value: number, unit: keyof typeof UNIT_MS): number {
@@ -585,15 +606,15 @@ export const GAME_TIME_FORMAT_HELP = {
   examples: [
     '混排：时间：2024-05-07 | 周二 15:30-18:00（取 2024-05-07 18:00）',
     '多行标签块：地点…\\n时间：2026年04月10日 周五 下午 17:05\\n在场角色：\\n- 角色|服装（只取时间行）',
-    '中文/架空历法：复兴纪元488年5月14日15:48、自由纪元-427年-07月-12日',
-    '中文月日：复兴纪元十年十月十四日、五月初一（需带年份）',
-    '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15',
+    '中文/架空历法：复兴纪元488年5月14日15:48、自由纪元-427年-07月-12日、无名纪元元年-01月-01日-星期一-14:00',
+    '中文月日：复兴纪元十年十月十四日、五月初一（年/月/日可缺；有月+日即可支撑天/周及更粗间隔）',
+    '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15、…元年-01/01/10:15',
     '横杠月日时：复兴纪元488年-5-14-15:48',
     '横杠简写：488-5-14 15:48',
     '公历数字：2026-06-30 15:48、2026/06/30 15:48、2026年6月30日15时30分',
-    '天数计数：第12天、第 3 天 8:30',
+    '天数计数：第12天、第 3 天 8:30（有日序即可用于天/周及更粗间隔，与「月+日」日历同一原则）',
     '仅时刻（可带 | 备注）：15:48、15:48 | 晴、15时30分',
   ],
   footnote:
-    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；仅时刻仅适用于分钟/小时间隔；精度不足或无法识别时跳过本任务，原因见运行日志。',
+    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；有线性日序（第N天，或月+日）即可用于天/周及更粗间隔；仅时刻仅适用于分钟/小时间隔；精度不足或无法识别时跳过本任务，原因见运行日志。',
 } as const;

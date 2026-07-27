@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   chineseNumeralToInt,
+  formatGameTimeFields,
   formatRemainingDuration,
   intervalToMs,
   isGameTimeAdequateForUnit,
@@ -17,6 +18,20 @@ function test(name: string, fn: () => void): void {
   } catch (e) {
     console.error(`FAIL ${name}`, e);
     process.exitCode = 1;
+  }
+}
+
+function assertAdequateAll(
+  parsed: NonNullable<ReturnType<typeof parseGameTime>>,
+  expectAll: boolean,
+): void {
+  for (const unit of ['minute', 'hour', 'day', 'week', 'month', 'year'] as const) {
+    const ok = isGameTimeAdequateForUnit(parsed, unit);
+    if (unit === 'minute' || unit === 'hour') {
+      assert.equal(ok, true);
+    } else {
+      assert.equal(ok, expectAll, `unit=${unit}`);
+    }
   }
 }
 
@@ -155,6 +170,17 @@ test('chinese_slash dash month-day after year', () => {
   assert.equal(a.ms, b.ms);
 });
 
+test('chinese_slash 元年', () => {
+  const r = parseGameTime('无名纪元元年-01/01/10:15');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_slash');
+  assert.equal(r.fields.year, 1);
+  assert.equal(r.fields.month, 1);
+  assert.equal(r.fields.day, 1);
+  assert.equal(r.fields.hour, 10);
+  assert.equal(r.fields.minute, 15);
+});
+
 test('chinese_ymd classic fantasy calendar', () => {
   const r = parseGameTime('复兴纪元488年-5月-14日-星期三-15:48');
   assert.ok(r);
@@ -192,6 +218,90 @@ test('chinese_ymd 正月初一', () => {
   assert.equal(r.fields.day, 1);
 });
 
+test('chinese_ymd 元年 with weekday and clock', () => {
+  const r = parseGameTime('无名纪元元年-01月-01日-星期一-14:00');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.kind, 'calendar');
+  assert.equal(r.fields.year, 1);
+  assert.equal(r.fields.month, 1);
+  assert.equal(r.fields.day, 1);
+  assert.equal(r.fields.hour, 14);
+  assert.equal(r.fields.minute, 0);
+  assert.equal(isGameTimeAdequateForUnit(r, 'week'), true);
+});
+
+test('chinese_ymd 元年 with location and weather', () => {
+  const r = parseGameTime(
+    '无名纪元元年-01月-01日-星期一-14:00 @ 虚海边缘-未知区域-无阵营-边境聚落-老橡木酒馆-角落座位 | 阴冷，薄雾',
+  );
+  assert.ok(r);
+  assert.equal(r.kind, 'calendar');
+  assert.equal(r.fields.year, 1);
+  assert.equal(r.fields.month, 1);
+  assert.equal(r.fields.day, 1);
+  assert.equal(r.fields.hour, 14);
+  assert.equal(r.fields.minute, 0);
+  assert.equal(isGameTimeAdequateForUnit(r, 'week'), true);
+});
+
+test('chinese_ymd month+day without year adequate for all units', () => {
+  const r = parseGameTime('5月14日 15:48');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.fields.year, undefined);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.day, 14);
+  assert.equal(r.fields.hour, 15);
+  assert.equal(r.fields.minute, 48);
+  assertAdequateAll(r, true);
+});
+
+test('chinese_ymd year only adequate for year', () => {
+  const r = parseGameTime('复兴纪元488年');
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd');
+  assert.equal(r.fields.year, 488);
+  assert.equal(r.fields.month, undefined);
+  assert.equal(r.fields.day, undefined);
+  assert.equal(isGameTimeAdequateForUnit(r, 'hour'), true);
+  assert.equal(isGameTimeAdequateForUnit(r, 'day'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'week'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'month'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'year'), true);
+});
+
+test('chinese_ymd month only inadequate beyond hour', () => {
+  const r = parseGameTime('5月');
+  assert.ok(r);
+  assert.equal(r.fields.month, 5);
+  assert.equal(r.fields.year, undefined);
+  assert.equal(r.fields.day, undefined);
+  assert.equal(isGameTimeAdequateForUnit(r, 'hour'), true);
+  assert.equal(isGameTimeAdequateForUnit(r, 'day'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'week'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'month'), false);
+  assert.equal(isGameTimeAdequateForUnit(r, 'year'), false);
+});
+
+test('chinese_ymd day only inadequate beyond hour', () => {
+  const r = parseGameTime('14日');
+  assert.ok(r);
+  assert.equal(r.fields.day, 14);
+  assert.equal(r.fields.month, undefined);
+  assert.equal(isGameTimeAdequateForUnit(r, 'hour'), true);
+  assert.equal(isGameTimeAdequateForUnit(r, 'week'), false);
+});
+
+test('formatGameTimeFields omits missing calendar parts', () => {
+  const md = parseGameTime('5月14日 15:48');
+  assert.ok(md);
+  assert.equal(formatGameTimeFields(md), '5月14日 15:48');
+  const y = parseGameTime('复兴纪元488年');
+  assert.ok(y);
+  assert.equal(formatGameTimeFields(y), '488年');
+});
+
 test('dash_ymd shorthand', () => {
   const r = parseGameTime('488-5-14 15:48');
   assert.ok(r);
@@ -211,6 +321,13 @@ test('day_count', () => {
   assert.equal(r.fields.hour, 8);
   assert.equal(r.fields.minute, 30);
   assert.equal(r.ms, 3 * intervalToMs(1, 'day') + 8 * intervalToMs(1, 'hour') + 30 * intervalToMs(1, 'minute'));
+});
+
+test('day_count adequate for all interval units', () => {
+  const r = parseGameTime('第12天');
+  assert.ok(r);
+  assert.equal(r.kind, 'day_count');
+  assertAdequateAll(r, true);
 });
 
 test('time_only', () => {
