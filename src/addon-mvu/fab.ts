@@ -376,7 +376,7 @@ function ensureStyles(): void {
   height:min(92dvh,920px);
   max-height:92vh;
   max-height:92dvh;
-  background:#fdf9f2;
+  background:var(--cream-bg,#fdf9f2);
   border-radius:16px;
   box-shadow:0 16px 48px rgba(12,16,28,.28);
   border:1px solid rgba(200,164,92,.28);
@@ -385,6 +385,11 @@ function ensureStyles(): void {
   transition:transform .24s ease, opacity .24s ease;
   display:flex;flex-direction:column;
   overflow:hidden;
+}
+#${SHELL_ID}:has(.addon-console[data-theme='dark']) .ac-panel{
+  background:#0b142a;
+  border-color:rgba(180,150,80,.3);
+  box-shadow:0 16px 48px rgba(0,0,0,.45),0 0 24px rgba(120,100,50,.18);
 }
 #${SHELL_ID}.open .ac-panel{
   transform:translateY(0) scale(1);
@@ -415,8 +420,8 @@ function ensureStyles(): void {
   display:flex;
   flex-direction:column;
   overflow:hidden;
-  color:#2c2416;
-  background:#fdf9f2;
+  color:var(--text,#2c2416);
+  background:var(--cream-bg,#fdf9f2);
   font-family:'PingFang SC','Microsoft YaHei',sans-serif;
 }
 #${SHELL_ID} .addon-console .ac-header{
@@ -457,7 +462,7 @@ function ensureStyles(): void {
 #${SHELL_ID} .addon-console .ac-main,
 #${SHELL_ID} .addon-console .ac-main-scroll,
 #${SHELL_ID} .addon-console .ac-hint{
-  color:#2c2416;
+  color:var(--text,#2c2416);
 }
 @media (max-width:640px){
   #${SHELL_ID}{
