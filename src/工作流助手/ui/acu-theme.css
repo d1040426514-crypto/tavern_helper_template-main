@@ -697,6 +697,15 @@
   margin-top: 10px;
 }
 
+/* 规则列表折叠区：略深底，与条目展开内容区分 */
+.acu-config-rules-section__collapse .acu-collapsible-subsection__body {
+  margin: 0 10px 10px;
+  padding: 10px 12px 12px;
+  border: 1px solid var(--acu-border-2);
+  border-radius: var(--acu-radius-sm);
+  background: color-mix(in srgb, var(--acu-bg-2) 78%, var(--acu-bg-0));
+}
+
 .acu-config-rules-list {
   display: flex;
   flex-direction: column;
@@ -719,9 +728,9 @@
 }
 
 .acu-config-rule-item {
-  border: 1px solid var(--acu-border);
+  border: 1px solid var(--acu-border-2);
   border-radius: var(--acu-radius-md);
-  background: var(--acu-bg-2);
+  background: var(--acu-bg-1);
   overflow: hidden;
 }
 
@@ -736,6 +745,7 @@
   list-style: none;
   font-size: var(--acu-font-size-body);
   color: var(--acu-text-1);
+  background: var(--acu-bg-1);
 }
 
 .acu-config-rule-item__summary::-webkit-details-marker {
@@ -760,8 +770,8 @@
 }
 
 .acu-config-rule-item[open] > .acu-config-rule-item__summary {
-  border-bottom: 1px solid var(--acu-border);
-  background: var(--acu-bg-1);
+  border-bottom: 1px solid var(--acu-border-2);
+  background: color-mix(in srgb, var(--acu-bg-2) 28%, var(--acu-bg-1));
 }
 
 .acu-config-rule-item__name {
@@ -785,6 +795,8 @@
 
 .acu-config-rule-item__body {
   padding: 12px 14px 14px;
+  /* 相对列表折叠区深底，条目展开区用更浅底形成嵌套层次 */
+  background: var(--acu-bg-0);
 }
 
 .acu-config-rule-item--wb .acu-wb-write-rule {
@@ -1518,7 +1530,7 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
-  flex: 0 1 auto;
+  flex: 1 1 0;
   min-width: 0;
 }
 
@@ -1526,7 +1538,7 @@
   display: flex;
   flex-wrap: nowrap;
   align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
   width: 100%;
   min-width: 0;
 }
@@ -1545,12 +1557,15 @@
 }
 
 .acu-wb-write-rule__field--tag {
-  flex: 0 0 130px;
+  flex: 0 0 112px;
 }
 
 .acu-wb-write-rule__field--template {
-  flex: 1 1 160px;
-  min-width: 160px;
+  /* 固定偏窄，把横向空间留给右侧字段（关键字/包裹标签等） */
+  flex: 0 0 140px;
+  width: 140px;
+  max-width: 140px;
+  min-width: 140px;
 }
 
 .acu-wb-write-rule__template-input {
@@ -1560,15 +1575,19 @@
 }
 
 .acu-wb-write-rule__field--type {
-  flex: 0 0 100px;
+  flex: 0 1 108px;
+  min-width: 88px;
 }
 
 .acu-wb-write-rule__field--keywords {
-  flex: 0 0 120px;
+  flex: 1 1 96px;
+  min-width: 72px;
 }
 
 .acu-wb-write-rule__field--check {
-  flex: 0 0 100px;
+  flex: 0 0 auto;
+  width: max-content;
+  max-width: 7.5em;
 }
 
 .acu-wb-write-rule__checks {
@@ -1576,7 +1595,8 @@
 }
 
 .acu-wb-write-rule__field--wrap {
-  flex: 0 0 120px;
+  flex: 1 1 88px;
+  min-width: 72px;
 }
 
 .acu-wb-write-rule__field--book {

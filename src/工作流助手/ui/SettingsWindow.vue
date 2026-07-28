@@ -3839,6 +3839,17 @@ function saveRunLogTaskTags(taskId: string): void {
                                   :disabled="rule.entryType !== 'keyword'"
                                 />
                               </div>
+                              <div
+                                v-if="rule.splitByAttr"
+                                class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
+                              >
+                                <label class="acu-label-with-help">包裹标签</label>
+                                <input
+                                  v-model="rule.wrapTagName"
+                                  class="acu-input"
+                                  :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
+                                />
+                              </div>
                               <div class="acu-wb-write-rule__checks">
                                 <div class="acu-wb-write-rule__field acu-wb-write-rule__field--check">
                                   <label class="acu-label-with-help">按属性拆分</label>
@@ -3854,17 +3865,6 @@ function saveRunLogTaskTags(taskId: string): void {
                                     <span>启用</span>
                                   </label>
                                 </div>
-                              </div>
-                              <div
-                                v-if="rule.splitByAttr"
-                                class="acu-wb-write-rule__field acu-wb-write-rule__field--wrap"
-                              >
-                                <label class="acu-label-with-help">包裹标签名</label>
-                                <input
-                                  v-model="rule.wrapTagName"
-                                  class="acu-input"
-                                  :placeholder="worldbookWriteWrapTagPlaceholder(rule)"
-                                />
                               </div>
                             </div>
                             <div class="acu-wb-write-rule__row acu-wb-write-rule__row--meta">
