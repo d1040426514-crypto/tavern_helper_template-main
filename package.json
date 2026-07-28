@@ -6,7 +6,7 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,js,jsx,css,scss,html,vue}\" --no-error-on-unmatched-pattern",
     "lint": "eslint",
     "lint:fix": "eslint --fix",
-    "dump": "node dump_schema.ts",
+    "dump": "tsx dump_schema.ts",
     "sync": "node tavern_sync.mjs"
   },
   "browserslist": [
@@ -65,6 +65,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths-webpack-plugin": "^4.2.0",
     "tslib": "^2.8.1",
+    "tsx": "^4.23.1",
     "type-fest": "^4.41.0",
     "typescript": "6.0.0-dev.20250807",
     "typescript-eslint": "^8.61.1",

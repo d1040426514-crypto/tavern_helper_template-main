@@ -43,9 +43,13 @@
             </span>
             <ChangeBadge :value="item.trend" />
           </header>
-          <p v-if="item.detail" class="ac-commodity-detail">
-            <span class="ac-commodity-detail-label">{{ item.detailLabel }}</span>
-            {{ item.detail }}
+          <p v-if="item.highlight" class="ac-commodity-detail">
+            <span class="ac-commodity-detail-label">行情要点</span>
+            {{ item.highlight }}
+          </p>
+          <p v-if="item.factor" class="ac-commodity-detail">
+            <span class="ac-commodity-detail-label">主要影响因素</span>
+            {{ item.factor }}
           </p>
         </article>
       </div>
@@ -208,19 +212,16 @@ const climateVisible = computed(() => isNonEmptyText(phase.value) || zones.value
 
 type CommodityKey = '粮食' | '矿产' | '能源';
 
-const COMMODITY_META: Record<
-  CommodityKey,
-  { icon: string; tone: string; detailKey: string; detailLabel: string }
-> = {
-  粮食: { icon: '🌾', tone: 'is-grain', detailKey: '主要影响因素', detailLabel: '因素' },
-  矿产: { icon: '⛏️', tone: 'is-ore', detailKey: '重点品种', detailLabel: '品种' },
-  能源: { icon: '⚡', tone: 'is-energy', detailKey: '类型', detailLabel: '类型' },
+const COMMODITY_META: Record<CommodityKey, { icon: string; tone: string }> = {
+  粮食: { icon: '🌾', tone: 'is-grain' },
+  矿产: { icon: '⛏️', tone: 'is-ore' },
+  能源: { icon: '⚡', tone: 'is-energy' },
 };
 
+const COMMODITY_FIELDS = ['供需', '行情要点', '价格趋势', '主要影响因素'] as const;
+
 function hasCommodity(key: CommodityKey): boolean {
-  const block = econ.value?.大宗商品市场?.[key];
-  const detailKey = COMMODITY_META[key].detailKey;
-  return hasAnyText(block, ['供需', detailKey, '价格趋势']);
+  return hasAnyText(econ.value?.大宗商品市场?.[key], [...COMMODITY_FIELDS]);
 }
 
 const commodityCards = computed(() =>
@@ -235,8 +236,8 @@ const commodityCards = computed(() =>
         tone: meta.tone,
         supply: textOf(block?.供需).trim(),
         trend: block?.价格趋势,
-        detailLabel: meta.detailLabel,
-        detail: textOf(block?.[meta.detailKey]).trim(),
+        highlight: textOf(block?.行情要点).trim(),
+        factor: textOf(block?.主要影响因素).trim(),
       };
     }),
 );

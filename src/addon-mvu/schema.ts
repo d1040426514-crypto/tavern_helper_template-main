@@ -259,35 +259,20 @@ const 世界经济气候Schema = z
   })
   .prefault({});
 
-const 粮食市场Schema = z
+const 大宗商品品类Schema = z
   .object({
     供需: looseString,
+    行情要点: looseString,
+    价格趋势: looseString,
     主要影响因素: looseString,
-    价格趋势: looseString,
-  })
-  .prefault({});
-
-const 矿产市场Schema = z
-  .object({
-    供需: looseString,
-    重点品种: looseString,
-    价格趋势: looseString,
-  })
-  .prefault({});
-
-const 能源市场Schema = z
-  .object({
-    供需: looseString,
-    类型: looseString,
-    价格趋势: looseString,
   })
   .prefault({});
 
 const 大宗商品市场Schema = z
   .object({
-    粮食: 粮食市场Schema,
-    矿产: 矿产市场Schema,
-    能源: 能源市场Schema,
+    粮食: 大宗商品品类Schema,
+    矿产: 大宗商品品类Schema,
+    能源: 大宗商品品类Schema,
   })
   .prefault({});
 

@@ -487,49 +487,13 @@
             "type": "object",
             "properties": {
               "粮食": {
-                "default": {},
-                "type": "object",
-                "properties": {
-                  "供需": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "主要影响因素": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "价格趋势": {
-                    "$ref": "#/$defs/__schema1"
-                  }
-                }
+                "$ref": "#/$defs/__schema5"
               },
               "矿产": {
-                "default": {},
-                "type": "object",
-                "properties": {
-                  "供需": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "重点品种": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "价格趋势": {
-                    "$ref": "#/$defs/__schema1"
-                  }
-                }
+                "$ref": "#/$defs/__schema5"
               },
               "能源": {
-                "default": {},
-                "type": "object",
-                "properties": {
-                  "供需": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "类型": {
-                    "$ref": "#/$defs/__schema1"
-                  },
-                  "价格趋势": {
-                    "$ref": "#/$defs/__schema1"
-                  }
-                }
+                "$ref": "#/$defs/__schema5"
               }
             }
           },
@@ -863,6 +827,24 @@
       },
       "additionalProperties": {
         "$ref": "#/$defs/__schema1"
+      }
+    },
+    "__schema5": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "供需": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "行情要点": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "价格趋势": {
+          "$ref": "#/$defs/__schema1"
+        },
+        "主要影响因素": {
+          "$ref": "#/$defs/__schema1"
+        }
       }
     }
   }

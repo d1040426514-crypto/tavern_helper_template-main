@@ -217,9 +217,9 @@ declare namespace Addon {
         主要贸易区状态?: Record<string, 贸易区状态>;
       };
       大宗商品市场?: {
-        粮食?: { 供需?: string; 主要影响因素?: string; 价格趋势?: string };
-        矿产?: { 供需?: string; 重点品种?: string; 价格趋势?: string };
-        能源?: { 供需?: string; 类型?: string; 价格趋势?: string };
+        粮食?: { 供需?: string; 行情要点?: string; 价格趋势?: string; 主要影响因素?: string };
+        矿产?: { 供需?: string; 行情要点?: string; 价格趋势?: string; 主要影响因素?: string };
+        能源?: { 供需?: string; 行情要点?: string; 价格趋势?: string; 主要影响因素?: string };
       };
       货币与金融?: {
         基准计价单位?: string;
