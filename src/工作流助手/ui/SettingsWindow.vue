@@ -21,6 +21,7 @@ import {
   appendPromptGroup,
   movePromptGroupAt,
   remapManualExpandedKeys,
+  remapManualExpandedKeysAfterRemove,
   removePromptGroupAt,
   reorderPromptGroupsAt,
 } from '../tasks/prompt-group-ops';
@@ -483,6 +484,13 @@ async function flushPendingWrites(options?: FlushPendingWritesOptions): Promise<
   }
 }
 
+/** 有快照时：先落盘最新 viewTasks，再执行 store 写，最后 skipTasksFlush 重载，避免旧 flush 回盖。 */
+async function runChatScopeStoreMutation(op: () => Promise<unknown>): Promise<void> {
+  await flushPendingWrites();
+  await op();
+  await refreshTaskView({ skipTasksFlush: true });
+}
+
 async function refreshTaskView(options?: RefreshTaskViewOptions): Promise<void> {
   refreshingTaskView = true;
   let didReloadTasks = false;
@@ -682,18 +690,26 @@ watch(viewTasks, schedulePersistViewTasks, { deep: true });
 let persistGlobalSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressGlobalSettingsPersist = false;
 
+function persistGlobalSettingsNow(): void {
+  if (persistGlobalSettingsTimer) {
+    clearTimeout(persistGlobalSettingsTimer);
+    persistGlobalSettingsTimer = null;
+  }
+  if (hasChatSnapshot.value) {
+    // 有快照：只经 persist 合并脚本级字段，避免展示态 tasks 写回全局
+    store.persist();
+    return;
+  }
+  ensureReplicasMirroredInPlace(settings.value.tasks);
+  store.persist();
+}
+
 function schedulePersistGlobalSettings() {
   if (suppressGlobalSettingsPersist) return;
   if (persistGlobalSettingsTimer) clearTimeout(persistGlobalSettingsTimer);
   persistGlobalSettingsTimer = setTimeout(() => {
     persistGlobalSettingsTimer = null;
-    if (hasChatSnapshot.value) {
-      // 有快照：只经 persist 合并脚本级字段，避免展示态 tasks 写回全局
-      store.persist();
-      return;
-    }
-    ensureReplicasMirroredInPlace(settings.value.tasks);
-    store.persist();
+    persistGlobalSettingsNow();
   }, 300);
 }
 
@@ -1038,9 +1054,9 @@ const selectedTaskEnabledModel = computed({
     const task = selectedTask.value;
     if (!task) return;
     if (chatScopeActive.value) {
-      void setTaskEnabledInStore(task.id, v, 'ui')
-        .then(() => refreshTaskView())
-        .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+      void runChatScopeStoreMutation(() => setTaskEnabledInStore(task.id, v, 'ui')).catch(e =>
+        acuToast('warning', e instanceof Error ? e.message : String(e)),
+      );
       return;
     }
     try {
@@ -1335,21 +1351,24 @@ function testGameTimeParse() {
 
 function insertClonedTask(cloned: PostProcessTask, afterTaskId?: string): void {
   if (chatScopeActive.value) {
-    const arr = [...viewTasks.value];
-    if (afterTaskId) {
-      const index = arr.findIndex(t => t.id === afterTaskId);
-      if (index >= 0) {
-        arr.splice(index + 1, 0, cloned);
+    void runChatScopeStoreMutation(async () => {
+      const arr = [...viewTasks.value];
+      if (afterTaskId) {
+        const index = arr.findIndex(t => t.id === afterTaskId);
+        if (index >= 0) {
+          arr.splice(index + 1, 0, cloned);
+        } else {
+          arr.push(cloned);
+        }
       } else {
         arr.push(cloned);
       }
-    } else {
-      arr.push(cloned);
-    }
-    void replaceTasks(arr, 'ui').then(() => {
-      void refreshTaskView();
-      selectedTaskId.value = cloned.id;
-    });
+      await replaceTasks(arr, 'ui');
+    })
+      .then(() => {
+        selectedTaskId.value = cloned.id;
+      })
+      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
     return;
   }
   const arr = settings.value.tasks;
@@ -1369,11 +1388,21 @@ function duplicateSelectedTask(): void {
   const task = selectedTask.value;
   if (!task) return;
   if (chatScopeActive.value) {
-    void duplicateTaskInStore(task.id, { afterTaskId: task.id }, 'ui').then(t => {
-      void refreshTaskView();
-      selectedTaskId.value = t.id;
-      acuToast('success', `已复制为新副本「${t.name}」`);
-    });
+    void (async () => {
+      try {
+        let clonedName = '';
+        let clonedId = '';
+        await runChatScopeStoreMutation(async () => {
+          const t = await duplicateTaskInStore(task.id, { afterTaskId: task.id }, 'ui');
+          clonedId = t.id;
+          clonedName = t.name;
+        });
+        selectedTaskId.value = clonedId;
+        acuToast('success', `已复制为新副本「${clonedName}」`);
+      } catch (e) {
+        acuToast('warning', e instanceof Error ? e.message : String(e));
+      }
+    })();
     return;
   }
   const cloned = cloneTaskForInsert(task, displayTasks.value);
@@ -1392,9 +1421,9 @@ function onReplicaScheduleModeChange(mode: ReplicaFamilyScheduleMode): void {
   const root = selectedTask.value;
   if (!root) return;
   if (chatScopeActive.value) {
-    void updateReplicaFamilyScheduleModeInStore(root.id, mode, 'ui')
-      .then(() => refreshTaskView())
-      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    void runChatScopeStoreMutation(() => updateReplicaFamilyScheduleModeInStore(root.id, mode, 'ui')).catch(e =>
+      acuToast('warning', e instanceof Error ? e.message : String(e)),
+    );
     return;
   }
   const idx = settings.value.tasks.findIndex(t => t.id === root.id);
@@ -1403,9 +1432,9 @@ function onReplicaScheduleModeChange(mode: ReplicaFamilyScheduleMode): void {
 
 function onReplicaMemberScheduleChange(memberId: string, patch: { launched?: boolean }): void {
   if (chatScopeActive.value) {
-    void updateReplicaMemberScheduleInStore(memberId, patch, 'ui')
-      .then(() => refreshTaskView())
-      .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+    void runChatScopeStoreMutation(() => updateReplicaMemberScheduleInStore(memberId, patch, 'ui')).catch(e =>
+      acuToast('warning', e instanceof Error ? e.message : String(e)),
+    );
     return;
   }
   const idx = settings.value.tasks.findIndex(t => t.id === memberId);
@@ -1441,10 +1470,12 @@ async function onCreateReplicaMember(): Promise<void> {
   }
 
   try {
-    await ensureReplicaFamilyMemberInStore(root.id, trimmed, { launched: true }, 'ui');
     if (chatScopeActive.value) {
-      await refreshTaskView();
+      await runChatScopeStoreMutation(() =>
+        ensureReplicaFamilyMemberInStore(root.id, trimmed, { launched: true }, 'ui'),
+      );
     } else {
+      await ensureReplicaFamilyMemberInStore(root.id, trimmed, { launched: true }, 'ui');
       settings.value.tasks = listTasks();
     }
     acuToast('success', `已创建副本「${trimmed}」`);
@@ -1495,8 +1526,7 @@ async function deleteSelectedReplicaMember(): Promise<void> {
 
   try {
     if (chatScopeActive.value) {
-      await applyReplicaFamilyCleanupInStore(keepByRoot, floorId, 'ui');
-      await refreshTaskView();
+      await runChatScopeStoreMutation(() => applyReplicaFamilyCleanupInStore(keepByRoot, floorId, 'ui'));
     } else {
       const removedOut: RemovedReplicaCleanupInfo[] = [];
       const next = applyReplicaFamilyCleanup(settings.value, keepByRoot, floorId, {
@@ -1544,12 +1574,23 @@ async function afterTaskWorkflowPresetMutation(updated: PostProcessTask): Promis
   }
 }
 
+async function runTaskWorkflowPresetStoreMutation(
+  op: () => Promise<PostProcessTask>,
+): Promise<PostProcessTask> {
+  if (chatScopeActive.value) {
+    await flushPendingWrites();
+  } else {
+    store.persist();
+  }
+  const updated = await op();
+  await afterTaskWorkflowPresetMutation(updated);
+  return updated;
+}
+
 function onTaskWorkflowPresetSave(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (!chatScopeActive.value) store.persist();
-  void saveTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(updated => afterTaskWorkflowPresetMutation(updated))
+  void runTaskWorkflowPresetStoreMutation(() => saveTaskWorkflowPresetInStore(task.id, name, 'ui'))
     .then(() => acuToast('success', `已保存工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -1557,9 +1598,7 @@ function onTaskWorkflowPresetSave(name: string): void {
 function onTaskWorkflowPresetApply(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (!chatScopeActive.value) store.persist();
-  void applyTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(updated => afterTaskWorkflowPresetMutation(updated))
+  void runTaskWorkflowPresetStoreMutation(() => applyTaskWorkflowPresetInStore(task.id, name, 'ui'))
     .then(() => acuToast('success', `已应用工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -1567,9 +1606,7 @@ function onTaskWorkflowPresetApply(name: string): void {
 function onTaskWorkflowPresetDelete(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
-  if (!chatScopeActive.value) store.persist();
-  void deleteTaskWorkflowPresetInStore(task.id, name, 'ui')
-    .then(updated => afterTaskWorkflowPresetMutation(updated))
+  void runTaskWorkflowPresetStoreMutation(() => deleteTaskWorkflowPresetInStore(task.id, name, 'ui'))
     .then(() => acuToast('success', `已删除工作流预设「${name}」`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -1578,9 +1615,9 @@ function onTaskWorkflowPresetImport(entries: TaskWorkflowPresetEntry[]): void {
   const task = selectedTask.value;
   if (!task || entries.length === 0) return;
   const next = mergeTaskWorkflowPresetsOnTask(task, entries);
-  if (!chatScopeActive.value) store.persist();
-  void updateTaskInStore(task.id, { taskWorkflowPresets: next.taskWorkflowPresets }, 'ui')
-    .then(updated => afterTaskWorkflowPresetMutation(updated))
+  void runTaskWorkflowPresetStoreMutation(() =>
+    updateTaskInStore(task.id, { taskWorkflowPresets: next.taskWorkflowPresets }, 'ui'),
+  )
     .then(() => acuToast('success', `已导入 ${entries.length} 个工作流预设`))
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
@@ -1598,9 +1635,16 @@ function pasteTask(): void {
 
 async function addTask() {
   if (chatScopeActive.value) {
-    const task = await createTaskInStore(undefined, 'ui');
-    void refreshTaskView();
-    selectedTaskId.value = task.id;
+    try {
+      let newId = '';
+      await runChatScopeStoreMutation(async () => {
+        const task = await createTaskInStore(undefined, 'ui');
+        newId = task.id;
+      });
+      selectedTaskId.value = newId;
+    } catch (e) {
+      acuToast('warning', e instanceof Error ? e.message : String(e));
+    }
     return;
   }
   const task: PostProcessTask = {
@@ -1630,7 +1674,9 @@ function moveTask(index: number, delta: -1 | 1) {
   const task = taskTabTasks.value[index];
   if (!task) return;
   if (chatScopeActive.value) {
-    void moveTaskInStore(task.id, delta, 'ui').then(() => void refreshTaskView());
+    void runChatScopeStoreMutation(() => moveTaskInStore(task.id, delta, 'ui')).catch(e =>
+      acuToast('warning', e instanceof Error ? e.message : String(e)),
+    );
     return;
   }
   const arr = settings.value.tasks;
@@ -1648,8 +1694,12 @@ async function removeTask(id: string) {
   const label = task.name?.trim() || '未命名任务';
   if (!(await acuConfirm({ message: `删除任务「${label}」？` }))) return;
   if (chatScopeActive.value) {
-    await deleteTaskInStore(id, 'ui');
-    void refreshTaskView();
+    try {
+      await runChatScopeStoreMutation(() => deleteTaskInStore(id, 'ui'));
+    } catch (e) {
+      acuToast('warning', e instanceof Error ? e.message : String(e));
+      return;
+    }
   } else {
     settings.value.tasks = settings.value.tasks.filter(t => t.id !== id);
   }
@@ -1667,17 +1717,8 @@ async function removePromptGroup(index: number): Promise<void> {
   try {
     // 与 add/move 一致：先改本地再落盘，避免 store→refresh 被待落盘旧 viewTasks 覆盖
     task.promptGroups = removePromptGroupAt(task.promptGroups ?? [], index);
-    expandedPromptRowKeys.value = new Set(
-      [...expandedPromptRowKeys.value]
-        .filter(k => k !== `m-${index}`)
-        .map(k => {
-          if (!k.startsWith('m-')) return k;
-          const i = Number(k.slice(2));
-          if (!Number.isInteger(i) || i < index) return k;
-          return `m-${i - 1}`;
-        }),
-    );
-    await persistPromptGroupsIfChatScope();
+    expandedPromptRowKeys.value = remapManualExpandedKeysAfterRemove(expandedPromptRowKeys.value, index);
+    await persistPromptGroupsNow();
   } catch (e) {
     acuToast('warning', e instanceof Error ? e.message : '无法删除提示词段');
   }
@@ -1690,13 +1731,38 @@ function applyPromptGroupsReorder(fromIndex: number, toIndex: number): void {
   expandedPromptRowKeys.value = remapManualExpandedKeys(expandedPromptRowKeys.value, fromIndex, toIndex);
 }
 
+/** 有快照：mirror 后立刻 replaceTasks，并写回 viewTasks；无快照：立刻 persist 全局。 */
 async function persistPromptGroupsIfChatScope(): Promise<void> {
   if (!chatScopeActive.value) return;
   if (persistViewTasksTimer) {
     clearTimeout(persistViewTasksTimer);
     persistViewTasksTimer = null;
   }
-  await replaceTasks(viewTasks.value, 'ui');
+  const draftTasks = _.cloneDeep(viewTasks.value);
+  ensureReplicasMirroredInPlace(draftTasks);
+  const changed = !_.isEqual(draftTasks, viewTasks.value);
+  refreshingTaskView = true;
+  try {
+    if (changed) {
+      viewTasks.value = draftTasks;
+    }
+    await replaceTasks(draftTasks, 'ui');
+  } finally {
+    await nextTick();
+    if (persistViewTasksTimer) {
+      clearTimeout(persistViewTasksTimer);
+      persistViewTasksTimer = null;
+    }
+    refreshingTaskView = false;
+  }
+}
+
+async function persistPromptGroupsNow(): Promise<void> {
+  if (chatScopeActive.value) {
+    await persistPromptGroupsIfChatScope();
+    return;
+  }
+  persistGlobalSettingsNow();
 }
 
 async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
@@ -1707,7 +1773,7 @@ async function movePromptGroup(index: number, delta: -1 | 1): Promise<void> {
     const toIndex = index + delta;
     task.promptGroups = next;
     expandedPromptRowKeys.value = remapManualExpandedKeys(expandedPromptRowKeys.value, index, toIndex);
-    await persistPromptGroupsIfChatScope();
+    await persistPromptGroupsNow();
   } catch {
     // 边界不可移动时静默忽略
   }
@@ -1718,7 +1784,7 @@ async function reorderPromptGroup(fromIndex: number, toIndex: number): Promise<v
   if (!task) return;
   try {
     applyPromptGroupsReorder(fromIndex, toIndex);
-    await persistPromptGroupsIfChatScope();
+    await persistPromptGroupsNow();
   } catch {
     // 越界等异常静默忽略
   }
@@ -1732,7 +1798,7 @@ async function addPromptGroup(): Promise<void> {
     const next = appendPromptGroup(task.promptGroups ?? []);
     task.promptGroups = next;
     expandedPromptRowKeys.value = new Set([`m-${next.length - 1}`]);
-    await persistPromptGroupsIfChatScope();
+    await persistPromptGroupsNow();
   } catch (e) {
     acuToast('warning', e instanceof Error ? e.message : '无法添加提示词段');
   }

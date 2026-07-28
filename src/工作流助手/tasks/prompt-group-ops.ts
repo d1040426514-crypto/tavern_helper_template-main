@@ -93,3 +93,25 @@ export function remapManualExpandedKeys(
   }
   return next;
 }
+
+/** 删除手动段后，去掉 `m-${removedIndex}`，并将更大下标的键左移一位。 */
+export function remapManualExpandedKeysAfterRemove(
+  keys: Iterable<string>,
+  removedIndex: number,
+): Set<string> {
+  const next = new Set<string>();
+  for (const key of keys) {
+    if (!key.startsWith('m-')) {
+      next.add(key);
+      continue;
+    }
+    const i = Number(key.slice(2));
+    if (!Number.isInteger(i)) {
+      next.add(key);
+      continue;
+    }
+    if (i === removedIndex) continue;
+    next.add(i > removedIndex ? `m-${i - 1}` : `m-${i}`);
+  }
+  return next;
+}
