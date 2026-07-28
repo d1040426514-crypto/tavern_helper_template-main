@@ -7,6 +7,7 @@ import type {
   ScriptSettings,
   TaskWorkflowPresetSnapshot,
 } from './tasks/schema';
+import { stripReplicaFamilyMembers } from './tasks/replica-family';
 
 export function redactRequestHeaders(headers: string): string {
   return String(headers || '')
@@ -91,11 +92,11 @@ export function sanitizePresetWorldbookRefsForShare(preset: PostProcessPreset): 
   };
 }
 
-/** 从当前设置抽出 PostProcessPreset（不含 API / 运行时字段） */
+/** 从当前设置抽出 PostProcessPreset（不含 API / 运行时字段；不含副本族成员） */
 export function buildPresetFromSettings(settings: ScriptSettings, name: string): PostProcessPreset {
   return {
     name,
-    tasks: _.cloneDeep(settings.tasks),
+    tasks: stripReplicaFamilyMembers(_.cloneDeep(settings.tasks)),
     finalInjectTemplate: settings.finalInjectTemplate,
     tagVariableInjectTemplate: settings.tagVariableInjectTemplate,
     chatExtractTags: _.cloneDeep(settings.chatExtractTags ?? { user: [], assistant: [] }),

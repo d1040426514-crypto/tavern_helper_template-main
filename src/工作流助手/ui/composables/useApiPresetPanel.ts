@@ -102,6 +102,7 @@ export function useApiPresetPanel() {
     };
     applyPresetToGlobals(preset);
     syncActiveDraft();
+    store.persist();
   }
 
   function setDefaultPreset(name: string) {
@@ -109,6 +110,7 @@ export function useApiPresetPanel() {
     if (!preset) return;
     settings.value.defaultApiPresetName = preset.name;
     settings.value.defaultTaskApiPreset = preset.name;
+    store.persist();
     acuToast('success', `已将「${name}」设为全局默认 API 预设`);
   }
 
@@ -128,6 +130,7 @@ export function useApiPresetPanel() {
       if (binding.presetName === name) delete settings.value.apiPresetBindingsByChat[chatKey];
     }
     syncActiveDraft();
+    store.persist();
     acuToast('success', `已删除 API 预设「${name}」`);
   }
 
@@ -179,6 +182,7 @@ export function useApiPresetPanel() {
     }
 
     syncActiveDraft();
+    store.persist();
     acuToast('success', '已保存当前 API 预设。');
   }
 

@@ -45,6 +45,7 @@ import {
   scanDynamicAttrPlaceholders,
   syncReplicaFamily,
   validateReplicaFamilyEligibility,
+  stripReplicaFamilyMembers,
 } from './replica-family';
 import {
   applyReplicaFamilyCleanup,
@@ -138,8 +139,7 @@ async function persistSnapshotTasks(
   tasks: PostProcessTask[],
   source: TaskWriteSource,
 ): Promise<ChatTaskScopeState> {
-  const wasActive = isChatOverrideActive(readChatTaskScope());
-  const scope = await ensureChatOverride(settings, source);
+  const { scope, created } = await ensureChatOverride(settings, source);
   const snapshot = PostProcessPresetSchema.parse({
     ...scope.snapshot!,
     tasks: _.cloneDeep(tasks),
@@ -154,8 +154,8 @@ async function persistSnapshotTasks(
     source,
   });
   await writeChatTaskScope(next);
-  if (!wasActive) {
-    await emitChatScopeChanged('chat_override', next.originPresetName);
+  if (created) {
+    await emitChatScopeChanged('chat_override', next.originPresetName, { createdSnapshot: true });
   }
   return next;
 }
@@ -165,8 +165,8 @@ async function persistGlobalTasks(settings: ScriptSettings, tasks: PostProcessTa
   saveSettings(settings);
 }
 
-/** UI 浏览全局预设时：写回绑定的全局预设槽，不动聊天快照 */
-function getBoundGlobalPresetNameForUiWrite(): string | null {
+/** 浏览绑定全局预设时的写回目标名（UI / API / runtime 共用检测） */
+function getBoundGlobalPresetNameForWrite(): string | null {
   const scope = readChatTaskScope();
   if (!isChatOverrideActive(scope) || scope?.activeView !== 'global') return null;
   const name = scope.boundGlobalPresetName?.trim() ?? '';
@@ -216,9 +216,13 @@ async function writeTasks(
   tasks: PostProcessTask[],
   source: TaskWriteSource,
 ): Promise<void> {
-  const boundName = source === 'ui' ? getBoundGlobalPresetNameForUiWrite() : null;
+  const boundName = getBoundGlobalPresetNameForWrite();
   if (boundName) {
     persistBoundGlobalTasks(settings, tasks, boundName);
+    // API/runtime：写绑定槽后再覆盖快照并切回 snapshot 视图；UI 手改只写全局
+    if (source === 'api') {
+      await forkEffectiveIntoChatSnapshot(source);
+    }
     return;
   }
   const useSnapshot = source === 'api' || isChatOverrideActive(readChatTaskScope());
@@ -341,6 +345,7 @@ export async function repairChatScopeIfNeeded(): Promise<void> {
 /**
  * 用当前 effective（下拉所看内容）覆盖聊天快照并切到 snapshot 视图。
  * 供 UI「覆盖快照」显式调用；浏览全局时的普通编辑不应再走这里。
+ * API/runtime 写回绑定全局后也会调用：此时会把 originPresetName 更新为绑定全局名。
  */
 export async function forkEffectiveIntoChatSnapshot(source: TaskWriteSource = 'ui'): Promise<void> {
   const settings = loadSettings();
@@ -348,17 +353,21 @@ export async function forkEffectiveIntoChatSnapshot(source: TaskWriteSource = 'u
   if (!scope?.snapshot) return;
   const effective = resolveEffectiveSettings(settings);
   const snapshot = buildChatSnapshotFromSettings(effective);
+  const boundName =
+    scope.activeView === 'global' ? scope.boundGlobalPresetName?.trim() || '' : '';
+  const originPresetName = boundName || scope.originPresetName;
   await writeChatTaskScope(
     ChatTaskScopeStateSchema.parse({
       ...scope,
       snapshot,
+      originPresetName,
       activeView: 'snapshot',
       boundGlobalPresetName: '',
       updatedAt: Date.now(),
       source,
     }),
   );
-  await emitChatScopeChanged('chat_override', scope.originPresetName);
+  await emitChatScopeChanged('chat_override', originPresetName);
   await emitTasksChanged('preset', source);
 }
 
@@ -384,6 +393,14 @@ export function saveNamedGlobalPresetFromDisplay(display: ScriptSettings, preset
 export async function clearChatScope(source: TaskWriteSource = 'api'): Promise<void> {
   const prev = readChatTaskScope();
   await clearChatTaskScope();
+  // 清除后从活动预设重水合顶层工作副本，避免展示叠写残留
+  const settings = loadSettings();
+  const activeName = settings.activePresetName?.trim() ?? '';
+  const activePreset = activeName ? settings.presets.find(p => p.name === activeName) : undefined;
+  if (activePreset) {
+    applyPresetFieldsToSettings(settings, activePreset);
+    saveSettings(settings);
+  }
   await emitChatScopeChanged('inherit_global', prev?.originPresetName);
   await emitTasksChanged('clear', source);
 }
@@ -400,6 +417,7 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   const preset = PostProcessPresetSchema.parse({
     ...scope.snapshot,
     name: presetName,
+    tasks: stripReplicaFamilyMembers(scope.snapshot.tasks),
   });
   settings.presets.push(_.cloneDeep(preset));
   settings.activePresetName = presetName;
@@ -434,6 +452,7 @@ export async function saveChatSnapshotAsGlobalPreset(name?: string): Promise<str
   const preset = PostProcessPresetSchema.parse({
     ...scope.snapshot,
     name: presetName,
+    tasks: stripReplicaFamilyMembers(scope.snapshot.tasks),
   });
   settings.presets.push(_.cloneDeep(preset));
   saveSettings(settings);
@@ -448,7 +467,7 @@ export async function syncEffectivePresetFieldsToChatScope(
 ): Promise<void> {
   if (!isChatOverrideActive(readChatTaskScope())) return;
   const settings = loadSettings();
-  const scope = await ensureChatOverride(settings, source);
+  const { scope } = await ensureChatOverride(settings, source);
   const snapshot = PostProcessPresetSchema.parse({
     ...scope.snapshot!,
     ...fields,
@@ -474,18 +493,21 @@ export async function updatePresetFields(
   source: TaskWriteSource = 'api',
 ): Promise<void> {
   const settings = loadSettings();
-  const boundName = source === 'ui' ? getBoundGlobalPresetNameForUiWrite() : null;
+  const boundName = getBoundGlobalPresetNameForWrite();
   if (boundName) {
     persistBoundGlobalPresetFields(settings, fields, boundName);
-    await emitTasksChanged('preset', source);
+    if (source === 'api') {
+      await forkEffectiveIntoChatSnapshot(source);
+    } else {
+      await emitTasksChanged('preset', source);
+    }
     return;
   }
 
   const useSnapshot = source === 'api' || isChatOverrideActive(readChatTaskScope());
 
   if (useSnapshot) {
-    const wasActive = isChatOverrideActive(readChatTaskScope());
-    const scope = await ensureChatOverride(settings, source);
+    const { scope, created } = await ensureChatOverride(settings, source);
     const mergedSnapshot = {
       ...scope.snapshot!,
       ..._.cloneDeep(fields),
@@ -500,8 +522,8 @@ export async function updatePresetFields(
       source,
     });
     await writeChatTaskScope(next);
-    if (!wasActive) {
-      await emitChatScopeChanged('chat_override', next.originPresetName);
+    if (created) {
+      await emitChatScopeChanged('chat_override', next.originPresetName, { createdSnapshot: true });
     }
   } else {
     Object.assign(settings, _.cloneDeep(fields));

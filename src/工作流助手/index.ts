@@ -21,6 +21,7 @@ import { ensureAcuToastStyles } from './ui/toast-styles';
 import { acuToast } from './ui/toast';
 import { ensureVueFeatureFlags } from './ui/ensure-vue-feature-flags';
 import { registerPlaceholderMacros } from './tasks/placeholder-macros';
+import { sanitizeGlobalTasksAfterChatChange } from './tasks/persist-runtime-tasks';
 import { RERUN_BUTTON_LABEL, SCRIPT_DISPLAY_NAME, SCRIPT_LOG_PREFIX } from './ui/brand';
 
 export const RERUN_BUTTON_NAME = RERUN_BUTTON_LABEL;
@@ -75,6 +76,7 @@ $(() => {
   });
 
   const offChatScopeNotify = eventOn(tavern_events.CHAT_CHANGED, () => {
+    sanitizeGlobalTasksAfterChatChange();
     const scope = readChatTaskScope();
     void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
   });

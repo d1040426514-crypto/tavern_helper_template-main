@@ -2,6 +2,7 @@ import { getDefaultSettingsPartial } from './tasks/example-presets';
 import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
 import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
+import { stripReplicaFamilyMembers } from './tasks/replica-family';
 import {
   buildPresetFromSettings,
   detectSecretsInImportRaw,
@@ -17,6 +18,8 @@ import {
   saveApiSecretsPayload,
   stripSecretsForPersistence,
 } from './settings/api-secrets';
+import { isChatOverrideActive, readChatTaskScope } from './tasks/chat-task-scope';
+import { applyPresetFieldsToSettings } from './tasks/effective-settings';
 import {
   PostProcessPresetSchema,
   ScriptSettingsSchema,
@@ -150,10 +153,72 @@ export function saveSettings(settings: ScriptSettings): void {
   });
 }
 
+/**
+ * 将脚本级字段从展示态拷到目标（不含任务预设展示字段）。
+ * 有聊天快照时用于安全落盘，避免把 sync 叠写的 tasks 等污染全局。
+ */
+export function applyScriptLevelSettings(from: ScriptSettings, target: ScriptSettings): void {
+  target.enabled = from.enabled;
+  target.apiConfig = _.cloneDeep(from.apiConfig);
+  target.apiPresets = _.cloneDeep(from.apiPresets);
+  target.defaultApiPresetName = from.defaultApiPresetName;
+  target.activeApiPresetName = from.activeApiPresetName;
+  target.apiPresetBindingsByChat = _.cloneDeep(from.apiPresetBindingsByChat);
+  target.defaultTaskApiPreset = from.defaultTaskApiPreset;
+  target.taskApiPresetOverridesById = _.cloneDeep(from.taskApiPresetOverridesById);
+  target.messageVarRetention = _.cloneDeep(from.messageVarRetention);
+  target.replicaFamilyCleanup = _.cloneDeep(from.replicaFamilyCleanup);
+  target.uiThemeId = from.uiThemeId;
+}
+
+/** 有快照时：以磁盘全局为底，只合并脚本级字段后保存 */
+export function saveScriptLevelSettingsFrom(display: ScriptSettings): void {
+  const base = loadSettings();
+  applyScriptLevelSettings(display, base);
+  saveSettings(base);
+}
+
+/**
+ * 合并脚本级字段并写回 presets[]（可选同步活动预设顶层真源）。
+ * 用于有快照时导入/删除任务预设，避免 script-level persist 丢槽。
+ */
+export function savePresetsCatalogToDisk(
+  display: ScriptSettings,
+  options?: {
+    activePresetName?: string;
+    rehydrateWorkingCopyFromActive?: boolean;
+  },
+): ScriptSettings {
+  const base = loadSettings();
+  applyScriptLevelSettings(display, base);
+  base.presets = _.cloneDeep(display.presets);
+  if (options?.activePresetName !== undefined) {
+    base.activePresetName = options.activePresetName.trim();
+  }
+  if (options?.rehydrateWorkingCopyFromActive) {
+    const activeName = base.activePresetName.trim();
+    const preset = activeName ? base.presets.find(p => p.name === activeName) : undefined;
+    if (preset) {
+      const cleanedTasks = stripReplicaFamilyMembers(_.cloneDeep(preset.tasks));
+      const cleanedPreset = { ...preset, tasks: cleanedTasks };
+      const idx = base.presets.findIndex(p => p.name === activeName);
+      if (idx >= 0) base.presets[idx] = cleanedPreset;
+      applyPresetFieldsToSettings(base, cleanedPreset);
+      ensureReplicaFamilyCleanupDefaults(base);
+    }
+  }
+  saveSettings(base);
+  return base;
+}
+
 export const useSettingsStore = defineStore('ai-post-process-settings', () => {
   const settings = ref<ScriptSettings>(loadSettings());
 
   function persist() {
+    if (isChatOverrideActive(readChatTaskScope())) {
+      saveScriptLevelSettingsFrom(settings.value);
+      return;
+    }
     saveSettings(settings.value);
   }
 
@@ -166,6 +231,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
   }
 
   function saveActivePreset(): boolean {
+    if (isChatOverrideActive(readChatTaskScope())) return false;
     const name = settings.value.activePresetName.trim();
     if (!name) return false;
     const preset = buildPresetFromCurrent(name);
@@ -186,8 +252,15 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
   function applyPreset(presetName: string) {
     const preset = settings.value.presets.find(p => p.name === presetName);
     if (!preset) return;
+    const cleanedTasks = stripReplicaFamilyMembers(_.cloneDeep(preset.tasks));
+    if (cleanedTasks.length !== preset.tasks.length) {
+      const idx = settings.value.presets.findIndex(p => p.name === presetName);
+      if (idx >= 0) {
+        settings.value.presets[idx] = { ...preset, tasks: cleanedTasks };
+      }
+    }
     settings.value.activePresetName = presetName;
-    settings.value.tasks = _.cloneDeep(preset.tasks);
+    settings.value.tasks = cleanedTasks;
     settings.value.finalInjectTemplate = preset.finalInjectTemplate;
     settings.value.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
     settings.value.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
@@ -219,7 +292,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     const idx = settings.value.presets.findIndex(p => p.name === name);
     if (idx >= 0) settings.value.presets[idx] = cloned;
     else settings.value.presets.push(cloned);
-    persist();
+    savePresetsCatalogToDisk(settings.value);
     return name;
   }
 
@@ -228,11 +301,24 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     const idx = settings.value.presets.findIndex(p => p.name === name);
     if (idx < 0) return false;
     settings.value.presets.splice(idx, 1);
+    const override = isChatOverrideActive(readChatTaskScope());
     if (settings.value.activePresetName === name) {
       const next = settings.value.presets[0]?.name;
-      if (next) applyPreset(next);
+      if (!next) return false;
+      if (override) {
+        savePresetsCatalogToDisk(settings.value, {
+          activePresetName: next,
+          rehydrateWorkingCopyFromActive: true,
+        });
+        settings.value.activePresetName = next;
+      } else {
+        applyPreset(next);
+      }
+    } else if (override) {
+      savePresetsCatalogToDisk(settings.value);
+    } else {
+      persist();
     }
-    persist();
     return true;
   }
 
@@ -291,6 +377,11 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
 
   watchEffect(() => {
     try {
+      // 有聊天快照时 settings.value 常被用作展示缓冲：只落盘脚本级字段
+      if (isChatOverrideActive(readChatTaskScope())) {
+        saveScriptLevelSettingsFrom(settings.value);
+        return;
+      }
       saveSettings(settings.value);
     } catch (error) {
       console.error('[工作流助手] 自动保存设置失败:', error);

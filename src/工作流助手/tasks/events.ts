@@ -23,6 +23,8 @@ export type ChatScopeChangedPayload = {
   chatKey: string;
   mode: 'chat_override' | 'inherit_global';
   originPresetName?: string;
+  /** 本次因 ensureChatOverride 等新创建了本聊快照 */
+  createdSnapshot?: boolean;
 };
 
 export async function emitTasksChanged(
@@ -42,11 +44,13 @@ export async function emitTasksChanged(
 export async function emitChatScopeChanged(
   mode: 'chat_override' | 'inherit_global',
   originPresetName?: string,
+  options?: { createdSnapshot?: boolean },
 ): Promise<void> {
   const payload: ChatScopeChangedPayload = {
     chatKey: getCurrentChatKey(),
     mode,
     originPresetName,
+    createdSnapshot: options?.createdSnapshot,
   };
   await eventEmit(ACU_PP_CHAT_SCOPE_CHANGED, payload);
 }

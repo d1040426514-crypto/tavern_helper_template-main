@@ -124,10 +124,10 @@ export async function clearChatTaskScope(options?: { skipSave?: boolean }): Prom
 export async function ensureChatOverride(
   settings: ScriptSettings,
   source: 'api' | 'ui',
-): Promise<ChatTaskScopeState> {
+): Promise<{ scope: ChatTaskScopeState; created: boolean }> {
   const existing = readChatTaskScope();
   if (existing?.snapshot) {
-    return existing;
+    return { scope: existing, created: false };
   }
   const snapshot = buildChatSnapshotFromSettings(settings);
   const state = ChatTaskScopeStateSchema.parse({
@@ -140,7 +140,7 @@ export async function ensureChatOverride(
     boundGlobalPresetName: '',
   });
   await writeChatTaskScope(state);
-  return state;
+  return { scope: state, created: true };
 }
 
 /**

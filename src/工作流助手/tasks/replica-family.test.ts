@@ -23,6 +23,7 @@ import {
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
   promoteReplicaApiPatchToCustom,
+  stripReplicaFamilyMembers,
   prunePromptAutoSegmentInsertedOverrides,
   patchPromptAutoSegmentInsertedOverride,
   resolveReplicaLaunchedPlaceholder,
@@ -310,6 +311,23 @@ test('isReplicaFamilyMember identifies replica tasks', () => {
     }),
     true,
   );
+});
+
+test('stripReplicaFamilyMembers keeps roots and plain tasks', () => {
+  const root = baseTask({ id: 'root-1', syncAsReplicaFamily: true, name: '族' });
+  const member = {
+    ...baseTask({ syncAsReplicaFamily: false }),
+    id: 'rep-1',
+    name: '族 1',
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+  };
+  const plain = baseTask({ id: 'plain', name: '普通' });
+  const next = stripReplicaFamilyMembers([root, member, plain]);
+  assert.equal(next.length, 2);
+  assert.ok(next.every(t => !t.replicaFamilyRootId));
+  assert.ok(next.some(t => t.id === 'root-1'));
+  assert.ok(next.some(t => t.id === 'plain'));
 });
 
 test('assertReplicaMemberPatchAllowed blocks workflow fields', () => {

@@ -12,7 +12,7 @@ import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-rep
 import { commaSeparatedListsEqual, formatCommaSeparatedList, parseCommaSeparatedList } from '../tasks/comma-separated';
 import { applyPresetFieldsToSettings, resolveEffectiveSettings } from '../tasks/effective-settings';
 import { buildChatSnapshotFromSettings } from '../tasks/chat-task-scope';
-import { ACU_PP_CHAT_SCOPE_CHANGED, ACU_PP_TASKS_CHANGED, type TasksChangedPayload } from '../tasks/events';
+import { ACU_PP_CHAT_SCOPE_CHANGED, ACU_PP_TASKS_CHANGED, type ChatScopeChangedPayload, type TasksChangedPayload } from '../tasks/events';
 import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
@@ -679,11 +679,15 @@ let persistGlobalSettingsTimer: ReturnType<typeof setTimeout> | null = null;
 let suppressGlobalSettingsPersist = false;
 
 function schedulePersistGlobalSettings() {
-  // 有快照期间禁止把展示态写回全局（即使下拉在看全局预设）
-  if (hasChatSnapshot.value || suppressGlobalSettingsPersist) return;
+  if (suppressGlobalSettingsPersist) return;
   if (persistGlobalSettingsTimer) clearTimeout(persistGlobalSettingsTimer);
   persistGlobalSettingsTimer = setTimeout(() => {
     persistGlobalSettingsTimer = null;
+    if (hasChatSnapshot.value) {
+      // 有快照：只经 persist 合并脚本级字段，避免展示态 tasks 写回全局
+      store.persist();
+      return;
+    }
     ensureReplicasMirroredInPlace(settings.value.tasks);
     store.persist();
   }, 300);
@@ -1750,6 +1754,7 @@ async function handleClearChatScope() {
     return;
   }
   await clearChatScope('ui');
+  store.reload();
   void refreshTaskView();
   selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
   acuToast('success', '已清除聊天快照');
@@ -1781,7 +1786,10 @@ onMounted(() => {
     store.reload();
     void refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });
   });
-  offChatScopeChanged = eventOn(ACU_PP_CHAT_SCOPE_CHANGED, () => {
+  offChatScopeChanged = eventOn(ACU_PP_CHAT_SCOPE_CHANGED, (payload?: ChatScopeChangedPayload) => {
+    if (payload?.createdSnapshot) {
+      acuToast('info', '本聊天已自动创建任务快照，编辑/运行将优先作用于本聊快照', { timeOut: 4500 });
+    }
     if (suppressChatScopeRefresh) return;
     void refreshTaskView();
   });
@@ -2522,7 +2530,7 @@ function saveRunLogTaskTags(taskId: string): void {
           <div class="acu-section acu-preset-section">
             <h4>任务预设</h4>
             <p v-if="hasChatSnapshot" class="acu-notes acu-notes--sm" style="margin-top: 0">
-              本聊天有独立快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。下拉可在「当前聊天快照」与全局预设间切换：看快照时编辑只写快照；看全局时编辑只改该全局预设、不动快照。需要把全局内容写入快照时，请点「覆盖快照」。另存可将快照拷贝为新的全局预设。<strong>工作流实际运行跟下拉当前所选：</strong>停在全局时按该全局跑；要按快照跑请先切回「当前聊天快照」。
+              本聊天有独立快照（来源：{{ chatScopeInfo?.originPresetName || '未知' }}）。下拉可在「当前聊天快照」与全局预设间切换：看快照时编辑只写快照；看全局时手改只改该全局预设、不动快照（要用手改结果更新快照请点「覆盖快照」）。<strong>工作流实际运行跟下拉当前所选：</strong>停在全局时按该全局跑；运行/API 写回会先更新该全局，再覆盖本聊快照并切回「当前聊天快照」。另存可将快照拷贝为新的全局预设。
             </p>
             <div class="acu-row acu-preset-toolbar">
               <select

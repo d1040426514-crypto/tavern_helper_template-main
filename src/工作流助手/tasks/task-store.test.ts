@@ -53,18 +53,11 @@ g.window = {
   },
 };
 
-function test(name: string, fn: () => void | Promise<void>): void {
-  void (async () => {
-    try {
-      await fn();
-      console.log(`ok ${name}`);
-    } catch (e) {
-      console.error(`FAIL ${name}`, e);
-      process.exitCode = 1;
-    }
-  })();
-}
+const tests: Array<{ name: string; fn: () => void | Promise<void> }> = [];
 
+function test(name: string, fn: () => void | Promise<void>): void {
+  tests.push({ name, fn });
+}
 void (async () => {
   const { loadSettings } = await import('../settings');
   const { readChatTaskScope } = await import('./chat-task-scope');
@@ -149,4 +142,14 @@ void (async () => {
     assert.equal(family[0]?.id, task.id);
     await clearChatScope('api');
   });
+
+  for (const t of tests) {
+    try {
+      await t.fn();
+      console.log(`ok ${t.name}`);
+    } catch (e) {
+      console.error(`FAIL ${t.name}`, e);
+      process.exitCode = 1;
+    }
+  }
 })();

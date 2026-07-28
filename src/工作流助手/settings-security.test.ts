@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import lodash from 'lodash';
 import { PostProcessPresetSchema, ScriptSettingsSchema } from './tasks/schema';
 import {
+  buildPresetFromSettings,
   buildShareablePresetExport,
   detectSecretsInImportRaw,
   redactScriptSettingsForShare,
@@ -84,6 +85,49 @@ test('redactScriptSettingsForShare clears apiKey but keeps recommendedModel', ()
 test('detectSecretsInImportRaw finds apiKey in nested object', () => {
   assert.equal(detectSecretsInImportRaw({ apiPresets: [{ apiConfig: { apiKey: 'x' } }] }), true);
   assert.equal(detectSecretsInImportRaw({ tasks: [{ id: 'a', name: 'n' }] }), false);
+});
+
+test('buildPresetFromSettings strips replica family members', () => {
+  const settings = minimalSettings();
+  settings.tasks = [
+    {
+      id: 'root-1',
+      name: '副本族',
+      enabled: true,
+      stage: 1,
+      extractInjectTags: [],
+      promptGroups: [],
+      syncAsReplicaFamily: true,
+      replicaFamilySpec: 'item@id',
+    },
+    {
+      id: 'rep-1',
+      name: '副本族 1',
+      enabled: true,
+      stage: 1,
+      extractInjectTags: [],
+      promptGroups: [],
+      replicaFamilyRootId: 'root-1',
+      replicaFamilyAttrValue: '1',
+    },
+    {
+      id: 'plain',
+      name: '普通',
+      enabled: true,
+      stage: 1,
+      extractInjectTags: [],
+      promptGroups: [],
+    },
+  ] as typeof settings.tasks;
+
+  const preset = buildPresetFromSettings(settings, '另存预设');
+  assert.equal(preset.name, '另存预设');
+  assert.equal(preset.tasks.length, 2);
+  assert.ok(preset.tasks.every(t => !t.replicaFamilyRootId));
+  assert.deepEqual(
+    preset.tasks.map(t => t.id).sort(),
+    ['plain', 'root-1'],
+  );
 });
 
 test('buildShareablePresetExport drops API and runtime fields', () => {

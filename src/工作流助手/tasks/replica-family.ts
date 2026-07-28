@@ -403,6 +403,11 @@ export function isReplicaFamilyMember(task: PostProcessTask): boolean {
   return !!task.replicaFamilyRootId;
 }
 
+/** 去掉副本族成员，保留根模板与普通任务（全局预设「原貌」） */
+export function stripReplicaFamilyMembers(tasks: PostProcessTask[]): PostProcessTask[] {
+  return tasks.filter(t => !isReplicaFamilyMember(t));
+}
+
 export const REPLICA_MEMBER_WRITABLE_KEYS = new Set<keyof PostProcessTask>([
   'replicaFamilyLaunched',
   'enabled',
