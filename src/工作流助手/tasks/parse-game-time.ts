@@ -1,10 +1,11 @@
+/** 与 encodeCalendarMs 日轴对齐：月=31 日，年=12×31=372 日 */
 const UNIT_MS: Record<string, number> = {
   minute: 60_000,
   hour: 3_600_000,
   day: 86_400_000,
   week: 604_800_000,
-  month: 2_592_000_000,
-  year: 31_536_000_000,
+  month: 31 * 86_400_000,
+  year: 372 * 86_400_000,
 };
 
 const MS_PER_MIN = UNIT_MS.minute;
@@ -41,12 +42,24 @@ type MatcherHit = {
 };
 
 type ClockHit = {
+  /** 结束时刻（时段取右端；单时刻即自身） */
   hour: number;
   minute: number;
+  /** 时段起点（fromRange 时有值；用于跨夜 +1 日） */
+  rangeStartHour?: number;
+  rangeStartMinute?: number;
   start: number;
   end: number;
   fromRange: boolean;
 };
+
+/** 时段右端早于左端 → 结束落在次日 */
+function overnightDayOffset(clock: ClockHit | null): number {
+  if (!clock?.fromRange || clock.rangeStartHour == null || clock.rangeStartMinute == null) return 0;
+  const startMin = clock.rangeStartHour * 60 + clock.rangeStartMinute;
+  const endMin = clock.hour * 60 + clock.minute;
+  return endMin < startMin ? 1 : 0;
+}
 
 /** 将年月日时分编码为可比较的毫秒值（游戏内日历轴，非 Unix 时间戳） */
 function encodeCalendarMs(year: number, month: number, day: number, hour = 0, minute = 0): number {
@@ -271,6 +284,8 @@ function extractClockOrRange(text: string): ClockHit | null {
       hits.push({
         hour: Number(m[3]),
         minute: Number(m[4]),
+        rangeStartHour: Number(m[1]),
+        rangeStartMinute: Number(m[2]),
         start: m.index,
         end: m.index + m[0].length,
         fromRange: true,
@@ -496,7 +511,7 @@ export function parseGameTime(raw: string): GameTimeParseResult | null {
   for (const match of DATE_MATCHERS) {
     const hit = match(forDate, clock);
     if (!hit) continue;
-    const ms = encodeHit(hit);
+    const ms = encodeHit(hit) + overnightDayOffset(clock) * UNIT_MS.day;
     if (Number.isNaN(ms)) continue;
     return {
       ms,
@@ -514,7 +529,7 @@ export function parseGameTime(raw: string): GameTimeParseResult | null {
       fields: { hour: clock.hour, minute: clock.minute },
     };
     return {
-      ms: encodeHit(hit),
+      ms: encodeHit(hit) + overnightDayOffset(clock) * UNIT_MS.day,
       kind: hit.kind,
       fields: hit.fields,
       rule: hit.rule,
@@ -574,6 +589,56 @@ export function intervalToMs(value: number, unit: keyof typeof UNIT_MS): number 
   return value * (UNIT_MS[unit] ?? UNIT_MS.hour);
 }
 
+/** 调度比较要求 last/now 同属一种时间轴编码 */
+export function kindsCompatibleForSchedule(lastKind: GameTimeKind, nowKind: GameTimeKind): boolean {
+  return lastKind === nowKind;
+}
+
+type ScheduleComparePoint = Pick<GameTimeParseResult, 'ms' | 'kind' | 'fields'>;
+
+/**
+ * 负 elapsed 时尝试跨午夜/跨年折算当前时刻。
+ * - time_only：+1 日
+ * - calendar 同月日钟点回拨：+1 日
+ * - 双方无年且仍为负：+1 年（372 日轴）
+ */
+export function adjustNowMsForScheduleCompare(
+  now: ScheduleComparePoint,
+  last: ScheduleComparePoint,
+): { nowMs: number; adjusted: boolean } {
+  if (now.ms >= last.ms) return { nowMs: now.ms, adjusted: false };
+
+  if (now.kind === 'time_only' && last.kind === 'time_only') {
+    return { nowMs: now.ms + UNIT_MS.day, adjusted: true };
+  }
+
+  if (now.kind === 'calendar' && last.kind === 'calendar') {
+    const nowYear = now.fields.year ?? 0;
+    const lastYear = last.fields.year ?? 0;
+    if (nowYear !== lastYear) return { nowMs: now.ms, adjusted: false };
+
+    const sameMonthDay =
+      now.fields.month != null &&
+      last.fields.month != null &&
+      now.fields.day != null &&
+      last.fields.day != null &&
+      now.fields.month === last.fields.month &&
+      now.fields.day === last.fields.day;
+
+    if (sameMonthDay) {
+      return { nowMs: now.ms + UNIT_MS.day, adjusted: true };
+    }
+
+    const bothYearless = now.fields.year == null && last.fields.year == null;
+    if (bothYearless) {
+      const plusYear = now.ms + UNIT_MS.year;
+      if (plusYear >= last.ms) return { nowMs: plusYear, adjusted: true };
+    }
+  }
+
+  return { nowMs: now.ms, adjusted: false };
+}
+
 const REMAINING_PARTS: { unit: keyof typeof UNIT_MS; label: string }[] = [
   { unit: 'year', label: '年' },
   { unit: 'month', label: '月' },
@@ -616,5 +681,5 @@ export const GAME_TIME_FORMAT_HELP = {
     '仅时刻（可带 | 备注）：15:48、15:48 | 晴、15时30分',
   ],
   footnote:
-    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；有线性日序（第N天，或月+日）即可用于天/周及更粗间隔；仅时刻仅适用于分钟/小时间隔；精度不足或无法识别时跳过本任务，原因见运行日志。',
+    '含年月日的日历时间一律按游戏内日历轴比较间隔（非 Unix 时间戳）；有线性日序（第N天，或月+日）即可用于天/周及更粗间隔；仅时刻仅适用于分钟/小时间隔，跨午夜会自动按次日折算一次。无年份的月+日跨年（如 12/31→1/1）会按年轴折算；请勿在同一任务中混用「第N天」与完整历法/仅时刻，否则将重置上次运行时间。跨夜时段（如 22:00-01:00）结束时刻按次日编码。精度不足或无法识别时跳过本任务，原因见运行日志。',
 } as const;

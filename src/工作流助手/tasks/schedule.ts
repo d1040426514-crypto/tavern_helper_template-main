@@ -1,15 +1,18 @@
 import _ from 'lodash';
 import { findLatestAssistantFloorId } from './message-floor';
 import {
+  adjustNowMsForScheduleCompare,
   formatGameTimeFields,
   formatRemainingDuration,
   gameTimeIntervalUnitLabel,
   intervalToMs,
   isGameTimeAdequateForUnit,
+  kindsCompatibleForSchedule,
   normalizeGameTimeRaw,
   parseGameTime,
   peelRangeEnd,
   type GameTimeIntervalUnit,
+  type GameTimeParseResult,
 } from './parse-game-time';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
 import { extractLastTagContent } from './utils';
@@ -227,17 +230,46 @@ export function shouldRunTask(
   }
   const nowMs = parsed.ms;
   // 优先用 raw 重解析，避免编码升级后旧 lastRunGameTimeMs 与新区不一致
+  let lastParsed: GameTimeParseResult | null = null;
   let lastMs: number | undefined;
   if (state?.lastRunGameTimeRaw) {
-    const lastParsed = parseGameTime(state.lastRunGameTimeRaw);
-    if (lastParsed && isGameTimeAdequateForUnit(lastParsed, unit)) {
-      lastMs = lastParsed.ms;
+    const candidate = parseGameTime(state.lastRunGameTimeRaw);
+    if (candidate && isGameTimeAdequateForUnit(candidate, unit)) {
+      lastParsed = candidate;
+      lastMs = candidate.ms;
     }
   }
+  const usedMsFallback = lastMs == null && state?.lastRunGameTimeMs != null;
   if (lastMs == null) lastMs = state?.lastRunGameTimeMs;
+
   if (lastMs != null) {
     const need = intervalToMs(ti.value, ti.unit);
-    const elapsed = nowMs - lastMs;
+
+    if (lastParsed && !kindsCompatibleForSchedule(lastParsed.kind, parsed.kind)) {
+      if (state) {
+        delete state.lastRunGameTimeRaw;
+        delete state.lastRunGameTimeMs;
+      }
+      return { run: true };
+    }
+
+    let compareNowMs = nowMs;
+    if (lastParsed) {
+      compareNowMs = adjustNowMsForScheduleCompare(parsed, lastParsed).nowMs;
+    } else if (usedMsFallback && compareNowMs < lastMs && need < intervalToMs(1, 'day')) {
+      // 无 kind 的旧 ms：短间隔下尝试一次 +1 日跨午夜折算
+      compareNowMs += intervalToMs(1, 'day');
+    }
+
+    let elapsed = compareNowMs - lastMs;
+    if (elapsed < 0) {
+      // 折算后仍为负：视为时间轴回拨/格式切换，自愈并放行（对齐回合模式）
+      if (state) {
+        state.lastRunGameTimeRaw = raw;
+        state.lastRunGameTimeMs = nowMs;
+      }
+      return { run: true };
+    }
     if (elapsed < need) {
       const left = formatRemainingDuration(need - elapsed);
       return { run: false, reason: `游戏时间间隔未到，还剩 ${left}` };

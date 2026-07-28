@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  adjustNowMsForScheduleCompare,
   chineseNumeralToInt,
   formatGameTimeFields,
   formatRemainingDuration,
   intervalToMs,
   isGameTimeAdequateForUnit,
+  kindsCompatibleForSchedule,
   normalizeGameTimeRaw,
   parseGameTime,
   parseGameTimeToMs,
@@ -415,6 +417,61 @@ test('location after at-sign still strips before parse', () => {
   assert.equal(r.fields.year, 488);
   assert.equal(r.fields.hour, 15);
   assert.equal(r.fields.minute, 48);
+});
+
+test('intervalToMs month/year align with 31/372 calendar day axis', () => {
+  assert.equal(intervalToMs(1, 'month'), 31 * intervalToMs(1, 'day'));
+  assert.equal(intervalToMs(1, 'year'), 372 * intervalToMs(1, 'day'));
+});
+
+test('overnight clock range end encodes as next day', () => {
+  const endOnly = parseGameTime('01:00');
+  const overnight = parseGameTime('22:00-01:00');
+  assert.ok(endOnly);
+  assert.ok(overnight);
+  assert.equal(overnight.kind, 'time_only');
+  assert.equal(overnight.ms, endOnly.ms + intervalToMs(1, 'day'));
+  assert.ok(overnight.ms > parseGameTime('22:00')!.ms);
+});
+
+test('overnight calendar range end encodes next calendar day', () => {
+  const sameDayEnd = parseGameTime('2024-05-07 01:00');
+  const overnight = parseGameTime('2024-05-07 22:00-01:00');
+  assert.ok(sameDayEnd);
+  assert.ok(overnight);
+  assert.equal(overnight.ms, sameDayEnd.ms + intervalToMs(1, 'day'));
+});
+
+test('adjustNowMsForScheduleCompare time_only midnight wrap', () => {
+  const last = parseGameTime('22:30')!;
+  const now = parseGameTime('00:30')!;
+  const adj = adjustNowMsForScheduleCompare(now, last);
+  assert.equal(adj.adjusted, true);
+  assert.equal(adj.nowMs, now.ms + intervalToMs(1, 'day'));
+  assert.ok(adj.nowMs - last.ms === intervalToMs(2, 'hour'));
+});
+
+test('adjustNowMsForScheduleCompare calendar same-day clock wrap', () => {
+  const last = parseGameTime('2024-05-07 22:30')!;
+  const now = parseGameTime('2024-05-07 00:30')!;
+  const adj = adjustNowMsForScheduleCompare(now, last);
+  assert.equal(adj.adjusted, true);
+  assert.ok(adj.nowMs > last.ms);
+});
+
+test('adjustNowMsForScheduleCompare yearless month wrap', () => {
+  const last = parseGameTime('12月31日')!;
+  const now = parseGameTime('1月1日')!;
+  assert.ok(now.ms < last.ms);
+  const adj = adjustNowMsForScheduleCompare(now, last);
+  assert.equal(adj.adjusted, true);
+  assert.ok(adj.nowMs >= last.ms);
+});
+
+test('kindsCompatibleForSchedule requires same kind', () => {
+  assert.equal(kindsCompatibleForSchedule('time_only', 'time_only'), true);
+  assert.equal(kindsCompatibleForSchedule('calendar', 'time_only'), false);
+  assert.equal(kindsCompatibleForSchedule('day_count', 'calendar'), false);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

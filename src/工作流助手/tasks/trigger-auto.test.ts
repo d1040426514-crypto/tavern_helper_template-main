@@ -184,4 +184,109 @@ test('updateScheduleStateAfterRun records round and game time', () => {
   assert.ok(settings.scheduleState.t1?.lastRunGameTimeRaw);
 });
 
+test('time_only midnight wrap: 22:30 then 00:30 with 30min interval runs', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 30,
+      unit: 'minute',
+      timeSource: { type: 'message_tag', tagNames: ['tp'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<tp>00:30</tp>',
+    currentPairText: '<tp>00:30</tp>',
+  });
+  const state = {
+    lastRunRound: 1,
+    lastRunGameTimeRaw: '22:30',
+  };
+  const check = shouldRunTask(task, state, ctx);
+  assert.equal(check.run, true);
+  assert.equal(check.reason, undefined);
+});
+
+test('time_only same morning: 08:00 then 08:20 with 30min still skips ~10min', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 30,
+      unit: 'minute',
+      timeSource: { type: 'message_tag', tagNames: ['tp'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<tp>08:20</tp>',
+    currentPairText: '<tp>08:20</tp>',
+  });
+  const check = shouldRunTask(task, { lastRunRound: 1, lastRunGameTimeRaw: '08:00' }, ctx);
+  assert.equal(check.run, false);
+  assert.match(check.reason ?? '', /^游戏时间间隔未到，还剩 /);
+  assert.ok(check.reason?.includes('10分钟'));
+});
+
+test('calendar same-day clock wrap runs after +1 day adjust', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 30,
+      unit: 'minute',
+      timeSource: { type: 'message_tag', tagNames: ['tp'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<tp>2024-05-07 00:30</tp>',
+    currentPairText: '<tp>2024-05-07 00:30</tp>',
+  });
+  const check = shouldRunTask(task, { lastRunRound: 1, lastRunGameTimeRaw: '2024-05-07 22:30' }, ctx);
+  assert.equal(check.run, true);
+});
+
+test('yearless Dec31 to Jan1 runs after year-axis adjust', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 1,
+      unit: 'day',
+      timeSource: { type: 'message_tag', tagNames: ['tp'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<tp>1月1日</tp>',
+    currentPairText: '<tp>1月1日</tp>',
+  });
+  const check = shouldRunTask(task, { lastRunRound: 1, lastRunGameTimeRaw: '12月31日' }, ctx);
+  assert.equal(check.run, true);
+});
+
+test('kind mismatch calendar last + time_only now heals and runs', () => {
+  const task = makeTask({
+    mode: 'time',
+    timeInterval: {
+      enabled: true,
+      value: 30,
+      unit: 'minute',
+      timeSource: { type: 'message_tag', tagNames: ['tp'], scope: 'current_ai' },
+    },
+  });
+  const ctx = makeCtx({
+    currentAiText: '<tp>00:30</tp>',
+    currentPairText: '<tp>00:30</tp>',
+  });
+  const state = {
+    lastRunRound: 1,
+    lastRunGameTimeRaw: '2024-05-07 22:30',
+    lastRunGameTimeMs: 1,
+  };
+  const check = shouldRunTask(task, state, ctx);
+  assert.equal(check.run, true);
+  assert.equal(state.lastRunGameTimeRaw, undefined);
+  assert.equal(state.lastRunGameTimeMs, undefined);
+  assert.ok(!check.reason?.includes('年'));
+});
+
 if (process.exitCode) process.exit(process.exitCode);
