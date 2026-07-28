@@ -17,7 +17,13 @@ import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessage
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
 import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
-import { movePromptGroupAt, remapManualExpandedKeys, reorderPromptGroupsAt } from '../tasks/prompt-group-ops';
+import {
+  appendPromptGroup,
+  movePromptGroupAt,
+  remapManualExpandedKeys,
+  removePromptGroupAt,
+  reorderPromptGroupsAt,
+} from '../tasks/prompt-group-ops';
 import { pruneWorldbookForRemovedReplicas } from '../tasks/prune-applied-for-replica';
 import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
@@ -58,7 +64,6 @@ import {
 import { cloneTaskForInsert, newTaskId } from '../tasks/task-clone';
 import { ensureTaskSchedule, mergeTaskSchedule } from '../tasks/task-schedule-merge';
 import {
-  addPromptGroup as addPromptGroupInStore,
   applyReplicaFamilyCleanupInStore,
   applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
   clearChatScope,
@@ -72,7 +77,6 @@ import {
   getChatScopeState,
   listTasks,
   moveTask as moveTaskInStore,
-  removePromptGroup as removePromptGroupInStore,
   repairChatScopeIfNeeded,
   replaceTasks,
   saveChatSnapshotAsGlobalPreset,
@@ -1655,16 +1659,25 @@ async function removeTask(id: string) {
 }
 
 async function removePromptGroup(index: number): Promise<void> {
-  const task = selectedTask.value;
-  if (!task) return;
+  const task = promptPreviewTask.value ?? selectedTask.value;
+  if (!task || isViewingReplicaMember.value) return;
   const pg = task.promptGroups[index];
   const label = pg?.name?.trim() ? `「${pg.name.trim()}」` : `第 ${index + 1} 段`;
   if (!(await acuConfirm({ message: `删除提示词段 ${label}？` }))) return;
   try {
-    if (!chatScopeActive.value) store.persist();
-    await removePromptGroupInStore(task.id, index, 'ui');
-    if (chatScopeActive.value) void refreshTaskView();
-    else store.reload();
+    // 与 add/move 一致：先改本地再落盘，避免 store→refresh 被待落盘旧 viewTasks 覆盖
+    task.promptGroups = removePromptGroupAt(task.promptGroups ?? [], index);
+    expandedPromptRowKeys.value = new Set(
+      [...expandedPromptRowKeys.value]
+        .filter(k => k !== `m-${index}`)
+        .map(k => {
+          if (!k.startsWith('m-')) return k;
+          const i = Number(k.slice(2));
+          if (!Number.isInteger(i) || i < index) return k;
+          return `m-${i - 1}`;
+        }),
+    );
+    await persistPromptGroupsIfChatScope();
   } catch (e) {
     acuToast('warning', e instanceof Error ? e.message : '无法删除提示词段');
   }
@@ -1712,14 +1725,17 @@ async function reorderPromptGroup(fromIndex: number, toIndex: number): Promise<v
 }
 
 async function addPromptGroup(): Promise<void> {
-  const task = selectedTask.value;
-  if (!task) return;
-  const newIndex = task.promptGroups?.length ?? 0;
-  if (!chatScopeActive.value) store.persist();
-  await addPromptGroupInStore(task.id, undefined, 'ui');
-  if (chatScopeActive.value) void refreshTaskView();
-  else store.reload();
-  expandedPromptRowKeys.value = new Set([`m-${newIndex}`]);
+  const task = promptPreviewTask.value ?? selectedTask.value;
+  if (!task || isViewingReplicaMember.value) return;
+  try {
+    // 与 move/reorder 一致：先改本地再落盘，避免 store→refresh 被待落盘旧 viewTasks 覆盖
+    const next = appendPromptGroup(task.promptGroups ?? []);
+    task.promptGroups = next;
+    expandedPromptRowKeys.value = new Set([`m-${next.length - 1}`]);
+    await persistPromptGroupsIfChatScope();
+  } catch (e) {
+    acuToast('warning', e instanceof Error ? e.message : '无法添加提示词段');
+  }
 }
 
 async function applyBuiltinPreset(name: string) {
