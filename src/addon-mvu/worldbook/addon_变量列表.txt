@@ -2,7 +2,7 @@
 <%_
 function stripAddonForDisplay(data) {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
-  const HIDDEN = new Set(['平行演化', '位面交汇']);
+  const HIDDEN = new Set(['平行演化', '刊报日期', '位面交汇']);
   function stripDeep(value) {
     if (value == null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(stripDeep);
