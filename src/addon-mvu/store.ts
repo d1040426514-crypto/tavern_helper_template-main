@@ -94,6 +94,24 @@ export function ensureAddonData(message_id: number): AddonData {
 }
 
 /**
+ * 展示用读取：本楼无 addon_data 键时只读回退上一楼，不写变量。
+ * 与 ensureAddonData 不同，不会 inherit 落盘。
+ */
+export function resolveAddonDataForRead(message_id: number): AddonData {
+  const own = getAddonData(message_id);
+  if (own !== undefined) {
+    return own;
+  }
+  if (message_id > 0) {
+    const prev = getAddonData(message_id - 1);
+    if (prev !== undefined) {
+      return prev;
+    }
+  }
+  return normalizeAddonData(undefined);
+}
+
+/**
  * 从消息文本解析 `<AddonJSONPatch>` 并对 addon_data 应用 JSON Patch.
  * 无更新块或 patch 后无变化时返回 undefined (对齐 MVU parseMessage).
  */

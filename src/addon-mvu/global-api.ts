@@ -16,6 +16,7 @@ import {
   hasChatMessages,
   parseAddonMessage,
   processFloor as processFloorInternal,
+  resolveAddonDataForRead,
   resolveMessageId,
   writeAddonData,
 } from './store';
@@ -48,7 +49,7 @@ function buildUiState(message_id: number | null): AddonUiState {
   if (message_id == null || !hasChatMessages()) {
     return { 位面交汇: false, theme };
   }
-  const data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
+  const data = resolveAddonDataForRead(message_id);
   return { 位面交汇: data.位面交汇 === true, theme };
 }
 
@@ -60,7 +61,7 @@ export const Addon = {
       return wrapAddonData(DEFAULT_ADDON_DATA);
     }
     const message_id = resolveAddonMessageId(options);
-    const addon_data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
+    const addon_data = resolveAddonDataForRead(message_id);
     return wrapAddonData(addon_data);
   },
 
@@ -70,7 +71,7 @@ export const Addon = {
       return wrapAddonData(DEFAULT_ADDON_DATA);
     }
     const message_id = resolveAddonMessageId(options);
-    const addon_data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
+    const addon_data = resolveAddonDataForRead(message_id);
     return wrapAddonData(toDisplayAddonData(addon_data) as AddonData);
   },
 

@@ -37,6 +37,7 @@ export {
   reprocessAllAddonFloors,
   hasChatMessages,
   isAccessibleMessageFloor,
+  resolveAddonDataForRead,
   resolveMessageId,
   writeAddonData,
 } from './store';

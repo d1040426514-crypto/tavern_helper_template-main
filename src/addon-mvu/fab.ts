@@ -5,7 +5,7 @@ import { ensureVueFeatureFlags } from '@util/vue-feature-flags';
 
 import ConsoleApp from '../addon-console/App.vue';
 import { AddonEvent } from './events';
-import { getAddonData, hasChatMessages } from './store';
+import { hasChatMessages, resolveAddonDataForRead } from './store';
 import { getWorldMap } from './schema';
 
 const FAB_ID = 'addon-console-fab';
@@ -886,7 +886,7 @@ function countWorlds(): number {
   try {
     if (!hasChatMessages()) return 0;
     const message_id = getLastMessageId();
-    const data = getAddonData(message_id);
+    const data = resolveAddonDataForRead(message_id);
     return Object.keys(getWorldMap(data)).length;
   } catch {
     return 0;
