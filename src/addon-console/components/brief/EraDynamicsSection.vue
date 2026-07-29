@@ -22,14 +22,15 @@
         >
           <div class="ac-sub-item-block">
             <div class="ac-sub-item-title">⚡ 已完结转折事件</div>
-            <FoldBlock
-              v-for="[ev, body] in entriesOf(node?.已完结转折点事件影响)"
-              :key="ev"
-              :title="ev"
-              :summary="textOf(body?.最终结局).slice(0, 40)"
-            >
-              <KvGrid :data="body" :labels="['起止日期', '最终结局', '事件脉络', '时代影响']" :cols="1" />
-            </FoldBlock>
+            <div class="ac-era-event-list">
+              <EraEventRow
+                v-for="[ev, body] in entriesOf(node?.已完结转折点事件影响)"
+                :key="ev"
+                :title="ev"
+                :body="body"
+                variant="completed"
+              />
+            </div>
           </div>
         </EraGroupCard>
       </div>
@@ -49,18 +50,15 @@
         >
           <div class="ac-sub-item-block">
             <div class="ac-sub-item-title">🔗 事件脉络</div>
-            <FoldBlock
-              v-for="[ev, body] in entriesOf(node?.事件脉络)"
-              :key="ev"
-              :title="ev"
-              :summary="textOf(body?.描述).slice(0, 40)"
-            >
-              <KvGrid
-                :data="body"
-                :labels="['开始日期', '结束日期', '干预方向', '干预强度', '描述', '影响']"
-                :cols="1"
+            <div class="ac-era-event-list">
+              <EraEventRow
+                v-for="[ev, body] in entriesOf(node?.事件脉络)"
+                :key="ev"
+                :title="ev"
+                :body="body"
+                variant="timeline"
               />
-            </FoldBlock>
+            </div>
           </div>
         </EraGroupCard>
       </div>
@@ -71,9 +69,8 @@
 <script setup lang="ts">
 import { entriesOf, isNonEmptyText, textOf } from '../../brief-utils';
 import BriefSection from './BriefSection.vue';
+import EraEventRow from './EraEventRow.vue';
 import EraGroupCard from './EraGroupCard.vue';
-import FoldBlock from './FoldBlock.vue';
-import KvGrid from './KvGrid.vue';
 
 const props = defineProps<{ world: Record<string, any> | null }>();
 

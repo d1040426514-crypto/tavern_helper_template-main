@@ -1548,6 +1548,105 @@
   font-family: var(--font-serif);
 }
 
+/* —— 时代演化 / 关键转折点：事件脉络（对齐岁月史书时间线节点） —— */
+.addon-console .ac-era-event-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-top: 2px;
+}
+
+.addon-console .ac-era-event-list .ac-era-event-row {
+  margin: 4px 0 4px 8px;
+  padding: 0 0 0 14px;
+  border: none;
+  border-left: 2px solid var(--gold);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.addon-console .ac-era-event-list .ac-era-event-row::before {
+  left: -5px;
+  top: 7px;
+  bottom: auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--sub-block-bg, var(--cream-card));
+}
+
+.addon-console .ac-era-event-list .ac-era-event-row--completed {
+  border-left-color: var(--sage);
+}
+
+.addon-console .ac-era-event-list .ac-era-event-row--completed::before {
+  background: var(--sage);
+}
+
+.addon-console .ac-era-event-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+  margin-bottom: 2px;
+}
+
+.addon-console .ac-era-event-title {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--subcard-title);
+  font-family: var(--font-serif);
+  line-height: 1.3;
+}
+
+.addon-console .ac-era-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.addon-console .ac-era-event-chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  line-height: 1.4;
+  color: var(--ink-mid);
+  background: rgba(200, 164, 92, 0.1);
+  border: 1px solid rgba(200, 164, 92, 0.22);
+  font-family: var(--font-body);
+  word-break: break-word;
+}
+
+.addon-console[data-theme='dark'] .ac-era-event-chip {
+  background: rgba(180, 150, 80, 0.12);
+  border-color: rgba(180, 150, 80, 0.28);
+  color: var(--ink-light);
+}
+
+.addon-console .ac-era-group-body .ac-sub-item-block {
+  margin-top: 8px;
+  padding: 8px 10px 6px;
+}
+
+.addon-console .ac-era-group-body .ac-sub-item-title {
+  margin-bottom: 6px;
+}
+
+/* 无标题时（数字键名）元信息贴顶，与描述更紧凑 */
+.addon-console .ac-era-event-row--timeline .ac-era-event-head:not(:has(.ac-era-event-title)) {
+  margin-bottom: 1px;
+}
+
+.addon-console .ac-era-event-row--timeline .ac-era-event-head:not(:has(.ac-era-event-title)) .ac-era-event-meta {
+  margin-left: 0;
+}
+
 .addon-console .ac-timeline-node-head {
   display: flex;
   flex-wrap: wrap;
