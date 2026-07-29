@@ -17,6 +17,10 @@
           <FactionsSection :world="world" />
         </div>
 
+        <div v-show="briefPage === 'social'" class="ac-brief-page">
+          <SocialCirclesSection :circles="socialCircles" />
+        </div>
+
         <div v-show="briefPage === 'econ'" class="ac-brief-page">
           <EconomySection :world="world" />
         </div>
@@ -35,12 +39,14 @@ import EraDynamicsSection from './brief/EraDynamicsSection.vue';
 import EraStageSection from './brief/EraStageSection.vue';
 import FactionsSection from './brief/FactionsSection.vue';
 import PlotEventsSection from './brief/PlotEventsSection.vue';
+import SocialCirclesSection from './brief/SocialCirclesSection.vue';
 
-export type BriefPage = 'era' | 'plot' | 'econ';
+export type BriefPage = 'era' | 'plot' | 'social' | 'econ';
 
 defineProps<{
   world: Record<string, any> | null;
   worldName: string;
   briefPage: BriefPage;
+  socialCircles?: Record<string, any> | null;
 }>();
 </script>

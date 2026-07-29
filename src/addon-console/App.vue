@@ -78,7 +78,12 @@
       </div>
 
       <div v-show="tab === 'brief'" class="ac-main-scroll">
-        <StatusBoard :world="selectedWorldData" :world-name="selectedWorld || ''" :brief-page="briefPage" />
+        <StatusBoard
+          :world="selectedWorldData"
+          :world-name="selectedWorld || ''"
+          :brief-page="briefPage"
+          :social-circles="socialCircles"
+        />
       </div>
 
       <div v-show="tab === 'control'" class="ac-main-scroll">
@@ -132,9 +137,10 @@ const warnings = ref<string[]>([]);
 const theme = ref<'light' | 'dark'>('light');
 const planeMerge = ref(false);
 const worlds = ref<Record<string, any>>({});
+const socialCircles = ref<Record<string, any>>({});
 const selectedWorld = ref<string | null>(null);
 const tab = ref<'brief' | 'control' | 'changelog'>('brief');
-const briefPage = ref<'era' | 'plot' | 'econ'>('era');
+const briefPage = ref<'era' | 'plot' | 'social' | 'econ'>('era');
 const patchLog = ref<AddonPatchLogEntry | null>(null);
 const changelogBusy = ref(false);
 const changelogError = ref('');
@@ -142,6 +148,7 @@ const changelogError = ref('');
 const briefPages = [
   { id: 'era' as const, label: '时代快讯', icon: '🕰️' },
   { id: 'plot' as const, label: '世界剧情态势', icon: '⚔️' },
+  { id: 'social' as const, label: '角色社交圈', icon: '🕸️' },
   { id: 'econ' as const, label: '世界经济简报', icon: '💰' },
 ];
 
@@ -184,6 +191,7 @@ function closeHost() {
 
 function applyResult(result: { data: Record<string, any>; warnings?: string[] }, preferWorld?: string) {
   worlds.value = result.data?.世界 ?? {};
+  socialCircles.value = result.data?.社交圈 ?? {};
   warnings.value = result.warnings ?? [];
   const names = Object.keys(worlds.value);
   if (preferWorld && names.includes(preferWorld)) {
@@ -198,6 +206,7 @@ async function reload() {
   try {
     const { addon_data } = api.getAddonData(latestOpts());
     worlds.value = addon_data?.世界 ?? {};
+    socialCircles.value = addon_data?.社交圈 ?? {};
     const ui = api.getUiState(latestOpts());
     theme.value = ui.theme === 'dark' ? 'dark' : 'light';
     planeMerge.value = ui.位面交汇 === true;
