@@ -19,6 +19,20 @@ export type AddonPatchLogEntry = {
   changed: boolean;
 };
 
+export type MergePatchLogNext = {
+  ops: MvuJsonPatchOp[];
+  issues: PatchIssue[];
+  failedFragments?: AddonPatchFailedFragment[];
+  changed: boolean;
+  messageId?: number;
+  resolvedFragmentIndexes?: number[];
+};
+
+export type MergePatchLogOptions = {
+  /** 为 true 时将本次成功 op 记入 manualFixedOps（控制台手动修复） */
+  recordSuccessfulAsManual?: boolean;
+};
+
 let lastPatchLog: AddonPatchLogEntry | null = null;
 
 export function getLastPatchLog(): AddonPatchLogEntry | null {
@@ -85,21 +99,16 @@ function successfulManualOps(ops: MvuJsonPatchOp[], issues: PatchIssue[]): MvuJs
 }
 
 /**
- * 手动应用单条/少量 op 后，合并进上一份变更日志，避免整表被替换成仅本次 ops。
- * 成功应用的 op 写入 manualFixedOps，供「手动修复」分区展示。
+ * 按 path 合并变更日志：同 path 用新条目替换旧 op / apply issue；
+ * 保留未冲突的旧条目，并追加本次 failedFragments。
  */
-export function mergePatchLogAfterManualApply(
+export function mergePatchLogEntries(
   prev: AddonPatchLogEntry | null,
-  next: {
-    ops: MvuJsonPatchOp[];
-    issues: PatchIssue[];
-    failedFragments?: AddonPatchFailedFragment[];
-    changed: boolean;
-    messageId?: number;
-    resolvedFragmentIndexes?: number[];
-  },
+  next: MergePatchLogNext,
+  options: MergePatchLogOptions = {},
 ): AddonPatchLogEntry {
-  const fixedThisRound = successfulManualOps(next.ops, next.issues);
+  const recordManual = !!options.recordSuccessfulAsManual;
+  const fixedThisRound = recordManual ? successfulManualOps(next.ops, next.issues) : [];
 
   if (!prev) {
     return createPatchLogEntry({
@@ -150,8 +159,22 @@ export function mergePatchLogAfterManualApply(
     messageId: prev.messageId ?? next.messageId,
     ops: [...keptPrevOps, ...next.ops],
     issues: [...keptPrevIssues, ...next.issues],
-    failedFragments: keptFragments,
-    manualFixedOps: [...keptPrevManual, ...fixedThisRound],
+    failedFragments: [...keptFragments, ...(next.failedFragments ?? [])].map((f, i) => ({
+      ...f,
+      index: i + 1,
+    })),
+    manualFixedOps: recordManual ? [...keptPrevManual, ...fixedThisRound] : keptPrevManual,
     changed: prev.changed || next.changed,
   });
+}
+
+/**
+ * 手动应用单条/少量 op 后，合并进上一份变更日志，避免整表被替换成仅本次 ops。
+ * 成功应用的 op 写入 manualFixedOps，供「手动修复」分区展示。
+ */
+export function mergePatchLogAfterManualApply(
+  prev: AddonPatchLogEntry | null,
+  next: MergePatchLogNext,
+): AddonPatchLogEntry {
+  return mergePatchLogEntries(prev, next, { recordSuccessfulAsManual: true });
 }

@@ -9,6 +9,7 @@ import {
   createPatchLogEntry,
   getLastPatchLog,
   mergePatchLogAfterManualApply,
+  mergePatchLogEntries,
   setLastPatchLog,
 } from './patch-log';
 import { applyOpsToFloor, updateAddonFromMessage } from './update';
@@ -18,6 +19,9 @@ import { normalizeAddonData, type AddonData } from './schema';
 (globalThis as any).toastr = { warning: () => {}, error: () => {}, info: () => {} };
 (globalThis as any).eventEmit = async () => {};
 (globalThis as any).getVariables = () => ({});
+(globalThis as any).updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => {
+  fn({});
+};
 (globalThis as any).getScriptId = () => 'test';
 (globalThis as any).getScriptTrees = () => [];
 
@@ -178,6 +182,45 @@ async function main() {
 
   {
     clearPatchLog();
+    const merged = mergePatchLogEntries(
+      createPatchLogEntry({
+        messageId: 1,
+        changed: false,
+        ops: [],
+        issues: [{ kind: 'parse', message: '第 1 条 op 无法修复: a' }],
+        failedFragments: [
+          {
+            index: 1,
+            snippet: '{ "op": "insert", "path": "/阿斯塔利亚/a", "value": {',
+            message: '第 1 条 op 无法修复: a',
+          },
+        ],
+      }),
+      {
+        messageId: 1,
+        changed: false,
+        ops: [],
+        issues: [{ kind: 'parse', message: '第 1 条 op 无法修复: b' }],
+        failedFragments: [
+          {
+            index: 1,
+            snippet: '{ "op": "insert", "path": "/阿斯塔利亚/b", "value": {',
+            message: '第 1 条 op 无法修复: b',
+          },
+        ],
+      },
+      { recordSuccessfulAsManual: false },
+    );
+    assert.equal(merged.failedFragments.length, 2);
+    assert.equal(merged.failedFragments[0]!.index, 1);
+    assert.equal(merged.failedFragments[1]!.index, 2);
+    assert.ok(merged.failedFragments[0]!.snippet.includes('/阿斯塔利亚/a'));
+    assert.ok(merged.failedFragments[1]!.snippet.includes('/阿斯塔利亚/b'));
+    console.log('ok merge renumbers failedFragments to unique 1..n');
+  }
+
+  {
+    clearPatchLog();
     setLastPatchLog(
       createPatchLogEntry({
         messageId: 2,
@@ -216,6 +259,111 @@ async function main() {
     assert.equal(log!.manualFixedOps.length, 1);
     assert.ok(log!.manualFixedOps.some(o => 'path' in o && o.path === '/世界/阿斯塔利亚/刊报日期'));
     console.log('ok applyOpsToFloor mergeIntoLastLog preserves siblings');
+  }
+
+  {
+    clearPatchLog();
+    const base = baseWorld();
+    const msg1 = `<AddonJSONPatch>
+[
+  { "op": "insert", "path": "/世界/阿斯塔利亚/潮汐王座深夜市井图", "value": { "描述": "a" } },
+  { "op": "insert", "path": "/世界/阿斯塔利亚/深蓝议会政务图", "value": { "描述": "b" } }
+]
+</AddonJSONPatch>`;
+    const msg2 = `<AddonJSONPatch>
+[
+  { "op": "insert", "path": "/世界/阿斯塔利亚/艾瑟嘉德圣职书信图", "value": { "描述": "c" } }
+]
+</AddonJSONPatch>`;
+    await updateAddonFromMessage(msg1, base, {
+      emitEvents: false,
+      message_id: 2,
+      mergeIntoLastLog: true,
+    });
+    const after1 = getLastPatchLog();
+    assert.ok(after1);
+    assert.equal(after1!.ops.length, 2);
+    assert.equal(after1!.manualFixedOps.length, 0);
+
+    await updateAddonFromMessage(msg2, base, {
+      emitEvents: false,
+      message_id: 2,
+      mergeIntoLastLog: true,
+    });
+    const log = getLastPatchLog();
+    assert.ok(log);
+    assert.equal(log!.ops.length, 3);
+    assert.ok(log!.ops.some(o => 'path' in o && o.path?.includes('潮汐王座')));
+    assert.ok(log!.ops.some(o => 'path' in o && o.path?.includes('深蓝议会')));
+    assert.ok(log!.ops.some(o => 'path' in o && o.path?.includes('艾瑟嘉德')));
+    assert.equal(log!.manualFixedOps.length, 0);
+    assert.equal(log!.messageId, 2);
+    console.log('ok same messageId multi-stage merge keeps all ops without manualFixedOps');
+  }
+
+  {
+    clearPatchLog();
+    const base = baseWorld();
+    const msgA = `<AddonJSONPatch>
+[
+  { "op": "replace", "path": "/世界/阿斯塔利亚/刊报日期", "value": "阶段1" }
+]
+</AddonJSONPatch>`;
+    const msgB = `<AddonJSONPatch>
+[
+  { "op": "replace", "path": "/世界/阿斯塔利亚/刊报日期", "value": "阶段2" },
+  { "op": "insert", "path": "/世界/阿斯塔利亚/新传闻", "value": { "描述": "x" } }
+]
+</AddonJSONPatch>`;
+    await updateAddonFromMessage(msgA, base, {
+      emitEvents: false,
+      message_id: 5,
+      mergeIntoLastLog: true,
+    });
+    await updateAddonFromMessage(msgB, base, {
+      emitEvents: false,
+      message_id: 5,
+      mergeIntoLastLog: true,
+    });
+    const log = getLastPatchLog();
+    assert.ok(log);
+    const dateOps = log!.ops.filter(o => 'path' in o && o.path === '/世界/阿斯塔利亚/刊报日期');
+    assert.equal(dateOps.length, 1);
+    assert.equal((dateOps[0] as { value: string }).value, '阶段2');
+    assert.ok(log!.ops.some(o => 'path' in o && o.path === '/世界/阿斯塔利亚/新传闻'));
+    console.log('ok same path later stage overwrites earlier op');
+  }
+
+  {
+    clearPatchLog();
+    const base = baseWorld();
+    const msg1 = `<AddonJSONPatch>
+[
+  { "op": "insert", "path": "/世界/阿斯塔利亚/楼2专属", "value": { "描述": "a" } }
+]
+</AddonJSONPatch>`;
+    const msg2 = `<AddonJSONPatch>
+[
+  { "op": "insert", "path": "/世界/阿斯塔利亚/楼3专属", "value": { "描述": "b" } }
+]
+</AddonJSONPatch>`;
+    await updateAddonFromMessage(msg1, base, {
+      emitEvents: false,
+      message_id: 2,
+      mergeIntoLastLog: true,
+    });
+    await updateAddonFromMessage(msg2, base, {
+      emitEvents: false,
+      message_id: 3,
+      mergeIntoLastLog: true,
+    });
+    const log = getLastPatchLog();
+    assert.ok(log);
+    assert.equal(log!.messageId, 3);
+    assert.equal(log!.ops.length, 1);
+    assert.ok(log!.ops.some(o => 'path' in o && o.path?.includes('楼3专属')));
+    assert.ok(!log!.ops.some(o => 'path' in o && o.path?.includes('楼2专属')));
+    console.log('ok different messageId does not merge');
   }
 }
 

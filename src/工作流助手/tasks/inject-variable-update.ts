@@ -133,6 +133,19 @@ export async function restoreInjectVarBaselineForRerun(messageId: number): Promi
   }
 }
 
+/**
+ * 每一轮工作流开始时清空 addon 变更日志，避免同楼重跑/新一轮把上一轮 ops 粘进合并日志。
+ * 同轮内多阶段仍由 applyAddonUpdateFromMessage 的 mergeIntoLastLog 合并。
+ */
+export async function clearAddonPatchLogForWorkflowRound(): Promise<void> {
+  if (!(await ensureAddonReady())) return;
+  try {
+    Addon.clearPatchLog?.();
+  } catch (e) {
+    console.warn('[工作流助手] 清空 Addon 变更日志失败:', e);
+  }
+}
+
 async function applyMvuInjectPatch(messageId: number, aiBlock: string): Promise<void> {
   const ready = await ensureMvuReady();
   if (!ready) {

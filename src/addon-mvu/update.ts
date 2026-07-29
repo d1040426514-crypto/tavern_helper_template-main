@@ -13,6 +13,7 @@ import {
   createPatchLogEntry,
   getLastPatchLog,
   mergePatchLogAfterManualApply,
+  mergePatchLogEntries,
   setLastPatchLog,
   type AddonPatchFailedFragment,
   type AddonPatchLogEntry,
@@ -40,6 +41,11 @@ export type AddonUpdateOptions = {
   mutateOps?: (ops: MvuJsonPatchOp[]) => MvuJsonPatchOp[];
   /** 写回特异点存档 / 副本族同步的楼层；缺省则不做 reconcile 写回 */
   message_id?: number;
+  /**
+   * 为 true 且上一份日志同 messageId 时，按 path 合并进 lastPatchLog（工作流多阶段）。
+   * 不会写入 manualFixedOps。
+   */
+  mergeIntoLastLog?: boolean;
 };
 
 export function wrapAddonData(addon_data: AddonData): AddonWrapper {
@@ -63,6 +69,30 @@ async function publishPatchLog(entry: AddonPatchLogEntry, emitEvents: boolean): 
   if (emitEvents) {
     await eventEmit(AddonEvent.PATCH_LOG_UPDATED, entry);
   }
+}
+
+/** 工作流同楼合并：仅当 mergeIntoLastLog 且与上一份 messageId 一致时合并 */
+function resolveMessagePatchLogEntry(
+  partial: {
+    messageId?: number;
+    ops: MvuJsonPatchOp[];
+    issues: PatchIssue[];
+    failedFragments: AddonPatchFailedFragment[];
+    changed: boolean;
+  },
+  mergeIntoLastLog: boolean | undefined,
+): AddonPatchLogEntry {
+  const prev = getLastPatchLog();
+  if (
+    mergeIntoLastLog &&
+    prev &&
+    prev.messageId !== undefined &&
+    partial.messageId !== undefined &&
+    prev.messageId === partial.messageId
+  ) {
+    return mergePatchLogEntries(prev, partial, { recordSuccessfulAsManual: false });
+  }
+  return createPatchLogEntry(partial);
 }
 
 async function reconcileAfterPatch(
@@ -179,13 +209,16 @@ export async function updateAddonFromMessage(
 
   if (extracted_ops.length === 0) {
     if (parse_issues.length > 0 || failedFragments.length > 0) {
-      const entry = createPatchLogEntry({
-        messageId: options.message_id,
-        ops: [],
-        issues: parse_issues,
-        failedFragments,
-        changed: false,
-      });
+      const entry = resolveMessagePatchLogEntry(
+        {
+          messageId: options.message_id,
+          ops: [],
+          issues: parse_issues,
+          failedFragments,
+          changed: false,
+        },
+        options.mergeIntoLastLog,
+      );
       await publishPatchLog(entry, emitEvents);
       notifyIssues(parse_issues);
     }
@@ -222,13 +255,16 @@ export async function updateAddonFromMessage(
   }
 
   const changed = !_.isEqual(new_wrapper.addon_data, base);
-  const entry = createPatchLogEntry({
-    messageId: options.message_id,
-    ops,
-    issues,
-    failedFragments,
-    changed,
-  });
+  const entry = resolveMessagePatchLogEntry(
+    {
+      messageId: options.message_id,
+      ops,
+      issues,
+      failedFragments,
+      changed,
+    },
+    options.mergeIntoLastLog,
+  );
   await publishPatchLog(entry, emitEvents);
   notifyIssues(issues);
 

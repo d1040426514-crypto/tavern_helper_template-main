@@ -176,6 +176,8 @@ export async function applyAddonUpdateFromMessage(
     emitEvents: true,
     message_content: message,
     message_id,
+    // 工作流多阶段同楼注入：变更日志按 path 合并，避免后阶段覆盖前阶段
+    mergeIntoLastLog: true,
   });
 
   const data = result !== undefined ? result.data : base;

@@ -40,6 +40,7 @@ import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from 
 import { applyChatBodyTagReplaceAfterStage } from './chat-body-tag-replace';
 import {
   applyVariableUpdatesAfterStage,
+  clearAddonPatchLogForWorkflowRound,
   restoreInjectVarBaselineForRerun,
 } from './inject-variable-update';
 import { applyChatWorldbookWriteAfterStage } from '../worldbook/write-from-template';
@@ -454,6 +455,8 @@ export async function runPostProcessTasks(
   if (options?.isRerun) {
     await restoreInjectVarBaselineForRerun(messageId);
   }
+  // 每轮工作流从空变更日志开始；同轮多阶段 apply 再按 messageId 合并
+  await clearAddonPatchLogForWorkflowRound();
 
   const ctx = await buildSharedContext(messageId, settings, snapshot, { isRerun: options?.isRerun });
   checkRunCancelled(options?.signal);
