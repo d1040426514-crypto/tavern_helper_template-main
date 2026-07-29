@@ -12,7 +12,7 @@ const socialCircles = readSocialCircles();
 const names = Object.keys(socialCircles);
 _%>
 <%_ if (names.length > 0) { _%>
-<SocialCirclePaper>
+<社交圈>
 <%- YAML.stringify(socialCircles, { blockQuote: 'literal' }) %>
-</SocialCirclePaper>
+</社交圈>
 <%_ } _%>
