@@ -241,8 +241,21 @@ declare namespace Addon {
     };
   };
 
+  type 社交圈条目 = {
+    性质?: string;
+    互动频率?: string;
+    信息范围?: string;
+    圈子人群?: string;
+    风云人物?: string;
+    关联团体?: string;
+    关联圈交集?: string;
+    当前动态?: string;
+    描述?: string;
+  };
+
   type AddonData = {
     世界?: Record<string, 世界条目>;
+    社交圈?: Record<string, 社交圈条目>;
     位面交汇?: boolean;
   };
 

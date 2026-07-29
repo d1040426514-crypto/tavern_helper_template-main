@@ -1,0 +1,66 @@
+---
+<%_
+function readSocialCircles() {
+  const addonData = getvar('addon_data');
+  if (!addonData || typeof addonData !== 'object' || Array.isArray(addonData)) return {};
+  const social = addonData.社交圈;
+  if (!social || typeof social !== 'object' || Array.isArray(social)) return {};
+  return _.cloneDeep(social);
+}
+
+function normalizeText(value) {
+  return String(value ?? '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+function splitKeywords(value) {
+  return String(value ?? '')
+    .split(/[、，,；;\n\r]+/g)
+    .map(part => normalizeText(part))
+    .filter(Boolean);
+}
+
+function getLatestUserMessageText() {
+  try {
+    const lastId = getLastMessageId();
+    const messages = getChatMessages(`0-${lastId}`);
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (!msg) continue;
+      if (msg.role === 'user' || msg.is_user === true) {
+        return String(msg.message ?? '');
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  return '';
+}
+
+function collectCircleKeywords(circleName, entry) {
+  return _.uniq([
+    ...splitKeywords(circleName),
+    ...splitKeywords(entry?.风云人物),
+    ...splitKeywords(entry?.圈子人群),
+  ]).filter(Boolean);
+}
+
+const socialCircles = readSocialCircles();
+const latestUserText = normalizeText(getLatestUserMessageText());
+const matched = {};
+
+for (const [circleName, entry] of Object.entries(socialCircles)) {
+  const keywords = collectCircleKeywords(circleName, entry);
+  if (keywords.length === 0) continue;
+  if (keywords.some(keyword => latestUserText.includes(keyword))) {
+    matched[circleName] = entry;
+  }
+}
+_%>
+<%_ if (Object.keys(matched).length > 0) { _%>
+<SocialCirclePaper>
+<%- YAML.stringify(matched, { blockQuote: 'literal' }) %>
+</SocialCirclePaper>
+<%_ } _%>

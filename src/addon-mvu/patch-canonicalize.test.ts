@@ -71,6 +71,12 @@ test('canonicalize 已正确路径仅补容器段', () => {
   assert.deepEqual(rewrites, ['补容器段 /世界']);
 });
 
+test('canonicalize 社交圈 显式容器 不应改写', () => {
+  const { path, rewrites } = canonicalizeJsonPointer('/社交圈/码头苦力圈/当前动态');
+  assert.equal(path, '/社交圈/码头苦力圈/当前动态');
+  assert.deepEqual(rewrites, []);
+});
+
 test('canonicalize 歧义固定段 状态 不补层', () => {
   const original = '/阿斯塔利亚/世界经济简报/状态';
   const { path, rewrites } = canonicalizeJsonPointer(original);

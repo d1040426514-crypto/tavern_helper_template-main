@@ -1,11 +1,13 @@
 import type { AddonData } from './schema';
-import { getWorldMap } from './schema';
+import { getSocialCircleMap, getWorldMap } from './schema';
 import { getAtPath } from './patch-heal';
 import { MvuJsonPatchOp, PatchIssue } from './patch';
 import {
   ALL_FIXED_SEGMENT_KEYS,
+  ALL_SOCIAL_FIXED_SEGMENT_KEYS,
   findUniqueAncestorChain,
   PathTreeNode,
+  SOCIAL_CIRCLE_ENTRY_TREE,
   WORLD_ENTRY_TREE,
 } from './patch-path-index';
 
@@ -109,13 +111,14 @@ function alignSegment(
   segment: string,
   base: Record<string, unknown> | undefined,
   outputPrefix: string[],
+  fixedSegmentKeys: Set<string>,
 ): AlignResult {
   const direct = node.children?.[segment];
   if (direct) {
     return { nextNode: direct, inserted: [] };
   }
 
-  const isFixed = ALL_FIXED_SEGMENT_KEYS.has(segment);
+  const isFixed = fixedSegmentKeys.has(segment);
 
   if (node.record && !isFixed) {
     const entityPath = [...outputPrefix, segment];
@@ -165,7 +168,50 @@ export function canonicalizeSegments(
       rewrites.push(`别名补层 /${ancestor}`);
     }
 
-    const { nextNode, inserted } = alignSegment(node, segment, baseRoot, output);
+    const { nextNode, inserted } = alignSegment(node, segment, baseRoot, output, ALL_FIXED_SEGMENT_KEYS);
+    for (const ancestor of inserted) {
+      output.push(ancestor);
+      node = node.children![ancestor]!;
+      rewrites.push(`补全固定段 /${ancestor}`);
+    }
+
+    output.push(segment);
+    node = nextNode;
+  }
+
+  return { segments: output, rewrites };
+}
+
+export function canonicalizeSocialSegments(
+  segments: string[],
+  base?: AddonData,
+): { segments: string[]; rewrites: string[] } {
+  if (segments.length <= 1) {
+    return { segments: [...segments], rewrites: [] };
+  }
+
+  const output: string[] = [segments[0]!];
+  const rewrites: string[] = [];
+  let node = SOCIAL_CIRCLE_ENTRY_TREE;
+  const baseRoot = base ? (getSocialCircleMap(base) as Record<string, unknown>) : undefined;
+
+  for (let i = 1; i < segments.length; i++) {
+    const segment = segments[i]!;
+
+    const aliasInsert = resolveAliasInsert(output.slice(1), segment);
+    for (const ancestor of aliasInsert) {
+      output.push(ancestor);
+      node = node.children![ancestor]!;
+      rewrites.push(`别名补层 /${ancestor}`);
+    }
+
+    const { nextNode, inserted } = alignSegment(
+      node,
+      segment,
+      baseRoot,
+      output,
+      ALL_SOCIAL_FIXED_SEGMENT_KEYS,
+    );
     for (const ancestor of inserted) {
       output.push(ancestor);
       node = node.children![ancestor]!;
@@ -185,20 +231,27 @@ export function canonicalizeJsonPointer(
 ): { path: string; rewrites: string[] } {
   let segments = parseJsonPointer(path);
   const rewrites: string[] = [];
-  const hadContainer = segments[0] === '世界';
+  const hadWorldContainer = segments[0] === '世界';
+  const hadSocialContainer = segments[0] === '社交圈';
 
   if (segments[0] === '位面交汇') {
     return { path: encodeJsonPointer(segments), rewrites };
   }
 
-  if (hadContainer) {
+  if (hadWorldContainer || hadSocialContainer) {
     segments = segments.slice(1);
   }
 
-  const aligned = canonicalizeSegments(segments, base);
+  const aligned = hadSocialContainer ? canonicalizeSocialSegments(segments, base) : canonicalizeSegments(segments, base);
   rewrites.push(...aligned.rewrites);
+
+  if (hadSocialContainer) {
+    const prefixed = ['社交圈', ...aligned.segments];
+    return { path: encodeJsonPointer(prefixed), rewrites };
+  }
+
   const prefixed = ensureWorldContainerPrefix(aligned.segments);
-  if (!hadContainer && prefixed[0] === '世界') {
+  if (!hadWorldContainer && prefixed[0] === '世界') {
     rewrites.push('补容器段 /世界');
   }
   return { path: encodeJsonPointer(prefixed), rewrites };

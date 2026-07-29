@@ -254,6 +254,20 @@ test('heal move.to missing parent', () => {
   assert.equal(_.get(data, '世界.阿斯塔利亚.世界剧情态势.时局动态.传闻.旧闻'), undefined);
 });
 
+test('heal insert 社交圈 当前动态 when circle missing', () => {
+  const base = baseWorld();
+  const { data, issues } = applyOps(base, [
+    {
+      op: 'insert',
+      path: '/社交圈/码头苦力圈/当前动态',
+      value: '因限流减船，众人商议绕开新税卡',
+    },
+  ]);
+  assertNoPathMissingIssues(issues);
+  assert.equal(_.get(data, '社交圈.码头苦力圈.当前动态'), '因限流减船，众人商议绕开新税卡');
+  assertNormalizedValid(normalizeAddonData(data));
+});
+
 test('ensurePathForWrite materializes intermediate nodes', () => {
   const root = _.cloneDeep(baseWorld()) as Record<string, unknown>;
   const segments = ['世界', '阿斯塔利亚', '世界剧情态势', '团体动态', '当前区域团体', '新团体', '当前动态'];

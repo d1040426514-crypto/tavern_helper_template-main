@@ -421,15 +421,32 @@ export function stripInvalidStrictBooleans(value: unknown): unknown {
  * addon 变量结构 (对齐 MVU stat_data 的 zod 用法).
  * 修改固定段结构时须同步 patch-path-index.ts
  *
- * - 根形: { 世界: { [世界名]: 世界条目 }, 位面交汇: boolean }
+ * - 根形: { 世界: { [世界名]: 世界条目 }, 社交圈: { [圈子名]: 社交圈条目 }, 位面交汇: boolean }
  * - AI patch 仍写 /世界名/...，运行时补 /世界 前缀
+ * - AI patch 仍写 /社交圈/圈子名/...，运行时不补 /世界 前缀
  * - 字符串占位选项: 宽松 z.string().prefault(''), 约束写在世界书变量更新规则
  * - 布尔字段: 严格 z.boolean().prefault(false)
  * - 构建时自动生成 `schema.json` (export 名 `Schema` 供 dump_schema 使用)
  */
+
+const 社交圈条目Schema = z
+  .object({
+    性质: looseString,
+    互动频率: looseString,
+    信息范围: looseString,
+    圈子人群: looseString,
+    风云人物: looseString,
+    关联团体: looseString,
+    关联圈交集: looseString,
+    当前动态: looseString,
+    描述: looseString,
+  })
+  .prefault({});
+
 export const AddonSchema = z
   .object({
     世界: z.record(z.string(), 世界条目Schema).prefault({}),
+    社交圈: z.record(z.string(), 社交圈条目Schema).prefault({}),
     位面交汇: strictBoolean,
   })
   .prefault({});
@@ -439,12 +456,20 @@ export const Schema = AddonSchema;
 
 export type AddonData = z.infer<typeof AddonSchema>;
 export type WorldEntry = z.infer<typeof 世界条目Schema>;
+export type SocialCircleEntry = z.infer<typeof 社交圈条目Schema>;
 
 export const DEFAULT_ADDON_DATA: AddonData = AddonSchema.parse({});
 
 /** 取世界 map（永不返回 undefined） */
 export function getWorldMap(data: AddonData | null | undefined): Record<string, WorldEntry> {
   return data?.世界 ?? {};
+}
+
+/** 取社交圈 map（永不返回 undefined） */
+export function getSocialCircleMap(
+  data: AddonData | null | undefined,
+): Record<string, SocialCircleEntry> {
+  return data?.社交圈 ?? {};
 }
 
 /** 预处理非法布尔 + 字段 coerce + prefault 补全完整结构 */

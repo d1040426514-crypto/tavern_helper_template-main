@@ -319,6 +319,19 @@ export const WORLD_ENTRY_TREE: PathTreeNode = obj({
   世界经济简报,
 });
 
+/** 社交圈条目根（/社交圈/{圈子名}/ 之下） */
+export const SOCIAL_CIRCLE_ENTRY_TREE: PathTreeNode = obj({
+  性质: leaf(),
+  互动频率: leaf(),
+  信息范围: leaf(),
+  圈子人群: leaf(),
+  风云人物: leaf(),
+  关联团体: leaf(),
+  关联圈交集: leaf(),
+  当前动态: leaf(),
+  描述: leaf(),
+});
+
 function collectFixedKeysFromNode(node: PathTreeNode, keys: Set<string>): void {
   if (!node.children) {
     return;
@@ -333,6 +346,13 @@ function collectFixedKeysFromNode(node: PathTreeNode, keys: Set<string>): void {
 export const ALL_FIXED_SEGMENT_KEYS = (() => {
   const keys = new Set<string>();
   collectFixedKeysFromNode(WORLD_ENTRY_TREE, keys);
+  return keys;
+})();
+
+/** 社交圈固定段名集合（用于 canonicalize） */
+export const ALL_SOCIAL_FIXED_SEGMENT_KEYS = (() => {
+  const keys = new Set<string>();
+  collectFixedKeysFromNode(SOCIAL_CIRCLE_ENTRY_TREE, keys);
   return keys;
 })();
 

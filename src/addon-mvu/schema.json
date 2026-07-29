@@ -707,6 +707,46 @@
         }
       }
     },
+    "社交圈": {
+      "default": {},
+      "type": "object",
+      "propertyNames": {
+        "type": "string"
+      },
+      "additionalProperties": {
+        "default": {},
+        "type": "object",
+        "properties": {
+          "性质": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "互动频率": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "信息范围": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "圈子人群": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "风云人物": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "关联团体": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "关联圈交集": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "当前动态": {
+            "$ref": "#/$defs/__schema1"
+          },
+          "描述": {
+            "$ref": "#/$defs/__schema1"
+          }
+        }
+      }
+    },
     "位面交汇": {
       "$ref": "#/$defs/__schema0"
     }
