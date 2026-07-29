@@ -12,6 +12,7 @@ import {
   type SharedContext,
 } from './placeholders';
 import { countAssistantRounds, shouldRunTask, updateScheduleStateAfterRun, type ScheduleContext } from './schedule';
+import { getCurrentChatKey } from '../api/chat-key';
 import {
   abortableDelay,
   checkRunCancelled,
@@ -476,6 +477,7 @@ export async function runPostProcessTasks(
     currentPairText: [ctx.userText, ctx.aiText].filter(Boolean).join('\n'),
     settings,
     bypassSchedule: options?.bypassSchedule ?? false,
+    chatKey: getCurrentChatKey(),
   };
 
   if (options?.taskIdFilter) {

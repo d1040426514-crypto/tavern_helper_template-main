@@ -42,6 +42,8 @@ export interface ScheduleContext {
   currentPairText: string;
   settings: ScriptSettings;
   bypassSchedule: boolean;
+  /** 当前聊天键；与 scheduleState.lastRunChatKey 不一致时视为新开局 */
+  chatKey?: string;
 }
 
 export function countAssistantRounds(): number {
@@ -196,11 +198,24 @@ export function shouldRunTask(
   if (mode === 'round') {
     const roundInterval = schedule.roundInterval ?? 0;
     if (roundInterval >= 2) {
-      let last = state?.lastRunRound ?? 0;
-      // 删楼/换聊天后 AI 回合数可能小于历史 lastRunRound，差值会变负并长期卡死
-      if (last > ctx.currentRound) {
-        last = ctx.currentRound;
-        if (state) state.lastRunRound = last;
+      const hasLastRunAt = state?.lastRunAt != null;
+      const chatKey = ctx.chatKey?.trim() || '';
+      const stateChatKey = state?.lastRunChatKey?.trim() || '';
+      const chatMismatch = Boolean(chatKey && (!stateChatKey || stateChatKey !== chatKey));
+      // 从未真正执行，或换了聊天：开局首次必跑（对齐时间模式「无 lastMs 则放行」）
+      const firstInChat = !hasLastRunAt || chatMismatch;
+      const last = state?.lastRunRound ?? 0;
+      // 删楼等导致回合回落：清空锚点并放行，避免压成 delta=0 后跳过首次
+      const roundRegressed = hasLastRunAt && !chatMismatch && last > ctx.currentRound;
+      if (firstInChat || roundRegressed) {
+        if (state && (chatMismatch || roundRegressed)) {
+          state.lastRunRound = 0;
+          delete state.lastRunAt;
+          delete state.lastRunChatKey;
+          delete state.lastRunGameTimeRaw;
+          delete state.lastRunGameTimeMs;
+        }
+        return { run: true };
       }
       const delta = ctx.currentRound - last;
       if (delta < roundInterval) {
@@ -212,6 +227,17 @@ export function shouldRunTask(
 
   const ti = schedule.timeInterval;
   if (!ti) return { run: true };
+
+  const chatKey = ctx.chatKey?.trim() || '';
+  const stateChatKey = state?.lastRunChatKey?.trim() || '';
+  const chatMismatch = Boolean(chatKey && (!stateChatKey || stateChatKey !== chatKey));
+  if (chatMismatch && state) {
+    delete state.lastRunAt;
+    delete state.lastRunChatKey;
+    delete state.lastRunGameTimeRaw;
+    delete state.lastRunGameTimeMs;
+    state.lastRunRound = 0;
+  }
 
   const { raw, fail } = resolveTimeRaw(task, ctx);
   if (fail || !raw) {
@@ -291,6 +317,9 @@ export function updateScheduleStateAfterRun(
   const entry = settings.scheduleState[id];
   entry.lastRunRound = ctx.currentRound;
   entry.lastRunAt = Date.now();
+  const chatKey = ctx.chatKey?.trim();
+  if (chatKey) entry.lastRunChatKey = chatKey;
+  else delete entry.lastRunChatKey;
 
   const schedule = task.schedule;
   if (schedule && resolveScheduleMode(schedule) === 'time') {

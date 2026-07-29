@@ -317,6 +317,8 @@ export const ScheduleStateEntrySchema = z.object({
   lastRunGameTimeRaw: z.string().optional(),
   lastRunGameTimeMs: z.number().optional(),
   lastRunAt: z.number().optional(),
+  /** 上次实际执行时所在聊天；用于换聊天后重置回合/时间间隔锚点 */
+  lastRunChatKey: z.string().optional(),
 });
 
 /** 存于 SillyTavern chatMetadata 的聊天级任务预设快照键 */

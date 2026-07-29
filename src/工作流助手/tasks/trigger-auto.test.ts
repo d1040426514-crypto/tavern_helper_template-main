@@ -44,19 +44,33 @@ test('round interval 0 runs every floor', () => {
 test('round interval 3 skips until gap met', () => {
   const task = makeTask({ mode: 'round', roundInterval: 3 });
   const ctx = makeCtx({ currentRound: 5 });
-  assert.equal(shouldRunTask(task, { lastRunRound: 5 }, ctx).run, false);
-  assert.equal(shouldRunTask(task, { lastRunRound: 2 }, ctx).run, true);
+  assert.equal(shouldRunTask(task, { lastRunRound: 5, lastRunAt: 1, lastRunChatKey: 'c1' }, { ...ctx, chatKey: 'c1' }).run, false);
+  assert.equal(shouldRunTask(task, { lastRunRound: 2, lastRunAt: 1, lastRunChatKey: 'c1' }, { ...ctx, chatKey: 'c1' }).run, true);
 });
 
-test('round interval heals stale lastRunRound above currentRound', () => {
+test('round interval first run without lastRunAt always allows', () => {
+  const task = makeTask({ mode: 'round', roundInterval: 5 });
+  const ctx = makeCtx({ currentRound: 1, chatKey: 'new' });
+  assert.equal(shouldRunTask(task, undefined, ctx).run, true);
+  assert.equal(shouldRunTask(task, { lastRunRound: 0 }, ctx).run, true);
+});
+
+test('round interval allows when chat key changes', () => {
+  const task = makeTask({ mode: 'round', roundInterval: 5 });
+  const state = { lastRunRound: 2, lastRunAt: 99, lastRunChatKey: 'old' };
+  const ctx = makeCtx({ currentRound: 2, chatKey: 'new' });
+  assert.equal(shouldRunTask(task, state, ctx).run, true);
+  assert.equal(state.lastRunAt, undefined);
+});
+
+test('round interval heals round regression by allowing first run', () => {
   const task = makeTask({ mode: 'round', roundInterval: 2 });
-  const state = { lastRunRound: 6, lastRunAt: 1 };
-  const ctx = makeCtx({ currentRound: 4 });
+  const state = { lastRunRound: 6, lastRunAt: 1, lastRunChatKey: 'c1' };
+  const ctx = makeCtx({ currentRound: 4, chatKey: 'c1' });
   const check = shouldRunTask(task, state, ctx);
-  assert.equal(state.lastRunRound, 4);
-  assert.equal(check.run, false);
-  assert.equal(check.reason, '回合间隔未到 (0/2)');
-  assert.equal(shouldRunTask(task, state, makeCtx({ currentRound: 6 })).run, true);
+  assert.equal(check.run, true);
+  assert.equal(state.lastRunAt, undefined);
+  assert.equal(state.lastRunRound, 0);
 });
 
 test('time mode with message tag runs when parse ok', () => {
