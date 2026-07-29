@@ -7,6 +7,7 @@ import ConsoleApp from '../addon-console/App.vue';
 import { AddonEvent } from './events';
 import { hasChatMessages, resolveAddonDataForRead } from './store';
 import { getWorldMap } from './schema';
+import { getConsoleTheme } from './script-ui-settings';
 
 const FAB_ID = 'addon-console-fab';
 const SHELL_ID = 'addon-console-shell';
@@ -387,7 +388,8 @@ function ensureStyles(): void {
   display:flex;flex-direction:column;
   overflow:hidden;
 }
-#${SHELL_ID}:has(.addon-console[data-theme='dark']) .ac-panel{
+#${SHELL_ID}:has(.addon-console[data-theme='dark']) .ac-panel,
+#${SHELL_ID}[data-theme-pref='dark'] .ac-panel{
   background:#0b142a;
   border-color:rgba(180,150,80,.3);
   box-shadow:0 16px 48px rgba(0,0,0,.45),0 0 24px rgba(120,100,50,.18);
@@ -857,9 +859,20 @@ function isOpen(): boolean {
   return hostDoc().getElementById(SHELL_ID)?.classList.contains('open') === true;
 }
 
+function applyShellThemePref(): void {
+  try {
+    const shell = hostDoc().getElementById(SHELL_ID);
+    if (!shell) return;
+    shell.setAttribute('data-theme-pref', getConsoleTheme());
+  } catch {
+    /* ignore */
+  }
+}
+
 export function openAddonConsole(): void {
   ensureStyles();
   ensureShell();
+  applyShellThemePref();
   loadConsoleContent();
   // 关闭时会卸掉 teleported 样式；再次打开需补回（内容可能已挂载）
   if (vueApp && !styleDestroy) {
@@ -872,9 +885,8 @@ export function openAddonConsole(): void {
 
 export function closeAddonConsole(): void {
   setOpen(false);
-  // 移除注入父页的控制台样式，避免污染酒馆主题
-  styleDestroy?.();
-  styleDestroy = null;
+  // 保留 teleported 样式（均挂在 .addon-console 下），避免再次打开时先以无样式/浅色绘制再注入
+  // 真正卸载仍走 unmountConsole()
 }
 
 export function toggleAddonConsole(): void {

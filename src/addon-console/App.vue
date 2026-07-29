@@ -131,10 +131,22 @@ import SingularityPanel from './components/SingularityPanel.vue';
 import StatusBoard from './components/StatusBoard.vue';
 import WorldControls from './components/WorldControls.vue';
 
+/** 首屏前同步读取已保存主题，避免默认 light 再被 reload 改成 dark 造成闪烁 */
+function readInitialTheme(): 'light' | 'dark' {
+  try {
+    const fromParent = _.get(window.parent, 'Addon') as { getUiState?: () => { theme?: string } } | undefined;
+    const local = _.get(window, 'Addon') as { getUiState?: () => { theme?: string } } | undefined;
+    const t = fromParent?.getUiState?.()?.theme ?? local?.getUiState?.()?.theme;
+    return t === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
+  }
+}
+
 const loading = ref(true);
 const error = ref('');
 const warnings = ref<string[]>([]);
-const theme = ref<'light' | 'dark'>('light');
+const theme = ref<'light' | 'dark'>(readInitialTheme());
 const planeMerge = ref(false);
 const worlds = ref<Record<string, any>>({});
 const socialCircles = ref<Record<string, any>>({});
