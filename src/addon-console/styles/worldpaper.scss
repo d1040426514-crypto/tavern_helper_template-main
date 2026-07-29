@@ -1387,6 +1387,12 @@
   border-color: rgba(200, 165, 90, 0.55);
 }
 
+.addon-console .ac-tag.status-stable {
+  background: rgba(120, 150, 180, 0.18);
+  color: #4a6d8c;
+  border-color: rgba(120, 150, 180, 0.4);
+}
+
 .addon-console .ac-tag.status-critical {
   background: rgba(220, 110, 70, 0.25);
   color: #c45a38;
@@ -1400,6 +1406,10 @@
 
 .addon-console[data-theme='dark'] .ac-tag.status-developing {
   color: #e0c870;
+}
+
+.addon-console[data-theme='dark'] .ac-tag.status-stable {
+  color: #9bb6d0;
 }
 
 .addon-console[data-theme='dark'] .ac-tag.status-critical {

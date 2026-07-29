@@ -71,15 +71,21 @@ export function eraFieldIcon(label: string): string {
   return ERA_FIELD_ICONS[label] || '📌';
 }
 
-export type StatusClass = '' | 'status-embryo' | 'status-developing' | 'status-critical';
+export type StatusClass =
+  | ''
+  | 'status-embryo'
+  | 'status-developing'
+  | 'status-stable'
+  | 'status-critical';
 
-/** 与正则 getStatusClass 对齐 */
+/** 与正则 getStatusClass 对齐（含经济事件中性态势词） */
 export function getStatusClass(status: unknown): StatusClass {
   const s = textOf(status).trim();
   if (!s) return '';
-  if (/萌芽|胚胎|embryo/i.test(s)) return 'status-embryo';
+  if (/萌芽|胚胎|酝酿|embryo/i.test(s)) return 'status-embryo';
+  if (/趋稳|消退|受控/i.test(s)) return 'status-stable';
   if (/恶化|危机|崩溃|临界|critical|变革|前夜/i.test(s)) return 'status-critical';
-  if (/发展|developing|进行|转折|恢复|改善|好转/i.test(s)) return 'status-developing';
+  if (/发展|developing|推进|进行|转折|恢复|改善|好转/i.test(s)) return 'status-developing';
   return '';
 }
 
