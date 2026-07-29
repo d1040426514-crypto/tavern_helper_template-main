@@ -4,7 +4,7 @@ SocialCircle_Update_Format:
     - the update commands works like **JSON Patch (RFC 6902)**, supports: replace/delta/insert/remove/move
     - every patch path must start with `/社交圈/`
     - don't update fields starting with `_`
-    - "`圈子人群` `风云人物` `关联圈交集` must be string, not JSON array"
+    - "`社群人脉` `活跃角色` `关联圈交集` must be string, not JSON array"
     - "use `insert /社交圈/新圈子名称` with a full object when creating a new social circle"
     - "use `replace /社交圈/已有圈子/字段名` only for existing fields"
     - "don't output `/世界/...` paths in this task"
@@ -24,8 +24,8 @@ SocialCircle_Update_Format:
           "性质": "${string}",
           "互动频率": "${string}",
           "信息范围": "${string}",
-          "圈子人群": "${string}",
-          "风云人物": "${string}",
+          "社群人脉": "${string}",
+          "活跃角色": "${string}",
           "关联团体": "${string}",
           "关联圈交集": "${string}",
           "当前动态": "${string}",
@@ -33,7 +33,7 @@ SocialCircle_Update_Format:
         }
       },
       { "op": "replace", "path": "/社交圈/${已有圈子名称}/当前动态", "value": "${string}" },
-      { "op": "replace", "path": "/社交圈/${已有圈子名称}/风云人物", "value": "${string}" },
+      { "op": "replace", "path": "/社交圈/${已有圈子名称}/活跃角色", "value": "${string}" },
       { "op": "remove", "path": "/社交圈/${废弃圈子名称}" },
       { "op": "move", "from": "/社交圈/${旧圈子名称}", "to": "/社交圈/${新圈子名称}" }
     ]
@@ -47,8 +47,8 @@ SocialCircle_Update_Format:
           "性质": "业缘",
           "互动频率": "日常",
           "信息范围": "码头排班、市井流言、灰色运货风声",
-          "圈子人群": "码头搬运老工、短工头目、茶摊老板娘、船边记账学徒",
-          "风云人物": "周文彬、吴秋娘",
+          "社群人脉": "码头搬运老工、短工头目、茶摊老板娘、船边记账学徒",
+          "活跃角色": "周文彬、吴秋娘",
           "关联团体": "黑帆装卸行",
           "关联圈交集": "鱼市小贩圈；夜泊赌档圈",
           "当前动态": "因限流减船与新税卡加压，圈内正在商议如何重新分配短缺活计。",
@@ -58,8 +58,8 @@ SocialCircle_Update_Format:
           "性质": "黑市",
           "互动频率": "夜间日常",
           "信息范围": "地下债务、放贷风向、地盘纠纷",
-          "圈子人群": "夜间赌客、放贷中人、看场打手、替人跑腿的少年",
-          "风云人物": "周静荷、陈炳川",
+          "社群人脉": "夜间赌客、放贷中人、看场打手、替人跑腿的少年",
+          "活跃角色": "周静荷、陈炳川",
           "关联团体": "无",
           "关联圈交集": "码头苦力圈；鱼市小贩圈",
           "当前动态": "赌档东家正暗中拉拢码头放贷人，准备吃下邻街的新赌摊。",

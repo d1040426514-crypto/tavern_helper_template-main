@@ -245,8 +245,8 @@ declare namespace Addon {
     性质?: string;
     互动频率?: string;
     信息范围?: string;
-    圈子人群?: string;
-    风云人物?: string;
+    社群人脉?: string;
+    活跃角色?: string;
     关联团体?: string;
     关联圈交集?: string;
     当前动态?: string;

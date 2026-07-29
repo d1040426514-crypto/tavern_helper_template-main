@@ -22,17 +22,61 @@ function splitKeywords(value) {
     .filter(Boolean);
 }
 
-function getLatestUserMessageText() {
+/** 活跃角色：顿号拆人名后，若含 · 分隔的西方名（可含中间名），整名与各段均可触发 */
+function splitActiveCharacterKeywords(value) {
+  const names = String(value ?? '')
+    .split(/[、，,；;\n\r]+/g)
+    .map(part => String(part ?? '').trim())
+    .filter(Boolean);
+
+  const keywords = [];
+  for (const name of names) {
+    const full = normalizeText(name);
+    if (full) keywords.push(full);
+
+    if (/[·・]/.test(name)) {
+      for (const segment of name.split(/[·・]+/g)) {
+        const part = normalizeText(segment);
+        if (part) keywords.push(part);
+      }
+    }
+  }
+  return keywords;
+}
+
+function isUserMessage(msg) {
+  return msg?.role === 'user' || msg?.is_user === true;
+}
+
+function isAssistantMessage(msg) {
+  return msg?.role === 'assistant' || msg?.is_user === false;
+}
+
+function getRecentScanText(userLimit = 5, assistantLimit = 5) {
   try {
     const lastId = getLastMessageId();
     const messages = getChatMessages(`0-${lastId}`);
+    const userTexts = [];
+    const assistantTexts = [];
+
     for (let i = messages.length - 1; i >= 0; i--) {
       const msg = messages[i];
       if (!msg) continue;
-      if (msg.role === 'user' || msg.is_user === true) {
-        return String(msg.message ?? '');
+      const text = String(msg.message ?? '').trim();
+      if (!text) continue;
+
+      if (isUserMessage(msg)) {
+        if (userTexts.length < userLimit) userTexts.push(text);
+      } else if (isAssistantMessage(msg)) {
+        if (assistantTexts.length < assistantLimit) assistantTexts.push(text);
+      }
+
+      if (userTexts.length >= userLimit && assistantTexts.length >= assistantLimit) {
+        break;
       }
     }
+
+    return [...userTexts, ...assistantTexts].join('\n');
   } catch {
     /* ignore */
   }
@@ -42,19 +86,19 @@ function getLatestUserMessageText() {
 function collectCircleKeywords(circleName, entry) {
   return _.uniq([
     ...splitKeywords(circleName),
-    ...splitKeywords(entry?.风云人物),
-    ...splitKeywords(entry?.圈子人群),
+    ...splitActiveCharacterKeywords(entry?.活跃角色),
+    ...splitKeywords(entry?.社群人脉),
   ]).filter(Boolean);
 }
 
 const socialCircles = readSocialCircles();
-const latestUserText = normalizeText(getLatestUserMessageText());
+const scanText = normalizeText(getRecentScanText(5, 5));
 const matched = {};
 
 for (const [circleName, entry] of Object.entries(socialCircles)) {
   const keywords = collectCircleKeywords(circleName, entry);
   if (keywords.length === 0) continue;
-  if (keywords.some(keyword => latestUserText.includes(keyword))) {
+  if (keywords.some(keyword => scanText.includes(keyword))) {
     matched[circleName] = entry;
   }
 }

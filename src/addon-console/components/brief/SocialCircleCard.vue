@@ -25,11 +25,11 @@
 
     <div v-if="people || stars || group || overlap" class="ac-faction-split">
       <div v-if="people" class="ac-faction-panel">
-        <div class="ac-kv-key">圈子人群</div>
+        <div class="ac-kv-key">社群人脉</div>
         <div class="ac-prose">{{ people }}</div>
       </div>
       <div v-if="stars" class="ac-faction-panel">
-        <div class="ac-kv-key">风云人物</div>
+        <div class="ac-kv-key">活跃角色</div>
         <div class="ac-prose">{{ stars }}</div>
       </div>
       <div v-if="group" class="ac-faction-panel">
@@ -64,8 +64,8 @@ const frequency = computed(() => field('互动频率'));
 const infoScope = computed(() => field('信息范围'));
 const current = computed(() => field('当前动态'));
 const description = computed(() => field('描述'));
-const people = computed(() => field('圈子人群'));
-const stars = computed(() => field('风云人物'));
+const people = computed(() => field('社群人脉'));
+const stars = computed(() => field('活跃角色'));
 const group = computed(() => field('关联团体'));
 const overlap = computed(() => field('关联圈交集'));
 </script>
