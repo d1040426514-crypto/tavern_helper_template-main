@@ -257,6 +257,11 @@ export function canonicalizeJsonPointer(
   return { path: encodeJsonPointer(prefixed), rewrites };
 }
 
+/** 仅幂等补 `/世界` 容器前缀时不记 issue（变更页当普通更新、不弹提示） */
+function isWorldPrefixOnlyRewrite(rewrites: string[]): boolean {
+  return rewrites.length > 0 && rewrites.every(r => r === '补容器段 /世界');
+}
+
 export function canonicalizePatchOps(
   ops: MvuJsonPatchOp[],
   base: AddonData,
@@ -268,7 +273,7 @@ export function canonicalizePatchOps(
       const to = canonicalizeJsonPointer(op.to, base);
       const rewrites = [...from.rewrites, ...to.rewrites];
       const canonOp = { ...op, from: from.path, to: to.path };
-      if (rewrites.length > 0) {
+      if (rewrites.length > 0 && !isWorldPrefixOnlyRewrite(rewrites)) {
         issues.push({
           kind: 'heal',
           message: `路径规范化: ${op.from} → ${from.path}; ${op.to} → ${to.path}`,
@@ -280,7 +285,7 @@ export function canonicalizePatchOps(
 
     const { path, rewrites } = canonicalizeJsonPointer(op.path, base);
     const canonOp = { ...op, path };
-    if (rewrites.length > 0) {
+    if (rewrites.length > 0 && !isWorldPrefixOnlyRewrite(rewrites)) {
       issues.push({
         kind: 'heal',
         message: `路径规范化: ${op.path} → ${path}`,

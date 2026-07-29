@@ -152,7 +152,16 @@ test('canonicalizeSegments preserves world name', () => {
   assert.deepEqual(segments, ['阿斯塔利亚', '时代快讯', '岁月史书', '正史', '某纪']);
 });
 
-test('canonicalizePatchOps emits heal issue on rewrite', () => {
+test('canonicalizePatchOps world-prefix-only emits no issue', () => {
+  const { ops, issues } = canonicalizePatchOps(
+    [{ op: 'replace', path: '/阿斯塔利亚/刊报日期', value: '复兴纪元-488年-06月-05日' }],
+    baseWorld(),
+  );
+  assert.equal(ops[0]?.path, '/世界/阿斯塔利亚/刊报日期');
+  assert.equal(issues.length, 0);
+});
+
+test('canonicalizePatchOps emits heal issue on schema rewrite', () => {
   const { ops, issues } = canonicalizePatchOps(
     [{ op: 'replace', path: '/阿斯塔利亚/世界经济简报/贸易政策/帝国', value: 'x' }],
     baseWorld(),
