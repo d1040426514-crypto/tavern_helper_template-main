@@ -65,6 +65,25 @@ check('npc@act 思维链裸开标签不吞带属性块', () => {
   assert.equal(extractedTags.npc, undefined);
 });
 
+check('npc@act 同名孤儿开标签取最后一对', () => {
+  const text =
+    '<npc act="缪尔">标签正确，字段完整。\n[思维演化细节补充]：噪声</think>\n' +
+    '<npc act="缪尔">行为链: 静默祭奠\n当前状态: 悬空静坐</npc>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['npc@act']);
+  assert.equal(extractedTags['npc@act=缪尔'], '行为链: 静默祭奠\n当前状态: 悬空静坐');
+  assert.ok(!extractedTags['npc@act=缪尔']?.includes('思维演化'));
+  assert.ok(!extractedTags['npc@act=缪尔']?.includes('标签正确'));
+});
+
+check('npc@act 双孤儿开标签仍取最后一对', () => {
+  const text =
+    '<npc act="佐久夜">`。</think>\n' +
+    '<npc act="佐久夜">噪声2\n' +
+    '<npc act="佐久夜">行为链: 观测→锁定</npc>';
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['npc@act']);
+  assert.equal(extractedTags['npc@act=佐久夜'], '行为链: 观测→锁定');
+});
+
 check('item@id 同 key 后者覆盖', () => {
   const text = '<item id="1">A</item><item id="1">B</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);

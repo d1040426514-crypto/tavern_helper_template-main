@@ -173,6 +173,28 @@ export function findAllTagInstances(
     }
     const closeStart = findCloseTag(source, tagName, openEnd + 1);
     if (closeStart === -1) break;
+    // 带属性摘取：若开→闭之间还有同标签且带目标属性的开标签，则当前开标签为孤儿，跳过以免吞掉最后一对
+    if (requiredAttr) {
+      let scan = openEnd + 1;
+      let hasIntervening = false;
+      while (scan < closeStart) {
+        const nextOpen = findOpenTagAt(source, tagName, scan);
+        if (nextOpen === -1 || nextOpen >= closeStart) break;
+        const nextOpenEnd = findOpenTagEnd(source, nextOpen);
+        if (nextOpenEnd === -1 || nextOpenEnd >= closeStart) break;
+        const nextAttrs = parseOpenTagAttributes(source.slice(nextOpen, nextOpenEnd + 1));
+        const nextVal = nextAttrs[requiredAttr];
+        if (nextVal !== undefined && nextVal !== '') {
+          hasIntervening = true;
+          break;
+        }
+        scan = nextOpenEnd + 1;
+      }
+      if (hasIntervening) {
+        searchFrom = openEnd + 1;
+        continue;
+      }
+    }
     const closeEnd = closeStart + closeTagLen;
     const inner = source.slice(openEnd + 1, closeStart);
     instances.push({
