@@ -1,4 +1,5 @@
 import type { AddonData } from './schema';
+import { getWorldMap } from './schema';
 
 export const WORLD_REPLICA_SPEC = '世界锚定@world';
 
@@ -91,7 +92,7 @@ export async function syncReplicaLaunched(data: AddonData): Promise<string[]> {
   const members = api.listReplicaFamilyMembers(root.id).filter(m => m.replicaFamilyRootId);
   const byAttr = new Map(members.map(m => [String(m.replicaFamilyAttrValue ?? '').trim(), m]));
 
-  for (const [world, entry] of Object.entries(data)) {
+  for (const [world, entry] of Object.entries(getWorldMap(data))) {
     const launched = entry?.降临 === true || entry?.平行演化 === true;
     const member = byAttr.get(world);
     if (!member) {

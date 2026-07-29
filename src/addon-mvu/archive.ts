@@ -95,9 +95,10 @@ export function remapArchiveWorldKeys(archive: AddonArchive, oldWorld: string, n
   }
   for (const [key, snap] of Object.entries(archive.snapshots)) {
     const remappedSnap = _.cloneDeep(snap);
-    if (oldWorld in remappedSnap) {
-      remappedSnap[newWorld] = remappedSnap[oldWorld]!;
-      delete remappedSnap[oldWorld];
+    const worlds = remappedSnap.世界;
+    if (worlds && oldWorld in worlds) {
+      worlds[newWorld] = worlds[oldWorld]!;
+      delete worlds[oldWorld];
     }
     if (key.startsWith(`${oldWorld}/`)) {
       next.snapshots[`${newWorld}/${key.slice(oldWorld.length + 1)}`] = remappedSnap;
@@ -117,8 +118,8 @@ export function removeArchiveWorldKeys(archive: AddonArchive, world: string): Ad
   for (const [key, snap] of Object.entries(archive.snapshots)) {
     if (key.startsWith(`${world}/`)) continue;
     const remappedSnap = _.cloneDeep(snap);
-    if (world in remappedSnap) {
-      delete remappedSnap[world];
+    if (remappedSnap.世界 && world in remappedSnap.世界) {
+      delete remappedSnap.世界[world];
     }
     next.snapshots[key] = remappedSnap;
   }

@@ -1,4 +1,4 @@
-import { AddonData, normalizeAddonData } from './schema';
+import { AddonData, getWorldMap, normalizeAddonData } from './schema';
 
 type TarotCard = { name: string };
 
@@ -98,7 +98,7 @@ export function refreshNarrativeGuidanceDetails(addon: AddonData): AddonData {
   const next = _.cloneDeep(addon);
   let touched = false;
 
-  for (const world of Object.values(next ?? {})) {
+  for (const world of Object.values(getWorldMap(next))) {
     if (!world) {
       continue;
     }

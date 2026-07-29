@@ -39,17 +39,26 @@ function isReadonlyPath(segments: string[]): boolean {
   return segments.some(segment => segment.startsWith('_'));
 }
 
-/** 拒绝世界级 `/{世界}/平行演化`；特异点.降临等其它路径不受影响 */
+/** 拒绝世界级 `/世界/{世界}/平行演化`（补前缀后）；特异点.降临等其它路径不受影响 */
 export function isForbiddenParallelEvolutionPath(segments: string[]): boolean {
-  return segments.length === 2 && segments[1] === '平行演化';
+  return segments.length === 3 && segments[0] === '世界' && segments[2] === '平行演化';
 }
 
-/** 拒绝仅一段的世界根 path（`/{世界名}`）；世界键仅前端可创建/改名/删除 */
+/** 拒绝 `/世界` 容器或 `/世界/{世界名}` 世界根键；世界键仅前端可创建/改名/删除 */
 export function isForbiddenWorldRootPath(segments: string[]): boolean {
-  return segments.length === 1;
+  if (segments.length === 1 && segments[0] === '世界') return true;
+  return segments.length === 2 && segments[0] === '世界';
+}
+
+/** 拒绝写入位面交汇（仅前端） */
+export function isForbiddenPlaneMergePath(segments: string[]): boolean {
+  return segments[0] === '位面交汇';
 }
 
 function assertWritablePath(segments: string[]): void {
+  if (isForbiddenPlaneMergePath(segments)) {
+    throw new Error('位面交汇仅允许前端写入，已跳过 AI patch');
+  }
   if (isForbiddenWorldRootPath(segments)) {
     throw new Error('世界键仅允许前端创建，已跳过 AI patch');
   }

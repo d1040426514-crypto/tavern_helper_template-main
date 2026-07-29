@@ -1,4 +1,5 @@
 import type { AddonData } from './schema';
+import { getWorldMap } from './schema';
 
 export type SingularityRef = {
   world: string;
@@ -9,7 +10,7 @@ export type SingularityRef = {
 /** 扫描全部世界下的特异点.降临 */
 export function listSingularities(data: AddonData): SingularityRef[] {
   const out: SingularityRef[] = [];
-  for (const [world, entry] of Object.entries(data)) {
+  for (const [world, entry] of Object.entries(getWorldMap(data))) {
     const map = _.get(entry, '时代快讯.岁月史书.特异点') as Record<string, { 降临?: boolean }> | undefined;
     if (!map || typeof map !== 'object') continue;
     for (const [name, item] of Object.entries(map)) {
@@ -20,7 +21,7 @@ export function listSingularities(data: AddonData): SingularityRef[] {
 }
 
 export function setSingularityFlag(data: AddonData, world: string, name: string, value: boolean): void {
-  const path = `${world}.时代快讯.岁月史书.特异点.${name}.降临`;
+  const path = `世界.${world}.时代快讯.岁月史书.特异点.${name}.降临`;
   _.set(data, path, value);
 }
 
@@ -53,8 +54,8 @@ export function findDeactivatedActiveSingularity(
   const [world, ...rest] = activeKey.split('/');
   const name = rest.join('/');
   if (!world || !name) return null;
-  const oldOn = _.get(oldData, `${world}.时代快讯.岁月史书.特异点.${name}.降临`) === true;
-  const newOn = _.get(newData, `${world}.时代快讯.岁月史书.特异点.${name}.降临`) === true;
+  const oldOn = _.get(oldData, `世界.${world}.时代快讯.岁月史书.特异点.${name}.降临`) === true;
+  const newOn = _.get(newData, `世界.${world}.时代快讯.岁月史书.特异点.${name}.降临`) === true;
   if (oldOn && !newOn) return { world, name, 降临: false };
   return null;
 }

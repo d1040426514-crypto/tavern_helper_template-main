@@ -1,3 +1,5 @@
+import type { AddonData } from './schema';
+import { getWorldMap } from './schema';
 import { getAtPath } from './patch-heal';
 import { MvuJsonPatchOp, PatchIssue } from './patch';
 import {
@@ -6,7 +8,6 @@ import {
   PathTreeNode,
   WORLD_ENTRY_TREE,
 } from './patch-path-index';
-import type { AddonData } from './schema';
 
 /** 歧义段名 / 非 schema 段别名；初始为空，从日志增补 */
 export type SegmentAliasRule = {
@@ -24,7 +25,7 @@ function decodeJsonPointerSegment(segment: string): string {
   return segment.replace(/~1/g, '/').replace(/~0/g, '~');
 }
 
-function parseJsonPointer(path: string): string[] {
+export function parseJsonPointer(path: string): string[] {
   if (!path.startsWith('/')) {
     throw new Error(`JSON Pointer 必须以 / 开头: ${path}`);
   }
@@ -41,11 +42,18 @@ function encodeJsonPointerSegment(segment: string): string {
   return segment.replace(/~/g, '~0').replace(/\//g, '~1');
 }
 
-function encodeJsonPointer(segments: string[]): string {
+export function encodeJsonPointer(segments: string[]): string {
   if (segments.length === 0) {
     return '/';
   }
   return `/${segments.map(encodeJsonPointerSegment).join('/')}`;
+}
+
+/** AI 扁平 path 幂等补上容器段「世界」；已带前缀或位面交汇不改 */
+export function ensureWorldContainerPrefix(segments: string[]): string[] {
+  if (segments.length === 0) return segments;
+  if (segments[0] === '世界' || segments[0] === '位面交汇') return [...segments];
+  return ['世界', ...segments];
 }
 
 function navigateToContext(contextSuffix: string[]): PathTreeNode | null {
@@ -145,7 +153,7 @@ export function canonicalizeSegments(
   const output: string[] = [segments[0]!];
   const rewrites: string[] = [];
   let node = WORLD_ENTRY_TREE;
-  const baseRoot = base as Record<string, unknown> | undefined;
+  const baseRoot = base ? (getWorldMap(base) as Record<string, unknown>) : undefined;
 
   for (let i = 1; i < segments.length; i++) {
     const segment = segments[i]!;
@@ -175,9 +183,25 @@ export function canonicalizeJsonPointer(
   path: string,
   base?: AddonData,
 ): { path: string; rewrites: string[] } {
-  const segments = parseJsonPointer(path);
-  const { segments: aligned, rewrites } = canonicalizeSegments(segments, base);
-  return { path: encodeJsonPointer(aligned), rewrites };
+  let segments = parseJsonPointer(path);
+  const rewrites: string[] = [];
+  const hadContainer = segments[0] === '世界';
+
+  if (segments[0] === '位面交汇') {
+    return { path: encodeJsonPointer(segments), rewrites };
+  }
+
+  if (hadContainer) {
+    segments = segments.slice(1);
+  }
+
+  const aligned = canonicalizeSegments(segments, base);
+  rewrites.push(...aligned.rewrites);
+  const prefixed = ensureWorldContainerPrefix(aligned.segments);
+  if (!hadContainer && prefixed[0] === '世界') {
+    rewrites.push('补容器段 /世界');
+  }
+  return { path: encodeJsonPointer(prefixed), rewrites };
 }
 
 export function canonicalizePatchOps(
@@ -242,5 +266,3 @@ export function verifyCanonicalWrites(ops: MvuJsonPatchOp[], normalized: AddonDa
 
   return issues;
 }
-
-export { parseJsonPointer, encodeJsonPointer };

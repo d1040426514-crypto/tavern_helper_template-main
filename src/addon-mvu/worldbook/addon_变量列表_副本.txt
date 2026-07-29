@@ -2,7 +2,7 @@
 <%_
 function stripAddonForDisplay(data) {
   if (data == null || typeof data !== 'object' || Array.isArray(data)) return data;
-  const HIDDEN = new Set(['平行演化']);
+  const HIDDEN = new Set(['平行演化', '位面交汇']);
   function stripDeep(value) {
     if (value == null || typeof value !== 'object') return value;
     if (Array.isArray(value)) return value.map(stripDeep);
@@ -17,16 +17,16 @@ function stripAddonForDisplay(data) {
 }
 
 const addonData = getvar('addon_data');
-const addonUi = getvar('addon_ui') || {};
-const planeMerge = addonUi.位面交汇 === true;
+const worldMap = addonData && typeof addonData === 'object' ? addonData.世界 : null;
+const planeMerge = addonData && addonData.位面交汇 === true;
 const replicaKey = String(`{{replica:val}}`).trim();
-const isEmpty = !addonData || Object.keys(addonData || {}).length === 0;
+const isEmpty = !worldMap || Object.keys(worldMap || {}).length === 0;
 
 let primaryWorld = null;
 let otherWorlds = null;
 
 if (!isEmpty) {
-  const stripped = stripAddonForDisplay(addonData);
+  const stripped = stripAddonForDisplay(worldMap);
   if (stripped != null && typeof stripped === 'object' && !Array.isArray(stripped)) {
     if (planeMerge) {
       const others = {};

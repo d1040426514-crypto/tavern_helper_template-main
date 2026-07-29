@@ -31,16 +31,24 @@ export function pathExists(root: unknown, segments: string[]): boolean {
 }
 
 /**
- * 写操作前补全路径：世界必须已存在；中间缺失的 map 键补 `{}`；
- * 标量中间节点不可自愈。
+ * 写操作前补全路径：`/世界/{世界名}/...` 中世界名必须已存在；
+ * 中间缺失的 map 键补 `{}`；标量中间节点不可自愈。
  */
 export function ensurePathForWrite(root: Record<string, unknown>, segments: string[]): void {
   if (segments.length === 0) {
     throw new Error('不能对根路径执行该操作');
   }
 
-  const worldKey = segments[0]!;
-  if (!(worldKey in root)) {
+  if (segments[0] !== '世界' || segments.length < 2) {
+    throw new Error(`路径不存在: /${segments.join('/')}`);
+  }
+
+  const worlds = root['世界'];
+  if (!isObjectContainer(worlds)) {
+    throw new Error(`路径不存在: /${segments.join('/')}`);
+  }
+  const worldName = segments[1]!;
+  if (!(worldName in worlds)) {
     throw new Error(`路径不存在: /${segments.join('/')}`);
   }
 
@@ -52,7 +60,8 @@ export function ensurePathForWrite(root: Record<string, unknown>, segments: stri
     }
     const obj = current;
 
-    if (i > 0 && obj[seg] === undefined) {
+    // i=0 容器「世界」、i=1 世界名：均不可静默创建
+    if (i > 1 && obj[seg] === undefined) {
       obj[seg] = {};
     } else if (obj[seg] !== undefined && i < segments.length - 2 && !isObjectContainer(obj[seg])) {
       throw new Error(`路径不存在: /${segments.join('/')}`);

@@ -24,10 +24,13 @@ function test(name: string, fn: () => void): void {
 
 function baseWorld(): AddonData {
   return normalizeAddonData({
-    阿斯塔利亚: {
-      降临: true,
-      平行演化: false,
+    世界: {
+      阿斯塔利亚: {
+        降临: true,
+        平行演化: false,
+      },
     },
+    位面交汇: false,
   });
 }
 
@@ -43,41 +46,41 @@ function assertNormalizedValid(data: unknown): void {
 
 test('canonicalize 贸易政策缺层 inserts 贸易格局', () => {
   const { path } = canonicalizeJsonPointer('/阿斯塔利亚/世界经济简报/贸易政策/奥古斯提姆帝国');
-  assert.equal(path, '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国');
+  assert.equal(path, '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国');
 });
 
 test('canonicalize 主要商路缺层 inserts 贸易格局', () => {
   const { path } = canonicalizeJsonPointer('/阿斯塔利亚/世界经济简报/主要商路/环海航线/状态');
-  assert.equal(path, '/阿斯塔利亚/世界经济简报/贸易格局/主要商路/环海航线/状态');
+  assert.equal(path, '/世界/阿斯塔利亚/世界经济简报/贸易格局/主要商路/环海航线/状态');
 });
 
 test('canonicalize 流通货币缺层 inserts 货币与金融', () => {
   const { path } = canonicalizeJsonPointer('/阿斯塔利亚/世界经济简报/流通货币/兽盟币(BE)/汇率/本期');
-  assert.equal(path, '/阿斯塔利亚/世界经济简报/货币与金融/流通货币/兽盟币(BE)/汇率/本期');
+  assert.equal(path, '/世界/阿斯塔利亚/世界经济简报/货币与金融/流通货币/兽盟币(BE)/汇率/本期');
 });
 
 test('canonicalize 潜在时代演化缺层 inserts 世界时局演进动态', () => {
   const { path } = canonicalizeJsonPointer('/阿斯塔利亚/时代快讯/潜在时代演化/魔导工业萌芽/进度');
-  assert.equal(path, '/阿斯塔利亚/时代快讯/世界时局演进动态/潜在时代演化/魔导工业萌芽/进度');
+  assert.equal(path, '/世界/阿斯塔利亚/时代快讯/世界时局演进动态/潜在时代演化/魔导工业萌芽/进度');
 });
 
-test('canonicalize 已正确路径不变', () => {
+test('canonicalize 已正确路径仅补容器段', () => {
   const original = '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国';
   const { path, rewrites } = canonicalizeJsonPointer(original);
-  assert.equal(path, original);
-  assert.equal(rewrites.length, 0);
+  assert.equal(path, '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国');
+  assert.deepEqual(rewrites, ['补容器段 /世界']);
 });
 
 test('canonicalize 歧义固定段 状态 不补层', () => {
   const original = '/阿斯塔利亚/世界经济简报/状态';
   const { path, rewrites } = canonicalizeJsonPointer(original);
-  assert.equal(path, original);
-  assert.equal(rewrites.length, 0);
+  assert.equal(path, '/世界/阿斯塔利亚/世界经济简报/状态');
+  assert.deepEqual(rewrites, ['补容器段 /世界']);
 });
 
 test('canonicalize move from/to 均补层', () => {
   const base = baseWorld();
-  _.set(base, '阿斯塔利亚.世界经济简报.贸易格局.贸易政策.旧势力', '禁运');
+  _.set(base, '世界.阿斯塔利亚.世界经济简报.贸易格局.贸易政策.旧势力', '禁运');
   const { ops } = canonicalizePatchOps(
     [
       {
@@ -88,8 +91,8 @@ test('canonicalize move from/to 均补层', () => {
     ],
     base,
   );
-  assert.equal(ops[0]?.from, '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/旧势力');
-  assert.equal(ops[0]?.to, '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/新势力');
+  assert.equal(ops[0]?.from, '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/旧势力');
+  assert.equal(ops[0]?.to, '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/新势力');
 });
 
 test('e2e insert 贸易政策缺层 writes after normalize', () => {
@@ -103,9 +106,21 @@ test('e2e insert 贸易政策缺层 writes after normalize', () => {
   ]);
   assert.ok(!issues.some(i => i.message.includes('路径不存在')));
   const normalized = normalizeAddonData(data);
-  assert.equal(_.get(normalized, '阿斯塔利亚.世界经济简报.贸易格局.贸易政策.奥古斯提姆帝国'), '降低关税');
+  assert.equal(_.get(normalized, '世界.阿斯塔利亚.世界经济简报.贸易格局.贸易政策.奥古斯提姆帝国'), '降低关税');
   assertNormalizedValid(normalized);
-  assert.equal(verifyCanonicalWrites([{ op: 'insert', path: '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国', value: '降低关税' }], normalized).length, 0);
+  assert.equal(
+    verifyCanonicalWrites(
+      [
+        {
+          op: 'insert',
+          path: '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/奥古斯提姆帝国',
+          value: '降低关税',
+        },
+      ],
+      normalized,
+    ).length,
+    0,
+  );
 });
 
 test('e2e replace 流通货币缺层 writes nested field', () => {
@@ -119,7 +134,10 @@ test('e2e replace 流通货币缺层 writes nested field', () => {
   ]);
   assert.ok(!issues.some(i => i.message.includes('路径不存在')));
   const normalized = normalizeAddonData(data);
-  assert.equal(_.get(normalized, '阿斯塔利亚.世界经济简报.货币与金融.流通货币.兽盟币(BE).汇率.本期'), '1 BE = 1.20 AU');
+  assert.equal(
+    _.get(normalized, '世界.阿斯塔利亚.世界经济简报.货币与金融.流通货币.兽盟币(BE).汇率.本期'),
+    '1 BE = 1.20 AU',
+  );
   assertNormalizedValid(normalized);
 });
 
@@ -137,7 +155,7 @@ test('canonicalizePatchOps emits heal issue on rewrite', () => {
   assert.ok(heal);
   assert.equal(
     (heal!.op as { path: string }).path,
-    '/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/帝国',
+    '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/帝国',
   );
   assert.deepEqual(heal!.op, ops[0]);
 });

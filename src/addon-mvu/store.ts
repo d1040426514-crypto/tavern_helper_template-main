@@ -4,7 +4,6 @@ import { ensureAddonArchive, inheritAddonArchive } from './archive';
 import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
 import { stripInvalidStrictBooleans } from './schema';
 import { coerceAddonData } from './coerce';
-import { ensureAddonUi } from './ui-state';
 import { updateAddonFromMessage } from './update';
 import { ADDON_KEY, AddonData, AddonSchema, normalizeAddonData } from './schema';
 
@@ -83,8 +82,6 @@ export function inheritAddon(message_id: number): AddonData {
   const inherited = normalizeAddonData(previous);
   writeAddonData(message_id, inherited);
   inheritAddonArchive(message_id);
-  // 已有 addon_ui（含主题）则保留，避免 processFloor/重新处理覆盖用户主题
-  ensureAddonUi(message_id);
   return inherited;
 }
 
@@ -144,7 +141,6 @@ export function backfillChatAddonData(): void {
       inheritAddon(message_id);
     } else {
       ensureAddonArchive(message_id);
-      ensureAddonUi(message_id);
     }
   }
 }

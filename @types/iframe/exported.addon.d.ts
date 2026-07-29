@@ -241,7 +241,10 @@ declare namespace Addon {
     };
   };
 
-  type AddonData = Record<string, 世界条目>;
+  type AddonData = {
+    世界?: Record<string, 世界条目>;
+    位面交汇?: boolean;
+  };
 
   type AddonWrapper = {
     addon_data: AddonData;

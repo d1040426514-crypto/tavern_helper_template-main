@@ -6,6 +6,7 @@ import { ensureVueFeatureFlags } from '@util/vue-feature-flags';
 import ConsoleApp from '../addon-console/App.vue';
 import { AddonEvent } from './events';
 import { getAddonData, hasChatMessages } from './store';
+import { getWorldMap } from './schema';
 
 const FAB_ID = 'addon-console-fab';
 const SHELL_ID = 'addon-console-shell';
@@ -830,7 +831,7 @@ function exposeHostApi(): void {
   }
 }
 
-/** 打开面板时读一次最新 addon_data / addon_ui（关闭后 Vue 仍挂载，需主动刷） */
+/** 打开面板时读一次最新 addon_data（关闭后 Vue 仍挂载，需主动刷） */
 function requestConsoleRefresh(): void {
   // Vue 挂在脚本 window（常为 iframe），勿只查 hostWin/父页
   try {
@@ -886,7 +887,7 @@ function countWorlds(): number {
     if (!hasChatMessages()) return 0;
     const message_id = getLastMessageId();
     const data = getAddonData(message_id);
-    return Object.keys(data ?? {}).length;
+    return Object.keys(getWorldMap(data)).length;
   } catch {
     return 0;
   }

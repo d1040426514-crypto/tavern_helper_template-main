@@ -8,6 +8,7 @@ import {
   extractAddonJsonPatchOpsWithIssues,
   parseJsonPatchOpsWithIssues,
 } from './patch';
+import { canonicalizePatchOps } from './patch-canonicalize';
 import { normalizeAddonData, type AddonData } from './schema';
 
 function test(name: string, fn: () => void): void {
@@ -22,12 +23,20 @@ function test(name: string, fn: () => void): void {
 
 function baseWorld(): AddonData {
   return normalizeAddonData({
-    阿斯塔利亚: {
-      降临: true,
-      平行演化: false,
-      刊报日期: '旧',
+    世界: {
+      阿斯塔利亚: {
+        降临: true,
+        平行演化: false,
+        刊报日期: '旧',
+      },
     },
+    位面交汇: false,
   });
+}
+
+function applyParsedOps(base: AddonData, ops: Parameters<typeof applyMvuLikePatch>[1]) {
+  const { ops: canonOps } = canonicalizePatchOps(ops, base);
+  return applyMvuLikePatch(_.cloneDeep(base) as Record<string, unknown>, canonOps);
 }
 
 test('parseJsonPatchOpsWithIssues: valid array unchanged', () => {
@@ -72,9 +81,9 @@ test('extractAddonJsonPatchOpsWithIssues: heals missing braces in XML patch', ()
   assert.equal((healWithOp[0]!.op as { path: string }).path, '/阿斯塔利亚/x');
   assert.equal(failedFragments.length, 0);
 
-  const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
-  assert.equal(_.get(data, '阿斯塔利亚.刊报日期'), 'd2');
-  assert.deepEqual(_.get(data, '阿斯塔利亚.x'), { a: 1 });
+  const { data } = applyParsedOps(baseWorld(), ops);
+  assert.equal(_.get(data, '世界.阿斯塔利亚.刊报日期'), 'd2');
+  assert.deepEqual(_.get(data, '世界.阿斯塔利亚.x'), { a: 1 });
 });
 
 test('all ops with only missing braces heal successfully', () => {
@@ -129,7 +138,10 @@ test('healed deep insert (multiple missing braces) applies', () => {
   assert.equal(healWithOp.length, 1);
   assert.equal((healWithOp[0]!.op as { path: string }).path, '/阿斯塔利亚/传闻/珍珠湾夜影');
   assert.equal(failedFragments.length, 0);
-  const { data } = applyMvuLikePatch(_.cloneDeep(baseWorld()) as Record<string, unknown>, ops);
-  assert.equal(_.get(data, '阿斯塔利亚.刊报日期'), '新日');
-  assert.equal(_.get(data, '阿斯塔利亚.传闻.珍珠湾夜影.影响力'), '街头巷议');
+  const { data } = applyParsedOps(baseWorld(), ops);
+  assert.equal(_.get(data, '世界.阿斯塔利亚.刊报日期'), '新日');
+  assert.equal(
+    _.get(data, '世界.阿斯塔利亚.世界剧情态势.时局动态.传闻.珍珠湾夜影.影响力'),
+    '街头巷议',
+  );
 });

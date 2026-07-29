@@ -5,7 +5,7 @@
       <div class="ac-row">
         <div>
           <div class="ac-label">启用位面交汇</div>
-          <div class="ac-muted">默认关闭；仅写入 addon_ui，不对 AI 可见</div>
+          <div class="ac-muted">默认关闭；写入 addon_data.位面交汇，不对 AI 可见</div>
         </div>
         <ToggleSwitch :model-value="value" @update:model-value="emit('update:value', $event)" />
       </div>

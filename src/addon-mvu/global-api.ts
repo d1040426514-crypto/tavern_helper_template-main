@@ -19,16 +19,21 @@ import {
   resolveMessageId,
   writeAddonData,
 } from './store';
-import { stripAddonHiddenFieldsForDisplay } from './display';
 import { clearPatchLog, getLastPatchLog } from './patch-log';
 import { refreshNarrativeGuidanceDetails } from './narrative-guidance';
 import type { MvuJsonPatchOp } from './patch';
 import { syncReplicaLaunched } from './replica-sync';
 import { AddonData, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
-import { getAddonUi, writeAddonUi, type AddonUiState, type AddonUiTheme } from './ui-state';
+import { getConsoleTheme, setConsoleTheme, type AddonConsoleTheme } from './script-ui-settings';
+import { toDisplayAddonData } from './display';
 import { applyOpsToFloor, wrapAddonData, AddonWrapper } from './update';
 
 type AddonMessageOption = Extract<VariableOption, { type: 'message' }>;
+
+export type AddonUiState = {
+  位面交汇: boolean;
+  theme: AddonConsoleTheme;
+};
 
 function resolveAddonMessageId(option: AddonMessageOption): number {
   return resolveMessageId(option.message_id);
@@ -36,6 +41,15 @@ function resolveAddonMessageId(option: AddonMessageOption): number {
 
 function requireFloorData(message_id: number): AddonData {
   return getAddonDataFromStore(message_id) ?? ensureAddonData(message_id);
+}
+
+function buildUiState(message_id: number | null): AddonUiState {
+  const theme = getConsoleTheme();
+  if (message_id == null || !hasChatMessages()) {
+    return { 位面交汇: false, theme };
+  }
+  const data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
+  return { 位面交汇: data.位面交汇 === true, theme };
 }
 
 export const Addon = {
@@ -50,14 +64,14 @@ export const Addon = {
     return wrapAddonData(addon_data);
   },
 
-  /** 供提示词/世界书使用的 addon 快照 */
+  /** 供提示词/世界书使用的 addon 快照（已 strip 隐藏字段，不再二次 parse） */
   getDisplayAddonData(options: AddonMessageOption): AddonWrapper {
     if (!hasChatMessages()) {
       return wrapAddonData(DEFAULT_ADDON_DATA);
     }
     const message_id = resolveAddonMessageId(options);
     const addon_data = getAddonDataFromStore(message_id) ?? DEFAULT_ADDON_DATA;
-    return wrapAddonData(normalizeAddonData(stripAddonHiddenFieldsForDisplay(addon_data)) as AddonData);
+    return wrapAddonData(toDisplayAddonData(addon_data) as AddonData);
   },
 
   replaceAddonData(data: AddonWrapper, options: AddonMessageOption): void {
@@ -128,23 +142,33 @@ export const Addon = {
 
   getUiState(options: AddonMessageOption = { type: 'message', message_id: 'latest' }): AddonUiState {
     if (!hasChatMessages()) {
-      return { 位面交汇: false, theme: 'light' };
+      return buildUiState(null);
     }
-    return getAddonUi(resolveAddonMessageId(options));
+    return buildUiState(resolveAddonMessageId(options));
   },
 
   setUiState(patch: Partial<AddonUiState>, options: AddonMessageOption = { type: 'message', message_id: 'latest' }): AddonUiState {
+    if (patch.theme === 'dark' || patch.theme === 'light') {
+      setConsoleTheme(patch.theme);
+    }
     if (!hasChatMessages()) {
-      return { 位面交汇: false, theme: 'light', ...patch };
+      return { 位面交汇: patch.位面交汇 === true, theme: getConsoleTheme() };
     }
     const message_id = resolveAddonMessageId(options);
-    const next = { ...getAddonUi(message_id), ...patch };
-    writeAddonUi(message_id, next);
-    return next;
+    if (typeof patch.位面交汇 === 'boolean') {
+      const data = _.cloneDeep(requireFloorData(message_id));
+      data.位面交汇 = patch.位面交汇;
+      writeAddonData(message_id, normalizeAddonData(data));
+    }
+    return buildUiState(message_id);
   },
 
-  setTheme(theme: AddonUiTheme, options?: AddonMessageOption): AddonUiState {
-    return Addon.setUiState({ theme }, options ?? { type: 'message', message_id: 'latest' });
+  setTheme(theme: AddonConsoleTheme, _options?: AddonMessageOption): AddonUiState {
+    setConsoleTheme(theme);
+    if (!hasChatMessages()) {
+      return { 位面交汇: false, theme: getConsoleTheme() };
+    }
+    return buildUiState(getLastMessageId());
   },
 
   setPlaneMerge(value: boolean, options?: AddonMessageOption): AddonUiState {

@@ -7,10 +7,10 @@ import { Addon } from './global-api';
 import { backfillChatAddonData, processFloor } from './store';
 
 export { randomMinorTitle, refreshNarrativeGuidanceDetails } from './narrative-guidance';
-export { ADDON_HIDDEN_FROM_PROMPT_KEYS, stripAddonHiddenFieldsForDisplay } from './display';
-export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA, normalizeAddonData } from './schema';
+export { ADDON_HIDDEN_FROM_PROMPT_KEYS, stripAddonHiddenFieldsForDisplay, toDisplayAddonData } from './display';
+export { ADDON_KEY, AddonSchema, DEFAULT_ADDON_DATA, getWorldMap, normalizeAddonData } from './schema';
 export { coerceAddonData, LOOSE_NUMERIC_STRING_KEYS, STRICT_BOOLEAN_KEYS } from './coerce';
-export type { AddonData } from './schema';
+export type { AddonData, WorldEntry } from './schema';
 export { AddonEvent } from './events';
 export {
   applyMvuLikePatch,
@@ -25,6 +25,7 @@ export type { AddonUpdateResult, AddonUpdateOptions, AddonWrapper } from './upda
 export { getLastPatchLog, clearPatchLog, setLastPatchLog, createPatchLogEntry, mergePatchLogAfterManualApply } from './patch-log';
 export type { AddonPatchLogEntry, AddonPatchFailedFragment } from './patch-log';
 export { Addon } from './global-api';
+export type { AddonUiState } from './global-api';
 export {
   applyAddonUpdateFromMessage,
   backfillChatAddonData,
@@ -40,7 +41,8 @@ export {
   writeAddonData,
 } from './store';
 export { getAddonArchive, writeAddonArchive, normalizeAddonArchive, ADDON_ARCHIVE_KEY } from './archive';
-export { getAddonUi, writeAddonUi, normalizeAddonUi, ADDON_UI_KEY } from './ui-state';
+export { getConsoleTheme, setConsoleTheme, ADDON_CONSOLE_THEME_KEY } from './script-ui-settings';
+export type { AddonConsoleTheme } from './script-ui-settings';
 export {
   activateSingularity,
   deactivateSingularity,
@@ -101,7 +103,7 @@ function initAddonMvu(): void {
     errorCatched(teardownAddonConsoleHostOnUnload)();
   });
 
-  console.info('[addon-mvu] 已加载: addon_data / archive / ui、控制台悬浮球与 Addon API 已启用');
+  console.info('[addon-mvu] 已加载: addon_data / archive、控制台悬浮球与 Addon API 已启用');
 }
 
 $(async () => {

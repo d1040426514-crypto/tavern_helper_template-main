@@ -1,5 +1,5 @@
 import type { AddonData } from './schema';
-import { normalizeAddonData } from './schema';
+import { getWorldMap, normalizeAddonData } from './schema';
 import {
   getAddonArchive,
   makeSingularityKey,
@@ -28,7 +28,7 @@ export type ControlResult = {
 };
 
 function ensureWorld(data: AddonData, world: string): void {
-  if (!(world in data)) {
+  if (!(world in getWorldMap(data))) {
     throw new Error(`世界不存在: ${world}`);
   }
 }
@@ -50,7 +50,6 @@ export function activateSingularity(data: AddonData, archive: AddonArchive, worl
     }
   }
 
-  // 在改写降临之前拍快照（当前树）
   nextArchive.snapshots[key] = _.cloneDeep(nextData);
   clearAllSingularityDescents(nextData, { world, name });
   setSingularityFlag(nextData, world, name, true);
@@ -70,7 +69,6 @@ export function deactivateSingularity(data: AddonData, archive: AddonArchive, wo
     const snap = nextArchive.snapshots[key];
     if (snap) {
       nextData = _.cloneDeep(snap);
-      // 还原后确保该特异点为关闭
       setSingularityFlag(nextData, world, name, false);
     } else {
       warnings.push(`缺少特异点快照，仅关闭降临旗标: ${key}`);
@@ -107,13 +105,11 @@ export function reconcileSingularityAfterPatch(
 
   const activated = findNewlyActivatedSingularity(oldData, data);
   if (activated) {
-    // 激活应基于「patch 应用后、互斥改写前」的树；若刚做过 deactivate，用当前 data
     const result = activateSingularity(data, nextArchive, activated.world, activated.name);
     data = result.data;
     nextArchive = result.archive;
     warnings.push(...result.warnings);
   } else if (!deactivated) {
-    // 无激活/关闭时仍强制互斥：若多个 true，只保留 activeKey 或第一个
     const ons = listTrueSingularities(data);
     if (ons.length > 1) {
       const keep = nextArchive.activeKey
@@ -135,7 +131,7 @@ export function reconcileSingularityAfterPatch(
 
 function listTrueSingularities(data: AddonData): { world: string; name: string }[] {
   const out: { world: string; name: string }[] = [];
-  for (const [world, entry] of Object.entries(data)) {
+  for (const [world, entry] of Object.entries(getWorldMap(data))) {
     const map = _.get(entry, '时代快讯.岁月史书.特异点') as Record<string, { 降临?: boolean }> | undefined;
     if (!map) continue;
     for (const [name, item] of Object.entries(map)) {
@@ -149,11 +145,11 @@ export function setWorldDescent(data: AddonData, world: string, value: boolean):
   ensureWorld(data, world);
   const next = _.cloneDeep(data);
   if (value) {
-    for (const name of Object.keys(next)) {
-      _.set(next, `${name}.降临`, name === world);
+    for (const name of Object.keys(getWorldMap(next))) {
+      _.set(next, `世界.${name}.降临`, name === world);
     }
   } else {
-    _.set(next, `${world}.降临`, false);
+    _.set(next, `世界.${world}.降临`, false);
   }
   return normalizeAddonData(next);
 }
@@ -161,15 +157,18 @@ export function setWorldDescent(data: AddonData, world: string, value: boolean):
 export function setWorldParallel(data: AddonData, world: string, value: boolean): AddonData {
   ensureWorld(data, world);
   const next = _.cloneDeep(data);
-  _.set(next, `${world}.平行演化`, value);
+  _.set(next, `世界.${world}.平行演化`, value);
   return normalizeAddonData(next);
 }
 
 export function createWorld(data: AddonData, name: string): AddonData {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('世界名不能为空');
-  if (trimmed in data) throw new Error(`世界已存在: ${trimmed}`);
-  return normalizeAddonData({ ...data, [trimmed]: {} });
+  if (trimmed in getWorldMap(data)) throw new Error(`世界已存在: ${trimmed}`);
+  return normalizeAddonData({
+    ...data,
+    世界: { ...getWorldMap(data), [trimmed]: {} },
+  });
 }
 
 export function renameWorld(
@@ -181,13 +180,14 @@ export function renameWorld(
   const nextOld = oldName.trim();
   const nextNew = newName.trim();
   if (!nextOld || !nextNew) throw new Error('世界名不能为空');
-  if (!(nextOld in data)) throw new Error(`世界不存在: ${nextOld}`);
-  if (nextNew !== nextOld && nextNew in data) throw new Error(`世界已存在: ${nextNew}`);
+  const worlds = getWorldMap(data);
+  if (!(nextOld in worlds)) throw new Error(`世界不存在: ${nextOld}`);
+  if (nextNew !== nextOld && nextNew in worlds) throw new Error(`世界已存在: ${nextNew}`);
 
   const nextData = _.cloneDeep(data);
   if (nextNew !== nextOld) {
-    nextData[nextNew] = nextData[nextOld]!;
-    delete nextData[nextOld];
+    nextData.世界[nextNew] = nextData.世界[nextOld]!;
+    delete nextData.世界[nextOld];
   }
   const nextArchive = nextNew === nextOld ? _.cloneDeep(archive) : remapArchiveWorldKeys(archive, nextOld, nextNew);
   return { data: normalizeAddonData(nextData), archive: nextArchive, warnings: [] };
@@ -196,10 +196,10 @@ export function renameWorld(
 export function deleteWorld(data: AddonData, archive: AddonArchive, name: string): ControlResult {
   const trimmed = name.trim();
   if (!trimmed) throw new Error('世界名不能为空');
-  if (!(trimmed in data)) throw new Error(`世界不存在: ${trimmed}`);
+  if (!(trimmed in getWorldMap(data))) throw new Error(`世界不存在: ${trimmed}`);
 
   const nextData = _.cloneDeep(data);
-  delete nextData[trimmed];
+  delete nextData.世界[trimmed];
   const nextArchive = removeArchiveWorldKeys(archive, trimmed);
   return { data: normalizeAddonData(nextData), archive: nextArchive, warnings: [] };
 }
@@ -266,7 +266,7 @@ export async function applyCreateWorld(
   const archive = getAddonArchive(message_id);
   writeData(message_id, data);
   writeAddonArchive(message_id, archive);
-  const world = data[name.trim()];
+  const world = getWorldMap(data)[name.trim()];
   const launched = world?.降临 === true || world?.平行演化 === true;
   const ensureWarnings = await ensureWorldReplicaMember(name.trim(), launched);
   const syncWarnings = await syncReplicaLaunched(data);

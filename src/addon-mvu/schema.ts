@@ -421,19 +421,31 @@ export function stripInvalidStrictBooleans(value: unknown): unknown {
  * addon 变量结构 (对齐 MVU stat_data 的 zod 用法).
  * 修改固定段结构时须同步 patch-path-index.ts
  *
- * - 根即为世界 map: addon_data[世界名] = 世界条目
+ * - 根形: { 世界: { [世界名]: 世界条目 }, 位面交汇: boolean }
+ * - AI patch 仍写 /世界名/...，运行时补 /世界 前缀
  * - 字符串占位选项: 宽松 z.string().prefault(''), 约束写在世界书变量更新规则
  * - 布尔字段: 严格 z.boolean().prefault(false)
  * - 构建时自动生成 `schema.json` (export 名 `Schema` 供 dump_schema 使用)
  */
-export const AddonSchema = z.record(z.string(), 世界条目Schema).prefault({});
+export const AddonSchema = z
+  .object({
+    世界: z.record(z.string(), 世界条目Schema).prefault({}),
+    位面交汇: strictBoolean,
+  })
+  .prefault({});
 
 /** 与 MVU 角色卡一致, 供 dump_schema 生成 schema.json */
 export const Schema = AddonSchema;
 
 export type AddonData = z.infer<typeof AddonSchema>;
+export type WorldEntry = z.infer<typeof 世界条目Schema>;
 
 export const DEFAULT_ADDON_DATA: AddonData = AddonSchema.parse({});
+
+/** 取世界 map（永不返回 undefined） */
+export function getWorldMap(data: AddonData | null | undefined): Record<string, WorldEntry> {
+  return data?.世界 ?? {};
+}
 
 /** 预处理非法布尔 + 字段 coerce + prefault 补全完整结构 */
 export function normalizeAddonData(raw?: unknown): AddonData {

@@ -1,5 +1,5 @@
 /** 需严格校验的布尔字段名 (深度遍历时剔除非法值 / coerce 字符串布尔) */
-export const STRICT_BOOLEAN_KEYS = new Set(['降临', '平行演化', '原典', '临界事件']);
+export const STRICT_BOOLEAN_KEYS = new Set(['降临', '平行演化', '原典', '临界事件', '位面交汇']);
 
 /** schema 中应为字符串的数值型字段 */
 export const LOOSE_NUMERIC_STRING_KEYS = new Set([

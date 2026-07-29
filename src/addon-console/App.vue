@@ -183,7 +183,7 @@ function closeHost() {
 }
 
 function applyResult(result: { data: Record<string, any>; warnings?: string[] }, preferWorld?: string) {
-  worlds.value = result.data ?? {};
+  worlds.value = result.data?.世界 ?? {};
   warnings.value = result.warnings ?? [];
   const names = Object.keys(worlds.value);
   if (preferWorld && names.includes(preferWorld)) {
@@ -197,7 +197,7 @@ async function reload() {
   if (!api) return;
   try {
     const { addon_data } = api.getAddonData(latestOpts());
-    worlds.value = addon_data ?? {};
+    worlds.value = addon_data?.世界 ?? {};
     const ui = api.getUiState(latestOpts());
     theme.value = ui.theme === 'dark' ? 'dark' : 'light';
     planeMerge.value = ui.位面交汇 === true;

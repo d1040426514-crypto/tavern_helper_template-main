@@ -67,10 +67,7 @@ function ensureStructuredOutputRules(task: PostProcessTask): NonNullable<PostPro
   return task.structuredOutputRules;
 }
 
-export function resolveStructuredOutputRulesContent(
-  task: PostProcessTask,
-  mode: ActiveStructuredOutputMode,
-): string {
+export function resolveStructuredOutputRulesContent(task: PostProcessTask, mode: ActiveStructuredOutputMode): string {
   const rules = task.structuredOutputRules;
   if (mode === 'mvu_json_patch') {
     const cached = rules?.mvu?.trim();
@@ -108,8 +105,7 @@ export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: Str
   removeAutoPromptGroups(task);
   if (mode === 'off') return;
 
-  const name =
-    mode === 'mvu_json_patch' ? MVU_JSON_PATCH_PROMPT_GROUP_NAME : ADDON_JSON_PATCH_PROMPT_GROUP_NAME;
+  const name = mode === 'mvu_json_patch' ? MVU_JSON_PATCH_PROMPT_GROUP_NAME : ADDON_JSON_PATCH_PROMPT_GROUP_NAME;
   const content = resolveStructuredOutputRulesContent(task, mode);
   const group = {
     name,
@@ -118,7 +114,6 @@ export function syncStructuredOutputPromptGroup(task: PostProcessTask, mode: Str
     enabled: true,
   };
   // 已存在时插回原位，避免手动排序后被 push 到末尾
-  const insertAt =
-    existingIndex >= 0 ? Math.min(existingIndex, task.promptGroups.length) : task.promptGroups.length;
+  const insertAt = existingIndex >= 0 ? Math.min(existingIndex, task.promptGroups.length) : task.promptGroups.length;
   task.promptGroups.splice(insertAt, 0, group);
 }
