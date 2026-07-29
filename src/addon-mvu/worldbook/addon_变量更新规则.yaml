@@ -671,6 +671,3 @@ WorldPaper_Update_Rules:
             - 经济/社会/政治等
         当前态势:
           format: 酝酿 | 推进中 | 趋稳 | 消退 | 转折等
-        check:
-          - 事件结束或影响消退后 remove
-          - 活跃经济事件上限不超过 5 个
