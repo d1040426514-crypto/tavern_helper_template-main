@@ -1,7 +1,17 @@
 <template>
-  <div class="npc-card" :class="{ 'npc-card--empty': npc.empty }">
-    <!-- 顶栏：头像 + 名字 | 声誉 | 资金 -->
-    <div class="npc-card-top">
+  <div
+    class="npc-card"
+    :class="{ 'npc-card--empty': npc.empty, 'npc-card--open': expanded }"
+  >
+    <!-- 顶栏：可点击折叠；头像 + 名字 | 声誉 | 资金 | 箭头 -->
+    <button
+      type="button"
+      class="npc-card-top"
+      :class="{ 'npc-card-top--static': !hasBody }"
+      :aria-expanded="hasBody ? expanded : undefined"
+      :disabled="!hasBody"
+      @click="toggleExpanded"
+    >
       <div class="npc-avatar" aria-hidden="true">🌟</div>
       <div class="npc-name">
         <span class="npc-name-icon">💠</span>
@@ -16,177 +26,185 @@
         {{ wealthEmoji }} {{ npc.wealth }}
       </span>
       <span v-else-if="npc.empty" class="npc-wealth-tag wealth-balanced">暂无行动数据</span>
-    </div>
+      <span
+        v-if="hasBody"
+        class="npc-card-caret"
+        :class="{ 'npc-card-caret--open': expanded }"
+        aria-hidden="true"
+      >▾</span>
+    </button>
 
-    <!-- 行为链紧贴名字下方 -->
-    <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
-      <div class="chain-label">⚡ 行为链</div>
-      <div class="chain-flow">
-        <template v-for="(step, i) in npc.actionChain" :key="'a' + i">
-          <span v-if="i > 0" class="chain-arrow">→</span>
-          <span class="chain-step">{{ step }}</span>
-        </template>
-        <template v-if="npc.predict">
-          <span class="chain-arrow">→</span>
-          <span class="chain-predict">后续: {{ npc.predict }}</span>
-        </template>
-        <span v-if="npc.debutReady" class="chain-debut-tag">⚡准备登场</span>
-      </div>
-    </div>
-
-    <!-- 当前状态：标签在上、内容在下的信息格；「正在做」可通栏 -->
-    <section v-if="statusCells.length" class="npc-section">
-      <header class="npc-section-head">📍 当前状态</header>
-      <div class="npc-status-grid" :class="{ 'has-doing': !!doingCell }">
-        <div v-for="cell in statusMainCells" :key="cell.label" class="npc-status-cell">
-          <div class="npc-status-k">{{ cell.label }}</div>
-          <div class="npc-status-v">{{ cell.value }}</div>
-        </div>
-        <div v-if="doingCell" class="npc-status-cell npc-status-cell--doing">
-          <div class="npc-status-k">{{ doingCell.label }}</div>
-          <div class="npc-status-v">{{ doingCell.value }}</div>
+    <div v-show="expanded && hasBody" class="npc-card-body">
+      <!-- 行为链紧贴名字下方 -->
+      <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
+        <div class="chain-label">⚡ 行为链</div>
+        <div class="chain-flow">
+          <template v-for="(step, i) in npc.actionChain" :key="'a' + i">
+            <span v-if="i > 0" class="chain-arrow">→</span>
+            <span class="chain-step">{{ step }}</span>
+          </template>
+          <template v-if="npc.predict">
+            <span class="chain-arrow">→</span>
+            <span class="chain-predict">后续: {{ npc.predict }}</span>
+          </template>
+          <span v-if="npc.debutReady" class="chain-debut-tag">⚡准备登场</span>
         </div>
       </div>
-    </section>
 
-    <!-- 社交 / 背景：并排双卡，窄屏堆叠 -->
-    <div v-if="npc.socialNetwork.length || showBackgroundCard" class="npc-duo">
-      <article v-if="npc.socialNetwork.length" class="npc-subcard">
-        <header class="npc-subcard-head">🤝 社交网络</header>
-        <div class="npc-subcard-body">
-          <div v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi" class="npc-social-row">
-            <span class="npc-social-cat">{{ g.category }}</span>
-            <div class="npc-social-people">
-              <div v-for="(p, pi) in g.people" :key="'p' + gi + '-' + pi" class="npc-person">
-                <span class="npc-person-name">{{ p.name }}</span>
-                <span v-if="p.note" class="npc-person-note">{{ p.note }}</span>
+      <!-- 当前状态：标签在上、内容在下的信息格；「正在做」可通栏 -->
+      <section v-if="statusCells.length" class="npc-section">
+        <header class="npc-section-head">📍 当前状态</header>
+        <div class="npc-status-grid" :class="{ 'has-doing': !!doingCell }">
+          <div v-for="cell in statusMainCells" :key="cell.label" class="npc-status-cell">
+            <div class="npc-status-k">{{ cell.label }}</div>
+            <div class="npc-status-v">{{ cell.value }}</div>
+          </div>
+          <div v-if="doingCell" class="npc-status-cell npc-status-cell--doing">
+            <div class="npc-status-k">{{ doingCell.label }}</div>
+            <div class="npc-status-v">{{ doingCell.value }}</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 社交 / 背景：并排双卡，窄屏堆叠 -->
+      <div v-if="npc.socialNetwork.length || showBackgroundCard" class="npc-duo">
+        <article v-if="npc.socialNetwork.length" class="npc-subcard">
+          <header class="npc-subcard-head">🤝 社交网络</header>
+          <div class="npc-subcard-body">
+            <div v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi" class="npc-social-row">
+              <span class="npc-social-cat">{{ g.category }}</span>
+              <div class="npc-social-people">
+                <div v-for="(p, pi) in g.people" :key="'p' + gi + '-' + pi" class="npc-person">
+                  <span class="npc-person-name">{{ p.name }}</span>
+                  <span v-if="p.note" class="npc-person-note">{{ p.note }}</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </article>
+        </article>
 
-      <article v-if="showBackgroundCard" class="npc-subcard">
-        <header class="npc-subcard-head">🔗 背景关联</header>
-        <div class="npc-subcard-body npc-bg-rows">
-          <div v-for="row in backgroundRows" :key="row.key" class="npc-bg-row">
-            <span class="npc-bg-key">{{ row.label }}</span>
-            <span class="npc-bg-val" :class="{ muted: row.empty }">{{ row.value }}</span>
+        <article v-if="showBackgroundCard" class="npc-subcard">
+          <header class="npc-subcard-head">🔗 背景关联</header>
+          <div class="npc-subcard-body npc-bg-rows">
+            <div v-for="row in backgroundRows" :key="row.key" class="npc-bg-row">
+              <span class="npc-bg-key">{{ row.label }}</span>
+              <span class="npc-bg-val" :class="{ muted: row.empty }">{{ row.value }}</span>
+            </div>
           </div>
-        </div>
-      </article>
-    </div>
+        </article>
+      </div>
 
-    <!-- 长期目标 / 近期打算：并排双卡；近期按 事件|行为|时段 拆行 -->
-    <div v-if="npc.longGoal || npc.nearPlan.length" class="npc-duo">
-      <article v-if="npc.longGoal" class="npc-subcard">
-        <header class="npc-subcard-head">🎯 长期目标</header>
-        <p class="npc-goal-text">{{ npc.longGoal }}</p>
-      </article>
-      <article v-if="npc.nearPlan.length" class="npc-subcard">
-        <header class="npc-subcard-head">📅 近期打算</header>
-        <div class="npc-subcard-body npc-bg-rows">
-          <div v-for="row in nearPlanRows" :key="row.key" class="npc-bg-row">
-            <span class="npc-bg-key">{{ row.label }}</span>
-            <span class="npc-bg-val">{{ row.value }}</span>
+      <!-- 长期目标 / 近期打算：并排双卡；近期按 事件|行为|时段 拆行 -->
+      <div v-if="npc.longGoal || npc.nearPlan.length" class="npc-duo">
+        <article v-if="npc.longGoal" class="npc-subcard">
+          <header class="npc-subcard-head">🎯 长期目标</header>
+          <p class="npc-goal-text">{{ npc.longGoal }}</p>
+        </article>
+        <article v-if="npc.nearPlan.length" class="npc-subcard">
+          <header class="npc-subcard-head">📅 近期打算</header>
+          <div class="npc-subcard-body npc-bg-rows">
+            <div v-for="row in nearPlanRows" :key="row.key" class="npc-bg-row">
+              <span class="npc-bg-key">{{ row.label }}</span>
+              <span class="npc-bg-val">{{ row.value }}</span>
+            </div>
           </div>
+        </article>
+      </div>
+
+      <!-- 可选任务：进行中 + 归档 -->
+      <section
+        v-if="npc.questLogs.length || npc.questArchive.length"
+        class="npc-section npc-quest-section"
+      >
+        <header class="npc-section-head">
+          📋 任务
+          <span class="npc-quest-count">{{ questSectionCount }}</span>
+        </header>
+
+        <div v-if="npc.questLogs.length" class="npc-quest-logs">
+          <article
+            v-for="(log, li) in npc.questLogs"
+            :key="'qlog' + li"
+            class="npc-subcard npc-quest-card"
+          >
+            <div class="npc-quest-card-top">
+              <span class="npc-quest-kind" :class="questKindClass(log.kind)">{{ log.kind || '任务' }}</span>
+              <span class="npc-quest-title">{{ log.title }}</span>
+            </div>
+            <p v-if="log.summary" class="npc-quest-summary">{{ log.summary }}</p>
+            <ul v-if="log.items.length" class="npc-quest-items">
+              <li
+                v-for="(item, ii) in log.items"
+                :key="'qi' + li + '-' + ii"
+                class="npc-quest-item"
+                :class="'npc-quest-item--' + item.status"
+              >
+                <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(item.status) }}</span>
+                <span class="npc-quest-item-text">{{ item.text }}</span>
+                <ul v-if="item.children.length" class="npc-quest-children">
+                  <li
+                    v-for="(child, ci) in item.children"
+                    :key="'qc' + li + '-' + ii + '-' + ci"
+                    class="npc-quest-item npc-quest-item--child"
+                    :class="'npc-quest-item--' + child.status"
+                  >
+                    <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(child.status) }}</span>
+                    <span class="npc-quest-item-text">{{ child.text }}</span>
+                  </li>
+                </ul>
+              </li>
+            </ul>
+            <div v-if="log.climax" class="npc-quest-climax">
+              <span class="npc-quest-climax-label">收束</span>
+              <span class="npc-quest-climax-text">{{ log.climax }}</span>
+            </div>
+          </article>
         </div>
-      </article>
-    </div>
 
-    <!-- 可选任务：进行中 + 归档 -->
-    <section
-      v-if="npc.questLogs.length || npc.questArchive.length"
-      class="npc-section npc-quest-section"
-    >
-      <header class="npc-section-head">
-        📋 任务
-        <span class="npc-quest-count">{{ questSectionCount }}</span>
-      </header>
-
-      <div v-if="npc.questLogs.length" class="npc-quest-logs">
-        <article
-          v-for="(log, li) in npc.questLogs"
-          :key="'qlog' + li"
-          class="npc-subcard npc-quest-card"
-        >
-          <div class="npc-quest-card-top">
-            <span class="npc-quest-kind" :class="questKindClass(log.kind)">{{ log.kind || '任务' }}</span>
-            <span class="npc-quest-title">{{ log.title }}</span>
-          </div>
-          <p v-if="log.summary" class="npc-quest-summary">{{ log.summary }}</p>
-          <ul v-if="log.items.length" class="npc-quest-items">
+        <div v-if="npc.questArchive.length" class="npc-quest-archive">
+          <header class="npc-quest-archive-head">归档</header>
+          <ul class="npc-quest-archive-list">
             <li
-              v-for="(item, ii) in log.items"
-              :key="'qi' + li + '-' + ii"
-              class="npc-quest-item"
-              :class="'npc-quest-item--' + item.status"
+              v-for="(entry, ai) in npc.questArchive"
+              :key="'qarch' + ai"
+              class="npc-quest-archive-row"
             >
-              <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(item.status) }}</span>
-              <span class="npc-quest-item-text">{{ item.text }}</span>
-              <ul v-if="item.children.length" class="npc-quest-children">
-                <li
-                  v-for="(child, ci) in item.children"
-                  :key="'qc' + li + '-' + ii + '-' + ci"
-                  class="npc-quest-item npc-quest-item--child"
-                  :class="'npc-quest-item--' + child.status"
-                >
-                  <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(child.status) }}</span>
-                  <span class="npc-quest-item-text">{{ child.text }}</span>
-                </li>
-              </ul>
+              <span class="npc-quest-kind npc-quest-kind--archive" :class="questKindClass(entry.kind)">
+                {{ entry.kind }}
+              </span>
+              <span class="npc-quest-archive-title">{{ entry.title }}</span>
+              <span v-if="entry.completedAt" class="npc-quest-archive-date">{{ entry.completedAt }}</span>
+              <span v-if="entry.ending" class="npc-quest-archive-ending">{{ entry.ending }}</span>
             </li>
           </ul>
-          <div v-if="log.climax" class="npc-quest-climax">
-            <span class="npc-quest-climax-label">收束</span>
-            <span class="npc-quest-climax-text">{{ log.climax }}</span>
-          </div>
-        </article>
-      </div>
+        </div>
+      </section>
 
-      <div v-if="npc.questArchive.length" class="npc-quest-archive">
-        <header class="npc-quest-archive-head">归档</header>
-        <ul class="npc-quest-archive-list">
-          <li
-            v-for="(entry, ai) in npc.questArchive"
-            :key="'qarch' + ai"
-            class="npc-quest-archive-row"
-          >
-            <span class="npc-quest-kind npc-quest-kind--archive" :class="questKindClass(entry.kind)">
-              {{ entry.kind }}
-            </span>
-            <span class="npc-quest-archive-title">{{ entry.title }}</span>
-            <span v-if="entry.completedAt" class="npc-quest-archive-date">{{ entry.completedAt }}</span>
-            <span v-if="entry.ending" class="npc-quest-archive-ending">{{ entry.ending }}</span>
-          </li>
-        </ul>
-      </div>
-    </section>
-
-    <!-- 记忆：三类等宽栏，统一列表样式 -->
-    <section v-if="memoryColumns.length" class="npc-section npc-memory-section">
-      <header class="npc-section-head">🧠 记忆</header>
-      <div
-        class="npc-memory-grid"
-        :style="{ '--mem-cols': String(memoryColumns.length) }"
-      >
-        <article
-          v-for="col in memoryColumns"
-          :key="col.key"
-          class="npc-memory-col"
-          :class="'npc-memory-col--' + col.key"
+      <!-- 记忆：三类等宽栏，统一列表样式 -->
+      <section v-if="memoryColumns.length" class="npc-section npc-memory-section">
+        <header class="npc-section-head">🧠 记忆</header>
+        <div
+          class="npc-memory-grid"
+          :style="{ '--mem-cols': String(memoryColumns.length) }"
         >
-          <header class="npc-memory-col-head">
-            <span>{{ col.icon }}</span>
-            <span>{{ col.title }}</span>
-            <span class="npc-memory-count">{{ col.items.length }}</span>
-          </header>
-          <ol class="npc-memory-list">
-            <li v-for="(m, i) in col.items" :key="col.key + i">{{ m }}</li>
-          </ol>
-        </article>
-      </div>
-    </section>
+          <article
+            v-for="col in memoryColumns"
+            :key="col.key"
+            class="npc-memory-col"
+            :class="'npc-memory-col--' + col.key"
+          >
+            <header class="npc-memory-col-head">
+              <span>{{ col.icon }}</span>
+              <span>{{ col.title }}</span>
+              <span class="npc-memory-count">{{ col.items.length }}</span>
+            </header>
+            <ol class="npc-memory-list">
+              <li v-for="(m, i) in col.items" :key="col.key + i">{{ m }}</li>
+            </ol>
+          </article>
+        </div>
+      </section>
+    </div>
   </div>
 </template>
 
@@ -195,6 +213,8 @@ import { getWealthClass, getWealthEmoji } from '../parse';
 import { STATUS_LABELS, type NpcCard, type QuestItemStatus } from '../types';
 
 const props = defineProps<{ npc: NpcCard }>();
+
+const expanded = ref(false);
 
 const statusLabels = STATUS_LABELS;
 const wealthCls = computed(() => getWealthClass(props.npc.wealth));
@@ -217,6 +237,40 @@ function questKindClass(kind: string): string {
   if (k.includes('角色')) return 'quest-kind--char';
   if (k.includes('委托')) return 'quest-kind--errand';
   return 'quest-kind--default';
+}
+
+function bgDisplay(v: string): { value: string; empty: boolean } {
+  const t = String(v ?? '').trim();
+  if (!t || t === '无') return { value: '无', empty: true };
+  return { value: t, empty: false };
+}
+
+const showBackgroundCard = computed(() => {
+  const b = props.npc.background;
+  return !!(b.group || b.circle || b.event);
+});
+
+const hasBody = computed(() => {
+  const n = props.npc;
+  return !!(
+    n.actionChain.length ||
+    n.predict ||
+    n.statusParts.length ||
+    n.socialNetwork.length ||
+    showBackgroundCard.value ||
+    n.longGoal ||
+    n.nearPlan.length ||
+    n.questLogs.length ||
+    n.questArchive.length ||
+    n.recentMemories.length ||
+    n.settledMemories.length ||
+    n.coreMemories.length
+  );
+});
+
+function toggleExpanded(): void {
+  if (!hasBody.value) return;
+  expanded.value = !expanded.value;
 }
 
 const statusCells = computed(() =>
@@ -259,17 +313,6 @@ const memoryColumns = computed(() => {
     cols.push({ key: 'core', title: '核心记忆', icon: '💎', items: props.npc.coreMemories });
   }
   return cols;
-});
-
-function bgDisplay(v: string): { value: string; empty: boolean } {
-  const t = String(v ?? '').trim();
-  if (!t || t === '无') return { value: '无', empty: true };
-  return { value: t, empty: false };
-}
-
-const showBackgroundCard = computed(() => {
-  const b = props.npc.background;
-  return !!(b.group || b.circle || b.event);
 });
 
 const backgroundRows = computed(() => {
@@ -316,7 +359,7 @@ const backgroundRows = computed(() => {
   }
 }
 
-/* 顶栏：名字靠左，声誉与资金靠右对齐同一行 */
+/* 顶栏：可点击折叠；名字靠左，声誉与资金靠右 */
 .npc-card-top {
   display: flex;
   flex-wrap: wrap;
@@ -325,6 +368,56 @@ const backgroundRows = computed(() => {
   position: relative;
   z-index: 1;
   width: 100%;
+  margin: 0;
+  padding: 0.15em 0;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--transition-smooth);
+
+  &:hover:not(:disabled) {
+    background: color-mix(in srgb, var(--bg-step) 55%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--border-glow);
+    outline-offset: 2px;
+  }
+
+  &--static,
+  &:disabled {
+    cursor: default;
+  }
+}
+
+.npc-card-caret {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.85em;
+  color: var(--text-muted);
+  line-height: 1;
+  transition: transform 0.2s ease;
+  transform: rotate(0deg);
+
+  &--open {
+    transform: rotate(180deg);
+  }
+}
+
+.npc-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  width: 100%;
+  min-width: 0;
+}
+
+.npc-card:not(.npc-card--open) {
+  gap: 0;
 }
 
 .npc-avatar {
