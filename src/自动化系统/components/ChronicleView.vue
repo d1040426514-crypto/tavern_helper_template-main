@@ -1,5 +1,9 @@
 <template>
-  <div class="chronicle-container" :class="themeLight ? 'theme-light' : 'theme-dark'">
+  <div
+    class="chronicle-container"
+    :class="themeLight ? 'theme-light' : 'theme-dark'"
+    :style="{ '--chronicle-font-scale': String(fontScale), fontSize: `calc(16px * ${fontScale})` }"
+  >
     <div class="chronicle-header" @click="onHeaderClick">
       <div class="header-icon-group">
         <span class="header-icon-main">🎭</span>
@@ -13,6 +17,24 @@
         <span class="header-caret" :style="{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }">
           ▼
         </span>
+        <button
+          type="button"
+          class="font-btn"
+          title="减小字号"
+          :disabled="fontScale <= FONT_MIN"
+          @click.stop="$emit('font-smaller')"
+        >
+          A−
+        </button>
+        <button
+          type="button"
+          class="font-btn"
+          title="增大字号"
+          :disabled="fontScale >= FONT_MAX"
+          @click.stop="$emit('font-larger')"
+        >
+          A+
+        </button>
         <button
           type="button"
           class="theme-btn"
@@ -42,13 +64,21 @@ import type { ChronicleData } from '../types';
 import CategoryPanel from './CategoryPanel.vue';
 import InteractionPanel from './InteractionPanel.vue';
 
+const FONT_MIN = 0.85;
+const FONT_MAX = 1.25;
+
 const props = defineProps<{
   data: ChronicleData;
   themeLight: boolean;
+  fontScale: number;
   defaultExpanded?: boolean;
 }>();
 
-defineEmits<{ 'toggle-theme': [] }>();
+defineEmits<{
+  'toggle-theme': [];
+  'font-smaller': [];
+  'font-larger': [];
+}>();
 
 const expanded = ref(props.defaultExpanded ?? false);
 
@@ -59,13 +89,14 @@ const hasContent = computed(
 
 function onHeaderClick(e: MouseEvent) {
   const t = e.target as HTMLElement | null;
-  if (t?.closest?.('.theme-btn')) return;
+  if (t?.closest?.('.theme-btn, .font-btn')) return;
   expanded.value = !expanded.value;
 }
 </script>
 
 <style lang="scss" scoped>
 .chronicle-container {
+  --chronicle-font-scale: 1;
   background: var(--bg-deep);
   background-image:
     radial-gradient(ellipse at 25% 10%, rgba(160, 140, 200, 0.06) 0%, transparent 55%),
@@ -126,7 +157,7 @@ function onHeaderClick(e: MouseEvent) {
 }
 
 .header-icon-main {
-  font-size: 16px;
+  font-size: 1em;
   line-height: 1;
 }
 
@@ -137,7 +168,7 @@ function onHeaderClick(e: MouseEvent) {
 
 .header-title {
   font-family: var(--font-display);
-  font-size: 0.88rem;
+  font-size: 0.88em;
   font-weight: 700;
   letter-spacing: 0.4px;
   color: var(--text-header);
@@ -149,7 +180,7 @@ function onHeaderClick(e: MouseEvent) {
 
 .header-time-badge {
   font-family: var(--font-mono);
-  font-size: 0.58rem;
+  font-size: 0.58em;
   font-weight: 500;
   color: var(--text-on-chip);
   background: var(--bg-chip);
@@ -172,7 +203,7 @@ function onHeaderClick(e: MouseEvent) {
 }
 
 .toggle-badge {
-  font-size: 0.55rem;
+  font-size: 0.55em;
   font-family: var(--font-mono);
   background: var(--bg-chip);
   color: var(--text-header-muted);
@@ -184,7 +215,7 @@ function onHeaderClick(e: MouseEvent) {
 }
 
 .header-caret {
-  font-size: 0.7rem;
+  font-size: 0.7em;
   color: var(--accent-lavender);
   transition: transform 0.35s ease;
   width: 28px;
@@ -197,11 +228,12 @@ function onHeaderClick(e: MouseEvent) {
   border: 1px solid var(--border-subtle);
 }
 
-.theme-btn {
+.theme-btn,
+.font-btn {
   background: var(--bg-control);
   border: 1px solid var(--border-subtle);
   color: var(--accent-lavender);
-  font-size: 0.8rem;
+  font-size: 0.8em;
   cursor: pointer;
   width: 28px;
   height: 28px;
@@ -212,10 +244,26 @@ function onHeaderClick(e: MouseEvent) {
   transition: background 0.2s, border-color 0.2s;
   padding: 0;
 
-  &:hover {
+  &:hover:not(:disabled) {
     background: var(--bg-step);
     border-color: var(--accent-lavender);
   }
+
+  &:disabled {
+    opacity: 0.4;
+    cursor: default;
+  }
+}
+
+.font-btn {
+  border-radius: 8px;
+  width: auto;
+  min-width: 28px;
+  padding: 0 6px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 0.72em;
+  letter-spacing: -0.02em;
 }
 
 .chronicle-body {
@@ -238,12 +286,12 @@ function onHeaderClick(e: MouseEvent) {
   color: var(--text-muted);
   padding: var(--space-4);
   text-align: center;
-  font-size: 0.78rem;
+  font-size: 0.78em;
 }
 
 .footer-line {
   text-align: center;
-  font-size: 0.5rem;
+  font-size: 0.5em;
   color: var(--text-muted);
   border-top: 1px solid var(--border-subtle);
   margin-top: 2px;
@@ -252,14 +300,12 @@ function onHeaderClick(e: MouseEvent) {
   letter-spacing: 1.2px;
 }
 
-/* —— 平板 —— */
 @media (max-width: 900px) {
   .header-time-badge {
     max-width: 36%;
   }
 }
 
-/* —— 手机 —— */
 @media (max-width: 640px) {
   .chronicle-container::before {
     inset: 3px;
@@ -278,7 +324,7 @@ function onHeaderClick(e: MouseEvent) {
   }
 
   .header-title {
-    font-size: 0.82rem;
+    font-size: 0.82em;
   }
 
   .header-time-badge {
@@ -288,7 +334,7 @@ function onHeaderClick(e: MouseEvent) {
     width: 100%;
     white-space: normal;
     word-break: break-word;
-    font-size: 0.58rem;
+    font-size: 0.58em;
     padding: 4px 8px;
     line-height: 1.35;
   }
@@ -301,11 +347,17 @@ function onHeaderClick(e: MouseEvent) {
   .theme-btn {
     width: 36px;
     height: 36px;
-    font-size: 0.85rem;
+    font-size: 0.85em;
+  }
+
+  .font-btn {
+    min-height: 36px;
+    min-width: 36px;
+    font-size: 0.75em;
   }
 
   .header-icon-main {
-    font-size: 15px;
+    font-size: 0.95em;
   }
 
   .footer-line {
@@ -315,7 +367,7 @@ function onHeaderClick(e: MouseEvent) {
 
 @media (max-width: 380px) {
   .header-title {
-    font-size: 0.78rem;
+    font-size: 0.78em;
     letter-spacing: 0.2px;
   }
 }

@@ -2,6 +2,27 @@ export type AttrMap = Record<string, string>;
 
 export type NpcCategoryKey = 'relation' | 'plot' | 'world';
 
+export type NpcReputationItem = {
+  label: string;
+  value: string;
+};
+
+export type NpcSocialPerson = {
+  name: string;
+  note: string;
+};
+
+export type NpcSocialGroup = {
+  category: string;
+  people: NpcSocialPerson[];
+};
+
+export type NpcBackground = {
+  group: string;
+  circle: string;
+  event: string;
+};
+
 export type NpcCard = {
   name: string;
   actionChain: string[];
@@ -9,8 +30,12 @@ export type NpcCard = {
   debutReady: boolean;
   statusParts: string[];
   wealth: string;
+  reputation: NpcReputationItem[];
+  socialNetwork: NpcSocialGroup[];
+  background: NpcBackground;
   longGoal: string;
   nearPlan: string[];
+  /** 兼容旧字段；新格式取自 background.event */
   relatedEvent: string;
   recentMemories: string[];
   settledMemories: string[];

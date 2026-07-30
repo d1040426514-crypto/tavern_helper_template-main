@@ -9,7 +9,10 @@
       v-else
       :data="chronicle!"
       :theme-light="themeLight"
+      :font-scale="fontScale"
       @toggle-theme="toggleTheme"
+      @font-smaller="adjustFont(-FONT_STEP)"
+      @font-larger="adjustFont(FONT_STEP)"
     />
   </div>
 </template>
@@ -22,12 +25,34 @@ import { isChronicleEmpty } from './parse';
 import type { ChronicleData } from './types';
 
 const THEME_KEY = 'chronicleTheme';
+const FONT_KEY = 'chronicleFontScale';
+const FONT_MIN = 0.85;
+const FONT_MAX = 1.25;
+const FONT_STEP = 0.05;
 
 const loading = ref(true);
 const empty = ref(false);
 const chronicle = ref<ChronicleData | null>(null);
 /** true = 浅色；与正则脚本 localStorage 值 light/dark 对齐 */
 const themeLight = ref(false);
+const fontScale = ref(1);
+
+function clampFont(n: number): number {
+  return Math.min(FONT_MAX, Math.max(FONT_MIN, Math.round(n * 100) / 100));
+}
+
+function persistFont(scale: number) {
+  try {
+    localStorage.setItem(FONT_KEY, String(scale));
+  } catch {
+    /* ignore */
+  }
+}
+
+function adjustFont(delta: number) {
+  fontScale.value = clampFont(fontScale.value + delta);
+  persistFont(fontScale.value);
+}
 
 function toggleTheme() {
   themeLight.value = !themeLight.value;
@@ -62,6 +87,15 @@ onMounted(() => {
   } catch {
     themeLight.value = false;
   }
+  try {
+    const raw = localStorage.getItem(FONT_KEY);
+    if (raw != null) {
+      const n = Number(raw);
+      if (Number.isFinite(n)) fontScale.value = clampFont(n);
+    }
+  } catch {
+    fontScale.value = 1;
+  }
 
   load();
   let tries = 0;
@@ -79,24 +113,19 @@ onMounted(() => {
 
 <style lang="scss" scoped>
 .app-hint {
-  padding: 0.7em 0.85em;
-  color: var(--text-muted);
-  background: var(--bg-card);
-  border: 1px dashed var(--border-subtle);
-  border-radius: var(--radius-md);
-  overflow-wrap: anywhere;
+  padding: 12px 14px;
+  color: var(--text-muted, #888);
   font-size: 0.8rem;
+  line-height: 1.5;
 
   code {
     font-size: 0.9em;
-    color: var(--accent-lavender);
-    font-family: var(--font-mono);
   }
 }
 
 @media (max-width: 640px) {
   .app-hint {
-    padding: 0.6em 0.7em;
+    padding: 10px 12px;
     font-size: 0.75rem;
   }
 }

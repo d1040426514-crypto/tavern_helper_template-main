@@ -104,6 +104,67 @@ function splitMemories(raw: string): string[] {
     .filter(Boolean);
 }
 
+function parseReputation(raw: string): NpcCard['reputation'] {
+  if (!raw) return [];
+  const out: NpcCard['reputation'] = [];
+  for (const part of splitPipe(raw)) {
+    const m = part.match(/^\[([^\]]+)\]\s*(.+)$/);
+    if (m) {
+      out.push({ label: softTrim(m[1] ?? ''), value: softTrim(m[2] ?? '') });
+    } else if (part) {
+      out.push({ label: '', value: part });
+    }
+  }
+  return out.filter(r => r.value);
+}
+
+function parseSocialNetwork(raw: string): NpcCard['socialNetwork'] {
+  if (!raw) return [];
+  const groups: NpcCard['socialNetwork'] = [];
+  const byCat = new Map<string, NpcCard['socialNetwork'][number]['people']>();
+
+  const entries = raw
+    .split(/[|;；]/)
+    .map(s => softTrim(s))
+    .filter(Boolean);
+
+  for (const entry of entries) {
+    const catMatch = entry.match(/^\[([^\]]+)\]\s*(.*)$/);
+    const category = catMatch ? softTrim(catMatch[1] ?? '') || '关系' : '关系';
+    const personRaw = catMatch ? softTrim(catMatch[2] ?? '') : entry;
+    if (!personRaw) continue;
+    const pm = personRaw.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
+    const person = pm
+      ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
+      : { name: personRaw, note: '' };
+    if (!person.name) continue;
+    const list = byCat.get(category) ?? [];
+    list.push(person);
+    byCat.set(category, list);
+  }
+
+  for (const [category, people] of byCat) {
+    groups.push({ category, people });
+  }
+  return groups;
+}
+
+function parseBackground(raw: string): NpcCard['background'] {
+  const bg: NpcCard['background'] = { group: '', circle: '', event: '' };
+  if (!raw) return bg;
+  const group = raw.match(/\[团体\]\s*([^|\[\]]*)/);
+  const circle = raw.match(/\[社交圈\]\s*([^|\[\]]*)/);
+  const event = raw.match(/\[事件\]\s*([^|\[\]]*)/);
+  if (group) bg.group = softTrim(group[1] ?? '');
+  if (circle) bg.circle = softTrim(circle[1] ?? '');
+  if (event) bg.event = softTrim(event[1] ?? '');
+  return bg;
+}
+
+function emptyBackground(): NpcCard['background'] {
+  return { group: '', circle: '', event: '' };
+}
+
 function emptyNpc(name: string): NpcCard {
   return {
     name,
@@ -112,6 +173,9 @@ function emptyNpc(name: string): NpcCard {
     debutReady: false,
     statusParts: [],
     wealth: '',
+    reputation: [],
+    socialNetwork: [],
+    background: emptyBackground(),
     longGoal: '',
     nearPlan: [],
     relatedEvent: '',
@@ -165,11 +229,15 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   if (statusRaw) npc.statusParts = splitPipe(statusRaw);
 
   npc.wealth = fieldLine(body, '资金状况');
+  npc.reputation = parseReputation(fieldLine(body, '声誉'));
+  npc.socialNetwork = parseSocialNetwork(fieldLine(body, '社交网络'));
+  npc.background = parseBackground(fieldLine(body, '背景关联'));
   npc.longGoal = fieldLine(body, '长期目标');
 
   const planRaw = fieldLine(body, '近期打算');
   if (planRaw) npc.nearPlan = splitPipe(planRaw);
 
+  // 旧「关联事件」回退；新格式优先背景关联.事件
   const eventMatch = body.match(/关联事件\s*[:：]\s*\[([^\]]*)\]/);
   if (eventMatch) npc.relatedEvent = softTrim(eventMatch[1] ?? '');
   else {
@@ -178,6 +246,11 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
       const bracket = eventLine.match(/\[([^\]]*)\]/);
       npc.relatedEvent = bracket ? softTrim(bracket[1] ?? '') : eventLine;
     }
+  }
+  if (npc.background.event) {
+    npc.relatedEvent = npc.background.event;
+  } else if (npc.relatedEvent) {
+    npc.background.event = npc.relatedEvent;
   }
 
   const recent = fieldLine(body, '近期记忆');
@@ -194,7 +267,17 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   }
 
   if (!npc.name) npc.name = fallbackName;
-  if (!npc.name && !npc.actionChain.length && !npc.wealth && !npc.longGoal) {
+  const hasBg =
+    !!npc.background.group || !!npc.background.circle || !!npc.background.event;
+  if (
+    !npc.name &&
+    !npc.actionChain.length &&
+    !npc.wealth &&
+    !npc.longGoal &&
+    !npc.reputation.length &&
+    !npc.socialNetwork.length &&
+    !hasBg
+  ) {
     npc.empty = true;
   }
   return npc;

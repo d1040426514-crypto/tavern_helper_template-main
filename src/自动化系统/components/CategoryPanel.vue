@@ -134,23 +134,9 @@ const open = ref(true);
 }
 
 .npc-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-}
-
-@media (min-width: 720px) {
-  .npc-grid {
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 8px;
-  }
-}
-
-@media (min-width: 1100px) {
-  .npc-grid {
-    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-    gap: 10px;
-  }
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 @media (max-width: 640px) {
@@ -159,7 +145,6 @@ const open = ref(true);
   }
 
   .npc-grid {
-    grid-template-columns: 1fr;
     gap: 6px;
   }
 
