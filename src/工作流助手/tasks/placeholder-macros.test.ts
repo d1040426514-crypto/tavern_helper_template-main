@@ -14,7 +14,7 @@ import {
   recordPendingLastEnumAttrValues,
   takePendingLastEnumAttrValues,
 } from './replica-enum-pending';
-import { ENUM_REGISTRY_MARKER } from './replica-enum-parse';
+import { buildDirectedEnumRegistryKey, ENUM_REGISTRY_MARKER } from './replica-enum-parse';
 import { prepareStageTasksWithReplicaSync } from './replica-family';
 import type { RelayTagMap } from './utils';
 
@@ -54,13 +54,31 @@ function memberTask(attr: string, overrides: Partial<PostProcessTask> = {}): Pos
   } as PostProcessTask;
 }
 
-test('buildMacroRelayFromReplicaState uses lastEnumAttrValues markers', () => {
+test('buildMacroRelayFromReplicaState writes directed keys per root', () => {
   const tasks = [rootTask(), memberTask('1'), memberTask('2')];
   const relay = buildMacroRelayFromReplicaState(tasks, {
     'root-1': { attrValues: ['1', '2'], lastEnumAttrValues: ['1'] },
   });
-  assert.deepEqual(relay.get('item@id=1'), [ENUM_REGISTRY_MARKER]);
-  assert.equal(relay.has('item@id=2'), false);
+  const key = buildDirectedEnumRegistryKey('root-1', 'item', 'id', '1');
+  assert.deepEqual(relay.get(key), [ENUM_REGISTRY_MARKER]);
+  assert.equal(relay.has('item@id=1'), false);
+  assert.equal(relay.has(buildDirectedEnumRegistryKey('root-1', 'item', 'id', '2')), false);
+});
+
+test('buildMacroRelayFromReplicaState isolates two roots sharing spec', () => {
+  const rootA = rootTask({ id: 'root-a', name: '族A', replicaFamilyBaseName: '族A' });
+  const rootB = rootTask({ id: 'root-b', name: '族B', replicaFamilyBaseName: '族B' });
+  const relay = buildMacroRelayFromReplicaState([rootA, rootB], {
+    'root-a': { attrValues: ['1'], lastEnumAttrValues: ['1'] },
+    'root-b': { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+  });
+  assert.deepEqual(relay.get(buildDirectedEnumRegistryKey('root-a', 'item', 'id', '1')), [
+    ENUM_REGISTRY_MARKER,
+  ]);
+  assert.deepEqual(relay.get(buildDirectedEnumRegistryKey('root-b', 'item', 'id', '2')), [
+    ENUM_REGISTRY_MARKER,
+  ]);
+  assert.equal(relay.has('item@id=1'), false);
 });
 
 test('resolveWorkflowPlaceholderMacro last-launched auto uses lastEnum', () => {

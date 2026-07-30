@@ -788,6 +788,242 @@ test('total:launched empty when both current and last empty', () => {
   assert.equal(out, '');
 });
 
+test('total:launched unions all replica families sharing spec', () => {
+  const rootA = {
+    id: 'root-a',
+    name: '族A',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rootB = {
+    ...rootA,
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+  };
+  const repA = {
+    ...rootA,
+    id: 'rep-a1',
+    name: '族A 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-a',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const repB = {
+    ...rootB,
+    id: 'rep-b2',
+    name: '族B 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-b',
+    replicaFamilyAttrValue: '2',
+    replicaFamilyLaunched: true,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map(),
+    history,
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [rootA, rootB, repA, repB] },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('<item id="2">'));
+});
+
+test('total:launched:spec:task narrows to one family', () => {
+  const rootA = {
+    id: 'root-a',
+    name: '族A',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rootB = {
+    ...rootA,
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+  };
+  const repA = {
+    ...rootA,
+    id: 'rep-a1',
+    name: '族A 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-a',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const repB = {
+    ...rootB,
+    id: 'rep-b2',
+    name: '族B 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-b',
+    replicaFamilyAttrValue: '2',
+    replicaFamilyLaunched: true,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id:族A}}',
+    new Map(),
+    history,
+    new Set(),
+    { historyFallback: 'all-tags', allTasks: [rootA, rootB, repA, repB] },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(!out.includes('<item id="2">'));
+});
+
+test('total:last-launched:spec:task filters by task', () => {
+  const rootA = {
+    id: 'root-a',
+    name: '族A',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'auto' as const,
+  };
+  const rootB = {
+    ...rootA,
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:last-launched:item@id:族B}}',
+    new Map(),
+    history,
+    new Set(),
+    {
+      historyFallback: 'all-tags',
+      allTasks: [rootA, rootB],
+      replicaState: {
+        'root-a': { attrValues: ['1'], lastEnumAttrValues: ['1'] },
+        'root-b': { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+      },
+    },
+  );
+  assert.ok(out.includes('<item id="2">'));
+  assert.ok(!out.includes('<item id="1">'));
+});
+
+test('total:launched per-root fallback unions current of A with last of B', () => {
+  const rootA = {
+    id: 'root-a',
+    name: '族A',
+    enabled: true,
+    stage: 2,
+    promptGroups: [],
+    extractInjectTags: ['item@id'],
+    mergeStrategy: 'concat' as const,
+    maxRetries: 3,
+    minLength: 0,
+    apiPresetName: '',
+    plotWorldbookMode: 'inherit' as const,
+    contextMode: 'inherit' as const,
+    structuredOutputMode: 'off' as const,
+    syncAsReplicaFamily: true,
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'manual' as const,
+  };
+  const rootB = {
+    ...rootA,
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+  };
+  const repA = {
+    ...rootA,
+    id: 'rep-a1',
+    name: '族A 1',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-a',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: true,
+  };
+  const repB = {
+    ...rootB,
+    id: 'rep-b2',
+    name: '族B 2',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-b',
+    replicaFamilyAttrValue: '2',
+    replicaFamilyLaunched: false,
+  };
+  const history: RelayTagMap = new Map([
+    ['item@id=1', ['A']],
+    ['item@id=2', ['B']],
+  ]);
+  const out = replacePlotTagPlaceholdersWithHistory(
+    '{{total:launched:item@id}}',
+    new Map(),
+    history,
+    new Set(),
+    {
+      historyFallback: 'all-tags',
+      allTasks: [rootA, rootB, repA, repB],
+      replicaState: {
+        'root-a': { attrValues: ['1'], lastEnumAttrValues: ['9'] },
+        'root-b': { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+      },
+    },
+  );
+  assert.ok(out.includes('<item id="1">'));
+  assert.ok(out.includes('<item id="2">'));
+});
+
 if (process.exitCode) {
   process.exit(process.exitCode);
 }

@@ -49,6 +49,7 @@ import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
   prepareStageTasksWithReplicaSync,
+  resolveReplicaEnumTaskRef,
   type ReplicaMemberProgressState,
 } from './replica-family';
 
@@ -317,7 +318,9 @@ async function runSingleTask(
 
   const plotExtraction = extractPlotTagsFromResponse(processedResponse || rawResponse, task.extractInjectTags ?? []);
   const enumParsed = parseReplicaEnumFromResponse(processedResponse || rawResponse);
-  const enumRegistryTags = replicaEnumResultToRegistryTags(enumParsed);
+  const enumRegistryTags = replicaEnumResultToRegistryTags(enumParsed, taskRef =>
+    resolveReplicaEnumTaskRef(taskRef, ctx.settings.tasks),
+  );
   const hasEnumRegistry = Object.keys(enumRegistryTags).length > 0;
   const extractedTags = { ...plotExtraction.extractedTags, ...enumRegistryTags };
   const hasTags = Object.keys(extractedTags).length > 0;

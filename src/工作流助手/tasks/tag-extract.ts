@@ -36,24 +36,58 @@ export function parseDynamicAttrPlaceholder(name: string): { tagName: string; at
 export const TOTAL_LAUNCHED_PLACEHOLDER_PREFIX = 'total:launched:';
 export const TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX = 'total:last-launched:';
 
-/** {{total:last-launched:tag@attr}}：展开楼层快照中上次启动副本的 tag@attr=* 正文 */
-export function parseTotalLastLaunchedPlaceholder(name: string): { tagName: string; attrName: string } | null {
+export type TotalLaunchedPlaceholderSpec = {
+  tagName: string;
+  attrName: string;
+  /** 可选任务引用（baseName / 任务名 / id） */
+  taskRef?: string;
+};
+
+/**
+ * 解析 `tag@attr` 或 `tag@attr:任务名`（任务名可含更多冒号）。
+ * 在 `@` 之后找第一个 `:` 切开；attr 本身不含 `:`。
+ */
+export function parseAttrSpecWithOptionalTaskRef(suffix: string): TotalLaunchedPlaceholderSpec | null {
+  const trimmed = String(suffix ?? '').trim();
+  if (!trimmed) return null;
+  const atIdx = trimmed.indexOf('@');
+  if (atIdx === -1) return null;
+  const tagName = trimmed.slice(0, atIdx).trim();
+  if (!tagName || tagName.includes(':')) return null;
+
+  const afterAt = trimmed.slice(atIdx + 1);
+  const colonIdx = afterAt.indexOf(':');
+  let attrName: string;
+  let taskRef: string | undefined;
+  if (colonIdx === -1) {
+    attrName = afterAt.trim();
+  } else {
+    attrName = afterAt.slice(0, colonIdx).trim();
+    const rest = afterAt.slice(colonIdx + 1).trim();
+    taskRef = rest || undefined;
+  }
+  if (!attrName || attrName.includes(':') || attrName.includes('=')) return null;
+  return { tagName, attrName, taskRef };
+}
+
+/** {{total:last-launched:tag@attr[:任务名]}}：展开楼层快照中上次启动副本的 tag@attr=* 正文 */
+export function parseTotalLastLaunchedPlaceholder(name: string): TotalLaunchedPlaceholderSpec | null {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
   const prefix = TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
   if (!lower.startsWith(prefix)) return null;
-  return parseDynamicAttrPlaceholder(trimmed.slice(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.length).trim());
+  return parseAttrSpecWithOptionalTaskRef(trimmed.slice(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.length));
 }
 
-/** {{total:launched:tag@attr}}：仅展开副本族本轮可运行副本的 tag@attr=* 实例 */
-export function parseTotalLaunchedPlaceholder(name: string): { tagName: string; attrName: string } | null {
+/** {{total:launched:tag@attr[:任务名]}}：展开副本族本轮可运行（或回退 last）的 tag@attr=* 实例 */
+export function parseTotalLaunchedPlaceholder(name: string): TotalLaunchedPlaceholderSpec | null {
   const trimmed = name.trim();
   const lower = trimmed.toLowerCase();
   // 避免 total:last-launched: 被误当成 launched
   if (lower.startsWith(TOTAL_LAST_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase())) return null;
   const prefix = TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.toLowerCase();
   if (!lower.startsWith(prefix)) return null;
-  return parseDynamicAttrPlaceholder(trimmed.slice(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.length).trim());
+  return parseAttrSpecWithOptionalTaskRef(trimmed.slice(TOTAL_LAUNCHED_PLACEHOLDER_PREFIX.length));
 }
 
 /** {{total:tag@attr}}：展开全部 tag@attr=* 实例 */
@@ -423,11 +457,11 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         code: '{{total:launched:标签@属性}}',
-        desc: '工作流脚本占位符：优先展开本轮可运行副本的复合实例（manual=replicaFamilyLaunched，auto=relay <ReplicaEnum>）；本轮名单为空则回退 last-launched（仅 post_process_tags）。例如 {{total:launched:item@id}}。',
+        desc: '覆盖该 spec 下全部副本族：优先展开本轮可运行副本正文，空则回退 last-launched。可写 {{total:launched:标签@属性:任务名}} 收窄。例如 {{total:launched:item@id}}。',
       },
       {
         code: '{{total:last-launched:标签@属性}}',
-        desc: '展开楼层快照中「上次启动」副本的复合实例正文（仅 post_process_tags）；manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。脚本与酒馆助手宏均可使用。例如 {{total:last-launched:item@id}}。',
+        desc: '覆盖该 spec 下全部副本族的楼层上次启动正文。可写 {{total:last-launched:标签@属性:任务名}} 收窄。例如 {{total:last-launched:item@id}}。',
       },
       {
         code: '{{item@id=1}}',
@@ -449,7 +483,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     steps: [
       {
         title: '1. 上一阶段枚举',
-        desc: '在较早阶段任务输出 <ReplicaEnum> 包裹的 JSON。单 spec：{"spec":"item@id","values":["1","2"]}；批量 {"enums":[{"spec":"npc@id","values":[...]}, ...]}。正文可含其它叙述；副本族仅读取 ReplicaEnum 注册的 key 列表，不再从 XML item@id 摘取枚举。',
+        desc: '在较早阶段任务输出 <ReplicaEnum> 包裹的 JSON。单条：{"spec":"item@id","values":["1","2"]}；可选 task 定向：{"spec":"item@id","values":["1"],"task":"副本族处理"}；批量 {"enums":[...]}。无 task 时广播给所有声明该 spec 的副本族；有 task 时仅喂给该副本族（且与广播互斥）。正文可含其它叙述；不再从 XML item@id 摘取枚举。',
       },
       {
         title: '2. 配置副本族任务',
@@ -461,7 +495,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       },
       {
         title: '4. 镜像与运行时同步',
-        desc: '编辑原本或应用任务级工作流预设时，全部已有副本（含 relay 外的存量副本）会实时镜像原本的任务字段；API 在「沿用原本」时跟随原本，「本副本自定义」时保留独立路由。提示词中的 {{item@id}} 在副本中保持为 {{item@id=1}} 等精确形式。进入执行阶段前，读取上一阶段 relay 中由 <ReplicaEnum> 注册的 spec 列表增量新增缺失副本。registry key 无注入内文；占位符内容仅从当前楼 post_process_tags 读取；楼层无对应路径时输出空内文属性标签块。',
+        desc: '编辑原本或应用任务级工作流预设时，全部已有副本（含 relay 外的存量副本）会实时镜像原本的任务字段；API 在「沿用原本」时跟随原本，「本副本自定义」时保留独立路由。提示词中的 {{item@id}} 在副本中保持为 {{item@id=1}} 等精确形式。进入执行阶段前，读取上一阶段 relay 中由 <ReplicaEnum> 注册的名单增量新增缺失副本（广播键 tag@attr=值；定向键 #replica:<原本id>|tag@attr=值）。同一 spec 可供多个副本族共用。registry key 无注入内文；占位符内容仅从当前楼 post_process_tags 读取。',
       },
       {
         title: '5. 调度模式',
@@ -476,13 +510,13 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '直接编辑副本（除允许字段外）会在下次镜像时被覆盖。',
       '提示词可用 {{replica:val}} 获取当前副本实例的属性值字符串（无需展开完整 XML 标签块）。',
       '提示词可用 {{replica:launched:任务名}} 列出指定副本族已开启副本的后缀名（顿号连接）；本轮名单为空则回退楼层 last-launched 名单。',
-      '提示词可用 {{total:launched:标签@属性}} 展开对应副本族复合实例正文：本轮优先，空则回退 last-launched（仅 post_process_tags）。',
-      '提示词可用 {{total:last-launched:标签@属性}} 展开楼层快照中上次启动副本的复合实例正文（只读 post_process_tags）。',
-      '{{total:…}} / {{total:last-launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用。',
+      '提示词可用 {{total:launched:标签@属性}} 展开该 spec 下全部副本族的复合实例正文（本轮优先，空则回退 last-launched）；可写 {{total:launched:标签@属性:任务名}} 收窄。',
+      '提示词可用 {{total:last-launched:标签@属性}} 展开该 spec 下全部副本族的楼层上次启动正文；可写 {{total:last-launched:标签@属性:任务名}} 收窄。',
+      '{{total:…}} / {{total:launched:…}} / {{total:last-launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用。',
     ],
     example:
-      'S1「枚举 item」（<ReplicaEnum> JSON 含 item@id）→ S2「副本族处理」（提示词 {{item@id}}，启用副本族）→ 运行时生成「副本族处理 1」「副本族处理 2」… 并行执行',
+      'S1「枚举」（<ReplicaEnum> 可无 task 广播或带 task 定向）→ S2 多个副本族可共用同一 spec（如 {{item@id}}）→ 运行时各自按名单增量生成副本并并行执行',
   },
   relay:
-    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 ReplicaEnum 注册的 relay key 增量新增副本（无内文），占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
+    '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 ReplicaEnum 注册的 relay key 增量新增副本（广播或按 task 定向，无内文），占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
 } as const;

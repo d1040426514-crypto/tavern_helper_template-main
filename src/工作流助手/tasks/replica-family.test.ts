@@ -14,11 +14,15 @@ import {
   cloneAutoSegmentsFromRoot,
   expandEnabledTasksForRuntime,
   findReplicaFamilyRootByAttrSpec,
+  findReplicaFamilyRootsByAttrSpec,
   findReplicaFamilyRootByRef,
   isReplicaFamilyMember,
   isReplicaFamilyRootTemplate,
+  listLaunchedAttrValuesForSpec,
+  listLaunchedAttrValuesForSpecWithFallback,
   listLaunchedReplicaSuffixes,
   listLastLaunchedAttrValues,
+  listLastLaunchedAttrValuesForSpec,
   listLaunchedAttrValuesWithFallback,
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
@@ -592,6 +596,104 @@ test('findReplicaFamilyRootByAttrSpec matches enumSpec or spec', () => {
   });
   assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'item', attrName: 'id' }, [root])?.id, root.id);
   assert.equal(findReplicaFamilyRootByAttrSpec({ tagName: 'npc', attrName: 'name' }, [root]), undefined);
+});
+
+test('findReplicaFamilyRootsByAttrSpec returns all matching roots', () => {
+  const rootA = baseTask({
+    id: 'root-a',
+    name: '族A',
+    replicaFamilyBaseName: '族A',
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  const rootB = baseTask({
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+    replicaFamilySpec: 'item@id',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  const roots = findReplicaFamilyRootsByAttrSpec({ tagName: 'item', attrName: 'id' }, [rootA, rootB]);
+  assert.deepEqual(roots.map(r => r.id).sort(), ['root-a', 'root-b']);
+});
+
+test('listLaunchedAttrValuesForSpec unions and can narrow by task', () => {
+  const rootA = baseTask({
+    id: 'root-a',
+    name: '族A',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  const rootB = baseTask({
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(rootA, ['1'], [rootA, rootB]).tasks;
+  tasks = mergeReplicaFamilyFromRelay(rootB, ['2'], tasks).tasks;
+  tasks = tasks.map(t =>
+    t.replicaFamilyRootId ? { ...t, replicaFamilyLaunched: true } : t,
+  );
+  assert.deepEqual(
+    listLaunchedAttrValuesForSpec({ tagName: 'item', attrName: 'id' }, tasks, new Map()),
+    ['1', '2'],
+  );
+  assert.deepEqual(
+    listLaunchedAttrValuesForSpec({ tagName: 'item', attrName: 'id' }, tasks, new Map(), '族A'),
+    ['1'],
+  );
+  assert.deepEqual(
+    listLastLaunchedAttrValuesForSpec(
+      { tagName: 'item', attrName: 'id' },
+      tasks,
+      {
+        'root-a': { attrValues: ['1'], lastEnumAttrValues: ['1'] },
+        'root-b': { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+      },
+      '族B',
+    ),
+    ['2'],
+  );
+});
+
+test('listLaunchedAttrValuesForSpecWithFallback per-root merges current and last', () => {
+  const rootA = baseTask({
+    id: 'root-a',
+    name: '族A',
+    replicaFamilyBaseName: '族A',
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  const rootB = baseTask({
+    id: 'root-b',
+    name: '族B',
+    replicaFamilyBaseName: '族B',
+    replicaFamilyScheduleMode: 'manual',
+    replicaFamilyEnumSpec: 'item@id',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(rootA, ['1'], [rootA, rootB]).tasks;
+  tasks = mergeReplicaFamilyFromRelay(rootB, ['2'], tasks).tasks;
+  // 仅族A 本轮 launched；族B 本轮未启动 → 应回退族B 的 last
+  tasks = tasks.map(t => {
+    if (t.replicaFamilyRootId === 'root-a') return { ...t, replicaFamilyLaunched: true };
+    if (t.replicaFamilyRootId === 'root-b') return { ...t, replicaFamilyLaunched: false };
+    return t;
+  });
+  assert.deepEqual(
+    listLaunchedAttrValuesForSpecWithFallback(
+      { tagName: 'item', attrName: 'id' },
+      tasks,
+      new Map(),
+      {
+        'root-a': { attrValues: ['1'], lastEnumAttrValues: ['9'] },
+        'root-b': { attrValues: ['2'], lastEnumAttrValues: ['2'] },
+      },
+    ),
+    ['1', '2'],
+  );
 });
 
 test('findReplicaFamilyRootByAttrSpec prefers enumSpec over spec', () => {

@@ -38,28 +38,53 @@ test('parseTotalLaunchedPlaceholder resolves total:launched:tag@attr', () => {
   assert.deepEqual(parseTotalLaunchedPlaceholder('total:launched:item@id'), {
     tagName: 'item',
     attrName: 'id',
+    taskRef: undefined,
   });
   assert.deepEqual(parseTotalLaunchedPlaceholder('TOTAL:LAUNCHED:npc@name'), {
     tagName: 'npc',
     attrName: 'name',
+    taskRef: undefined,
   });
   assert.equal(parseTotalLaunchedPlaceholder('total:item@id'), null);
   assert.equal(parseTotalLaunchedPlaceholder('total:launched:item@id=1'), null);
   assert.equal(parseTotalLaunchedPlaceholder('total:launched:'), null);
 });
 
+test('parseTotalLaunchedPlaceholder accepts optional taskRef after attr', () => {
+  assert.deepEqual(parseTotalLaunchedPlaceholder('total:launched:item@id:副本族处理'), {
+    tagName: 'item',
+    attrName: 'id',
+    taskRef: '副本族处理',
+  });
+  assert.deepEqual(parseTotalLaunchedPlaceholder('total:launched:item@id:阶段:处理'), {
+    tagName: 'item',
+    attrName: 'id',
+    taskRef: '阶段:处理',
+  });
+});
+
 test('parseTotalLastLaunchedPlaceholder resolves total:last-launched:tag@attr', () => {
   assert.deepEqual(parseTotalLastLaunchedPlaceholder('total:last-launched:item@id'), {
     tagName: 'item',
     attrName: 'id',
+    taskRef: undefined,
   });
   assert.deepEqual(parseTotalLastLaunchedPlaceholder('TOTAL:LAST-LAUNCHED:npc@name'), {
     tagName: 'npc',
     attrName: 'name',
+    taskRef: undefined,
   });
   assert.equal(parseTotalLastLaunchedPlaceholder('total:launched:item@id'), null);
   assert.equal(parseTotalLastLaunchedPlaceholder('total:last-launched:item@id=1'), null);
   assert.equal(parseTotalLastLaunchedPlaceholder('total:last-launched:'), null);
+});
+
+test('parseTotalLastLaunchedPlaceholder accepts optional taskRef', () => {
+  assert.deepEqual(parseTotalLastLaunchedPlaceholder('total:last-launched:item@id:族A'), {
+    tagName: 'item',
+    attrName: 'id',
+    taskRef: '族A',
+  });
 });
 
 test('parseTotalPlaceholder rejects launched / last-launched forms', () => {

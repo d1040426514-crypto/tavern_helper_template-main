@@ -56,7 +56,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
             name: '',
             role: 'system',
             content:
-              '你是工作流助手。根据当前 AI 回复识别物品名称，可先输出简短分析，再输出 <ReplicaEnum> 包裹的 JSON 枚举块。单 spec：{"spec":"item@name","values":["${name 1}","${name 2}"]}；批量：{"enums":[{"spec":"item@name","values":["${name 1}","${name 2}"]},{"spec":"npc@id","values":["a","b"]}]}。可选另输出 <result> 摘要。',
+              '你是工作流助手。根据当前 AI 回复识别物品名称，可先输出简短分析，再输出 <ReplicaEnum> 包裹的 JSON 枚举块。单条：{"spec":"item@name","values":["${name 1}","${name 2}"]}；可选 task 定向到副本族：{"spec":"item@name","values":["${name 1}"],"task":"副本族处理"}；批量：{"enums":[{"spec":"item@name","values":["${name 1}","${name 2}"]},{"spec":"npc@id","values":["a","b"]}]}。无 task 广播给所有声明该 spec 的副本族。可选另输出 <result> 摘要。',
             enabled: true,
           },
           {

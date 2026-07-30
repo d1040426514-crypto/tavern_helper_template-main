@@ -544,18 +544,35 @@ export function getReplicaAttrSpecForTask(
   return { tagName: parsed.tagName, attrName: parsed.attrName };
 }
 
+export function getReplicaFamilyEnumSpecKey(root: PostProcessTask): string {
+  return (
+    root.replicaFamilyEnumSpec?.trim() ||
+    root.replicaFamilySpec?.trim() ||
+    scanDynamicAttrPlaceholders(root)[0] ||
+    ''
+  ).trim();
+}
+
+export function resolveReplicaEnumTaskRef(
+  taskRef: string,
+  allTasks: PostProcessTask[],
+): { rootId: string; specKey: string } | null {
+  const root = findReplicaFamilyRootByRef(taskRef, allTasks);
+  if (!root) return null;
+  const specKey = getReplicaFamilyEnumSpecKey(root);
+  if (!specKey) return null;
+  return { rootId: root.id, specKey };
+}
+
 export function collectAttrValuesForReplicaRoot(
   root: PostProcessTask,
   relayMap: RelayTagMap,
 ): string[] {
-  const enumSpecStr =
-    root.replicaFamilyEnumSpec?.trim() ||
-    root.replicaFamilySpec ||
-    scanDynamicAttrPlaceholders(root)[0];
+  const enumSpecStr = getReplicaFamilyEnumSpecKey(root);
   if (!enumSpecStr) return [];
   const parsed = parseExtractTagSpec(enumSpecStr);
   if (!parsed?.attrName) return [];
-  return collectEnumRegistryAttrValues(relayMap, parsed);
+  return collectEnumRegistryAttrValues(relayMap, parsed, root.id);
 }
 
 export function listReplicaFamilyScheduleEntries(
@@ -609,17 +626,91 @@ export function findReplicaFamilyRootByRef(ref: string, allTasks: PostProcessTas
   );
 }
 
-/** 按 replicaFamilyEnumSpec / replicaFamilySpec 匹配副本族原本 */
+/** 按 replicaFamilyEnumSpec / replicaFamilySpec 匹配全部副本族原本 */
+export function findReplicaFamilyRootsByAttrSpec(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+): PostProcessTask[] {
+  const key = buildExtractSpecKey(spec.tagName, spec.attrName).toLowerCase();
+  return allTasks.filter(t => {
+    if (!isReplicaFamilyRootTemplate(t)) return false;
+    const rootSpec = getReplicaFamilyEnumSpecKey(t).toLowerCase();
+    return rootSpec === key;
+  });
+}
+
+/** @deprecated 请使用 findReplicaFamilyRootsByAttrSpec；仅返回第一个匹配根 */
 export function findReplicaFamilyRootByAttrSpec(
   spec: { tagName: string; attrName: string },
   allTasks: PostProcessTask[],
 ): PostProcessTask | undefined {
-  const key = buildExtractSpecKey(spec.tagName, spec.attrName).toLowerCase();
-  return allTasks.find(t => {
-    if (!isReplicaFamilyRootTemplate(t)) return false;
-    const rootSpec = (t.replicaFamilyEnumSpec?.trim() || t.replicaFamilySpec?.trim() || '').toLowerCase();
-    return rootSpec === key;
-  });
+  return findReplicaFamilyRootsByAttrSpec(spec, allTasks)[0];
+}
+
+function resolveRootsForAttrSpec(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+  taskRef?: string,
+): PostProcessTask[] {
+  if (taskRef?.trim()) {
+    const root = findReplicaFamilyRootByRef(taskRef, allTasks);
+    if (!root) return [];
+    const expected = buildExtractSpecKey(spec.tagName, spec.attrName).toLowerCase();
+    if (getReplicaFamilyEnumSpecKey(root).toLowerCase() !== expected) return [];
+    return [root];
+  }
+  return findReplicaFamilyRootsByAttrSpec(spec, allTasks);
+}
+
+/** 跨匹配副本族并集本轮 launched 后缀（按 attrValue 去重排序） */
+export function listLaunchedAttrValuesForSpec(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+  relayMap: RelayTagMap,
+  taskRef?: string,
+): string[] {
+  const roots = resolveRootsForAttrSpec(spec, allTasks, taskRef);
+  const values: string[] = [];
+  for (const root of roots) {
+    values.push(...listLaunchedReplicaSuffixes(root, allTasks, relayMap));
+  }
+  return sortAttrValues([...new Set(values)]);
+}
+
+/** 跨匹配副本族并集楼层 last-launched 后缀（按 attrValue 去重排序） */
+export function listLastLaunchedAttrValuesForSpec(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+  snapshot: ReplicaStateSnapshot,
+  taskRef?: string,
+): string[] {
+  const roots = resolveRootsForAttrSpec(spec, allTasks, taskRef);
+  const values: string[] = [];
+  for (const root of roots) {
+    values.push(...listLastLaunchedAttrValues(root, snapshot));
+  }
+  return sortAttrValues([...new Set(values)]);
+}
+
+/**
+ * 按根回退后再并集：每个匹配根「本轮非空用本轮，否则用该根 last-launched」，
+ * 再跨根按 attrValue 去重排序（可指定 task）。
+ */
+export function listLaunchedAttrValuesForSpecWithFallback(
+  spec: { tagName: string; attrName: string },
+  allTasks: PostProcessTask[],
+  relayMap: RelayTagMap,
+  snapshot: ReplicaStateSnapshot,
+  taskRef?: string,
+): string[] {
+  const roots = resolveRootsForAttrSpec(spec, allTasks, taskRef);
+  const values: string[] = [];
+  for (const root of roots) {
+    const current = listLaunchedReplicaSuffixes(root, allTasks, relayMap);
+    if (current.length) values.push(...current);
+    else values.push(...listLastLaunchedAttrValues(root, snapshot));
+  }
+  return sortAttrValues([...new Set(values)]);
 }
 
 export function listLaunchedReplicaSuffixes(

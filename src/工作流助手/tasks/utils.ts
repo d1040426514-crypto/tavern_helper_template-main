@@ -20,9 +20,12 @@ import {
 } from './tag-extract';
 import { isEnumRegistryMarker } from './replica-enum-parse';
 import {
-  findReplicaFamilyRootByAttrSpec,
+  findReplicaFamilyRootByRef,
+  findReplicaFamilyRootsByAttrSpec,
+  getReplicaFamilyEnumSpecKey,
   listLaunchedReplicaSuffixes,
   listLastLaunchedAttrValues,
+  listLastLaunchedAttrValuesForSpec,
   parseReplicaLaunchedPlaceholder,
   resolveReplicaLaunchedPlaceholder,
 } from './replica-family';
@@ -380,15 +383,32 @@ function applyNestedRefresh(
   });
 }
 
+function resolveRootsForTotalLaunched(
+  spec: { tagName: string; attrName: string; taskRef?: string },
+  allTasks: PostProcessTask[],
+): PostProcessTask[] {
+  if (spec.taskRef?.trim()) {
+    const root = findReplicaFamilyRootByRef(spec.taskRef, allTasks);
+    if (!root) return [];
+    const expected = buildExtractSpecKey(spec.tagName, spec.attrName).toLowerCase();
+    if (getReplicaFamilyEnumSpecKey(root).toLowerCase() !== expected) return [];
+    return [root];
+  }
+  return findReplicaFamilyRootsByAttrSpec(spec, allTasks);
+}
+
 function resolveTotalLastLaunchedInject(
-  spec: { tagName: string; attrName: string },
+  spec: { tagName: string; attrName: string; taskRef?: string },
   messageVarHistoryMap: RelayTagMap,
   options?: PlotPlaceholderResolveOptions,
 ): string {
   if (!options?.allTasks?.length) return '';
-  const root = findReplicaFamilyRootByAttrSpec(spec, options.allTasks);
-  if (!root) return '';
-  const suffixes = listLastLaunchedAttrValues(root, options.replicaState ?? {});
+  const suffixes = listLastLaunchedAttrValuesForSpec(
+    spec,
+    options.allTasks,
+    options.replicaState ?? {},
+    spec.taskRef,
+  );
   const parts: string[] = [];
   for (const suffix of suffixes) {
     const key = buildCompositeKey(spec.tagName, spec.attrName, suffix);
@@ -397,6 +417,20 @@ function resolveTotalLastLaunchedInject(
     if (part) parts.push(part);
   }
   return parts.join('\n\n');
+}
+
+function expandTotalLaunchedSuffixesFromHistory(
+  spec: { tagName: string; attrName: string },
+  suffixes: string[],
+  messageVarHistoryMap: RelayTagMap,
+): string[] {
+  const parts: string[] = [];
+  for (const suffix of suffixes) {
+    const key = buildCompositeKey(spec.tagName, spec.attrName, suffix);
+    const part = resolvePlaceholderInjectTextFromMap(messageVarHistoryMap, key);
+    if (part) parts.push(part);
+  }
+  return parts;
 }
 
 export function resolvePlaceholderForInject(
@@ -433,26 +467,42 @@ export function resolvePlaceholderForInject(
   const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
   if (totalLaunchedSpec) {
     if (!options?.allTasks?.length) return '';
-    const root = findReplicaFamilyRootByAttrSpec(totalLaunchedSpec, options.allTasks);
-    if (!root) return '';
-    const currentSuffixes = listLaunchedReplicaSuffixes(root, options.allTasks, relayTagMap);
-    if (currentSuffixes.length) {
-      const parts: string[] = [];
-      for (const suffix of currentSuffixes) {
-        const key = buildCompositeKey(totalLaunchedSpec.tagName, totalLaunchedSpec.attrName, suffix);
-        const part = resolvePlaceholderForInject(
-          key,
-          relayTagMap,
-          messageVarHistoryMap,
-          injectOnlyTags,
-          options,
-        );
-        if (part) parts.push(part);
+    const roots = resolveRootsForTotalLaunched(totalLaunchedSpec, options.allTasks);
+    const snapshot = options.replicaState ?? {};
+    const parts: string[] = [];
+    const seen = new Set<string>();
+    for (const root of roots) {
+      const current = listLaunchedReplicaSuffixes(root, options.allTasks, relayTagMap);
+      if (current.length) {
+        for (const suffix of current) {
+          if (seen.has(suffix)) continue;
+          seen.add(suffix);
+          const key = buildCompositeKey(totalLaunchedSpec.tagName, totalLaunchedSpec.attrName, suffix);
+          const part = resolvePlaceholderForInject(
+            key,
+            relayTagMap,
+            messageVarHistoryMap,
+            injectOnlyTags,
+            options,
+          );
+          if (part) parts.push(part);
+        }
+      } else {
+        // 该根本轮空 → 回退该根 last-launched，正文只读 history
+        for (const suffix of listLastLaunchedAttrValues(root, snapshot)) {
+          if (seen.has(suffix)) continue;
+          seen.add(suffix);
+          parts.push(
+            ...expandTotalLaunchedSuffixesFromHistory(
+              totalLaunchedSpec,
+              [suffix],
+              messageVarHistoryMap,
+            ),
+          );
+        }
       }
-      return parts.join('\n\n');
     }
-    // 本轮名单空 → 回退 last-launched（仅 history）
-    return resolveTotalLastLaunchedInject(totalLaunchedSpec, messageVarHistoryMap, options);
+    return parts.join('\n\n');
   }
 
   const totalSpec = parseTotalPlaceholder(placeholderName);
@@ -808,6 +858,14 @@ export function expandWritableKeysFromPlaceholder(
   placeholderName: string,
   availableKeys: Iterable<string>,
 ): string[] {
+  const totalLastLaunchedSpec = parseTotalLastLaunchedPlaceholder(placeholderName);
+  if (totalLastLaunchedSpec) {
+    return expandWritableKeysFromPlaceholder(
+      `${totalLastLaunchedSpec.tagName}@${totalLastLaunchedSpec.attrName}`,
+      availableKeys,
+    );
+  }
+
   const totalLaunchedSpec = parseTotalLaunchedPlaceholder(placeholderName);
   if (totalLaunchedSpec) {
     return expandWritableKeysFromPlaceholder(
@@ -889,11 +947,11 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{total:launched:标签@属性}}',
-    desc: '工作流脚本占位符：优先展开本轮可运行副本（manual=replicaFamilyLaunched，auto=relay <ReplicaEnum>）；本轮名单为空则回退 last-launched（仅 post_process_tags）。不回退全量 total:。',
+    desc: '覆盖该 spec 下全部副本族任务：优先展开本轮可运行副本正文（manual=replicaFamilyLaunched，auto=relay <ReplicaEnum>）；空则回退 last-launched。可写 {{total:launched:标签@属性:任务名}} 收窄到指定副本族。亦注册为酒馆助手宏。',
   },
   {
     code: '{{total:last-launched:标签@属性}}',
-    desc: '展开楼层快照中上次启动副本的 tag@attr=* 正文（仅 post_process_tags）。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。脚本与酒馆助手宏均可使用。',
+    desc: '覆盖该 spec 下全部副本族的楼层上次启动正文。可写 {{total:last-launched:标签@属性:任务名}} 收窄。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。脚本与酒馆助手宏均可使用。',
   },
   { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
   {

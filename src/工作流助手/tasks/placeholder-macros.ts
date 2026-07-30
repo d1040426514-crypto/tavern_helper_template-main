@@ -1,6 +1,9 @@
-import { buildCompositeKey, parseExtractTagSpec } from './tag-extract';
-import { ENUM_REGISTRY_MARKER } from './replica-enum-parse';
-import { isReplicaFamilyRootTemplate } from './replica-family';
+import { parseExtractTagSpec } from './tag-extract';
+import {
+  buildDirectedEnumRegistryKey,
+  ENUM_REGISTRY_MARKER,
+} from './replica-enum-parse';
+import { getReplicaFamilyEnumSpecKey, isReplicaFamilyRootTemplate } from './replica-family';
 import { buildFloorTagMap } from './tag-variables';
 import { resolvePlaceholderForInject, type RelayTagMap } from './utils';
 import type { PostProcessTask } from './schema';
@@ -35,7 +38,7 @@ function loadEffectiveTasks(): PostProcessTask[] {
   return resolveEffectiveSettings(loadSettings()).tasks;
 }
 
-/** 用楼层 lastEnumAttrValues 重建带 ENUM_REGISTRY_MARKER 的合成 relay，供 auto {{replica:launched}} 过滤 */
+/** 用楼层 lastEnumAttrValues 按根写定向 registry 键，供 auto {{replica:launched}} 过滤（多族同 spec 不串） */
 export function buildMacroRelayFromReplicaState(
   tasks: PostProcessTask[],
   snapshot: ReplicaStateSnapshot,
@@ -45,12 +48,10 @@ export function buildMacroRelayFromReplicaState(
     if (!isReplicaFamilyRootTemplate(root)) continue;
     const values = snapshot[root.id]?.lastEnumAttrValues;
     if (!values?.length) continue;
-    const enumSpecStr =
-      root.replicaFamilyEnumSpec?.trim() || root.replicaFamilySpec?.trim() || '';
-    const parsed = parseExtractTagSpec(enumSpecStr);
+    const parsed = parseExtractTagSpec(getReplicaFamilyEnumSpecKey(root));
     if (!parsed?.attrName) continue;
     for (const value of values) {
-      const key = buildCompositeKey(parsed.tagName, parsed.attrName, value);
+      const key = buildDirectedEnumRegistryKey(root.id, parsed.tagName, parsed.attrName, value);
       relay.set(key, [ENUM_REGISTRY_MARKER]);
     }
   }
@@ -103,6 +104,9 @@ export function registerPlaceholderMacros(): { stop(): void } {
     registerMacroLike(/\{\{(total:last-launched:[^}]+)\}\}/gi, (context, _substring, inner) =>
       replaceMacroMatch(context, String(inner ?? '')),
     ),
+    registerMacroLike(/\{\{(total:launched:[^}]+)\}\}/gi, (context, _substring, inner) =>
+      replaceMacroMatch(context, String(inner ?? '')),
+    ),
     // 排除 launched: / last-launched:，避免被普通 total: 吃掉
     registerMacroLike(/\{\{(total:(?!launched:|last-launched:)[^}]+)\}\}/gi, (context, _substring, inner) =>
       replaceMacroMatch(context, String(inner ?? '')),
@@ -132,8 +136,12 @@ export const REGISTERED_MACRO_LEGEND: { code: string; desc: string }[] = [
     desc: '展开楼层 post_process_tags 中该规格的全部复合实例，例如 {{total:item@id}}。',
   },
   {
+    code: '{{total:launched:标签@属性}}',
+    desc: '覆盖该 spec 下全部副本族：优先展开本轮可运行副本正文，空则回退 last-launched。可写 {{total:launched:标签@属性:任务名}} 收窄到指定副本族。',
+  },
+  {
     code: '{{total:last-launched:标签@属性}}',
-    desc: '展开楼层快照中上次启动副本的复合实例正文（仅 post_process_tags）。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues；所选为空则回退另一字段。',
+    desc: '覆盖该 spec 下全部副本族的楼层上次启动正文。可写 {{total:last-launched:标签@属性:任务名}} 收窄。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。',
   },
   {
     code: '{{replica:launched:任务名}}',
