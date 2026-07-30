@@ -34,13 +34,20 @@
       </div>
     </div>
 
-    <div v-if="npc.statusParts.length" class="npc-status-row">
-      <span v-for="(part, i) in npc.statusParts" :key="i" class="npc-status-item">
-        <span class="npc-status-dot">●</span>
-        <strong>{{ statusLabels[i] || '详情' }}:</strong>
-        {{ part }}
-      </span>
-    </div>
+    <!-- 当前状态：标签在上、内容在下的信息格；「正在做」可通栏 -->
+    <section v-if="statusCells.length" class="npc-section">
+      <header class="npc-section-head">📍 当前状态</header>
+      <div class="npc-status-grid" :class="{ 'has-doing': !!doingCell }">
+        <div v-for="cell in statusMainCells" :key="cell.label" class="npc-status-cell">
+          <div class="npc-status-k">{{ cell.label }}</div>
+          <div class="npc-status-v">{{ cell.value }}</div>
+        </div>
+        <div v-if="doingCell" class="npc-status-cell npc-status-cell--doing">
+          <div class="npc-status-k">{{ doingCell.label }}</div>
+          <div class="npc-status-v">{{ doingCell.value }}</div>
+        </div>
+      </div>
+    </section>
 
     <!-- 社交 / 背景：并排双卡，窄屏堆叠 -->
     <div v-if="npc.socialNetwork.length || showBackgroundCard" class="npc-duo">
@@ -70,38 +77,47 @@
       </article>
     </div>
 
-    <div v-if="npc.longGoal" class="npc-info-row">
-      <span class="npc-info-label">🎯 长期目标:</span>
-      <span class="npc-info-value">{{ npc.longGoal }}</span>
+    <!-- 长期目标 / 近期打算：并排双卡；近期按 事件|行为|时段 拆行 -->
+    <div v-if="npc.longGoal || npc.nearPlan.length" class="npc-duo">
+      <article v-if="npc.longGoal" class="npc-subcard">
+        <header class="npc-subcard-head">🎯 长期目标</header>
+        <p class="npc-goal-text">{{ npc.longGoal }}</p>
+      </article>
+      <article v-if="npc.nearPlan.length" class="npc-subcard">
+        <header class="npc-subcard-head">📅 近期打算</header>
+        <div class="npc-subcard-body npc-bg-rows">
+          <div v-for="row in nearPlanRows" :key="row.key" class="npc-bg-row">
+            <span class="npc-bg-key">{{ row.label }}</span>
+            <span class="npc-bg-val">{{ row.value }}</span>
+          </div>
+        </div>
+      </article>
     </div>
 
-    <div v-if="npc.nearPlan.length" class="npc-info-row">
-      <span class="npc-info-label">📅 近期打算:</span>
-      <span class="npc-info-value">{{ npc.nearPlan.join(' · ') }}</span>
-    </div>
-
-    <div v-if="npc.recentMemories.length" class="npc-memory-block">
-      <div class="memory-label">近期记忆</div>
-      <div class="npc-memory-tags">
-        <span v-for="(m, i) in npc.recentMemories" :key="'r' + i" class="memory-tag">🧠 {{ m }}</span>
+    <!-- 记忆：三类等宽栏，统一列表样式 -->
+    <section v-if="memoryColumns.length" class="npc-section npc-memory-section">
+      <header class="npc-section-head">🧠 记忆</header>
+      <div
+        class="npc-memory-grid"
+        :style="{ '--mem-cols': String(memoryColumns.length) }"
+      >
+        <article
+          v-for="col in memoryColumns"
+          :key="col.key"
+          class="npc-memory-col"
+          :class="'npc-memory-col--' + col.key"
+        >
+          <header class="npc-memory-col-head">
+            <span>{{ col.icon }}</span>
+            <span>{{ col.title }}</span>
+            <span class="npc-memory-count">{{ col.items.length }}</span>
+          </header>
+          <ol class="npc-memory-list">
+            <li v-for="(m, i) in col.items" :key="col.key + i">{{ m }}</li>
+          </ol>
+        </article>
       </div>
-    </div>
-    <div v-if="npc.settledMemories.length" class="npc-memory-block">
-      <div class="memory-label">沉淀记忆</div>
-      <div class="npc-memory-tags">
-        <span v-for="(m, i) in npc.settledMemories" :key="'s' + i" class="memory-tag memory-tag--settled">
-          📜 {{ m }}
-        </span>
-      </div>
-    </div>
-    <div v-if="npc.coreMemories.length" class="npc-memory-block">
-      <div class="memory-label">核心记忆</div>
-      <div class="npc-memory-tags">
-        <span v-for="(m, i) in npc.coreMemories" :key="'c' + i" class="memory-tag memory-tag--core">
-          💎 {{ m }}
-        </span>
-      </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -114,6 +130,48 @@ const props = defineProps<{ npc: NpcCard }>();
 const statusLabels = STATUS_LABELS;
 const wealthCls = computed(() => getWealthClass(props.npc.wealth));
 const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
+
+const statusCells = computed(() =>
+  props.npc.statusParts.map((value, i) => ({
+    label: statusLabels[i] || `详情${i + 1}`,
+    value,
+  })),
+);
+
+const statusMainCells = computed(() =>
+  statusCells.value.filter(c => c.label !== '正在做'),
+);
+
+const doingCell = computed(() => statusCells.value.find(c => c.label === '正在做') ?? null);
+
+const NEAR_PLAN_LABELS = ['事件', '行为', '时段'] as const;
+
+const nearPlanRows = computed(() => {
+  const parts = props.npc.nearPlan;
+  if (!parts.length) return [];
+  if (parts.length === 1) {
+    return [{ key: 'plan', label: '内容', value: parts[0]! }];
+  }
+  return parts.map((value, i) => ({
+    key: `p${i}`,
+    label: NEAR_PLAN_LABELS[i] ?? `项${i + 1}`,
+    value,
+  }));
+});
+
+const memoryColumns = computed(() => {
+  const cols: Array<{ key: string; title: string; icon: string; items: string[] }> = [];
+  if (props.npc.recentMemories.length) {
+    cols.push({ key: 'recent', title: '近期记忆', icon: '💬', items: props.npc.recentMemories });
+  }
+  if (props.npc.settledMemories.length) {
+    cols.push({ key: 'settled', title: '沉淀记忆', icon: '📜', items: props.npc.settledMemories });
+  }
+  if (props.npc.coreMemories.length) {
+    cols.push({ key: 'core', title: '核心记忆', icon: '💎', items: props.npc.coreMemories });
+  }
+  return cols;
+});
 
 function bgDisplay(v: string): { value: string; empty: boolean } {
   const t = String(v ?? '').trim();
@@ -304,8 +362,7 @@ const backgroundRows = computed(() => {
   width: 100%;
 }
 
-.chain-label,
-.memory-label {
+.chain-label {
   font-family: var(--font-mono);
   font-size: 0.68em;
   font-weight: 700;
@@ -372,25 +429,75 @@ const backgroundRows = computed(() => {
   }
 }
 
-.npc-status-row {
-  font-family: var(--font-mono);
-  font-size: 0.72em;
-  color: var(--text-secondary);
+/* —— 分区标题 —— */
+.npc-section {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.25em 0.85em;
-  line-height: 1.4;
+  flex-direction: column;
+  gap: 0.35em;
   width: 100%;
 }
 
-.npc-status-item {
-  min-width: 0;
-  word-break: break-word;
+.npc-section-head {
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--accent-lavender);
 }
 
-.npc-status-dot {
-  color: var(--accent-sky);
+/* 当前状态：前三项等宽格，「正在做」通栏 */
+.npc-status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35em;
+  width: 100%;
+
+  &.has-doing {
+    grid-template-areas:
+      'a b c'
+      'd d d';
+  }
+}
+
+.npc-status-cell {
+  min-width: 0;
+  padding: 0.35em 0.45em;
+  border-radius: 6px;
+  background: var(--bg-step);
+  border: 1px solid var(--border-subtle);
+
+  &:nth-child(1) {
+    grid-area: a;
+  }
+  &:nth-child(2) {
+    grid-area: b;
+  }
+  &:nth-child(3) {
+    grid-area: c;
+  }
+
+  &--doing {
+    grid-area: d;
+  }
+}
+
+.npc-status-grid:not(.has-doing) .npc-status-cell {
+  grid-area: auto;
+}
+
+.npc-status-k {
+  font-size: 0.65em;
   font-weight: 700;
+  color: var(--accent-sky);
+  letter-spacing: 0.3px;
+  margin-bottom: 0.15em;
+}
+
+.npc-status-v {
+  font-size: 0.78em;
+  color: var(--text-primary);
+  line-height: 1.4;
+  word-break: break-word;
 }
 
 /* 双卡：宽屏并排，等高拉伸 */
@@ -432,6 +539,15 @@ const backgroundRows = computed(() => {
   display: flex;
   flex-direction: column;
   gap: 0.4em;
+  flex: 1;
+}
+
+.npc-goal-text {
+  margin: 0;
+  font-size: 0.8em;
+  line-height: 1.5;
+  color: var(--text-primary);
+  word-break: break-word;
   flex: 1;
 }
 
@@ -481,7 +597,7 @@ const backgroundRows = computed(() => {
   word-break: break-word;
 }
 
-/* 背景：三行键值，对齐整齐 */
+/* 背景 / 近期打算：键值行 */
 .npc-bg-rows {
   gap: 0.3em;
 }
@@ -514,68 +630,104 @@ const backgroundRows = computed(() => {
   }
 }
 
-.npc-info-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.15em 0.3em;
-  font-size: 0.78em;
-  color: var(--text-secondary);
-  line-height: 1.45;
+/* 记忆：等宽分栏 + 有序列表 */
+.npc-memory-section {
+  gap: 0.4em;
+}
+
+.npc-memory-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--mem-cols, 3), minmax(0, 1fr));
+  gap: 0.5em;
   width: 100%;
+  align-items: stretch;
 }
 
-.npc-info-label {
-  font-weight: 700;
-  color: var(--accent-sky);
-  white-space: nowrap;
-}
-
-.npc-info-value {
-  color: var(--text-primary);
-  word-break: break-word;
-  min-width: 0;
-  flex: 1;
-}
-
-.npc-memory-block {
+.npc-memory-col {
   display: flex;
   flex-direction: column;
-  gap: 0.15em;
-  width: 100%;
-}
-
-.npc-memory-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.25em;
-}
-
-.memory-tag {
-  font-size: 0.72em;
-  background: var(--memory-bg);
-  border: 1px solid var(--memory-bd);
-  padding: 0.12em 0.4em;
-  border-radius: 6px;
-  color: var(--text-secondary);
-  line-height: 1.35;
-  max-width: 100%;
-  word-break: break-word;
+  gap: 0.3em;
+  min-width: 0;
+  padding: 0.4em 0.5em;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-subtle);
+  background: var(--memory-bg, var(--bg-step));
+  min-height: 100%;
 
   &--settled {
-    background: var(--memory-settled-bg);
-    border-color: var(--memory-settled-bd);
+    background: var(--memory-settled-bg, var(--bg-step));
+    border-color: var(--memory-settled-bd, var(--border-subtle));
   }
 
   &--core {
-    background: var(--memory-core-bg);
-    border-color: var(--memory-core-bd);
-    color: var(--accent-gold);
+    background: var(--memory-core-bg, var(--bg-step));
+    border-color: var(--memory-core-bd, var(--border-subtle));
+  }
+}
+
+.npc-memory-col-head {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: 700;
+  color: var(--accent-lavender);
+  letter-spacing: 0.3px;
+  padding-bottom: 0.25em;
+  border-bottom: 1px dashed var(--border-subtle);
+}
+
+.npc-memory-col--core .npc-memory-col-head {
+  color: var(--accent-gold);
+}
+
+.npc-memory-count {
+  margin-left: auto;
+  font-weight: 600;
+  opacity: 0.7;
+  font-size: 0.95em;
+}
+
+.npc-memory-list {
+  margin: 0;
+  padding: 0 0 0 1.15em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  list-style: decimal;
+}
+
+.npc-memory-list li {
+  font-size: 0.74em;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  word-break: break-word;
+  padding-left: 0.15em;
+}
+
+.npc-memory-col--core .npc-memory-list li {
+  color: var(--text-primary);
+}
+
+@media (max-width: 900px) {
+  .npc-memory-grid {
+    grid-template-columns: 1fr;
   }
 }
 
 @media (max-width: 720px) {
   .npc-duo {
     grid-template-columns: 1fr;
+  }
+
+  .npc-status-grid {
+    grid-template-columns: 1fr;
+    grid-template-areas: none !important;
+
+    .npc-status-cell {
+      grid-area: auto !important;
+    }
   }
 
   .npc-wealth-tag {
@@ -588,11 +740,6 @@ const backgroundRows = computed(() => {
 }
 
 @media (max-width: 640px) {
-  .npc-status-row {
-    flex-direction: column;
-    gap: 0.2em;
-  }
-
   .npc-rep-inline {
     flex: 1 1 100%;
     order: 3;
