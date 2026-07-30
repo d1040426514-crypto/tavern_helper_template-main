@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildChronicle,
+  getReputationClass,
   getWealthClass,
   isChronicleEmpty,
   parseAttrs,
@@ -115,6 +116,16 @@ test('parseNpcBlock accepts inner-only text with fallback name', () => {
 test('getWealthClass includes 富甲天下', () => {
   assert.equal(getWealthClass('富甲天下'), 'wealth-tycoon');
   assert.equal(getWealthClass('富足有余'), 'wealth-rich');
+});
+
+test('getReputationClass maps six reputation tiers', () => {
+  assert.equal(getReputationClass('天怒人怨'), 'rep-hated');
+  assert.equal(getReputationClass('声名狼藉'), 'rep-infamous');
+  assert.equal(getReputationClass('默默无闻'), 'rep-obscure');
+  assert.equal(getReputationClass('小有名气'), 'rep-known');
+  assert.equal(getReputationClass('受人尊敬'), 'rep-respected');
+  assert.equal(getReputationClass('万众敬仰'), 'rep-revered');
+  assert.equal(getReputationClass('其它'), 'rep-default');
 });
 
 test('parsePreview extracts time role sets and interactions', () => {

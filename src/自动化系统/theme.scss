@@ -68,6 +68,26 @@
   --wealth-tycoon-fg: #f5dc90;
   --wealth-tycoon-bd: rgba(220, 190, 100, 0.6);
 
+  /* reputation tags (dark) */
+  --rep-hated-bg: rgba(200, 80, 90, 0.24);
+  --rep-hated-fg: #f0a0a8;
+  --rep-hated-bd: rgba(200, 80, 90, 0.45);
+  --rep-infamous-bg: rgba(160, 100, 140, 0.22);
+  --rep-infamous-fg: #d8a0c0;
+  --rep-infamous-bd: rgba(160, 100, 140, 0.42);
+  --rep-obscure-bg: rgba(120, 130, 150, 0.2);
+  --rep-obscure-fg: #a8b0c0;
+  --rep-obscure-bd: rgba(120, 130, 150, 0.38);
+  --rep-known-bg: rgba(120, 160, 190, 0.22);
+  --rep-known-fg: #98c4dc;
+  --rep-known-bd: rgba(120, 160, 190, 0.42);
+  --rep-respected-bg: rgba(130, 170, 140, 0.22);
+  --rep-respected-fg: #a0d0b0;
+  --rep-respected-bd: rgba(130, 170, 140, 0.42);
+  --rep-revered-bg: rgba(200, 170, 90, 0.28);
+  --rep-revered-fg: #f0dc98;
+  --rep-revered-bd: rgba(210, 180, 100, 0.5);
+
   --debut-bg: rgba(220, 150, 120, 0.28);
   --debut-fg: #f0b090;
   --memory-bg: rgba(160, 140, 200, 0.14);
@@ -162,6 +182,26 @@
   --wealth-tycoon-fg: #f5dc90;
   --wealth-tycoon-bd: rgba(220, 190, 100, 0.6);
 
+  /* reputation tags (dark) */
+  --rep-hated-bg: rgba(200, 80, 90, 0.24);
+  --rep-hated-fg: #f0a0a8;
+  --rep-hated-bd: rgba(200, 80, 90, 0.45);
+  --rep-infamous-bg: rgba(160, 100, 140, 0.22);
+  --rep-infamous-fg: #d8a0c0;
+  --rep-infamous-bd: rgba(160, 100, 140, 0.42);
+  --rep-obscure-bg: rgba(120, 130, 150, 0.2);
+  --rep-obscure-fg: #a8b0c0;
+  --rep-obscure-bd: rgba(120, 130, 150, 0.38);
+  --rep-known-bg: rgba(120, 160, 190, 0.22);
+  --rep-known-fg: #98c4dc;
+  --rep-known-bd: rgba(120, 160, 190, 0.42);
+  --rep-respected-bg: rgba(130, 170, 140, 0.22);
+  --rep-respected-fg: #a0d0b0;
+  --rep-respected-bd: rgba(130, 170, 140, 0.42);
+  --rep-revered-bg: rgba(200, 170, 90, 0.28);
+  --rep-revered-fg: #f0dc98;
+  --rep-revered-bd: rgba(210, 180, 100, 0.5);
+
   --debut-bg: rgba(220, 150, 120, 0.28);
   --debut-fg: #f0b090;
   --memory-bg: rgba(100, 160, 140, 0.14);
@@ -236,6 +276,26 @@
   --wealth-tycoon-bg: rgba(154, 116, 40, 0.16);
   --wealth-tycoon-fg: #6e580e;
   --wealth-tycoon-bd: rgba(154, 116, 40, 0.38);
+
+  /* reputation tags (light) */
+  --rep-hated-bg: rgba(176, 48, 56, 0.12);
+  --rep-hated-fg: #9a2828;
+  --rep-hated-bd: rgba(176, 48, 56, 0.32);
+  --rep-infamous-bg: rgba(120, 60, 100, 0.12);
+  --rep-infamous-fg: #6e3860;
+  --rep-infamous-bd: rgba(120, 60, 100, 0.3);
+  --rep-obscure-bg: rgba(90, 100, 120, 0.1);
+  --rep-obscure-fg: #5a6478;
+  --rep-obscure-bd: rgba(90, 100, 120, 0.28);
+  --rep-known-bg: rgba(50, 110, 150, 0.12);
+  --rep-known-fg: #2a6888;
+  --rep-known-bd: rgba(50, 110, 150, 0.3);
+  --rep-respected-bg: rgba(40, 120, 80, 0.12);
+  --rep-respected-fg: #2a6a42;
+  --rep-respected-bd: rgba(40, 120, 80, 0.3);
+  --rep-revered-bg: rgba(154, 116, 40, 0.14);
+  --rep-revered-fg: #6e580e;
+  --rep-revered-bd: rgba(154, 116, 40, 0.36);
 
   --debut-bg: rgba(176, 80, 48, 0.14);
   --debut-fg: #a04028;
@@ -312,6 +372,26 @@
   --wealth-tycoon-fg: #6e580e;
   --wealth-tycoon-bd: rgba(150, 110, 20, 0.4);
 
+  /* reputation tags (light) */
+  --rep-hated-bg: rgba(176, 48, 56, 0.12);
+  --rep-hated-fg: #9a2828;
+  --rep-hated-bd: rgba(176, 48, 56, 0.32);
+  --rep-infamous-bg: rgba(120, 60, 100, 0.12);
+  --rep-infamous-fg: #6e3860;
+  --rep-infamous-bd: rgba(120, 60, 100, 0.3);
+  --rep-obscure-bg: rgba(90, 100, 120, 0.1);
+  --rep-obscure-fg: #5a6478;
+  --rep-obscure-bd: rgba(90, 100, 120, 0.28);
+  --rep-known-bg: rgba(50, 110, 150, 0.12);
+  --rep-known-fg: #2a6888;
+  --rep-known-bd: rgba(50, 110, 150, 0.3);
+  --rep-respected-bg: rgba(40, 120, 80, 0.12);
+  --rep-respected-fg: #2a6a42;
+  --rep-respected-bd: rgba(40, 120, 80, 0.3);
+  --rep-revered-bg: rgba(154, 116, 40, 0.14);
+  --rep-revered-fg: #6e580e;
+  --rep-revered-bd: rgba(154, 116, 40, 0.36);
+
   --debut-bg: rgba(176, 80, 48, 0.14);
   --debut-fg: #a04028;
   --memory-bg: rgba(70, 95, 140, 0.08);
@@ -387,6 +467,26 @@
   --wealth-tycoon-fg: #6e580e;
   --wealth-tycoon-bd: rgba(150, 110, 20, 0.38);
 
+  /* reputation tags (light) */
+  --rep-hated-bg: rgba(176, 48, 56, 0.12);
+  --rep-hated-fg: #9a2828;
+  --rep-hated-bd: rgba(176, 48, 56, 0.32);
+  --rep-infamous-bg: rgba(120, 60, 100, 0.12);
+  --rep-infamous-fg: #6e3860;
+  --rep-infamous-bd: rgba(120, 60, 100, 0.3);
+  --rep-obscure-bg: rgba(90, 100, 120, 0.1);
+  --rep-obscure-fg: #5a6478;
+  --rep-obscure-bd: rgba(90, 100, 120, 0.28);
+  --rep-known-bg: rgba(50, 110, 150, 0.12);
+  --rep-known-fg: #2a6888;
+  --rep-known-bd: rgba(50, 110, 150, 0.3);
+  --rep-respected-bg: rgba(40, 120, 80, 0.12);
+  --rep-respected-fg: #2a6a42;
+  --rep-respected-bd: rgba(40, 120, 80, 0.3);
+  --rep-revered-bg: rgba(154, 116, 40, 0.14);
+  --rep-revered-fg: #6e580e;
+  --rep-revered-bd: rgba(154, 116, 40, 0.36);
+
   --debut-bg: rgba(160, 70, 60, 0.14);
   --debut-fg: #903828;
   --memory-bg: rgba(45, 100, 90, 0.08);
@@ -461,6 +561,26 @@
   --wealth-tycoon-bg: rgba(160, 110, 30, 0.16);
   --wealth-tycoon-fg: #6e580e;
   --wealth-tycoon-bd: rgba(160, 110, 30, 0.4);
+
+  /* reputation tags (light) */
+  --rep-hated-bg: rgba(176, 48, 56, 0.12);
+  --rep-hated-fg: #9a2828;
+  --rep-hated-bd: rgba(176, 48, 56, 0.32);
+  --rep-infamous-bg: rgba(120, 60, 100, 0.12);
+  --rep-infamous-fg: #6e3860;
+  --rep-infamous-bd: rgba(120, 60, 100, 0.3);
+  --rep-obscure-bg: rgba(90, 100, 120, 0.1);
+  --rep-obscure-fg: #5a6478;
+  --rep-obscure-bd: rgba(90, 100, 120, 0.28);
+  --rep-known-bg: rgba(50, 110, 150, 0.12);
+  --rep-known-fg: #2a6888;
+  --rep-known-bd: rgba(50, 110, 150, 0.3);
+  --rep-respected-bg: rgba(40, 120, 80, 0.12);
+  --rep-respected-fg: #2a6a42;
+  --rep-respected-bd: rgba(40, 120, 80, 0.3);
+  --rep-revered-bg: rgba(154, 116, 40, 0.14);
+  --rep-revered-fg: #6e580e;
+  --rep-revered-bd: rgba(154, 116, 40, 0.36);
 
   --debut-bg: rgba(176, 64, 64, 0.14);
   --debut-fg: #b04040;

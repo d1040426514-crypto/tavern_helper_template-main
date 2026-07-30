@@ -136,3 +136,12 @@ export type WealthClass =
   | 'wealth-welloff'
   | 'wealth-rich'
   | 'wealth-tycoon';
+
+export type ReputationClass =
+  | 'rep-hated'
+  | 'rep-infamous'
+  | 'rep-obscure'
+  | 'rep-known'
+  | 'rep-respected'
+  | 'rep-revered'
+  | 'rep-default';

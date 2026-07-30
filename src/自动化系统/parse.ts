@@ -11,6 +11,7 @@ import {
   type QuestItem,
   type QuestItemStatus,
   type QuestLog,
+  type ReputationClass,
   type WealthClass,
 } from './types';
 
@@ -484,6 +485,17 @@ export function getWealthEmoji(wealth: string): string {
     'wealth-tycoon': '🏰',
   };
   return map[cls];
+}
+
+export function getReputationClass(value: string): ReputationClass {
+  const v = String(value ?? '');
+  if (/天怒人怨/.test(v)) return 'rep-hated';
+  if (/声名狼藉/.test(v)) return 'rep-infamous';
+  if (/默默无闻/.test(v)) return 'rep-obscure';
+  if (/小有名气/.test(v)) return 'rep-known';
+  if (/受人尊敬/.test(v)) return 'rep-respected';
+  if (/万众敬仰/.test(v)) return 'rep-revered';
+  return 'rep-default';
 }
 
 /**

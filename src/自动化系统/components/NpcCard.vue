@@ -18,7 +18,12 @@
         {{ npc.name }}
       </div>
       <div v-if="npc.reputation.length" class="npc-rep-inline" title="声誉">
-        <span v-for="(r, i) in npc.reputation" :key="'rep' + i" class="npc-chip npc-chip--rep">
+        <span
+          v-for="(r, i) in npc.reputation"
+          :key="'rep' + i"
+          class="npc-chip npc-chip--rep"
+          :class="getReputationClass(r.value)"
+        >
           <template v-if="r.label">[{{ r.label }}]</template>{{ r.value }}
         </span>
       </div>
@@ -209,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { getWealthClass, getWealthEmoji } from '../parse';
+import { getReputationClass, getWealthClass, getWealthEmoji } from '../parse';
 import { STATUS_LABELS, type NpcCard, type QuestItemStatus } from '../types';
 
 const props = defineProps<{ npc: NpcCard }>();
@@ -529,10 +534,45 @@ const backgroundRows = computed(() => {
   white-space: nowrap;
 
   &--rep {
-    color: var(--text-primary);
-    border-color: rgba(180, 150, 80, 0.35);
-    background: rgba(200, 164, 92, 0.1);
+    font-weight: 600;
+    letter-spacing: 0.15px;
   }
+}
+
+.rep-hated {
+  background: var(--rep-hated-bg);
+  color: var(--rep-hated-fg);
+  border-color: var(--rep-hated-bd);
+}
+.rep-infamous {
+  background: var(--rep-infamous-bg);
+  color: var(--rep-infamous-fg);
+  border-color: var(--rep-infamous-bd);
+}
+.rep-obscure {
+  background: var(--rep-obscure-bg);
+  color: var(--rep-obscure-fg);
+  border-color: var(--rep-obscure-bd);
+}
+.rep-known {
+  background: var(--rep-known-bg);
+  color: var(--rep-known-fg);
+  border-color: var(--rep-known-bd);
+}
+.rep-respected {
+  background: var(--rep-respected-bg);
+  color: var(--rep-respected-fg);
+  border-color: var(--rep-respected-bd);
+}
+.rep-revered {
+  background: var(--rep-revered-bg);
+  color: var(--rep-revered-fg);
+  border-color: var(--rep-revered-bd);
+}
+.rep-default {
+  background: var(--bg-step);
+  color: var(--text-secondary);
+  border-color: var(--border-subtle);
 }
 
 .npc-chain-section {
