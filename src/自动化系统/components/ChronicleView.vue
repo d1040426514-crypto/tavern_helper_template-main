@@ -1,7 +1,7 @@
 <template>
   <div
     class="chronicle-container"
-    :class="{ 'menu-open': themeMenuOpen }"
+    :class="{ 'menu-open': expanded && themeMenuOpen }"
     :style="{ '--chronicle-font-scale': String(fontScale), fontSize: `calc(16px * ${fontScale})` }"
   >
     <div class="chronicle-header" @click="onHeaderClick">
@@ -36,6 +36,25 @@
           A+
         </button>
         <div ref="themeWrapRef" class="theme-wrap">
+          <div
+            v-if="!expanded && themeMenuOpen"
+            class="theme-dots"
+            role="listbox"
+            aria-label="选择主题"
+          >
+            <button
+              v-for="opt in THEME_OPTIONS"
+              :key="opt.id"
+              type="button"
+              class="theme-dot"
+              role="option"
+              :class="{ active: opt.id === themeId }"
+              :title="opt.label"
+              :aria-selected="opt.id === themeId"
+              :style="{ background: opt.swatch }"
+              @click.stop="selectTheme(opt.id)"
+            />
+          </div>
           <button
             type="button"
             class="theme-btn"
@@ -47,10 +66,10 @@
             {{ currentTheme.icon }}
           </button>
           <div
-            v-if="themeMenuOpen"
+            v-if="expanded && themeMenuOpen"
             class="theme-menu"
             role="listbox"
-            :aria-label="'主题列表'"
+            aria-label="主题列表"
           >
             <button
               v-for="opt in THEME_OPTIONS"
@@ -123,7 +142,7 @@ function toggleThemeMenu() {
 
 function selectTheme(id: ChronicleThemeId) {
   emit('set-theme', id);
-  themeMenuOpen.value = false;
+  if (expanded.value) themeMenuOpen.value = false;
 }
 
 function closeThemeMenu() {
@@ -150,6 +169,10 @@ function onDocPointerDown(e: PointerEvent) {
 function onDocKeydown(e: KeyboardEvent) {
   if (e.key === 'Escape' && themeMenuOpen.value) closeThemeMenu();
 }
+
+watch(expanded, () => {
+  closeThemeMenu();
+});
 
 onMounted(() => {
   document.addEventListener('pointerdown', onDocPointerDown, true);
@@ -294,6 +317,44 @@ onBeforeUnmount(() => {
 .theme-wrap {
   position: relative;
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.theme-dots {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.theme-dot {
+  width: 13px;
+  height: 13px;
+  padding: 0;
+  margin: 0;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  cursor: pointer;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  transition: outline-color 0.15s, border-color 0.15s, transform 0.15s;
+
+  &:hover {
+    transform: scale(1.12);
+    border-color: var(--accent-lavender);
+  }
+
+  &.active {
+    outline: 2px solid var(--accent-lavender);
+    outline-offset: 1px;
+    border-color: var(--accent-lavender);
+  }
 }
 
 .theme-btn,
@@ -474,6 +535,15 @@ onBeforeUnmount(() => {
     width: 36px;
     height: 36px;
     font-size: 0.85em;
+  }
+
+  .theme-dots {
+    gap: 5px;
+  }
+
+  .theme-dot {
+    width: 16px;
+    height: 16px;
   }
 
   .font-btn {
