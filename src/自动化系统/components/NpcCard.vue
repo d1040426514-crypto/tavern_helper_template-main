@@ -740,13 +740,36 @@ const backgroundRows = computed(() => {
 }
 
 @media (max-width: 640px) {
+  .npc-card {
+    overflow-x: hidden;
+    gap: 0.55em;
+  }
+
+  .npc-name {
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    word-break: break-word;
+  }
+
   .npc-rep-inline {
     flex: 1 1 100%;
     order: 3;
+    row-gap: 0.35em;
+  }
+
+  .npc-chip {
+    white-space: normal;
   }
 
   .npc-wealth-tag {
     order: 4;
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .npc-chain-section {
+    padding: 0.5em 0.65em;
   }
 
   .chain-arrow {
@@ -756,6 +779,26 @@ const backgroundRows = computed(() => {
   .chain-step,
   .chain-predict {
     flex: 1 1 100%;
+    font-size: 0.78em;
+    line-height: 1.45;
+    padding: 0.35em 0.5em;
+  }
+
+  .npc-subcard {
+    padding: 0.55em 0.6em 0.6em;
+    gap: 0.45em;
+  }
+
+  .npc-memory-col {
+    padding: 0.5em 0.55em;
+  }
+
+  .npc-memory-list {
+    gap: 0.4em;
+  }
+
+  .npc-memory-list li {
+    line-height: 1.55;
   }
 
   .npc-social-row {

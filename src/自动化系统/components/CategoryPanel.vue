@@ -145,22 +145,22 @@ const open = ref(true);
   }
 
   .npc-grid {
-    gap: 6px;
+    gap: var(--space-3);
   }
 
   .panel-header {
-    padding: 7px 8px 7px 10px;
+    padding: 8px 8px 8px 10px;
     font-size: 0.75rem;
-    min-height: 40px;
+    min-height: var(--touch-min);
   }
 
   .panel-caret {
-    width: 36px;
-    height: 36px;
+    width: var(--touch-min);
+    height: var(--touch-min);
   }
 
   .panel-content.open {
-    padding: 6px 8px 8px;
+    padding: var(--space-3) var(--panel-pad-x) var(--space-4);
   }
 }
 </style>

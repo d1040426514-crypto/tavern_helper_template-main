@@ -506,8 +506,14 @@ onBeforeUnmount(() => {
     padding: 6px 8px;
     gap: 5px;
     flex-wrap: wrap;
-    row-gap: 5px;
-    min-height: 40px;
+    row-gap: 6px;
+    min-height: var(--touch-min);
+  }
+
+  .header-controls {
+    flex-wrap: wrap;
+    row-gap: 6px;
+    justify-content: flex-end;
   }
 
   .header-title {
@@ -532,23 +538,42 @@ onBeforeUnmount(() => {
 
   .header-caret,
   .theme-btn {
-    width: 36px;
-    height: 36px;
+    width: var(--touch-min);
+    height: var(--touch-min);
     font-size: 0.85em;
   }
 
+  .theme-wrap:has(.theme-dots) {
+    flex-basis: 100%;
+    order: 20;
+    justify-content: flex-end;
+  }
+
   .theme-dots {
-    gap: 5px;
+    gap: 6px;
   }
 
   .theme-dot {
     width: 16px;
     height: 16px;
+    padding: 6px;
+    box-sizing: content-box;
+    background-clip: content-box;
+  }
+
+  .theme-menu {
+    min-width: min(200px, 70vw);
+  }
+
+  .theme-menu-item {
+    min-height: 40px;
+    font-size: 0.78em;
+    padding: 8px 10px;
   }
 
   .font-btn {
-    min-height: 36px;
-    min-width: 36px;
+    min-height: var(--touch-min);
+    min-width: var(--touch-min);
     font-size: 0.75em;
   }
 

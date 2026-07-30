@@ -492,3 +492,18 @@
     box-sizing: border-box;
   }
 }
+
+@media (max-width: 640px) {
+  .chronicle-root {
+    margin: 6px 0;
+    --space-2: 5px;
+    --space-3: 6px;
+    --space-4: 8px;
+    --space-5: 10px;
+    --card-pad: 7px 8px;
+    --panel-pad-x: 8px;
+    --touch-min: 40px;
+    --radius-md: 9px;
+    --radius-lg: 11px;
+  }
+}

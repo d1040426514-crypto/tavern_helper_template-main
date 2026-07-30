@@ -126,8 +126,9 @@ onMounted(() => {
 
 @media (max-width: 640px) {
   .app-hint {
-    padding: 10px 12px;
+    padding: var(--space-4, 8px) var(--panel-pad-x, 8px);
     font-size: 0.75rem;
+    color: var(--text-muted, #888);
   }
 }
 </style>
