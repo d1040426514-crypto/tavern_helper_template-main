@@ -1,12 +1,10 @@
 import { extractBalancedJsonSlice, parseJsonPatchArrayLenient } from '@util/common';
+import { hasXmlTagBlock } from '@util/xml-tag-blocks';
 
 import type { ApiConfig } from './schema';
 
 export type StructuredOutputMode = 'off' | 'mvu_json_patch' | 'addon_json_patch';
 export type ActiveStructuredOutputMode = Exclude<StructuredOutputMode, 'off'>;
-
-const JSON_PATCH_RE = /<JSONPatch>\s*[\s\S]*?\s*<\/JSONPatch>/i;
-const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*[\s\S]*?\s*<\/AddonJSONPatch>/i;
 
 export { extractBalancedJsonSlice } from '@util/common';
 
@@ -223,8 +221,8 @@ export function extractStrictVariableResponse(
 }
 
 export function hasCompleteVariableXml(text: string, mode: ActiveStructuredOutputMode): boolean {
-  const re = mode === 'mvu_json_patch' ? JSON_PATCH_RE : ADDON_JSON_PATCH_RE;
-  return re.test(String(text || ''));
+  const tag = mode === 'mvu_json_patch' ? 'JSONPatch' : 'AddonJSONPatch';
+  return hasXmlTagBlock(String(text || ''), tag);
 }
 
 export function apiConfigRequiresChatCompletionPath(apiConfig: ApiConfig): boolean {

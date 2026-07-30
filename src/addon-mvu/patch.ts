@@ -1,3 +1,5 @@
+import { extractXmlTagInners } from '@util/xml-tag-blocks';
+
 import { getAtPath, resolveParentForWrite, resolveParentStrict } from './patch-heal';
 import { parseJsonPatchOpsWithIssues } from './patch-parse-lenient';
 import type { AddonPatchFailedFragment } from './patch-log';
@@ -15,8 +17,6 @@ export type PatchIssue = {
   message: string;
   op?: MvuJsonPatchOp;
 };
-
-const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*([\s\S]*?)\s*<\/AddonJSONPatch>/gi;
 
 function decodeJsonPointerSegment(segment: string): string {
   return segment.replace(/~1/g, '/').replace(/~0/g, '~');
@@ -198,7 +198,7 @@ export function parseJsonPatchOps(raw: string): MvuJsonPatchOp[] {
   return ops;
 }
 
-/** 从消息中提取所有 <AddonJSONPatch> 块并解析为 op 列表（含逐条容错） */
+/** 从消息中提取所有 <AddonJSONPatch> 块并解析为 op 列表（含逐条容错；跳过孤儿开标签） */
 export function extractAddonJsonPatchOpsWithIssues(message: string): {
   ops: MvuJsonPatchOp[];
   issues: PatchIssue[];
@@ -207,8 +207,8 @@ export function extractAddonJsonPatchOpsWithIssues(message: string): {
   const ops: MvuJsonPatchOp[] = [];
   const issues: PatchIssue[] = [];
   const failedFragments: AddonPatchFailedFragment[] = [];
-  for (const match of message.matchAll(ADDON_JSON_PATCH_RE)) {
-    const patchText = match[1]?.trim();
+  for (const inner of extractXmlTagInners(message, 'AddonJSONPatch')) {
+    const patchText = inner.trim();
     if (!patchText) {
       continue;
     }

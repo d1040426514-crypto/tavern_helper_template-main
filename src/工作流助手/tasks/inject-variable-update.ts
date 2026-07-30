@@ -4,6 +4,7 @@ import {
   hasUpdateVariableTag,
   type StageVariableUpdateResult,
 } from './inject-variable-update-logic';
+import { hasXmlTagBlock, neutralizeOrphanXmlOpens } from '@util/xml-tag-blocks';
 
 export {
   collectStageVariableUpdateSources,
@@ -13,8 +14,7 @@ export {
 
 const BASELINE_KEY = '_post_process_inject_var_baseline';
 
-const JSON_PATCH_RE = /<JSONPatch>\s*[\s\S]*?\s*<\/JSONPatch>/i;
-const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*[\s\S]*?\s*<\/AddonJSONPatch>/i;
+const PATCH_TAG_NAMES = ['JSONPatch', 'AddonJSONPatch'] as const;
 
 type InjectVarBaseline = {
   mvu?: Mvu.MvuData;
@@ -22,11 +22,15 @@ type InjectVarBaseline = {
 };
 
 function hasMvuJsonPatch(aiBlock: string): boolean {
-  return JSON_PATCH_RE.test(aiBlock);
+  return hasXmlTagBlock(aiBlock, 'JSONPatch');
 }
 
 function hasAddonJsonPatch(aiBlock: string): boolean {
-  return ADDON_JSON_PATCH_RE.test(aiBlock);
+  return hasXmlTagBlock(aiBlock, 'AddonJSONPatch');
+}
+
+function sanitizePatchTagsForApply(aiBlock: string): string {
+  return neutralizeOrphanXmlOpens(aiBlock, [...PATCH_TAG_NAMES]);
 }
 
 function readBaseline(messageId: number): InjectVarBaseline | undefined {
@@ -153,8 +157,9 @@ async function applyMvuInjectPatch(messageId: number, aiBlock: string): Promise<
     return;
   }
 
+  const sanitized = sanitizePatchTagsForApply(aiBlock);
   const oldMvu = Mvu.getMvuData({ type: 'message', message_id: messageId });
-  const newMvu = await Mvu.parseMessage(aiBlock, oldMvu);
+  const newMvu = await Mvu.parseMessage(sanitized, oldMvu);
   if (!newMvu || _.isEqual(newMvu, oldMvu)) return;
   await Mvu.replaceMvuData(newMvu, { type: 'message', message_id: messageId });
 }
@@ -166,7 +171,7 @@ async function applyAddonInjectPatch(messageId: number, aiBlock: string): Promis
     return;
   }
 
-  await Addon.applyAddonUpdateFromMessage(aiBlock, messageId);
+  await Addon.applyAddonUpdateFromMessage(sanitizePatchTagsForApply(aiBlock), messageId);
 }
 
 /**

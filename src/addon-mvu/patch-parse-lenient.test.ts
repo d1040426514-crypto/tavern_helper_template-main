@@ -86,6 +86,31 @@ test('extractAddonJsonPatchOpsWithIssues: heals missing braces in XML patch', ()
   assert.deepEqual(_.get(data, '世界.阿斯塔利亚.x'), { a: 1 });
 });
 
+test('extractAddonJsonPatchOpsWithIssues: skips orphan open in think', () => {
+  const message = `<think>
+确保 <UpdateVariable> 包含 <Analysis> 和 <AddonJSONPatch>。
+</think>
+<UpdateVariable>
+<Analysis>新建社交圈</Analysis>
+<AddonJSONPatch>
+[
+  { "op": "insert", "path": "/社交圈/帝国宫廷决策圈", "value": { "描述": "女皇中枢", "性质": "宫廷" } },
+  { "op": "insert", "path": "/社交圈/潮汐王座地下暗网", "value": { "描述": "暗巷", "性质": "黑市" } }
+]
+</AddonJSONPatch>
+</UpdateVariable>`;
+  const { ops, failedFragments } = extractAddonJsonPatchOpsWithIssues(message);
+  assert.equal(ops.length, 2);
+  assert.equal((ops[0] as { path: string }).path, '/社交圈/帝国宫廷决策圈');
+  assert.equal((ops[1] as { path: string }).path, '/社交圈/潮汐王座地下暗网');
+  assert.equal(failedFragments.length, 0);
+
+  const base = normalizeAddonData({ 社交圈: {}, 位面交汇: false });
+  const { data } = applyParsedOps(base, ops);
+  assert.equal(_.get(data, '社交圈.帝国宫廷决策圈.描述'), '女皇中枢');
+  assert.equal(_.get(data, '社交圈.潮汐王座地下暗网.性质'), '黑市');
+});
+
 test('all ops with only missing braces heal successfully', () => {
   const raw = `[
     { "op": "insert", "path": "/a", "value": { "x": 1 },
