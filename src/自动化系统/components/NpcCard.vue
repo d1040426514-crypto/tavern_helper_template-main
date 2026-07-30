@@ -94,6 +94,75 @@
       </article>
     </div>
 
+    <!-- 可选任务：进行中 + 归档 -->
+    <section
+      v-if="npc.questLogs.length || npc.questArchive.length"
+      class="npc-section npc-quest-section"
+    >
+      <header class="npc-section-head">
+        📋 任务
+        <span class="npc-quest-count">{{ questSectionCount }}</span>
+      </header>
+
+      <div v-if="npc.questLogs.length" class="npc-quest-logs">
+        <article
+          v-for="(log, li) in npc.questLogs"
+          :key="'qlog' + li"
+          class="npc-subcard npc-quest-card"
+        >
+          <div class="npc-quest-card-top">
+            <span class="npc-quest-kind" :class="questKindClass(log.kind)">{{ log.kind || '任务' }}</span>
+            <span class="npc-quest-title">{{ log.title }}</span>
+          </div>
+          <p v-if="log.summary" class="npc-quest-summary">{{ log.summary }}</p>
+          <ul v-if="log.items.length" class="npc-quest-items">
+            <li
+              v-for="(item, ii) in log.items"
+              :key="'qi' + li + '-' + ii"
+              class="npc-quest-item"
+              :class="'npc-quest-item--' + item.status"
+            >
+              <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(item.status) }}</span>
+              <span class="npc-quest-item-text">{{ item.text }}</span>
+              <ul v-if="item.children.length" class="npc-quest-children">
+                <li
+                  v-for="(child, ci) in item.children"
+                  :key="'qc' + li + '-' + ii + '-' + ci"
+                  class="npc-quest-item npc-quest-item--child"
+                  :class="'npc-quest-item--' + child.status"
+                >
+                  <span class="npc-quest-mark" aria-hidden="true">{{ questStatusMark(child.status) }}</span>
+                  <span class="npc-quest-item-text">{{ child.text }}</span>
+                </li>
+              </ul>
+            </li>
+          </ul>
+          <div v-if="log.climax" class="npc-quest-climax">
+            <span class="npc-quest-climax-label">收束</span>
+            <span class="npc-quest-climax-text">{{ log.climax }}</span>
+          </div>
+        </article>
+      </div>
+
+      <div v-if="npc.questArchive.length" class="npc-quest-archive">
+        <header class="npc-quest-archive-head">归档</header>
+        <ul class="npc-quest-archive-list">
+          <li
+            v-for="(entry, ai) in npc.questArchive"
+            :key="'qarch' + ai"
+            class="npc-quest-archive-row"
+          >
+            <span class="npc-quest-kind npc-quest-kind--archive" :class="questKindClass(entry.kind)">
+              {{ entry.kind }}
+            </span>
+            <span class="npc-quest-archive-title">{{ entry.title }}</span>
+            <span v-if="entry.completedAt" class="npc-quest-archive-date">{{ entry.completedAt }}</span>
+            <span v-if="entry.ending" class="npc-quest-archive-ending">{{ entry.ending }}</span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
     <!-- 记忆：三类等宽栏，统一列表样式 -->
     <section v-if="memoryColumns.length" class="npc-section npc-memory-section">
       <header class="npc-section-head">🧠 记忆</header>
@@ -123,13 +192,32 @@
 
 <script setup lang="ts">
 import { getWealthClass, getWealthEmoji } from '../parse';
-import { STATUS_LABELS, type NpcCard } from '../types';
+import { STATUS_LABELS, type NpcCard, type QuestItemStatus } from '../types';
 
 const props = defineProps<{ npc: NpcCard }>();
 
 const statusLabels = STATUS_LABELS;
 const wealthCls = computed(() => getWealthClass(props.npc.wealth));
 const wealthEmoji = computed(() => getWealthEmoji(props.npc.wealth));
+
+const questSectionCount = computed(
+  () => props.npc.questLogs.length + props.npc.questArchive.length,
+);
+
+function questStatusMark(status: QuestItemStatus): string {
+  if (status === 'done') return '☑';
+  if (status === 'active') return '▶';
+  return '☐';
+}
+
+function questKindClass(kind: string): string {
+  const k = String(kind ?? '').trim();
+  if (k.includes('主线')) return 'quest-kind--main';
+  if (k.includes('支线')) return 'quest-kind--side';
+  if (k.includes('角色')) return 'quest-kind--char';
+  if (k.includes('委托')) return 'quest-kind--errand';
+  return 'quest-kind--default';
+}
 
 const statusCells = computed(() =>
   props.npc.statusParts.map((value, i) => ({
@@ -708,6 +796,255 @@ const backgroundRows = computed(() => {
 
 .npc-memory-col--core .npc-memory-list li {
   color: var(--text-primary);
+}
+
+/* —— 可选任务模块 —— */
+.npc-quest-section {
+  gap: 0.45em;
+}
+
+.npc-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+}
+
+.npc-quest-count {
+  font-size: 0.85em;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--bg-step);
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 0.05em 0.45em;
+  letter-spacing: 0;
+}
+
+.npc-quest-logs {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
+  width: 100%;
+}
+
+.npc-quest-card {
+  min-height: 0;
+}
+
+.npc-quest-card-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35em 0.5em;
+}
+
+.npc-quest-kind {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 0.12em 0.4em;
+  border-radius: 4px;
+  border: 1px solid var(--border-subtle);
+  line-height: 1.3;
+}
+
+.quest-kind--main {
+  color: var(--accent-gold);
+  background: color-mix(in srgb, var(--accent-gold) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-gold) 35%, transparent);
+}
+
+.quest-kind--side {
+  color: var(--accent-sky);
+  background: color-mix(in srgb, var(--accent-sky) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-sky) 35%, transparent);
+}
+
+.quest-kind--char {
+  color: var(--accent-rose);
+  background: color-mix(in srgb, var(--accent-rose) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-rose) 35%, transparent);
+}
+
+.quest-kind--errand {
+  color: var(--accent-mint);
+  background: color-mix(in srgb, var(--accent-mint) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent-mint) 35%, transparent);
+}
+
+.quest-kind--default {
+  color: var(--accent-lavender);
+  background: var(--bg-step);
+}
+
+.npc-quest-title {
+  font-size: 0.84em;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.35;
+  word-break: break-word;
+  min-width: 0;
+}
+
+.npc-quest-summary {
+  margin: 0;
+  font-size: 0.74em;
+  line-height: 1.45;
+  color: var(--text-muted);
+  word-break: break-word;
+}
+
+.npc-quest-items,
+.npc-quest-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.28em;
+}
+
+.npc-quest-item {
+  display: grid;
+  grid-template-columns: 1.1em minmax(0, 1fr);
+  column-gap: 0.35em;
+  row-gap: 0.2em;
+  align-items: start;
+  font-size: 0.76em;
+  line-height: 1.45;
+  color: var(--text-secondary);
+
+  &--done {
+    color: var(--text-muted);
+
+    .npc-quest-item-text {
+      text-decoration: line-through;
+      text-decoration-color: color-mix(in srgb, var(--text-muted) 55%, transparent);
+    }
+  }
+
+  &--active {
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  &--todo {
+    color: var(--text-secondary);
+  }
+}
+
+.npc-quest-mark {
+  font-size: 0.9em;
+  line-height: 1.45;
+  color: var(--accent-sky);
+  text-align: center;
+}
+
+.npc-quest-item--done .npc-quest-mark {
+  color: var(--accent-mint);
+}
+
+.npc-quest-item--active .npc-quest-mark {
+  color: var(--accent-gold);
+}
+
+.npc-quest-item-text {
+  word-break: break-word;
+  min-width: 0;
+}
+
+.npc-quest-children {
+  grid-column: 1 / -1;
+  padding-left: 1.35em;
+  border-left: 1px dashed var(--border-subtle);
+  margin-left: 0.35em;
+}
+
+.npc-quest-climax {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em 0.5em;
+  margin-top: 0.15em;
+  padding-top: 0.35em;
+  border-top: 1px dashed var(--border-subtle);
+}
+
+.npc-quest-climax-label {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.65em;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  color: var(--accent-coral);
+}
+
+.npc-quest-climax-text {
+  font-size: 0.74em;
+  line-height: 1.45;
+  color: var(--text-secondary);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.npc-quest-archive {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  padding: 0.4em 0.5em 0.45em;
+  border-radius: var(--radius-sm);
+  background: var(--bg-step);
+  border: 1px solid var(--border-subtle);
+}
+
+.npc-quest-archive-head {
+  font-family: var(--font-mono);
+  font-size: 0.68em;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  color: var(--text-muted);
+}
+
+.npc-quest-archive-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.npc-quest-archive-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.25em 0.45em;
+  font-size: 0.74em;
+  line-height: 1.4;
+}
+
+.npc-quest-kind--archive {
+  opacity: 0.9;
+}
+
+.npc-quest-archive-title {
+  font-weight: 600;
+  color: var(--text-primary);
+  word-break: break-word;
+}
+
+.npc-quest-archive-date {
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+}
+
+.npc-quest-archive-ending {
+  flex: 1 1 100%;
+  color: var(--text-secondary);
+  word-break: break-word;
 }
 
 @media (max-width: 900px) {

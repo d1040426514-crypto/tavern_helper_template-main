@@ -23,6 +23,30 @@ export type NpcBackground = {
   event: string;
 };
 
+export type QuestItemStatus = 'done' | 'active' | 'todo';
+
+export type QuestItem = {
+  status: QuestItemStatus;
+  text: string;
+  children: QuestItem[];
+};
+
+export type QuestLog = {
+  kind: string;
+  title: string;
+  summary: string;
+  items: QuestItem[];
+  /** 收束场景，可空 */
+  climax: string;
+};
+
+export type QuestArchiveEntry = {
+  kind: string;
+  title: string;
+  completedAt: string;
+  ending: string;
+};
+
 export type NpcCard = {
   name: string;
   actionChain: string[];
@@ -40,6 +64,10 @@ export type NpcCard = {
   recentMemories: string[];
   settledMemories: string[];
   coreMemories: string[];
+  /** 可选进行中任务；无标签时为空 */
+  questLogs: QuestLog[];
+  /** 可选已归档任务；无标签时为空，最多 5 条 */
+  questArchive: QuestArchiveEntry[];
   /** 名单内有名但尚无行动落盘 */
   empty?: boolean;
 };

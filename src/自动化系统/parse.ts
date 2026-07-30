@@ -7,6 +7,10 @@ import {
   type NpcCard,
   type NpcCategoryKey,
   type PreviewData,
+  type QuestArchiveEntry,
+  type QuestItem,
+  type QuestItemStatus,
+  type QuestLog,
   type WealthClass,
 } from './types';
 
@@ -165,6 +169,98 @@ function emptyBackground(): NpcCard['background'] {
   return { group: '', circle: '', event: '' };
 }
 
+function leadingIndent(line: string): number {
+  const m = line.match(/^[ \t]*/);
+  return m ? m[0]!.length : 0;
+}
+
+function stripQuestMarker(line: string): { status: QuestItemStatus | 'climax' | null; text: string } {
+  const trimmed = line.replace(/^[ \t]+/, '');
+  if (/^☑/.test(trimmed)) return { status: 'done', text: softTrim(trimmed.replace(/^☑\s*/, '')) };
+  if (/^▶/.test(trimmed)) return { status: 'active', text: softTrim(trimmed.replace(/^▶\s*/, '')) };
+  if (/^☐/.test(trimmed)) return { status: 'todo', text: softTrim(trimmed.replace(/^☐\s*/, '')) };
+  if (/^📅/.test(trimmed)) return { status: 'climax', text: softTrim(trimmed.replace(/^📅\s*/, '')) };
+  return { status: null, text: softTrim(trimmed) };
+}
+
+/** 解析单个 <quest_log> 内文；无标题则返回 null */
+export function parseQuestLog(inner: string): QuestLog | null {
+  const text = softTrim(String(inner ?? ''));
+  if (!text) return null;
+
+  const lines = text.split(/\r?\n/);
+  let kind = '';
+  let title = '';
+  let summary = '';
+  let climax = '';
+  const items: QuestItem[] = [];
+  let lastTop: QuestItem | null = null;
+  let lastTopIndent = 0;
+
+  for (const rawLine of lines) {
+    if (!rawLine.trim()) continue;
+
+    if (!kind && !title) {
+      const head = rawLine.trim().match(/^【([^】]+)】\s*(.*)$/);
+      if (head) {
+        kind = softTrim(head[1] ?? '');
+        title = softTrim(head[2] ?? '');
+        continue;
+      }
+    }
+
+    const summaryMatch = rawLine.match(/^\s*任务简述\s*[:：]\s*(.*)$/i);
+    if (summaryMatch) {
+      summary = softTrim(summaryMatch[1] ?? '');
+      continue;
+    }
+
+    const indent = leadingIndent(rawLine);
+    const { status, text: itemText } = stripQuestMarker(rawLine);
+    if (!status || !itemText) continue;
+
+    if (status === 'climax') {
+      climax = itemText;
+      continue;
+    }
+
+    const node: QuestItem = { status, text: itemText, children: [] };
+    if (lastTop && status === 'todo' && indent > lastTopIndent) {
+      lastTop.children.push(node);
+      continue;
+    }
+
+    items.push(node);
+    lastTop = node;
+    lastTopIndent = indent;
+  }
+
+  if (!kind && !title) return null;
+  return { kind, title, summary, items, climax };
+}
+
+/** 解析 <quest_archive> 内文；最多 5 条 */
+export function parseQuestArchive(inner: string): QuestArchiveEntry[] {
+  const text = softTrim(String(inner ?? ''));
+  if (!text) return [];
+
+  const entries: QuestArchiveEntry[] = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const m = line.match(/^【([^】]+)】\s*(.+?)\s*\|\s*(.+?)\s*\|\s*(.+)$/);
+    if (!m) continue;
+    entries.push({
+      kind: softTrim(m[1] ?? ''),
+      title: softTrim(m[2] ?? ''),
+      completedAt: softTrim(m[3] ?? ''),
+      ending: softTrim(m[4] ?? ''),
+    });
+    if (entries.length >= 5) break;
+  }
+  return entries;
+}
+
 function emptyNpc(name: string): NpcCard {
   return {
     name,
@@ -182,6 +278,8 @@ function emptyNpc(name: string): NpcCard {
     recentMemories: [],
     settledMemories: [],
     coreMemories: [],
+    questLogs: [],
+    questArchive: [],
     empty: true,
   };
 }
@@ -266,9 +364,22 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     if (legacy) npc.recentMemories = splitMemories(legacy);
   }
 
+  const questLogs: QuestLog[] = [];
+  for (const hit of findAllPairs(body, 'quest_log')) {
+    const log = parseQuestLog(hit.inner);
+    if (log) questLogs.push(log);
+  }
+  npc.questLogs = questLogs;
+
+  const archiveHits = findAllPairs(body, 'quest_archive');
+  if (archiveHits.length) {
+    npc.questArchive = parseQuestArchive(archiveHits[archiveHits.length - 1]!.inner);
+  }
+
   if (!npc.name) npc.name = fallbackName;
   const hasBg =
     !!npc.background.group || !!npc.background.circle || !!npc.background.event;
+  const hasQuest = npc.questLogs.length > 0 || npc.questArchive.length > 0;
   if (
     !npc.name &&
     !npc.actionChain.length &&
@@ -276,7 +387,8 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     !npc.longGoal &&
     !npc.reputation.length &&
     !npc.socialNetwork.length &&
-    !hasBg
+    !hasBg &&
+    !hasQuest
   ) {
     npc.empty = true;
   }

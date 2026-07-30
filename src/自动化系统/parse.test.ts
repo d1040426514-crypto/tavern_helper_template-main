@@ -6,6 +6,8 @@ import {
   parseAttrs,
   parseNpcBlock,
   parsePreview,
+  parseQuestArchive,
+  parseQuestLog,
   splitNameList,
 } from './parse';
 
@@ -55,6 +57,8 @@ test('parseNpcBlock legacy format fields still work', () => {
   assert.deepEqual(npc.recentMemories, ['昨夜见黑影', '收到密信']);
   assert.deepEqual(npc.settledMemories, ['三年前出走']);
   assert.deepEqual(npc.coreMemories, ['父亲托付玉佩']);
+  assert.deepEqual(npc.questLogs, []);
+  assert.deepEqual(npc.questArchive, []);
   assert.equal(npc.empty, false);
 });
 
@@ -91,6 +95,8 @@ test('parseNpcBlock new format reputation social background', () => {
   assert.equal(npc.relatedEvent, '无');
   assert.equal(npc.coreMemories.length, 3);
   assert.equal(npc.wealth, '略有盈余');
+  assert.deepEqual(npc.questLogs, []);
+  assert.deepEqual(npc.questArchive, []);
 });
 
 test('parseNpcBlock accepts inner-only text with fallback name', () => {
@@ -152,4 +158,102 @@ test('buildChronicle prefers relation over plot for same name', () => {
   assert.equal(plot.npcs.length, 1);
   assert.equal(plot.npcs[0]!.name, '赵铁');
   assert.equal(isChronicleEmpty(chronicle), false);
+});
+
+test('parseQuestLog parses items children and climax', () => {
+  const log = parseQuestLog(`【支线】药材调拨
+  任务简述:协调炼金公会补缺口
+  ☑ 提交隔离方案
+  ▶ 催促药剂出库
+  ☐ 分发至西境营地
+    ☐ 核对名册
+    ☐ 押运护卫
+  📅 营区交接完成`);
+  assert.ok(log);
+  assert.equal(log!.kind, '支线');
+  assert.equal(log!.title, '药材调拨');
+  assert.equal(log!.summary, '协调炼金公会补缺口');
+  assert.equal(log!.items.length, 3);
+  assert.equal(log!.items[0]!.status, 'done');
+  assert.equal(log!.items[1]!.status, 'active');
+  assert.equal(log!.items[2]!.status, 'todo');
+  assert.equal(log!.items[2]!.children.length, 2);
+  assert.equal(log!.items[2]!.children[0]!.text, '核对名册');
+  assert.equal(log!.climax, '营区交接完成');
+});
+
+test('parseQuestLog empty or headless returns null', () => {
+  assert.equal(parseQuestLog(''), null);
+  assert.equal(parseQuestLog('  ☑ 只有条目无标题  '), null);
+});
+
+test('parseQuestArchive keeps at most five entries', () => {
+  const lines = Array.from({ length: 6 }, (_, i) => `【主线】任务${i + 1} | D${i + 1} | 结局${i + 1}`).join(
+    '\n',
+  );
+  const entries = parseQuestArchive(lines);
+  assert.equal(entries.length, 5);
+  assert.equal(entries[0]!.title, '任务1');
+  assert.equal(entries[4]!.title, '任务5');
+});
+
+test('parseNpcBlock optional quest_log and quest_archive', () => {
+  const block = `<npc act="菲莉亚娜">
+行为链: 审阅卷宗→回信→后续预测: 晨祷前小憩
+近期打算: 流民安置|协调药剂|复兴纪元488年4月15日23:30—4月16日01:30
+<quest_log>
+【委托】夜巡补给
+  任务简述:为哨所送灯油
+  ☑ 领取灯油
+  ▶ 送往北哨
+</quest_log>
+<quest_log>
+【角色线】给多米娜回信
+  任务简述:写完近三千字长信
+  ▶ 润色收尾
+  ☐ 交驿使
+    ☐ 附润肺膏
+  📅 驿站发信
+</quest_log>
+<quest_archive>
+【支线】旧日巡诊 | 复兴纪元488年3月 | 贫民窟疫病暂缓
+【主线】圣堂扩建募捐 | 复兴纪元488年2月 | 款项到位开工
+</quest_archive>
+</npc>`;
+  const npc = parseNpcBlock(block);
+  assert.equal(npc.questLogs.length, 2);
+  assert.equal(npc.questLogs[0]!.kind, '委托');
+  assert.equal(npc.questLogs[0]!.title, '夜巡补给');
+  assert.equal(npc.questLogs[1]!.kind, '角色线');
+  assert.equal(npc.questLogs[1]!.items[1]!.children[0]!.text, '附润肺膏');
+  assert.equal(npc.questLogs[1]!.climax, '驿站发信');
+  assert.equal(npc.questArchive.length, 2);
+  assert.equal(npc.questArchive[0]!.kind, '支线');
+  assert.equal(npc.questArchive[0]!.title, '旧日巡诊');
+  assert.equal(npc.questArchive[1]!.ending, '款项到位开工');
+});
+
+test('parseNpcBlock empty quest_log tag yields no logs', () => {
+  const npc = parseNpcBlock(`<npc act="甲">
+行为链: A→B
+<quest_log></quest_log>
+</npc>`);
+  assert.deepEqual(npc.questLogs, []);
+  assert.deepEqual(npc.questArchive, []);
+});
+
+test('parseNpcBlock uses last quest_archive block only', () => {
+  const npc = parseNpcBlock(`<npc act="乙">
+行为链: A
+<quest_archive>
+【支线】旧 | D1 | 旧结局
+</quest_archive>
+<quest_archive>
+【主线】新 | D2 | 新结局
+【角色线】另一 | D3 | 另一结局
+</quest_archive>
+</npc>`);
+  assert.equal(npc.questArchive.length, 2);
+  assert.equal(npc.questArchive[0]!.title, '新');
+  assert.equal(npc.questArchive[1]!.title, '另一');
 });
