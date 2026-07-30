@@ -1,7 +1,7 @@
 <template>
   <div
     class="chronicle-container"
-    :class="themeLight ? 'theme-light' : 'theme-dark'"
+    :class="{ 'menu-open': themeMenuOpen }"
     :style="{ '--chronicle-font-scale': String(fontScale), fontSize: `calc(16px * ${fontScale})` }"
   >
     <div class="chronicle-header" @click="onHeaderClick">
@@ -35,14 +35,39 @@
         >
           A+
         </button>
-        <button
-          type="button"
-          class="theme-btn"
-          title="切换主题"
-          @click.stop="$emit('toggle-theme')"
-        >
-          {{ themeLight ? '☀️' : '🌙' }}
-        </button>
+        <div ref="themeWrapRef" class="theme-wrap">
+          <button
+            type="button"
+            class="theme-btn"
+            title="选择主题"
+            :aria-expanded="themeMenuOpen"
+            aria-haspopup="listbox"
+            @click.stop="toggleThemeMenu"
+          >
+            {{ currentTheme.icon }}
+          </button>
+          <div
+            v-if="themeMenuOpen"
+            class="theme-menu"
+            role="listbox"
+            :aria-label="'主题列表'"
+          >
+            <button
+              v-for="opt in THEME_OPTIONS"
+              :key="opt.id"
+              type="button"
+              class="theme-menu-item"
+              role="option"
+              :aria-selected="opt.id === themeId"
+              :class="{ active: opt.id === themeId }"
+              @click.stop="selectTheme(opt.id)"
+            >
+              <span class="theme-swatch" :style="{ background: opt.swatch }" />
+              <span class="theme-menu-label">{{ opt.label }}</span>
+              <span v-if="opt.id === themeId" class="theme-check">✓</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -61,6 +86,7 @@
 
 <script setup lang="ts">
 import type { ChronicleData } from '../types';
+import { THEME_OPTIONS, themeOption, type ChronicleThemeId } from '../themes';
 import CategoryPanel from './CategoryPanel.vue';
 import InteractionPanel from './InteractionPanel.vue';
 
@@ -69,38 +95,77 @@ const FONT_MAX = 1.25;
 
 const props = defineProps<{
   data: ChronicleData;
-  themeLight: boolean;
+  themeId: ChronicleThemeId;
   fontScale: number;
   defaultExpanded?: boolean;
 }>();
 
-defineEmits<{
-  'toggle-theme': [];
+const emit = defineEmits<{
+  'set-theme': [id: ChronicleThemeId];
   'font-smaller': [];
   'font-larger': [];
 }>();
 
 const expanded = ref(props.defaultExpanded ?? false);
+const themeMenuOpen = ref(false);
+const themeWrapRef = ref<HTMLElement | null>(null);
+
+const currentTheme = computed(() => themeOption(props.themeId));
 
 const hasContent = computed(
   () =>
     props.data.sections.some(s => s.npcs.length > 0) || props.data.interactions.length > 0,
 );
 
+function toggleThemeMenu() {
+  themeMenuOpen.value = !themeMenuOpen.value;
+}
+
+function selectTheme(id: ChronicleThemeId) {
+  emit('set-theme', id);
+  themeMenuOpen.value = false;
+}
+
+function closeThemeMenu() {
+  themeMenuOpen.value = false;
+}
+
 function onHeaderClick(e: MouseEvent) {
   const t = e.target as HTMLElement | null;
-  if (t?.closest?.('.theme-btn, .font-btn')) return;
+  if (t?.closest?.('.theme-wrap, .font-btn')) return;
+  if (themeMenuOpen.value) {
+    closeThemeMenu();
+    return;
+  }
   expanded.value = !expanded.value;
 }
+
+function onDocPointerDown(e: PointerEvent) {
+  if (!themeMenuOpen.value) return;
+  const root = themeWrapRef.value;
+  if (root && e.target instanceof Node && root.contains(e.target)) return;
+  closeThemeMenu();
+}
+
+function onDocKeydown(e: KeyboardEvent) {
+  if (e.key === 'Escape' && themeMenuOpen.value) closeThemeMenu();
+}
+
+onMounted(() => {
+  document.addEventListener('pointerdown', onDocPointerDown, true);
+  document.addEventListener('keydown', onDocKeydown);
+});
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onDocPointerDown, true);
+  document.removeEventListener('keydown', onDocKeydown);
+});
 </script>
 
 <style lang="scss" scoped>
 .chronicle-container {
   --chronicle-font-scale: 1;
   background: var(--bg-deep);
-  background-image:
-    radial-gradient(ellipse at 25% 10%, rgba(160, 140, 200, 0.06) 0%, transparent 55%),
-    radial-gradient(ellipse at 70% 85%, rgba(180, 160, 210, 0.05) 0%, transparent 50%);
   border-radius: var(--radius-xl);
   border: 1px solid var(--border-glow);
   box-shadow: var(--glow-soft), 0 0 0 1px var(--border-inner) inset;
@@ -112,10 +177,8 @@ function onHeaderClick(e: MouseEvent) {
   max-width: 100%;
   transition: border-color var(--transition-smooth), box-shadow var(--transition-smooth);
 
-  &.theme-light {
-    background-image:
-      radial-gradient(ellipse at 18% 0%, rgba(90, 110, 160, 0.06) 0%, transparent 50%),
-      radial-gradient(ellipse at 85% 100%, rgba(70, 100, 140, 0.05) 0%, transparent 45%);
+  &.menu-open {
+    overflow: visible;
   }
 
   &::before {
@@ -228,6 +291,11 @@ function onHeaderClick(e: MouseEvent) {
   border: 1px solid var(--border-subtle);
 }
 
+.theme-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
 .theme-btn,
 .font-btn {
   background: var(--bg-control);
@@ -264,6 +332,64 @@ function onHeaderClick(e: MouseEvent) {
   font-weight: 700;
   font-size: 0.72em;
   letter-spacing: -0.02em;
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 20;
+  min-width: 148px;
+  padding: 4px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-glow);
+  border-radius: var(--radius-md);
+  box-shadow: var(--glow-soft), 0 8px 20px rgba(0, 0, 0, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.theme-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 7px 8px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  font-family: var(--font-body);
+  font-size: 0.72em;
+  line-height: 1.2;
+  cursor: pointer;
+  text-align: left;
+
+  &:hover,
+  &.active {
+    background: var(--bg-step);
+  }
+}
+
+.theme-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid var(--border-subtle);
+  flex-shrink: 0;
+}
+
+.theme-menu-label {
+  flex: 1;
+  min-width: 0;
+}
+
+.theme-check {
+  color: var(--accent-lavender);
+  font-size: 0.9em;
+  flex-shrink: 0;
 }
 
 .chronicle-body {

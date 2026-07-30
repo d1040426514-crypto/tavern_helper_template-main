@@ -1,5 +1,5 @@
 <template>
-  <div class="chronicle-root" :class="{ 'theme-light': themeLight }">
+  <div class="chronicle-root" :class="`theme-${themeId}`">
     <div v-if="loading" class="app-hint">读取后台角色变量…</div>
     <div v-else-if="empty" class="app-hint">
       本层暂无 <code>post_process_tags.后台角色交互预演</code> /
@@ -8,9 +8,9 @@
     <ChronicleView
       v-else
       :data="chronicle!"
-      :theme-light="themeLight"
+      :theme-id="themeId"
       :font-scale="fontScale"
-      @toggle-theme="toggleTheme"
+      @set-theme="setTheme"
       @font-smaller="adjustFont(-FONT_STEP)"
       @font-larger="adjustFont(FONT_STEP)"
     />
@@ -23,6 +23,7 @@ import ChronicleView from './components/ChronicleView.vue';
 import { hasChronicleSource, loadChronicle } from './data';
 import { isChronicleEmpty } from './parse';
 import type { ChronicleData } from './types';
+import { normalizeThemeId, type ChronicleThemeId } from './themes';
 
 const THEME_KEY = 'chronicleTheme';
 const FONT_KEY = 'chronicleFontScale';
@@ -33,8 +34,7 @@ const FONT_STEP = 0.05;
 const loading = ref(true);
 const empty = ref(false);
 const chronicle = ref<ChronicleData | null>(null);
-/** true = 浅色；与正则脚本 localStorage 值 light/dark 对齐 */
-const themeLight = ref(false);
+const themeId = ref<ChronicleThemeId>('dark');
 const fontScale = ref(1);
 
 function clampFont(n: number): number {
@@ -54,10 +54,11 @@ function adjustFont(delta: number) {
   persistFont(fontScale.value);
 }
 
-function toggleTheme() {
-  themeLight.value = !themeLight.value;
+function setTheme(id: ChronicleThemeId) {
+  const next = normalizeThemeId(id);
+  themeId.value = next;
   try {
-    localStorage.setItem(THEME_KEY, themeLight.value ? 'light' : 'dark');
+    localStorage.setItem(THEME_KEY, next);
   } catch {
     /* ignore */
   }
@@ -83,9 +84,9 @@ function load() {
 
 onMounted(() => {
   try {
-    themeLight.value = localStorage.getItem(THEME_KEY) === 'light';
+    themeId.value = normalizeThemeId(localStorage.getItem(THEME_KEY));
   } catch {
-    themeLight.value = false;
+    themeId.value = 'dark';
   }
   try {
     const raw = localStorage.getItem(FONT_KEY);

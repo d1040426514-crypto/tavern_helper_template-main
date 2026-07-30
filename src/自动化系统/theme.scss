@@ -1,7 +1,9 @@
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=IBM+Plex+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Serif+SC:wght@400;500;600;700;900&display=swap');
 
+/* 默认 / theme-dark：暗夜紫 */
 :root,
-.chronicle-root {
+.chronicle-root,
+.chronicle-root.theme-dark {
   /* surfaces */
   --bg-deep: #121420;
   --bg-card: rgba(28, 26, 48, 0.88);
@@ -99,8 +101,83 @@
   --touch-min: 36px;
 }
 
-/* 亮色：暖羊皮纸 + 深墨字；茶金/青灰强调，书卷感 */
-.chronicle-root.theme-light {
+/* 墨玉绿：深绿暗色，黛青/苔绿强调 */
+.chronicle-root.theme-jade {
+  --bg-deep: #0e1614;
+  --bg-card: rgba(22, 36, 32, 0.9);
+  --bg-card-hover: rgba(28, 44, 38, 0.95);
+  --bg-panel: rgba(18, 30, 26, 0.75);
+  --bg-header: linear-gradient(160deg, #121e1a 0%, #1a2e28 45%, #142420 100%);
+  --bg-header-hover: linear-gradient(160deg, #162420 0%, #1e342e 45%, #183028 100%);
+  --bg-panel-header: rgba(26, 42, 36, 0.55);
+  --bg-panel-header-hover: rgba(32, 50, 42, 0.65);
+  --bg-chain: rgba(18, 30, 26, 0.75);
+  --bg-step: rgba(120, 180, 150, 0.14);
+  --bg-chip: rgba(255, 255, 255, 0.06);
+  --bg-control: rgba(255, 255, 255, 0.05);
+
+  --border-subtle: rgba(120, 170, 150, 0.22);
+  --border-glow: rgba(110, 170, 145, 0.32);
+  --border-header: rgba(120, 170, 150, 0.28);
+  --border-inner: rgba(100, 150, 130, 0.18);
+  --border-chain: var(--accent-lavender);
+
+  --accent-rose: #c898a0;
+  --accent-lavender: #8cb4a4;
+  --accent-sky: #7ab0a8;
+  --accent-gold: #c4b078;
+  --accent-mint: #90c4a0;
+  --accent-coral: #d4a090;
+
+  --text-primary: #e2ebe6;
+  --text-secondary: #b8c8c0;
+  --text-muted: #8a9e94;
+  --text-accent: #e8e4d4;
+  --text-header: #dceae4;
+  --text-header-muted: #b0c4ba;
+  --text-on-chip: #d0ddd6;
+
+  --wealth-destitute-bg: rgba(200, 120, 100, 0.22);
+  --wealth-destitute-fg: #f0a898;
+  --wealth-destitute-bd: rgba(200, 120, 100, 0.4);
+  --wealth-poor-bg: rgba(200, 150, 100, 0.22);
+  --wealth-poor-fg: #e0b888;
+  --wealth-poor-bd: rgba(200, 150, 100, 0.4);
+  --wealth-tight-bg: rgba(190, 160, 110, 0.22);
+  --wealth-tight-fg: #d4b870;
+  --wealth-tight-bd: rgba(190, 160, 110, 0.4);
+  --wealth-balanced-bg: rgba(140, 190, 150, 0.22);
+  --wealth-balanced-fg: #a0d0b0;
+  --wealth-balanced-bd: rgba(140, 190, 150, 0.4);
+  --wealth-comfortable-bg: rgba(110, 180, 150, 0.22);
+  --wealth-comfortable-fg: #88c8a8;
+  --wealth-comfortable-bd: rgba(110, 180, 150, 0.4);
+  --wealth-welloff-bg: rgba(100, 170, 170, 0.22);
+  --wealth-welloff-fg: #80c0c0;
+  --wealth-welloff-bd: rgba(100, 170, 170, 0.4);
+  --wealth-rich-bg: rgba(180, 160, 100, 0.28);
+  --wealth-rich-fg: #e0d080;
+  --wealth-rich-bd: rgba(200, 170, 100, 0.5);
+  --wealth-tycoon-bg: rgba(200, 170, 90, 0.32);
+  --wealth-tycoon-fg: #f5dc90;
+  --wealth-tycoon-bd: rgba(220, 190, 100, 0.6);
+
+  --debut-bg: rgba(220, 150, 120, 0.28);
+  --debut-fg: #f0b090;
+  --memory-bg: rgba(100, 160, 140, 0.14);
+  --memory-bd: rgba(100, 160, 140, 0.28);
+  --memory-settled-bg: rgba(90, 150, 150, 0.14);
+  --memory-settled-bd: rgba(90, 150, 150, 0.28);
+  --memory-core-bg: rgba(180, 160, 90, 0.16);
+  --memory-core-bd: rgba(180, 160, 90, 0.36);
+
+  --glow-soft: 0 0 18px rgba(80, 140, 120, 0.14);
+  --glow-card: 0 0 16px rgba(60, 110, 90, 0.1);
+  --glow-accent: 0 0 12px rgba(100, 160, 140, 0.2);
+}
+
+/* 暖羊皮纸 */
+.chronicle-root.theme-parchment {
   --bg-deep: #f3efe6;
   --bg-card: #fffcf7;
   --bg-card-hover: #f7f2e9;
@@ -172,6 +249,231 @@
   --glow-soft: 0 2px 14px rgba(60, 45, 30, 0.08);
   --glow-card: 0 1px 8px rgba(60, 45, 30, 0.06);
   --glow-accent: 0 2px 12px rgba(60, 45, 30, 0.1);
+}
+
+/* 雾蓝档案 */
+.chronicle-root.theme-fog {
+  --bg-deep: #e8eef5;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f3f6fa;
+  --bg-panel: #f0f4f9;
+  --bg-header: linear-gradient(160deg, #d9e4f0 0%, #e8eef5 50%, #dde6f0 100%);
+  --bg-header-hover: linear-gradient(160deg, #d0dceb 0%, #e0e8f2 50%, #d6e0ec 100%);
+  --bg-panel-header: #d9e4f0;
+  --bg-panel-header-hover: #cfdceb;
+  --bg-chain: #dfe8f2;
+  --bg-step: rgba(70, 95, 140, 0.1);
+  --bg-chip: rgba(40, 55, 90, 0.06);
+  --bg-control: rgba(40, 55, 90, 0.06);
+
+  --border-subtle: rgba(60, 80, 120, 0.16);
+  --border-glow: rgba(70, 95, 140, 0.26);
+  --border-header: rgba(70, 95, 140, 0.22);
+  --border-inner: rgba(70, 90, 130, 0.14);
+  --border-chain: #4a5f9a;
+
+  --accent-rose: #a04560;
+  --accent-lavender: #4a5f9a;
+  --accent-sky: #2a6f8f;
+  --accent-gold: #8f6b20;
+  --accent-mint: #3a7a58;
+  --accent-coral: #b05440;
+
+  --text-primary: #1a2332;
+  --text-secondary: #445264;
+  --text-muted: #5c6a7a;
+  --text-accent: #243048;
+  --text-header: #1a2332;
+  --text-header-muted: #445264;
+  --text-on-chip: #2a3448;
+
+  --wealth-destitute-bg: rgba(176, 64, 48, 0.12);
+  --wealth-destitute-fg: #9a3020;
+  --wealth-destitute-bd: rgba(176, 64, 48, 0.32);
+  --wealth-poor-bg: rgba(160, 100, 40, 0.12);
+  --wealth-poor-fg: #8a5520;
+  --wealth-poor-bd: rgba(160, 100, 40, 0.32);
+  --wealth-tight-bg: rgba(140, 110, 40, 0.12);
+  --wealth-tight-fg: #7a6220;
+  --wealth-tight-bd: rgba(140, 110, 40, 0.32);
+  --wealth-balanced-bg: rgba(60, 120, 70, 0.12);
+  --wealth-balanced-fg: #2f6a3a;
+  --wealth-balanced-bd: rgba(60, 120, 70, 0.32);
+  --wealth-comfortable-bg: rgba(40, 120, 90, 0.12);
+  --wealth-comfortable-fg: #287058;
+  --wealth-comfortable-bd: rgba(40, 120, 90, 0.32);
+  --wealth-welloff-bg: rgba(40, 110, 130, 0.12);
+  --wealth-welloff-fg: #286878;
+  --wealth-welloff-bd: rgba(40, 110, 130, 0.32);
+  --wealth-rich-bg: rgba(140, 110, 30, 0.14);
+  --wealth-rich-fg: #7a6218;
+  --wealth-rich-bd: rgba(140, 110, 30, 0.36);
+  --wealth-tycoon-bg: rgba(150, 110, 20, 0.16);
+  --wealth-tycoon-fg: #6e580e;
+  --wealth-tycoon-bd: rgba(150, 110, 20, 0.4);
+
+  --debut-bg: rgba(176, 80, 48, 0.14);
+  --debut-fg: #a04028;
+  --memory-bg: rgba(70, 95, 140, 0.08);
+  --memory-bd: rgba(70, 95, 140, 0.22);
+  --memory-settled-bg: rgba(42, 111, 143, 0.08);
+  --memory-settled-bd: rgba(42, 111, 143, 0.22);
+  --memory-core-bg: rgba(143, 107, 32, 0.1);
+  --memory-core-bd: rgba(143, 107, 32, 0.28);
+
+  --glow-soft: 0 2px 14px rgba(40, 55, 90, 0.08);
+  --glow-card: 0 1px 8px rgba(40, 55, 90, 0.06);
+  --glow-accent: 0 2px 12px rgba(40, 55, 90, 0.1);
+}
+
+/* 墨玉青瓷 */
+.chronicle-root.theme-celadon {
+  --bg-deep: #e9efec;
+  --bg-card: #f7faf8;
+  --bg-card-hover: #eef4f1;
+  --bg-panel: #f0f5f2;
+  --bg-header: linear-gradient(160deg, #d9e5df 0%, #e9efec 50%, #dde8e2 100%);
+  --bg-header-hover: linear-gradient(160deg, #d0ddd6 0%, #e0eae4 50%, #d6e2dc 100%);
+  --bg-panel-header: #d9e5df;
+  --bg-panel-header-hover: #cfdcd6;
+  --bg-chain: #dde8e2;
+  --bg-step: rgba(45, 100, 90, 0.1);
+  --bg-chip: rgba(30, 60, 50, 0.06);
+  --bg-control: rgba(30, 60, 50, 0.06);
+
+  --border-subtle: rgba(50, 90, 80, 0.16);
+  --border-glow: rgba(50, 100, 85, 0.26);
+  --border-header: rgba(50, 100, 85, 0.22);
+  --border-inner: rgba(50, 90, 80, 0.14);
+  --border-chain: #3d5c56;
+
+  --accent-rose: #8f4a52;
+  --accent-lavender: #3d5c56;
+  --accent-sky: #2f6b62;
+  --accent-gold: #8a7040;
+  --accent-mint: #3a7a58;
+  --accent-coral: #a85040;
+
+  --text-primary: #1c2a26;
+  --text-secondary: #3e524c;
+  --text-muted: #5c6e68;
+  --text-accent: #243430;
+  --text-header: #1c2a26;
+  --text-header-muted: #3e524c;
+  --text-on-chip: #2a3834;
+
+  --wealth-destitute-bg: rgba(160, 70, 50, 0.12);
+  --wealth-destitute-fg: #8a3828;
+  --wealth-destitute-bd: rgba(160, 70, 50, 0.3);
+  --wealth-poor-bg: rgba(150, 100, 40, 0.12);
+  --wealth-poor-fg: #7a5520;
+  --wealth-poor-bd: rgba(150, 100, 40, 0.3);
+  --wealth-tight-bg: rgba(140, 110, 40, 0.12);
+  --wealth-tight-fg: #6e5a20;
+  --wealth-tight-bd: rgba(140, 110, 40, 0.3);
+  --wealth-balanced-bg: rgba(50, 120, 80, 0.12);
+  --wealth-balanced-fg: #2a6a42;
+  --wealth-balanced-bd: rgba(50, 120, 80, 0.3);
+  --wealth-comfortable-bg: rgba(40, 120, 90, 0.12);
+  --wealth-comfortable-fg: #287058;
+  --wealth-comfortable-bd: rgba(40, 120, 90, 0.3);
+  --wealth-welloff-bg: rgba(40, 110, 110, 0.12);
+  --wealth-welloff-fg: #286868;
+  --wealth-welloff-bd: rgba(40, 110, 110, 0.3);
+  --wealth-rich-bg: rgba(140, 110, 30, 0.14);
+  --wealth-rich-fg: #7a6218;
+  --wealth-rich-bd: rgba(140, 110, 30, 0.34);
+  --wealth-tycoon-bg: rgba(150, 110, 20, 0.16);
+  --wealth-tycoon-fg: #6e580e;
+  --wealth-tycoon-bd: rgba(150, 110, 20, 0.38);
+
+  --debut-bg: rgba(160, 70, 60, 0.14);
+  --debut-fg: #903828;
+  --memory-bg: rgba(45, 100, 90, 0.08);
+  --memory-bd: rgba(45, 100, 90, 0.22);
+  --memory-settled-bg: rgba(47, 107, 98, 0.08);
+  --memory-settled-bd: rgba(47, 107, 98, 0.22);
+  --memory-core-bg: rgba(138, 112, 64, 0.1);
+  --memory-core-bd: rgba(138, 112, 64, 0.28);
+
+  --glow-soft: 0 2px 14px rgba(30, 60, 50, 0.08);
+  --glow-card: 0 1px 8px rgba(30, 60, 50, 0.06);
+  --glow-accent: 0 2px 12px rgba(30, 60, 50, 0.1);
+}
+
+/* 暮霞石灰 */
+.chronicle-root.theme-dusk {
+  --bg-deep: #f0ecea;
+  --bg-card: #fffaf8;
+  --bg-card-hover: #f6f0ed;
+  --bg-panel: #f5f0ee;
+  --bg-header: linear-gradient(160deg, #e6dfdc 0%, #f0ecea 50%, #eae4e1 100%);
+  --bg-header-hover: linear-gradient(160deg, #ddd5d1 0%, #e8e1de 50%, #e2dad6 100%);
+  --bg-panel-header: #e6dfdc;
+  --bg-panel-header-hover: #ddd5d1;
+  --bg-chain: #e8e1de;
+  --bg-step: rgba(110, 74, 92, 0.1);
+  --bg-chip: rgba(70, 50, 60, 0.07);
+  --bg-control: rgba(70, 50, 60, 0.07);
+
+  --border-subtle: rgba(90, 60, 70, 0.16);
+  --border-glow: rgba(110, 74, 92, 0.26);
+  --border-header: rgba(110, 74, 92, 0.22);
+  --border-inner: rgba(90, 60, 70, 0.14);
+  --border-chain: #6e4a5c;
+
+  --accent-rose: #a03848;
+  --accent-lavender: #6e4a5c;
+  --accent-sky: #4a6578;
+  --accent-gold: #9a6a30;
+  --accent-mint: #3a7a58;
+  --accent-coral: #b04040;
+
+  --text-primary: #2c2426;
+  --text-secondary: #5a4e52;
+  --text-muted: #7a6e72;
+  --text-accent: #3a3034;
+  --text-header: #2c2426;
+  --text-header-muted: #5a4e52;
+  --text-on-chip: #3a3034;
+
+  --wealth-destitute-bg: rgba(176, 64, 64, 0.12);
+  --wealth-destitute-fg: #9a2828;
+  --wealth-destitute-bd: rgba(176, 64, 64, 0.32);
+  --wealth-poor-bg: rgba(160, 100, 40, 0.12);
+  --wealth-poor-fg: #8a5520;
+  --wealth-poor-bd: rgba(160, 100, 40, 0.32);
+  --wealth-tight-bg: rgba(140, 110, 40, 0.12);
+  --wealth-tight-fg: #7a6220;
+  --wealth-tight-bd: rgba(140, 110, 40, 0.32);
+  --wealth-balanced-bg: rgba(60, 120, 70, 0.12);
+  --wealth-balanced-fg: #2f6a3a;
+  --wealth-balanced-bd: rgba(60, 120, 70, 0.32);
+  --wealth-comfortable-bg: rgba(40, 120, 90, 0.12);
+  --wealth-comfortable-fg: #287058;
+  --wealth-comfortable-bd: rgba(40, 120, 90, 0.32);
+  --wealth-welloff-bg: rgba(50, 100, 120, 0.12);
+  --wealth-welloff-fg: #2a6070;
+  --wealth-welloff-bd: rgba(50, 100, 120, 0.32);
+  --wealth-rich-bg: rgba(154, 106, 48, 0.14);
+  --wealth-rich-fg: #7a5218;
+  --wealth-rich-bd: rgba(154, 106, 48, 0.36);
+  --wealth-tycoon-bg: rgba(160, 110, 30, 0.16);
+  --wealth-tycoon-fg: #6e580e;
+  --wealth-tycoon-bd: rgba(160, 110, 30, 0.4);
+
+  --debut-bg: rgba(176, 64, 64, 0.14);
+  --debut-fg: #b04040;
+  --memory-bg: rgba(110, 74, 92, 0.08);
+  --memory-bd: rgba(110, 74, 92, 0.22);
+  --memory-settled-bg: rgba(74, 101, 120, 0.08);
+  --memory-settled-bd: rgba(74, 101, 120, 0.22);
+  --memory-core-bg: rgba(154, 106, 48, 0.1);
+  --memory-core-bd: rgba(154, 106, 48, 0.28);
+
+  --glow-soft: 0 2px 14px rgba(70, 50, 60, 0.08);
+  --glow-card: 0 1px 8px rgba(70, 50, 60, 0.06);
+  --glow-accent: 0 2px 12px rgba(70, 50, 60, 0.1);
 }
 
 .chronicle-root {
