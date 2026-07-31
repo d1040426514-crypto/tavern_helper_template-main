@@ -34,7 +34,8 @@ test('副本族与动态占位符示例 preset configures replica family task', 
   assert.equal(enumTask.enabled, true);
   assert.equal(enumTask.stage, 1);
   assert.ok(enumTask.promptGroups.some(g => g.content.includes('item@name')));
-  assert.ok(enumTask.promptGroups.some(g => g.content.includes('${name 1}')));
+  assert.ok(enumTask.promptGroups.some(g => g.content.includes('副本族旁注')));
+  assert.ok(enumTask.promptGroups.some(g => g.content.includes('断剑')));
 
   const replicaTask = preset.tasks.find(t => t.id === 'example-replica-family');
   assert.ok(replicaTask);
@@ -44,10 +45,35 @@ test('副本族与动态占位符示例 preset configures replica family task', 
   assert.equal(replicaTask.syncAsReplicaFamily, true);
   assert.equal(replicaTask.replicaFamilySpec, 'item@name');
   assert.equal(replicaTask.replicaFamilyEnumSpec, 'item@name');
+  assert.equal(replicaTask.replicaFamilyBaseName, '副本族处理');
+  assert.ok(replicaTask.promptGroups.some(g => g.content.includes('{{replica:val}}')));
   assert.ok(replicaTask.promptGroups.some(g => g.content.includes('{{item@name}}')));
   assert.ok(replicaTask.promptGroups.some(g => g.content.includes('<item name')));
-  assert.equal(preset.tagVariableInjectTemplate, '{{item@name}}');
-  assert.equal(preset.finalInjectTemplate, 'FLOOR_INJECT:{{item@name}}');
+
+  const asideTask = preset.tasks.find(t => t.id === 'example-replica-family-aside');
+  assert.ok(asideTask);
+  assert.equal(asideTask.enabled, true);
+  assert.equal(asideTask.stage, 2);
+  assert.deepEqual(asideTask.extractInjectTags, ['note@name']);
+  assert.equal(asideTask.syncAsReplicaFamily, true);
+  assert.equal(asideTask.replicaFamilySpec, 'item@name');
+  assert.equal(asideTask.replicaFamilyEnumSpec, 'item@name');
+  assert.equal(asideTask.replicaFamilyBaseName, '副本族旁注');
+  assert.ok(asideTask.promptGroups.some(g => g.content.includes('{{item@name}}')));
+  assert.ok(asideTask.promptGroups.some(g => g.content.includes('<note name')));
+
+  const aggregateTask = preset.tasks.find(t => t.id === 'example-aggregate-launched');
+  assert.ok(aggregateTask);
+  assert.equal(aggregateTask.enabled, true);
+  assert.equal(aggregateTask.stage, 3);
+  assert.equal(aggregateTask.syncAsReplicaFamily, undefined);
+  assert.ok(aggregateTask.promptGroups.some(g => g.content.includes('total:launched:item@name')));
+  assert.ok(aggregateTask.promptGroups.some(g => g.content.includes('total:launched:item@name:副本族处理')));
+  assert.ok(aggregateTask.promptGroups.some(g => g.content.includes('replica:launched:副本族处理')));
+
+  assert.equal(preset.tagVariableInjectTemplate, '{{total:launched:item@name}}');
+  assert.equal(preset.finalInjectTemplate, 'FLOOR_INJECT:{{total:launched:item@name}}');
+  assert.equal(preset.chatWorldbookWriteRules?.[0]?.template, '{{total:launched:item@name}}');
 });
 
 console.log('example-presets.test.ts: all passed');
