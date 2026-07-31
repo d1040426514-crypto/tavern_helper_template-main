@@ -326,6 +326,9 @@ export type PlotPlaceholderResolveOptions = {
   replicaState?: ReplicaStateSnapshot;
 };
 
+/** 裸名酒馆核心宏：脚本阶段保留字面量，交给后续 processTemplateText */
+const DEFERRED_BARE_TAVERN_MACROS = new Set(['char', 'user']);
+
 /** 留给酒馆宏 / 酒馆助手宏（formatAsTavernRegexedString / substitudeMacros），脚本 {{}} 阶段不认领、不清空 */
 export function isDeferredToTavernMacros(placeholderName: string): boolean {
   const trimmed = placeholderName.trim();
@@ -337,7 +340,15 @@ export function isDeferredToTavernMacros(placeholderName: string): boolean {
   // 现代缩写 {{.localVar}} / {{$globalVar}}
   if (/^[.$]/.test(trimmed)) return true;
 
+  // {{char}} / {{user}} 等无 :: 的核心宏，须存活到宏管线
+  if (DEFERRED_BARE_TAVERN_MACROS.has(trimmed.toLowerCase())) return true;
+
   return false;
+}
+
+/** 写入模板中未命中成功任务的 {{task:…}} 清空为空白 */
+export function clearUnresolvedTaskPlaceholders(text: string): string {
+  return String(text || '').replace(/\{\{\s*task:[^}]*\}\}/gi, '');
 }
 
 /** 脚本认领的占位符：无数据时也替换为空，不留给酒馆宏 */
@@ -823,8 +834,9 @@ export function replacePlotTagPlaceholdersWithHistory(
       options,
     );
     if (out) return out;
-    if (isScriptOwnedPlaceholder(tagName, injectOnlyTags, options)) return '';
-    return placeholder;
+    // 无内容：仅延迟宏保留字面量，其余清空（不再残留 {{xxx}}）
+    if (isDeferredToTavernMacros(tagName)) return placeholder;
+    return '';
   });
 }
 
@@ -964,7 +976,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   },
   {
     code: '{{char}} 等',
-    desc: '未被脚本认领的 ASCII 占位符在 $ 与脚本 {{}} 替换后保留，再经 formatAsTavernRegexedString（酒馆正则 + ST 宏 + 全部 MacroLike）与 EJS 处理。任务提示词顺序：$ 变量 → 脚本 {{}} → 宏/EJS',
+    desc: '脚本 {{}} 阶段：解析无内容的占位符清空为空白；仅延迟宏（:: / . / $ 前缀，以及 char、user）保留字面量，再经 formatAsTavernRegexedString（酒馆正则 + ST 宏 + 全部 MacroLike）与 EJS 处理。任务提示词顺序：$ 变量 → 脚本 {{}} → 宏/EJS',
   },
   {
     code: 'post_process_tags',

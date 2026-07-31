@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { extractInjectTagsFromResponse } from './tag-extract';
 import {
+  clearUnresolvedTaskPlaceholders,
   extractPlotTagsFromResponse,
   filterXmlExtractedTagsForDisplay,
   formatTagValueForInject,
@@ -187,11 +188,11 @@ test('relay wins over history with all-tags fallback', () => {
   assert.equal(out, '<foo>\nnew\n</foo>');
 });
 
-test('all-tags fallback preserves unconfigured ASCII placeholder for tavern macros', () => {
+test('all-tags fallback clears unconfigured ASCII placeholder with no data', () => {
   const out = replacePlotTagPlaceholdersWithHistory('x{{missing}}y', new Map(), new Map(), new Set(), {
     historyFallback: 'all-tags',
   });
-  assert.equal(out, 'x{{missing}}y');
+  assert.equal(out, 'xy');
 });
 
 test('preserves tavern and helper variable macros for macro pass', () => {
@@ -332,11 +333,15 @@ test('replica:val ignores relay tag even when replicaAttrValue set', () => {
   assert.equal(out, '甲');
 });
 
-test('{{char}} preserved when not script-owned and unresolved', () => {
-  const out = replacePlotTagPlaceholdersWithHistory('hi {{char}} bye', new Map(), new Map(), new Set(), {
-    historyFallback: 'all-tags',
-  });
-  assert.equal(out, 'hi {{char}} bye');
+test('{{char}} and {{user}} preserved as deferred bare tavern macros', () => {
+  const out = replacePlotTagPlaceholdersWithHistory(
+    'hi {{char}} / <{{user}}初始设定> bye',
+    new Map(),
+    new Map(),
+    new Set(),
+    { historyFallback: 'all-tags' },
+  );
+  assert.equal(out, 'hi {{char}} / <{{user}}初始设定> bye');
 });
 
 test('configured plot tag still replaces to empty when no data', () => {
@@ -344,6 +349,19 @@ test('configured plot tag still replaces to empty when no data', () => {
     historyFallback: 'all-tags',
   });
   assert.equal(out, '');
+});
+
+test('unconfigured ASCII plot tag clears when no data even without inject whitelist', () => {
+  const out = replacePlotTagPlaceholdersWithHistory('a{{consistency}}b', new Map(), new Map(), new Set(), {
+    historyFallback: 'all-tags',
+  });
+  assert.equal(out, 'ab');
+});
+
+test('clearUnresolvedTaskPlaceholders strips unmatched task refs', () => {
+  assert.equal(clearUnresolvedTaskPlaceholders('x{{task:不存在}}y{{task:id-1}}z'), 'xyz');
+  assert.equal(clearUnresolvedTaskPlaceholders('ok {{task: name }} end'), 'ok  end');
+  assert.equal(clearUnresolvedTaskPlaceholders('keep {{char}}'), 'keep {{char}}');
 });
 
 test('replica:launched resolves launched suffixes', () => {

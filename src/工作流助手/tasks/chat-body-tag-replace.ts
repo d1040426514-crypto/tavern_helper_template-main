@@ -13,7 +13,12 @@ import {
   buildExtractedBlockFromTags,
   writeFloorTagValues,
 } from './tag-variables';
-import { overwriteRelayTagMap, replacePlotTagPlaceholdersWithHistory, type RelayTagMap } from './utils';
+import {
+  clearUnresolvedTaskPlaceholders,
+  overwriteRelayTagMap,
+  replacePlotTagPlaceholdersWithHistory,
+  type RelayTagMap,
+} from './utils';
 import type { SharedContext } from './placeholders';
 import type {
   ChatBodyTagReplaceRule,
@@ -170,6 +175,7 @@ export async function renderChatBodyTagReplaceTemplate(
     out = out.split(`{{task:${r.taskName}}}`).join(r.extractedBlock);
     out = out.split(`{{task:${r.taskId}}}`).join(r.extractedBlock);
   }
+  out = clearUnresolvedTaskPlaceholders(out);
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
     allTasks,

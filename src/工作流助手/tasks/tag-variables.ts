@@ -1,6 +1,7 @@
 import { processTemplateText } from './template-process';
 import type { ScriptSettings } from './schema';
 import {
+  clearUnresolvedTaskPlaceholders,
   expandWritableKeysFromPlaceholder,
   formatTagValueForInject,
   getPlotPlaceholderTagNames,
@@ -437,6 +438,7 @@ export async function mergeAiFloorInjectBlock(
     out = out.split(`{{task:${r.taskName}}}`).join(r.extractedBlock);
     out = out.split(`{{task:${r.taskId}}}`).join(r.extractedBlock);
   }
+  out = clearUnresolvedTaskPlaceholders(out);
   out = replacePlotTagPlaceholdersWithHistory(out, aggregated, historyMap, new Set(), {
     historyFallback: 'all-tags',
     allTasks: settings.tasks,
