@@ -163,7 +163,7 @@ export interface AcuPostProcessTaskAPI {
     patch: Partial<ScriptSettings['replicaFamilyCleanup']>,
   ): ReturnType<typeof updateReplicaFamilyCleanupConfigInStore>;
   listReplicaFamilyCleanupCandidates(): ReplicaCleanupCandidateGroup[];
-  applyReplicaFamilyCleanup(keepByRoot: Record<string, string[]>, messageId?: number): Promise<void>;
+  applyReplicaFamilyCleanup(keepBySpec: Record<string, string[]>, messageId?: number): Promise<void>;
   resetReplicaFamilyCleanupCycle(): Promise<void>;
   listTaskWorkflowPresets(taskId: string): string[];
   saveTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
@@ -269,9 +269,9 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
       typeof updateReplicaFamilyCleanupConfigInStore
     >,
   listReplicaFamilyCleanupCandidates: () => listReplicaFamilyCleanupCandidatesFromStore(),
-  applyReplicaFamilyCleanup: (keepByRoot, messageId) =>
+  applyReplicaFamilyCleanup: (keepBySpec, messageId) =>
     apiCall(() =>
-      applyReplicaFamilyCleanupInStore(keepByRoot, messageId ?? getLastMessageId(), 'api'),
+      applyReplicaFamilyCleanupInStore(keepBySpec, messageId ?? getLastMessageId(), 'api'),
     ) as Promise<void>,
   resetReplicaFamilyCleanupCycle: () =>
     apiCall(() => resetReplicaFamilyCleanupCycleInStore('api')) as Promise<void>,

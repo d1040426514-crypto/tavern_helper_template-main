@@ -395,7 +395,9 @@ export const ScriptSettingsSchema = z
         mode: z.enum(['auto', 'manual']).default('manual'),
         roundsSinceCleanup: z.number().int().min(0).default(0),
         cycleRunCounts: z.record(z.string(), z.number().int().min(0)).default({}),
-        lastManualKeepByRoot: z.record(z.string(), z.array(z.string())).default({}),
+        lastManualKeepBySpec: z.record(z.string(), z.array(z.string())).default({}),
+        /** @deprecated 加载后由 ensureReplicaFamilyCleanupDefaults 迁入 lastManualKeepBySpec */
+        lastManualKeepByRoot: z.record(z.string(), z.array(z.string())).optional(),
         lastCleanupRound: z.number().int().min(0).default(0),
       })
       .default({
@@ -405,7 +407,7 @@ export const ScriptSettingsSchema = z
         mode: 'manual',
         roundsSinceCleanup: 0,
         cycleRunCounts: {},
-        lastManualKeepByRoot: {},
+        lastManualKeepBySpec: {},
         lastCleanupRound: 0,
       }),
     uiThemeId: z.string().default('creamy-minimal'),

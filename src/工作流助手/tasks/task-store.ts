@@ -1115,15 +1115,15 @@ export function listReplicaFamilyCleanupCandidatesFromStore(): ReplicaCleanupCan
 }
 
 export async function applyReplicaFamilyCleanupInStore(
-  keepByRoot: Record<string, string[]>,
+  keepBySpec: Record<string, string[]>,
   messageId: number,
   _source: TaskWriteSource = 'api',
 ): Promise<void> {
   const baseSettings = loadSettings();
   const effectiveSettings = resolveEffectiveSettings(baseSettings);
   const removedOut: RemovedReplicaCleanupInfo[] = [];
-  const next = applyReplicaFamilyCleanup(effectiveSettings, keepByRoot, messageId, {
-    persistManualKeepByRoot: keepByRoot,
+  const next = applyReplicaFamilyCleanup(effectiveSettings, keepBySpec, messageId, {
+    persistManualKeepBySpec: keepBySpec,
     removedOut,
   });
   Object.assign(effectiveSettings, next);

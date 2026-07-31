@@ -9,7 +9,7 @@ import { ensureVueFeatureFlags } from './ensure-vue-feature-flags';
 import './acu-theme.css';
 
 export type ReplicaFamilyCleanupDialogResult = {
-  keepByRoot: Record<string, string[]>;
+  keepBySpec: Record<string, string[]>;
   persistManualKeep: boolean;
 };
 
@@ -60,8 +60,8 @@ export function showReplicaFamilyCleanupDialog(
     ensureVueFeatureFlags();
     const app = createApp(ReplicaFamilyCleanupDialog, {
       groups,
-      onConfirm: (keepByRoot: Record<string, string[]>) => {
-        cleanup({ keepByRoot, persistManualKeep: true });
+      onConfirm: (keepBySpec: Record<string, string[]>) => {
+        cleanup({ keepBySpec, persistManualKeep: true });
       },
       onCancel: () => {
         cleanup(null);

@@ -1,5 +1,6 @@
-import { buildAttrGroupKey, buildCompositeKey, parseExtractTagSpec } from './tag-extract';
+import { buildAttrGroupKey, buildCompositeKey, parseExtractTagSpec, sortAttrValues } from './tag-extract';
 import {
+  getReplicaFamilyEnumSpecKey,
   getReplicaFamilyScheduleMode,
   getReplicaTasks,
   hasReplicaFamilyTasks,
@@ -16,6 +17,7 @@ const TAG_DATA_ROOT_KEY = 'post_process_tags';
 export type ReplicaFamilyCleanupConfig = ScriptSettings['replicaFamilyCleanup'];
 
 export type ReplicaCleanupCandidate = {
+  /** 稳定键：attrValue（同 spec 下去重后） */
   memberId: string;
   attrValue: string;
   name: string;
@@ -26,11 +28,83 @@ export type ReplicaCleanupCandidate = {
 };
 
 export type ReplicaCleanupCandidateGroup = {
-  rootId: string;
-  rootName: string;
   spec: string;
   members: ReplicaCleanupCandidate[];
 };
+
+type AttrAgg = {
+  attrValue: string;
+  runCountMax: number;
+  anyLaunched: boolean;
+  anyProtected: boolean;
+  displayName: string;
+};
+
+type SpecBucket = {
+  /** canonical：trim + lowerCase，用作 keep / 记忆 map 键 */
+  spec: string;
+  roots: PostProcessTask[];
+  byAttr: Map<string, AttrAgg>;
+};
+
+/** 清理 keep / 记忆用的规范 spec 键 */
+export function canonicalSpecKey(spec: string): string {
+  return String(spec ?? '')
+    .trim()
+    .toLowerCase();
+}
+
+function specKeysEqual(a: string, b: string): boolean {
+  return canonicalSpecKey(a) === canonicalSpecKey(b);
+}
+
+/** 合并大小写变体键，attrs 并集；返回新 map */
+export function canonicalizeLastManualKeepMap(
+  map: Record<string, string[]> | undefined,
+): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  if (!map || typeof map !== 'object') return out;
+  for (const [rawKey, attrs] of Object.entries(map)) {
+    const key = canonicalSpecKey(rawKey);
+    if (!key || !Array.isArray(attrs)) continue;
+    const merged = [
+      ...(out[key] ?? []),
+      ...attrs.map(a => String(a ?? '').trim()).filter(Boolean),
+    ];
+    out[key] = sortAttrValues([...new Set(merged)]);
+  }
+  return out;
+}
+
+function getLastManualKeepForSpec(
+  state: ReplicaFamilyCleanupConfig,
+  spec: string,
+): string[] {
+  const map = state.lastManualKeepBySpec ?? {};
+  const key = findKeepKeyForSpec(map, spec);
+  if (!key) return [];
+  // 同 canonical 下可能仍有未规范化的多键：并集
+  const canonical = canonicalSpecKey(spec);
+  const attrs = new Set<string>();
+  for (const [k, list] of Object.entries(map)) {
+    if (canonicalSpecKey(k) !== canonical || !Array.isArray(list)) continue;
+    for (const a of list) {
+      const t = String(a ?? '').trim();
+      if (t) attrs.add(t);
+    }
+  }
+  return sortAttrValues([...attrs]);
+}
+
+function findKeepKeyForSpec(keepBySpec: Record<string, string[]>, spec: string): string | undefined {
+  const canonical = canonicalSpecKey(spec);
+  if (!canonical) return undefined;
+  if (Object.prototype.hasOwnProperty.call(keepBySpec, canonical)) return canonical;
+  for (const key of Object.keys(keepBySpec)) {
+    if (canonicalSpecKey(key) === canonical) return key;
+  }
+  return undefined;
+}
 
 export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): ReplicaFamilyCleanupConfig {
   return {
@@ -40,7 +114,7 @@ export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): Re
     mode: hasReplicaFamily ? 'auto' : 'manual',
     roundsSinceCleanup: 0,
     cycleRunCounts: {},
-    lastManualKeepByRoot: {},
+    lastManualKeepBySpec: {},
     lastCleanupRound: 0,
   };
 }
@@ -54,8 +128,34 @@ export function isReplicaFamilyCleanupAtFactoryDefaults(state: ReplicaFamilyClea
     (state.roundsSinceCleanup ?? 0) === 0 &&
     (state.lastCleanupRound ?? 0) === 0 &&
     Object.keys(state.cycleRunCounts ?? {}).length === 0 &&
+    Object.keys(state.lastManualKeepBySpec ?? {}).length === 0 &&
     Object.keys(state.lastManualKeepByRoot ?? {}).length === 0
   );
+}
+
+/** 将遗留 lastManualKeepByRoot 并入 lastManualKeepBySpec 后删除旧键 */
+export function migrateLastManualKeepByRootToSpec(settings: ScriptSettings): void {
+  const state = settings.replicaFamilyCleanup;
+  if (!state) return;
+  if (!state.lastManualKeepBySpec) state.lastManualKeepBySpec = {};
+  const legacy = state.lastManualKeepByRoot;
+  if (!legacy || typeof legacy !== 'object') {
+    delete state.lastManualKeepByRoot;
+    state.lastManualKeepBySpec = canonicalizeLastManualKeepMap(state.lastManualKeepBySpec);
+    return;
+  }
+  const bySpec = { ...state.lastManualKeepBySpec };
+  for (const [rootId, attrs] of Object.entries(legacy)) {
+    if (!Array.isArray(attrs)) continue;
+    const root = settings.tasks.find(t => t.id === rootId);
+    if (!root) continue;
+    const spec = canonicalSpecKey(getReplicaFamilyEnumSpecKey(root));
+    if (!spec) continue;
+    const merged = [...(bySpec[spec] ?? []), ...attrs.map(a => String(a ?? '').trim()).filter(Boolean)];
+    bySpec[spec] = sortAttrValues([...new Set(merged)]);
+  }
+  state.lastManualKeepBySpec = canonicalizeLastManualKeepMap(bySpec);
+  delete state.lastManualKeepByRoot;
 }
 
 /** 有副本族任务时默认启用清理周期 + 自动清理；无副本族时保持关闭 + 手动。 */
@@ -65,6 +165,10 @@ export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): Re
     settings.replicaFamilyCleanup = createDefaultReplicaFamilyCleanup(hasReplica);
     return settings.replicaFamilyCleanup;
   }
+  migrateLastManualKeepByRootToSpec(settings);
+  settings.replicaFamilyCleanup.lastManualKeepBySpec = canonicalizeLastManualKeepMap(
+    settings.replicaFamilyCleanup.lastManualKeepBySpec,
+  );
   if (hasReplica && isReplicaFamilyCleanupAtFactoryDefaults(settings.replicaFamilyCleanup)) {
     settings.replicaFamilyCleanup.enabled = true;
     settings.replicaFamilyCleanup.mode = 'auto';
@@ -122,79 +226,93 @@ function isMemberProtectedThisRound(memberId: string, protectMemberIds?: readonl
   return protectMemberIds.includes(memberId);
 }
 
-function isMemberKeepByScheduleAndActivity(
-  member: PostProcessTask,
-  root: PostProcessTask,
-  runCount: number,
-  cycleRounds: number,
-  activityRatio: number,
+function buildSpecBuckets(
+  settings: ScriptSettings,
   protectMemberIds?: readonly string[],
-): boolean {
-  if (isMemberProtectedThisRound(member.id, protectMemberIds)) return true;
-  if (getReplicaFamilyScheduleMode(root) === 'manual' && isReplicaLaunched(member)) return true;
-  return computeMemberActivityScore(runCount, cycleRounds) >= activityRatio;
+): SpecBucket[] {
+  const state = ensureCleanupState(settings);
+  const bySpec = new Map<string, SpecBucket>();
+
+  for (const root of settings.tasks) {
+    if (!isReplicaFamilyRootTemplate(root)) continue;
+    const spec = canonicalSpecKey(getReplicaFamilyEnumSpecKey(root));
+    if (!spec) continue;
+    let bucket = bySpec.get(spec);
+    if (!bucket) {
+      bucket = { spec, roots: [], byAttr: new Map() };
+      bySpec.set(spec, bucket);
+    }
+    bucket.roots.push(root);
+
+    for (const member of getReplicaTasks(root.id, settings.tasks)) {
+      const attr = (member.replicaFamilyAttrValue ?? '').trim();
+      if (!attr) continue;
+      const runCount = state.cycleRunCounts[member.id] ?? 0;
+      const existing = bucket.byAttr.get(attr);
+      const launched =
+        getReplicaFamilyScheduleMode(root) === 'manual' && isReplicaLaunched(member);
+      const protectedMember = isMemberProtectedThisRound(member.id, protectMemberIds);
+      if (!existing) {
+        bucket.byAttr.set(attr, {
+          attrValue: attr,
+          runCountMax: runCount,
+          anyLaunched: launched,
+          anyProtected: protectedMember,
+          displayName: member.name,
+        });
+      } else {
+        existing.runCountMax = Math.max(existing.runCountMax, runCount);
+        existing.anyLaunched = existing.anyLaunched || launched;
+        existing.anyProtected = existing.anyProtected || protectedMember;
+      }
+    }
+  }
+
+  return [...bySpec.values()];
 }
 
-function isMemberManualDialogDefault(
-  member: PostProcessTask,
-  root: PostProcessTask,
-  runCount: number,
+function isAttrKeepByScheduleAndActivity(
+  agg: AttrAgg,
+  cycleRounds: number,
+  activityRatio: number,
+): boolean {
+  if (agg.anyProtected) return true;
+  if (agg.anyLaunched) return true;
+  return computeMemberActivityScore(agg.runCountMax, cycleRounds) >= activityRatio;
+}
+
+function isAttrManualDialogDefault(
+  agg: AttrAgg,
   cycleRounds: number,
   activityRatio: number,
   lastManualKeep: string[],
-  protectMemberIds?: readonly string[],
 ): boolean {
-  if (isMemberProtectedThisRound(member.id, protectMemberIds)) return true;
-  const attrValue = member.replicaFamilyAttrValue ?? '';
-  if (lastManualKeep.includes(attrValue)) return true;
-  return isMemberKeepByScheduleAndActivity(
-    member,
-    root,
-    runCount,
-    cycleRounds,
-    activityRatio,
-    protectMemberIds,
-  );
+  if (agg.anyProtected) return true;
+  if (lastManualKeep.includes(agg.attrValue)) return true;
+  return isAttrKeepByScheduleAndActivity(agg, cycleRounds, activityRatio);
 }
 
-function collectKeepAttrsForRoot(
-  root: PostProcessTask,
-  tasks: PostProcessTask[],
-  state: ReplicaFamilyCleanupConfig,
-  shouldKeep: (
-    member: PostProcessTask,
-    root: PostProcessTask,
-    runCount: number,
-  ) => boolean,
+function collectKeepAttrsForBucket(
+  bucket: SpecBucket,
+  shouldKeep: (agg: AttrAgg) => boolean,
 ): string[] {
   const keep: string[] = [];
-  for (const member of getReplicaTasks(root.id, tasks)) {
-    const runCount = state.cycleRunCounts[member.id] ?? 0;
-    if (shouldKeep(member, root, runCount)) {
-      const attr = member.replicaFamilyAttrValue?.trim();
-      if (attr) keep.push(attr);
-    }
+  for (const agg of bucket.byAttr.values()) {
+    if (shouldKeep(agg)) keep.push(agg.attrValue);
   }
-  return keep;
+  return sortAttrValues(keep);
 }
 
+/** 每个有副本族根的 enumSpec 都有键（可为空数组） */
 export function computeAutoKeepSet(
   settings: ScriptSettings,
   protectMemberIds?: readonly string[],
 ): Record<string, string[]> {
   const state = ensureCleanupState(settings);
   const result: Record<string, string[]> = {};
-  for (const root of settings.tasks) {
-    if (!isReplicaFamilyRootTemplate(root)) continue;
-    result[root.id] = collectKeepAttrsForRoot(root, settings.tasks, state, (member, root, runCount) =>
-      isMemberKeepByScheduleAndActivity(
-        member,
-        root,
-        runCount,
-        state.cycleRounds,
-        state.activityRatio,
-        protectMemberIds,
-      ),
+  for (const bucket of buildSpecBuckets(settings, protectMemberIds)) {
+    result[bucket.spec] = collectKeepAttrsForBucket(bucket, agg =>
+      isAttrKeepByScheduleAndActivity(agg, state.cycleRounds, state.activityRatio),
     );
   }
   return result;
@@ -206,19 +324,10 @@ export function computeManualDialogDefaultSelection(
 ): Record<string, string[]> {
   const state = ensureCleanupState(settings);
   const result: Record<string, string[]> = {};
-  for (const root of settings.tasks) {
-    if (!isReplicaFamilyRootTemplate(root)) continue;
-    const lastManualKeep = state.lastManualKeepByRoot[root.id] ?? [];
-    result[root.id] = collectKeepAttrsForRoot(root, settings.tasks, state, (member, root, runCount) =>
-      isMemberManualDialogDefault(
-        member,
-        root,
-        runCount,
-        state.cycleRounds,
-        state.activityRatio,
-        lastManualKeep,
-        protectMemberIds,
-      ),
+  for (const bucket of buildSpecBuckets(settings, protectMemberIds)) {
+    const lastManualKeep = getLastManualKeepForSpec(state, bucket.spec);
+    result[bucket.spec] = collectKeepAttrsForBucket(bucket, agg =>
+      isAttrManualDialogDefault(agg, state.cycleRounds, state.activityRatio, lastManualKeep),
     );
   }
   return result;
@@ -238,38 +347,26 @@ export function listReplicaFamilyCleanupCandidates(
 ): ReplicaCleanupCandidateGroup[] {
   const state = ensureCleanupState(settings);
   const groups: ReplicaCleanupCandidateGroup[] = [];
-  for (const root of settings.tasks) {
-    if (!isReplicaFamilyRootTemplate(root)) continue;
-    const spec = root.replicaFamilySpec ?? '';
-    const lastManualKeep = state.lastManualKeepByRoot[root.id] ?? [];
-    const members: ReplicaCleanupCandidate[] = getReplicaTasks(root.id, settings.tasks).map(member => {
-      const runCount = state.cycleRunCounts[member.id] ?? 0;
-      const activityScore = computeMemberActivityScore(runCount, state.cycleRounds);
-      const defaultSelected = isMemberManualDialogDefault(
-        member,
-        root,
-        runCount,
-        state.cycleRounds,
-        state.activityRatio,
-        lastManualKeep,
-        protectMemberIds,
-      );
+  for (const bucket of buildSpecBuckets(settings, protectMemberIds)) {
+    const lastManualKeep = getLastManualKeepForSpec(state, bucket.spec);
+    const members: ReplicaCleanupCandidate[] = sortAttrValues([...bucket.byAttr.keys()]).map(attr => {
+      const agg = bucket.byAttr.get(attr)!;
       return {
-        memberId: member.id,
-        attrValue: member.replicaFamilyAttrValue ?? '',
-        name: member.name,
-        launched: isReplicaLaunched(member),
-        runCount,
-        activityScore,
-        defaultSelected,
+        memberId: attr,
+        attrValue: attr,
+        name: agg.displayName,
+        launched: agg.anyLaunched,
+        runCount: agg.runCountMax,
+        activityScore: computeMemberActivityScore(agg.runCountMax, state.cycleRounds),
+        defaultSelected: isAttrManualDialogDefault(
+          agg,
+          state.cycleRounds,
+          state.activityRatio,
+          lastManualKeep,
+        ),
       };
     });
-    groups.push({
-      rootId: root.id,
-      rootName: root.name,
-      spec,
-      members,
-    });
+    groups.push({ spec: bucket.spec, members });
   }
   return groups;
 }
@@ -317,6 +414,18 @@ export function pruneFloorTagKeysForReplica(
   );
 }
 
+function collectExtractSpecsFromMembers(members: PostProcessTask[]): string[] {
+  const specs = new Set<string>();
+  for (const member of members) {
+    for (const tag of member.extractInjectTags ?? []) {
+      const parsed = parseExtractTagSpec(String(tag ?? '').trim());
+      if (!parsed?.attrName) continue;
+      specs.add(canonicalSpecKey(`${parsed.tagName}@${parsed.attrName}`));
+    }
+  }
+  return [...specs];
+}
+
 export type RemovedReplicaCleanupInfo = {
   rootId: string;
   spec: string;
@@ -324,58 +433,80 @@ export type RemovedReplicaCleanupInfo = {
 };
 
 export type ApplyReplicaFamilyCleanupOptions = {
-  persistManualKeepByRoot?: Record<string, string[]>;
+  persistManualKeepBySpec?: Record<string, string[]>;
   /** 输出：本次清理实际移除的副本（供世界书条目/账本联动清理） */
   removedOut?: RemovedReplicaCleanupInfo[];
 };
 
 export function applyReplicaFamilyCleanup(
   settings: ScriptSettings,
-  keepAttrValuesByRoot: Record<string, string[]>,
+  keepAttrValuesBySpec: Record<string, string[]>,
   messageId: number,
   options?: ApplyReplicaFamilyCleanupOptions,
 ): ScriptSettings {
   const state = ensureCleanupState(settings);
   let tasks = [...settings.tasks];
+  const buckets = buildSpecBuckets(settings);
 
-  for (const root of settings.tasks) {
-    if (!isReplicaFamilyRootTemplate(root)) continue;
-    // 未出现在 keep 表中的 root 视为「本次不处理」，避免手动删单族时把其它族 keep 当成 []
-    if (!Object.prototype.hasOwnProperty.call(keepAttrValuesByRoot, root.id)) continue;
-    const keepSet = new Set(keepAttrValuesByRoot[root.id] ?? []);
-    const members = getReplicaTasks(root.id, tasks);
-    const toRemove: string[] = [];
+  for (const bucket of buckets) {
+    const keepKey = findKeepKeyForSpec(keepAttrValuesBySpec, bucket.spec);
+    // 未出现在 keep 表中的 spec 视为「本次不处理」
+    if (keepKey === undefined) continue;
+    const keepSet = new Set(keepAttrValuesBySpec[keepKey] ?? []);
+    const removedAttrs = new Set<string>();
     const removeMemberIds: string[] = [];
+    const removedMembers: PostProcessTask[] = [];
 
-    for (const member of members) {
-      const attr = member.replicaFamilyAttrValue ?? '';
-      if (!keepSet.has(attr)) {
-        toRemove.push(attr);
+    for (const root of bucket.roots) {
+      for (const member of getReplicaTasks(root.id, tasks)) {
+        const attr = (member.replicaFamilyAttrValue ?? '').trim();
+        if (!attr || keepSet.has(attr)) continue;
+        removedAttrs.add(attr);
         removeMemberIds.push(member.id);
+        removedMembers.push(member);
       }
     }
 
-    if (toRemove.length) {
-      const spec = root.replicaFamilySpec ?? '';
-      pruneFloorTagKeysForReplica(spec, toRemove, messageId);
-      tasks = tasks.filter(t => !removeMemberIds.includes(t.id));
-      for (const id of removeMemberIds) {
-        delete state.cycleRunCounts[id];
-      }
+    if (!removeMemberIds.length) continue;
+
+    const removedAttrList = sortAttrValues([...removedAttrs]);
+    pruneFloorTagKeysForReplica(bucket.spec, removedAttrList, messageId);
+
+    const extractSpecs = collectExtractSpecsFromMembers(removedMembers).filter(
+      s => !specKeysEqual(s, bucket.spec),
+    );
+    for (const extractSpec of extractSpecs) {
+      pruneFloorTagKeysForReplica(extractSpec, removedAttrList, messageId);
+    }
+
+    tasks = tasks.filter(t => !removeMemberIds.includes(t.id));
+    for (const id of removeMemberIds) {
+      delete state.cycleRunCounts[id];
+    }
+
+    const primaryRootId = bucket.roots[0]?.id ?? '';
+    options?.removedOut?.push({
+      rootId: primaryRootId,
+      spec: bucket.spec,
+      attrValues: removedAttrList,
+    });
+    for (const extractSpec of extractSpecs) {
       options?.removedOut?.push({
-        rootId: root.id,
-        spec,
-        attrValues: [...toRemove],
+        rootId: primaryRootId,
+        spec: extractSpec,
+        attrValues: removedAttrList,
       });
     }
   }
 
-  if (options?.persistManualKeepByRoot) {
-    const nextLastKeep = { ...state.lastManualKeepByRoot };
-    for (const [rootId, attrs] of Object.entries(options.persistManualKeepByRoot)) {
-      nextLastKeep[rootId] = [...attrs];
+  if (options?.persistManualKeepBySpec) {
+    const patched = { ...(state.lastManualKeepBySpec ?? {}) };
+    for (const [spec, attrs] of Object.entries(options.persistManualKeepBySpec)) {
+      const key = canonicalSpecKey(spec);
+      if (!key) continue;
+      patched[key] = [...attrs];
     }
-    state.lastManualKeepByRoot = nextLastKeep;
+    state.lastManualKeepBySpec = canonicalizeLastManualKeepMap(patched);
   }
 
   state.roundsSinceCleanup = 0;
@@ -383,6 +514,18 @@ export function applyReplicaFamilyCleanup(
   state.lastCleanupRound = countAssistantRounds();
 
   return { ...settings, tasks };
+}
+
+/** 某 enumSpec 下各族全部现有 attr 的并集 */
+export function listAllAttrValuesForEnumSpec(settings: ScriptSettings, enumSpec: string): string[] {
+  const target = canonicalSpecKey(enumSpec);
+  if (!target) return [];
+  const attrs = new Set<string>();
+  for (const bucket of buildSpecBuckets(settings)) {
+    if (bucket.spec !== target) continue;
+    for (const attr of bucket.byAttr.keys()) attrs.add(attr);
+  }
+  return sortAttrValues([...attrs]);
 }
 
 export function resetReplicaFamilyCleanupCycle(settings: ScriptSettings): void {

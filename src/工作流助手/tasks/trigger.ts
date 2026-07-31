@@ -141,8 +141,8 @@ async function runReplicaFamilyCleanupIfDue(
   const result = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
   if (!result) return;
   const removedOut: RemovedReplicaCleanupInfo[] = [];
-  const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepByRoot, messageId, {
-    ...(result.persistManualKeep ? { persistManualKeepByRoot: result.keepByRoot } : {}),
+  const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepBySpec, messageId, {
+    ...(result.persistManualKeep ? { persistManualKeepBySpec: result.keepBySpec } : {}),
     removedOut,
   });
   Object.assign(effectiveSettings, next);

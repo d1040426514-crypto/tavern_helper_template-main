@@ -30,6 +30,7 @@ import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
   disableReplicaFamilyOnTasks,
   enableReplicaFamilyOnTask,
+  getReplicaFamilyEnumSpecKey,
   hasReplicaFamilyTasks,
   mirrorAllReplicaFamilies,
   scanDynamicAttrPlaceholders,
@@ -38,6 +39,7 @@ import {
 import {
   applyReplicaFamilyCleanup,
   ensureReplicaFamilyCleanupDefaults,
+  listAllAttrValuesForEnumSpec,
   type RemovedReplicaCleanupInfo,
 } from '../tasks/replica-family-cleanup';
 import { probeTaskGameTime } from '../tasks/schedule';
@@ -1501,9 +1503,10 @@ async function deleteSelectedReplicaMember(): Promise<void> {
   const target = editorTask.value;
   if (!target?.replicaFamilyRootId || target.id === root.id) return;
 
-  const attrValue = target.replicaFamilyAttrValue ?? '';
+  const attrValue = (target.replicaFamilyAttrValue ?? '').trim();
   const attrLabel = attrValue || target.name.trim() || '该副本';
   const rootLabel = (root.replicaFamilyBaseName ?? root.name).trim() || '副本族';
+  const enumSpec = getReplicaFamilyEnumSpecKey(root).trim();
   const floorId = resolveReplicaCleanupMessageFloorId();
   const floorHint =
     floorId > 0 && isAccessibleMessageFloor(floorId)
@@ -1512,25 +1515,32 @@ async function deleteSelectedReplicaMember(): Promise<void> {
 
   if (
     !(await acuConfirm({
-      message: `删除「${rootLabel}」的副本「${attrLabel}」，${floorHint}？`,
+      message: enumSpec
+        ? `删除规格「${enumSpec}」下的属性值「${attrLabel}」：所有声明该 spec 的副本族中对应成员都会移除，${floorHint}？`
+        : `删除「${rootLabel}」的副本「${attrLabel}」，${floorHint}？`,
     }))
   ) {
     return;
   }
 
-  const keepAttrs = replicaFamilyMembers.value
-    .filter(m => m.id !== target.id)
-    .map(m => m.replicaFamilyAttrValue ?? '')
-    .filter(Boolean);
-  const keepByRoot = { [root.id]: keepAttrs };
+  if (!enumSpec || !attrValue) {
+    acuToast('warning', '无法解析副本规格或属性值');
+    return;
+  }
+
+  const keepAttrs = listAllAttrValuesForEnumSpec(
+    { ...settings.value, tasks: displayTasks.value },
+    enumSpec,
+  ).filter(a => a !== attrValue);
+  const keepBySpec = { [enumSpec]: keepAttrs };
 
   try {
     if (chatScopeActive.value) {
-      await runChatScopeStoreMutation(() => applyReplicaFamilyCleanupInStore(keepByRoot, floorId, 'ui'));
+      await runChatScopeStoreMutation(() => applyReplicaFamilyCleanupInStore(keepBySpec, floorId, 'ui'));
     } else {
       const removedOut: RemovedReplicaCleanupInfo[] = [];
-      const next = applyReplicaFamilyCleanup(settings.value, keepByRoot, floorId, {
-        persistManualKeepByRoot: keepByRoot,
+      const next = applyReplicaFamilyCleanup(settings.value, keepBySpec, floorId, {
+        persistManualKeepBySpec: keepBySpec,
         removedOut,
       });
       settings.value.tasks = next.tasks;

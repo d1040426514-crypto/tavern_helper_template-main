@@ -25,11 +25,15 @@ const cleanup = computed(() => ensureReplicaFamilyCleanupDefaults(settings.value
     </div>
     <AcuHelpPanel v-model:open="helpOpen" id="replica-cleanup-help" label="副本族清理说明">
       <p class="acu-notes acu-notes--sm" style="margin-top: 0">
-        每隔 N 轮对话触发一次清理。活跃性判断：当前周期内副本执行次数 ÷ N ≥ R 视为活跃。
+        每隔 N 轮对话触发一次清理。按动态属性规格（同
+        spec）统一计算：同
+        attr 在所有声明该规格的副本族中一起保留或一起删除。活跃性：同 attr 各成员执行次数取
+        max 后 ÷ N ≥ R 视为活跃。
       </p>
       <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
-        自动清理：仅按「已启动 + 活跃」静默保留副本任务及对应楼层变量 key，不沿用上次手动勾选。手动清理：在工作流全部完成且酒馆渲染后弹出选择窗。
-        默认勾选：手动调度中已启动的副本、活跃副本、上次手动确认保留的副本；确认后同时保留所选副本及其 post_process_tags 数据；跳过本次不执行清理。
+        自动清理：仅按「已启动 + 活跃」静默保留，不沿用上次手动勾选。手动清理：工作流完成后弹出选择窗（按
+        spec 分栏、属性值去重）。默认勾选：手动调度已启动、活跃、或上次手动确认保留的属性值；确认后保留所选属性值及其
+        post_process_tags；跳过本次不执行清理。
       </p>
     </AcuHelpPanel>
     <div class="replica-cleanup-panel__controls acu-row acu-row--inline">

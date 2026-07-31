@@ -7,7 +7,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
-  confirm: [keepByRoot: Record<string, string[]>];
+  confirm: [keepBySpec: Record<string, string[]>];
   cancel: [];
 }>();
 
@@ -20,7 +20,7 @@ function initSelection(): void {
     for (const m of group.members) {
       if (m.defaultSelected) set.add(m.attrValue);
     }
-    next[group.rootId] = set;
+    next[group.spec] = set;
   }
   selected.value = next;
 }
@@ -29,23 +29,23 @@ initSelection();
 
 const hasGroups = computed(() => props.groups.length > 0);
 
-function isSelected(rootId: string, attrValue: string): boolean {
-  return selected.value[rootId]?.has(attrValue) ?? false;
+function isSelected(spec: string, attrValue: string): boolean {
+  return selected.value[spec]?.has(attrValue) ?? false;
 }
 
-function toggleMember(rootId: string, attrValue: string): void {
-  const set = new Set(selected.value[rootId] ?? []);
+function toggleMember(spec: string, attrValue: string): void {
+  const set = new Set(selected.value[spec] ?? []);
   if (set.has(attrValue)) set.delete(attrValue);
   else set.add(attrValue);
-  selected.value = { ...selected.value, [rootId]: set };
+  selected.value = { ...selected.value, [spec]: set };
 }
 
 function onConfirm(): void {
-  const keepByRoot: Record<string, string[]> = {};
+  const keepBySpec: Record<string, string[]> = {};
   for (const group of props.groups) {
-    keepByRoot[group.rootId] = [...(selected.value[group.rootId] ?? [])];
+    keepBySpec[group.spec] = [...(selected.value[group.spec] ?? [])];
   }
-  emit('confirm', keepByRoot);
+  emit('confirm', keepBySpec);
 }
 
 function onCancel(): void {
@@ -67,23 +67,25 @@ function onCancel(): void {
       </div>
       <div class="acu-window-body replica-cleanup-dialog__body">
         <p class="acu-notes acu-notes--sm replica-cleanup-dialog__intro">
-          请选择需要继续保留的副本。未选中的副本及其楼层变量 key 将被移除。
+          按动态属性规格（同
+          spec）统一选择需保留的属性值。未选中的属性值将从所有声明该 spec
+          的副本族中移除，并清除对应楼层变量 key。
         </p>
         <div v-if="hasGroups" class="replica-cleanup-dialog__groups">
-          <div v-for="group in groups" :key="group.rootId" class="replica-cleanup-dialog__group">
-            <h5 class="replica-cleanup-dialog__group-title">{{ group.rootName }}</h5>
+          <div v-for="group in groups" :key="group.spec" class="replica-cleanup-dialog__group">
+            <h5 class="replica-cleanup-dialog__group-title">{{ group.spec }}</h5>
             <div class="replica-scheduler__chip-list">
               <button
                 v-for="member in group.members"
-                :key="member.memberId"
+                :key="member.attrValue"
                 type="button"
                 class="acu-auto-segment-chip"
                 :class="{
-                  'acu-auto-segment-chip--on': isSelected(group.rootId, member.attrValue),
-                  'acu-auto-segment-chip--off': !isSelected(group.rootId, member.attrValue),
+                  'acu-auto-segment-chip--on': isSelected(group.spec, member.attrValue),
+                  'acu-auto-segment-chip--off': !isSelected(group.spec, member.attrValue),
                 }"
                 :title="`执行 ${member.runCount} 次，活跃度 ${member.activityScore.toFixed(2)}`"
-                @click="toggleMember(group.rootId, member.attrValue)"
+                @click="toggleMember(group.spec, member.attrValue)"
               >
                 {{ member.attrValue }}
               </button>
