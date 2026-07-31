@@ -150,7 +150,17 @@
           :default-open="false"
           :forced-open="forcedOpen"
         >
-          <p v-if="ent.location" class="muted staff-note">📍 {{ ent.location }}</p>
+          <div v-if="ent.location || ent.nextFixedSettle" class="entity-meta">
+            <span v-if="ent.location" class="entity-meta__loc">{{ ent.location }}</span>
+            <span
+              v-if="ent.nextFixedSettle"
+              class="settle-chip"
+              title="下次固定支出结算（薪饷/维护等）"
+            >
+              <span class="settle-chip__label">下次固定结算</span>
+              <span class="settle-chip__value">{{ ent.nextFixedSettle }}</span>
+            </span>
+          </div>
           <FoldPanel
             v-if="ent.facilities.length"
             variant="sub"
@@ -555,8 +565,13 @@ function entitySummary(ent: EntityData): string {
     : ent.keyPersons.length
       ? `核心${ent.keyPersons.length}`
       : '';
+  const settleMatch = ent.nextFixedSettle.match(/(\d+年\d+月\d+日)/);
+  const settleShort = ent.nextFixedSettle
+    ? `下次结算 ${settleMatch?.[1] ?? ent.nextFixedSettle}`
+    : '';
   const parts = [
     ent.location || '',
+    settleShort,
     ent.facilities.length ? `设施${ent.facilities.length}` : '',
     ent.materials.length ? `物资${ent.materials.length}` : '',
     staffLabel,
@@ -1012,6 +1027,74 @@ function statusTagClass(status: string): string {
 
 .staff-note {
   margin: 0 0 0.4em;
+}
+
+.entity-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  background: var(--bg-subtle);
+  border: 1px solid var(--border-subtle);
+}
+
+.entity-meta__loc {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+
+  &::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    margin-right: 6px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    vertical-align: 0.1em;
+    opacity: 0.85;
+  }
+}
+
+.settle-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  padding: 3px 8px 3px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(176, 125, 68, 0.35);
+  background: linear-gradient(135deg, rgba(176, 125, 68, 0.12) 0%, rgba(184, 148, 62, 0.06) 100%);
+  box-shadow: var(--shadow-xs);
+}
+
+.settle-chip__label {
+  flex-shrink: 0;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--accent-primary);
+  text-transform: none;
+}
+
+.settle-chip__value {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.theme-dark .settle-chip {
+  border-color: rgba(126, 168, 224, 0.35);
+  background: linear-gradient(135deg, rgba(126, 168, 224, 0.14) 0%, rgba(212, 176, 96, 0.06) 100%);
+}
+
+.theme-dark .settle-chip__label {
+  color: var(--accent-secondary);
 }
 
 .item-meta {

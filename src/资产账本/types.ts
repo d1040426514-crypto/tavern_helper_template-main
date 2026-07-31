@@ -9,6 +9,8 @@ export type NamedBlock = {
 export type EntityData = {
   name: string;
   location: string;
+  /** 下次固定支出结算日期（薪饷/维护等） */
+  nextFixedSettle: string;
   attrs: AttrMap;
   facilities: NamedBlock[];
   materials: NamedBlock[];

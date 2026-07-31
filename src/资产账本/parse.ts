@@ -186,6 +186,7 @@ function parseEntity(hit: TagHit): EntityData {
   return {
     name,
     location: pickAttr(hit.attrs, 'location'),
+    nextFixedSettle: pickAttr(hit.attrs, 'nextFixedSettle'),
     attrs: hit.attrs,
     facilities,
     materials,
