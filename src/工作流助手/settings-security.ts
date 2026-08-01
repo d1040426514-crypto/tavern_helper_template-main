@@ -98,6 +98,7 @@ export function buildPresetFromSettings(settings: ScriptSettings, name: string):
     name,
     tasks: stripReplicaFamilyMembers(_.cloneDeep(settings.tasks)),
     finalInjectTemplate: settings.finalInjectTemplate,
+    userInputEndInjectTemplate: settings.userInputEndInjectTemplate ?? '',
     tagVariableInjectTemplate: settings.tagVariableInjectTemplate,
     chatExtractTags: _.cloneDeep(settings.chatExtractTags ?? { user: [], assistant: [] }),
     chatBodyTagReplaceRules: _.cloneDeep(settings.chatBodyTagReplaceRules ?? []),

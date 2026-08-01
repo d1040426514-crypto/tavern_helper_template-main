@@ -294,6 +294,8 @@ export const PostProcessPresetSchema = z.object({
   name: z.string(),
   tasks: z.array(PostProcessTaskSchema).default([]),
   finalInjectTemplate: z.string().default(''),
+  /** 用户发送时提示词注入（in_chat/user/depth0/should_scan），不改正文 */
+  userInputEndInjectTemplate: z.string().default(''),
   tagVariableInjectTemplate: z.string().default(''),
   chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
   chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),
@@ -367,6 +369,7 @@ export const ScriptSettingsSchema = z
     taskContextOverridesEnabled: z.boolean().default(false),
     memoryRecallRecentCount: z.number().int().min(0).default(10),
     finalInjectTemplate: z.string().default(''),
+    userInputEndInjectTemplate: z.string().default(''),
     tagVariableInjectTemplate: z.string().default(''),
     chatExtractTags: ChatExtractTagsConfigSchema.default({ user: [], assistant: [] }),
     chatBodyTagReplaceRules: z.array(ChatBodyTagReplaceRuleSchema).default([]),

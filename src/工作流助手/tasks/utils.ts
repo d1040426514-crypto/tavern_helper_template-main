@@ -965,7 +965,7 @@ export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
     code: '{{total:last-launched:标签@属性}}',
     desc: '覆盖该 spec 下全部副本族的楼层上次启动正文。可写 {{total:last-launched:标签@属性:任务名}} 收窄。manual 用 launchedAttrValues，auto 用 lastEnumAttrValues。脚本与酒馆助手宏均可使用。',
   },
-  { code: '{{task:任务名}}', desc: 'AI楼层文末注入与聊天正文标签替换模板中的任务结果占位' },
+  { code: '{{task:任务名}}', desc: 'AI楼层文末注入、用户输入文末注入与聊天正文标签替换模板中的任务结果占位' },
   {
     code: '{{replica:val}}',
     desc: '副本族成员任务专用。解析为当前副本实例的属性值（replicaFamilyAttrValue）；例如 replicaFamilySpec 为 item@id、副本对应 item@id=1 时解析为 1。根模板与普通任务中解析为空，不回退 relay/history。',

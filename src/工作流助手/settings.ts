@@ -262,6 +262,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     settings.value.activePresetName = presetName;
     settings.value.tasks = cleanedTasks;
     settings.value.finalInjectTemplate = preset.finalInjectTemplate;
+    settings.value.userInputEndInjectTemplate = preset.userInputEndInjectTemplate ?? '';
     settings.value.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
     settings.value.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
     settings.value.chatBodyTagReplaceRules = _.cloneDeep(preset.chatBodyTagReplaceRules ?? []);
@@ -345,6 +346,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
         name,
         tasks: s.tasks,
         finalInjectTemplate: s.finalInjectTemplate,
+        userInputEndInjectTemplate: s.userInputEndInjectTemplate ?? '',
         tagVariableInjectTemplate: s.tagVariableInjectTemplate,
         chatExtractTags: _.cloneDeep(s.chatExtractTags ?? { user: [], assistant: [] }),
         chatBodyTagReplaceRules: _.cloneDeep(s.chatBodyTagReplaceRules ?? []),

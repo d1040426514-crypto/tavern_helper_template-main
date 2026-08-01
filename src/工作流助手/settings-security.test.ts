@@ -220,6 +220,7 @@ test('redactScriptSettingsForShare strips machine-local worldbook bindings', () 
       name: '分享预设',
       tasks: [],
       finalInjectTemplate: '',
+      userInputEndInjectTemplate: '',
       tagVariableInjectTemplate: '',
       chatExtractTags: { user: [], assistant: [] },
       chatBodyTagReplaceRules: [],

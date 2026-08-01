@@ -447,6 +447,7 @@ function buildPresetFieldsPatch() {
     taskContextOverridesEnabled: settings.value.taskContextOverridesEnabled,
     memoryRecallRecentCount: settings.value.memoryRecallRecentCount ?? 10,
     finalInjectTemplate: settings.value.finalInjectTemplate ?? '',
+    userInputEndInjectTemplate: settings.value.userInputEndInjectTemplate ?? '',
     tagVariableInjectTemplate: settings.value.tagVariableInjectTemplate ?? '',
     chatExtractTags: _.cloneDeep(settings.value.chatExtractTags ?? { user: [], assistant: [] }),
     chatBodyTagReplaceRules: _.cloneDeep(settings.value.chatBodyTagReplaceRules ?? []),
@@ -611,6 +612,7 @@ watch(
 watch(
   () => ({
     finalInjectTemplate: settings.value.finalInjectTemplate,
+    userInputEndInjectTemplate: settings.value.userInputEndInjectTemplate,
     tagVariableInjectTemplate: settings.value.tagVariableInjectTemplate,
     chatExtractTags: settings.value.chatExtractTags,
     chatBodyTagReplaceRules: settings.value.chatBodyTagReplaceRules,
@@ -739,6 +741,7 @@ const extractInjectTagsHelpOpen = ref(false);
 const structuredOutputHelpOpen = ref(false);
 const tagVariableInjectHelpOpen = ref(false);
 const finalInjectHelpOpen = ref(false);
+const userInputEndInjectHelpOpen = ref(false);
 const chatBodyTagReplaceHelpOpen = ref(false);
 const chatWorldbookWriteHelpOpen = ref(false);
 const apiRouteConcurrencyHelpOpen = ref(false);
@@ -2748,6 +2751,8 @@ function saveRunLogTaskTags(taskId: string): void {
                 <strong>用户输入</strong>：在
                 <code>MESSAGE_SENT</code>
                 最后阶段（<code>eventMakeLast</code>）从最终用户消息摘取，写入用户楼变量，供下一 AI 楼继承。
+                若 shujuku 策略1在已有用户楼上改写正文，会在
+                <code>GENERATION_AFTER_COMMANDS</code> 末尾再摘取一次（基于改写后正文）。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
                 <strong>AI 输出</strong>：在工作流任务开始前从当前 AI 楼正文摘取并写入，供当轮任务
@@ -3598,6 +3603,52 @@ function saveRunLogTaskTags(taskId: string): void {
               v-model="settings.finalInjectTemplate"
               class="acu-textarea"
               placeholder="finalInjectTemplate，可用 {{task:任务名}} 与 {{提取写入标签名}}"
+            />
+          </div>
+
+          <div class="acu-section">
+            <div class="acu-heading-with-help">
+              <h4>用户输入文末注入</h4>
+              <AcuHelpIconBtn
+                v-model:open="userInputEndInjectHelpOpen"
+                panel-id="user-input-end-inject-help"
+                label="用户输入文末注入说明"
+              />
+            </div>
+            <AcuHelpPanel
+              v-model:open="userInputEndInjectHelpOpen"
+              id="user-input-end-inject-help"
+              label="用户输入文末注入说明"
+            >
+              <p class="acu-notes acu-notes--sm" style="margin-top: 0">
+                用户发送消息时，以提示词注入方式贴到最新 user 消息底部（<code>in_chat</code> /
+                <code>role:user</code> / <code>depth:0</code>），<strong>不修改楼层正文</strong>，也不创建世界书条目。
+                内容默认加入世界书绿灯欲扫描文本（<code>should_scan</code>）。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                时序（有/无 shujuku 共用）：正常发送时 shujuku 先改写输入框，再
+                <code>MESSAGE_SENT</code> 摘取 → 本注入（监听返回 Promise，等待完成）→ 世界书扫描。
+                「先落用户楼再生成」（shujuku 策略1）时，在
+                <code>GENERATION_AFTER_COMMANDS</code> 的 <code>eventMakeLast</code>
+                对最新 user 楼再摘取+注入，保证基于改写后正文且早于世界书扫描。
+              </p>
+              <p class="acu-notes acu-notes--sm">
+                占位符同 AI 楼文末注入：<code v-pre>{{标签名}}</code> /
+                <code v-pre>{{task:任务名}}</code> / 酒馆宏。脚本认领的占位符无数据时清空；
+                <code v-pre>{{user}}</code> 等核心宏留给酒馆宏管线。可读取上一 AI 楼
+                <code>lastRunStatus</code> 中仅进 relay、未写入
+                <code>post_process_tags</code> 的提取标签。
+              </p>
+              <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
+                限制：Prompt 预览（<code>dry_run</code>）会跳过
+                <code>GENERATION_AFTER_COMMANDS</code> 兜底，且通常不触发
+                <code>MESSAGE_SENT</code>，预览中可能看不到本块。
+              </p>
+            </AcuHelpPanel>
+            <textarea
+              v-model="settings.userInputEndInjectTemplate"
+              class="acu-textarea"
+              placeholder="userInputEndInjectTemplate，可用 {{task:任务名}} 与 {{标签名}}"
             />
           </div>
 

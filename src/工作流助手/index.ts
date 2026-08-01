@@ -5,6 +5,7 @@ import { readChatTaskScope } from './tasks/chat-task-scope';
 import { emitChatScopeChanged, ACU_PP_TASKS_CHANGED } from './tasks/events';
 import { registerTrigger } from './tasks/trigger';
 import { registerUserChatTagExtractTrigger } from './tasks/chat-tag-extract';
+import { registerUserInputEndInjectTrigger } from './tasks/user-input-end-inject';
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { registerReplicaReconcile } from './tasks/replica-reconcile';
@@ -61,6 +62,8 @@ $(() => {
 
   const offTrigger = registerTrigger();
   const offChatTagExtract = registerUserChatTagExtractTrigger();
+  // 必须在聊天摘取之后注册：同为 eventMakeLast(MESSAGE_SENT)，后注册者最后执行
+  const offUserInputEndInject = registerUserInputEndInjectTrigger();
   const offTagInherit = registerTagVariableInheritance();
   const offChat = reloadOnChatChange({ beforeReload: markExtensionsMenuSoftUnload });
   const offWorldbookReconcile = registerWorldbookWriteReconcile();
@@ -89,6 +92,7 @@ $(() => {
     }
     offTrigger.stop();
     offChatTagExtract.stop();
+    offUserInputEndInject.stop();
     offTagInherit.stop();
     offChat.stop();
     offWorldbookReconcile.stop();

@@ -101,6 +101,7 @@ export type PresetFieldsPatch = Partial<{
   taskContextOverridesEnabled: boolean;
   memoryRecallRecentCount: number;
   finalInjectTemplate: string;
+  userInputEndInjectTemplate: string;
   tagVariableInjectTemplate: string;
   chatExtractTags: ScriptSettings['chatExtractTags'];
   chatBodyTagReplaceRules: ScriptSettings['chatBodyTagReplaceRules'];
@@ -423,6 +424,7 @@ export async function promoteChatScopeToPreset(name?: string): Promise<string | 
   settings.activePresetName = presetName;
   settings.tasks = _.cloneDeep(preset.tasks);
   settings.finalInjectTemplate = preset.finalInjectTemplate;
+  settings.userInputEndInjectTemplate = preset.userInputEndInjectTemplate ?? '';
   settings.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
   settings.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
   settings.chatBodyTagReplaceRules = _.cloneDeep(preset.chatBodyTagReplaceRules ?? []);

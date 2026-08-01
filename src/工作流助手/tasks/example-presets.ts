@@ -24,6 +24,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     ],
     tagVariableInjectTemplate: '<post_process_data>\n{{result}}\n</post_process_data>',
     finalInjectTemplate: '',
+    userInputEndInjectTemplate: '',
     contextTurnCount: 3,
     contextExtractRules: [],
     contextExcludeRules: [],
@@ -183,6 +184,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     ],
     tagVariableInjectTemplate: '{{total:launched:item@name}}',
     finalInjectTemplate: 'FLOOR_INJECT:{{total:launched:item@name}}',
+    userInputEndInjectTemplate: '',
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],
     chatWorldbookWriteRules: [
@@ -241,6 +243,7 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
     ],
     tagVariableInjectTemplate: '',
     finalInjectTemplate: '',
+    userInputEndInjectTemplate: '',
     chatExtractTags: { user: [], assistant: ['content'] },
     chatBodyTagReplaceRules: [
       {
@@ -269,6 +272,7 @@ export function getDefaultSettingsPartial() {
     tasks: preset.tasks,
     tagVariableInjectTemplate: preset.tagVariableInjectTemplate,
     finalInjectTemplate: preset.finalInjectTemplate,
+    userInputEndInjectTemplate: preset.userInputEndInjectTemplate ?? '',
     contextTurnCount: preset.contextTurnCount,
     contextExtractRules: preset.contextExtractRules,
     contextExcludeRules: preset.contextExcludeRules,

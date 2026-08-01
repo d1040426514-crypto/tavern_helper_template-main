@@ -30,6 +30,7 @@ export function buildChatSnapshotFromSettings(settings: ScriptSettings): PostPro
     name: CHAT_SNAPSHOT_PRESET_NAME,
     tasks: _.cloneDeep(settings.tasks),
     finalInjectTemplate: settings.finalInjectTemplate,
+    userInputEndInjectTemplate: settings.userInputEndInjectTemplate ?? '',
     tagVariableInjectTemplate: settings.tagVariableInjectTemplate,
     chatExtractTags: _.cloneDeep(settings.chatExtractTags ?? { user: [], assistant: [] }),
     chatBodyTagReplaceRules: _.cloneDeep(settings.chatBodyTagReplaceRules ?? []),

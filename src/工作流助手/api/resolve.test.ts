@@ -28,6 +28,7 @@ function baseSettings(partial?: Partial<ScriptSettings>): ScriptSettings {
     taskPlotWorldbookOverridesEnabled: false,
     taskContextOverridesEnabled: false,
     finalInjectTemplate: '',
+    userInputEndInjectTemplate: '',
     tagVariableInjectTemplate: '',
     chatExtractTags: { user: [], assistant: [] },
     chatBodyTagReplaceRules: [],

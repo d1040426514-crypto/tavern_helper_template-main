@@ -9,6 +9,7 @@ import {
 export function applyPresetFieldsToSettings(target: ScriptSettings, preset: PostProcessPreset): void {
   target.tasks = _.cloneDeep(preset.tasks);
   target.finalInjectTemplate = preset.finalInjectTemplate;
+  target.userInputEndInjectTemplate = preset.userInputEndInjectTemplate ?? '';
   target.tagVariableInjectTemplate = preset.tagVariableInjectTemplate;
   target.chatExtractTags = _.cloneDeep(preset.chatExtractTags ?? { user: [], assistant: [] });
   target.chatBodyTagReplaceRules = _.cloneDeep(preset.chatBodyTagReplaceRules ?? []);
