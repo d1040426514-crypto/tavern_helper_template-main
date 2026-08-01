@@ -56,22 +56,33 @@ async function persistBaseline(messageId: number, baseline: InjectVarBaseline): 
   );
 }
 
-async function ensureMvuReady(): Promise<boolean> {
+/** waitGlobalInitialized 在目标未加载时永不 resolve；必须带超时，否则无 Addon/Mvu 时整轮工作流会挂死 */
+const GLOBAL_READY_WAIT_MS = 1500;
+
+async function waitGlobalReadyOrTimeout(
+  globalName: 'Mvu' | 'Addon',
+  alreadyDefined: boolean,
+): Promise<boolean> {
+  if (alreadyDefined) return true;
   try {
-    await waitGlobalInitialized('Mvu');
-    return typeof Mvu !== 'undefined';
+    await Promise.race([
+      waitGlobalInitialized(globalName),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => reject(new Error(`${globalName} wait timeout`)), GLOBAL_READY_WAIT_MS);
+      }),
+    ]);
+    return globalName === 'Mvu' ? typeof Mvu !== 'undefined' : typeof Addon !== 'undefined';
   } catch {
     return false;
   }
 }
 
+async function ensureMvuReady(): Promise<boolean> {
+  return waitGlobalReadyOrTimeout('Mvu', typeof Mvu !== 'undefined');
+}
+
 async function ensureAddonReady(): Promise<boolean> {
-  try {
-    await waitGlobalInitialized('Addon');
-    return typeof Addon !== 'undefined';
-  } catch {
-    return false;
-  }
+  return waitGlobalReadyOrTimeout('Addon', typeof Addon !== 'undefined');
 }
 
 async function ensureBaselineSides(
