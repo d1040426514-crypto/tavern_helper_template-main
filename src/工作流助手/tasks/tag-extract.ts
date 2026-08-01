@@ -246,11 +246,19 @@ export function findLastTagInstance(text: string, tagName: string): TagInstance 
   const source = String(text ?? '');
   if (!source || !tagName) return null;
 
+  // 跳过自闭合开标签（如 <角色集 …/>），否则同名嵌套时会误取内层导致内文为空
   let lastOpenStart = -1;
   let searchFrom = 0;
   while (searchFrom < source.length) {
     const openStart = findOpenTagAt(source, tagName, searchFrom);
     if (openStart === -1) break;
+    const tentativeEnd = findOpenTagEnd(source, openStart);
+    if (tentativeEnd === -1) break;
+    const tentativeTag = source.slice(openStart, tentativeEnd + 1);
+    if (/\/\s*>$/.test(tentativeTag)) {
+      searchFrom = tentativeEnd + 1;
+      continue;
+    }
     lastOpenStart = openStart;
     searchFrom = openStart + 1;
   }

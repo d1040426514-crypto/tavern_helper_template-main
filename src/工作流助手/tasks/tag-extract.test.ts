@@ -35,6 +35,17 @@ test('item@id splits by attribute', () => {
   assert.equal(injectedFragments[1], '<item id="2">\nB\n</item>');
 });
 
+test('bare tag skips nested same-name self-closing when taking last', () => {
+  const text = `<角色集>
+  <角色集 类型="前台角色" 列表="波尔特" />
+  <角色集 类型="后台关系列表角色" 列表="凯尔" />
+</角色集>`;
+  const { extractedTags } = extractInjectTagsFromResponse(text, ['角色集']);
+  assert.match(extractedTags['角色集'] || '', /类型="前台角色"/);
+  assert.match(extractedTags['角色集'] || '', /类型="后台关系列表角色"/);
+  assert.ok((extractedTags['角色集'] || '').length > 0);
+});
+
 test('item@id skips bare tag without id', () => {
   const text = '<item id="1">A</item><item>无id</item>';
   const { extractedTags } = extractInjectTagsFromResponse(text, ['item@id']);
