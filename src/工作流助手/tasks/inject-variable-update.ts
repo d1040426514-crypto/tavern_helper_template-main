@@ -5,12 +5,20 @@ import {
   type StageVariableUpdateResult,
 } from './inject-variable-update-logic';
 import { hasXmlTagBlock, neutralizeOrphanXmlOpens } from '@util/xml-tag-blocks';
+import { resolveAddonApi, invokeClearAddonPatchLog, type ResolvedAddonApi } from './resolve-addon-api';
 
 export {
   collectStageVariableUpdateSources,
   hasUpdateVariableTag,
   type StageVariableUpdateResult,
 } from './inject-variable-update-logic';
+
+export {
+  resolveAddonApi,
+  resolveAddonApiFromScopes,
+  isAddonApiShape,
+  invokeClearAddonPatchLog,
+} from './resolve-addon-api';
 
 const BASELINE_KEY = '_post_process_inject_var_baseline';
 
@@ -56,39 +64,34 @@ async function persistBaseline(messageId: number, baseline: InjectVarBaseline): 
   );
 }
 
-/** waitGlobalInitialized 在目标未加载时永不 resolve；必须带超时，否则无 Addon/Mvu 时整轮工作流会挂死 */
-const GLOBAL_READY_WAIT_MS = 1500;
+/** waitGlobalInitialized 在目标未加载时永不 resolve；MVU 必须带超时 */
+const MVU_READY_WAIT_MS = 1500;
 
-async function waitGlobalReadyOrTimeout(
-  globalName: 'Mvu' | 'Addon',
-  alreadyDefined: boolean,
-): Promise<boolean> {
-  if (alreadyDefined) return true;
+async function ensureMvuReady(): Promise<boolean> {
+  if (typeof Mvu !== 'undefined') return true;
   try {
     await Promise.race([
-      waitGlobalInitialized(globalName),
+      waitGlobalInitialized('Mvu'),
       new Promise<never>((_, reject) => {
-        setTimeout(() => reject(new Error(`${globalName} wait timeout`)), GLOBAL_READY_WAIT_MS);
+        setTimeout(() => reject(new Error('Mvu wait timeout')), MVU_READY_WAIT_MS);
       }),
     ]);
-    return globalName === 'Mvu' ? typeof Mvu !== 'undefined' : typeof Addon !== 'undefined';
+    return typeof Mvu !== 'undefined';
   } catch {
     return false;
   }
 }
 
-async function ensureMvuReady(): Promise<boolean> {
-  return waitGlobalReadyOrTimeout('Mvu', typeof Mvu !== 'undefined');
-}
-
-async function ensureAddonReady(): Promise<boolean> {
-  return waitGlobalReadyOrTimeout('Addon', typeof Addon !== 'undefined');
+/** 同步探测；禁止 waitGlobalInitialized('Addon') */
+function ensureAddonReady(): ResolvedAddonApi | null {
+  return resolveAddonApi();
 }
 
 async function ensureBaselineSides(
   messageId: number,
   needMvu: boolean,
   needAddon: boolean,
+  addonApi: ResolvedAddonApi | null,
 ): Promise<void> {
   let baseline = readBaseline(messageId);
   const next: InjectVarBaseline = baseline ? { ...baseline } : {};
@@ -98,8 +101,8 @@ async function ensureBaselineSides(
     next.mvu = _.cloneDeep(Mvu.getMvuData({ type: 'message', message_id: messageId }));
     dirty = true;
   }
-  if (needAddon && !next.addon) {
-    next.addon = _.cloneDeep(Addon.getAddonData({ type: 'message', message_id: messageId }).addon_data);
+  if (needAddon && addonApi && !next.addon) {
+    next.addon = _.cloneDeep(addonApi.getAddonData({ type: 'message', message_id: messageId }).addon_data);
     dirty = true;
   }
 
@@ -113,12 +116,13 @@ async function restoreBaseline(
   baseline: InjectVarBaseline,
   needMvu: boolean,
   needAddon: boolean,
+  addonApi: ResolvedAddonApi | null,
 ): Promise<void> {
   if (needMvu && baseline.mvu) {
     await Mvu.replaceMvuData(_.cloneDeep(baseline.mvu), { type: 'message', message_id: messageId });
   }
-  if (needAddon && baseline.addon) {
-    Addon.replaceAddonData({ addon_data: _.cloneDeep(baseline.addon) }, { type: 'message', message_id: messageId });
+  if (needAddon && baseline.addon && addonApi) {
+    addonApi.replaceAddonData({ addon_data: _.cloneDeep(baseline.addon) }, { type: 'message', message_id: messageId });
   }
 }
 
@@ -135,12 +139,13 @@ export async function restoreInjectVarBaselineForRerun(messageId: number): Promi
     if (needMvu && !(await ensureMvuReady())) {
       console.warn('[工作流助手] MVU 未就绪，重跑时无法还原 inject baseline（MVU）');
     } else if (needMvu) {
-      await restoreBaseline(messageId, baseline, true, false);
+      await restoreBaseline(messageId, baseline, true, false, null);
     }
-    if (needAddon && !(await ensureAddonReady())) {
+    const addonApi = needAddon ? ensureAddonReady() : null;
+    if (needAddon && !addonApi) {
       console.warn('[工作流助手] Addon 未就绪，重跑时无法还原 inject baseline（Addon）');
-    } else if (needAddon) {
-      await restoreBaseline(messageId, baseline, false, true);
+    } else if (needAddon && addonApi) {
+      await restoreBaseline(messageId, baseline, false, true, addonApi);
     }
   } catch (e) {
     console.error('[工作流助手] 重跑还原 inject baseline 失败:', e);
@@ -151,11 +156,11 @@ export async function restoreInjectVarBaselineForRerun(messageId: number): Promi
 /**
  * 每一轮工作流开始时清空 addon 变更日志，避免同楼重跑/新一轮把上一轮 ops 粘进合并日志。
  * 同轮内多阶段仍由 applyAddonUpdateFromMessage 的 mergeIntoLastLog 合并。
+ * 无 Addon 时立即跳过（零等待）。
  */
 export async function clearAddonPatchLogForWorkflowRound(): Promise<void> {
-  if (!(await ensureAddonReady())) return;
   try {
-    Addon.clearPatchLog?.();
+    invokeClearAddonPatchLog(ensureAddonReady());
   } catch (e) {
     console.warn('[工作流助手] 清空 Addon 变更日志失败:', e);
   }
@@ -175,14 +180,12 @@ async function applyMvuInjectPatch(messageId: number, aiBlock: string): Promise<
   await Mvu.replaceMvuData(newMvu, { type: 'message', message_id: messageId });
 }
 
-async function applyAddonInjectPatch(messageId: number, aiBlock: string): Promise<void> {
-  const ready = await ensureAddonReady();
-  if (!ready) {
-    console.warn('[工作流助手] Addon 未就绪，已跳过 <AddonJSONPatch> 解析');
-    return;
-  }
-
-  await Addon.applyAddonUpdateFromMessage(sanitizePatchTagsForApply(aiBlock), messageId);
+async function applyAddonInjectPatch(
+  messageId: number,
+  aiBlock: string,
+  addonApi: ResolvedAddonApi,
+): Promise<void> {
+  await addonApi.applyAddonUpdateFromMessage(sanitizePatchTagsForApply(aiBlock), messageId);
 }
 
 /**
@@ -201,19 +204,20 @@ export async function applyVariableUpdatesFromText(messageId: number, aiBlock: s
       console.warn('[工作流助手] MVU 未就绪，已跳过 <JSONPatch> 解析');
       needMvu = false;
     }
-    if (needAddon && !(await ensureAddonReady())) {
+    const addonApi = needAddon ? ensureAddonReady() : null;
+    if (needAddon && !addonApi) {
       console.warn('[工作流助手] Addon 未就绪，已跳过 <AddonJSONPatch> 解析');
       needAddon = false;
     }
     if (!needMvu && !needAddon) return;
 
-    await ensureBaselineSides(messageId, needMvu, needAddon);
+    await ensureBaselineSides(messageId, needMvu, needAddon, addonApi);
 
     if (needMvu) {
       await applyMvuInjectPatch(messageId, aiBlock);
     }
-    if (needAddon) {
-      await applyAddonInjectPatch(messageId, aiBlock);
+    if (needAddon && addonApi) {
+      await applyAddonInjectPatch(messageId, aiBlock, addonApi);
     }
   } catch (e) {
     console.error('[工作流助手] 阶段变量更新失败:', e);
