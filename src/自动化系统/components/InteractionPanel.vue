@@ -13,7 +13,7 @@
         <div v-for="ix in interactions" :key="ix.id" class="ix-card">
           <div class="ix-top">
             <span class="ix-id">{{ ix.id }}</span>
-            <span v-if="ix.roles.length" class="ix-roles">{{ ix.roles.join(' · ') }}</span>
+            <span v-if="ix.roles.length" class="ix-roles">{{ ix.roles.join('、') }}</span>
           </div>
           <div v-if="ix.summary" class="ix-row">
             <span class="ix-label">简述</span>

@@ -9,6 +9,7 @@ import {
   parseNpcBlock,
   parseQuestArchive,
   parseQuestLog,
+  splitMemories,
   splitNameList,
 } from './parse';
 
@@ -30,6 +31,21 @@ test('parseAttrs supports Chinese attr names', () => {
 
 test('splitNameList handles comma and顿号', () => {
   assert.deepEqual(splitNameList('甲,乙、丙；丁'), ['甲', '乙', '丙', '丁']);
+});
+
+test('splitMemories supports semicolon and numbered run-on', () => {
+  assert.deepEqual(splitMemories('1.昨夜见黑影;2.收到密信'), ['昨夜见黑影', '收到密信']);
+  assert.deepEqual(
+    splitMemories(
+      '1.今晚在怒涛海峡确认了袭击路径。2.亚瑟要求三日内提交评估。3.处理了两份紧急公文。',
+    ),
+    ['今晚在怒涛海峡确认了袭击路径。', '亚瑟要求三日内提交评估。', '处理了两份紧急公文。'],
+  );
+  assert.deepEqual(splitMemories('1、二十岁继承商会；2、父亲临终托付金狮印'), [
+    '二十岁继承商会',
+    '父亲临终托付金狮印',
+  ]);
+  assert.deepEqual(splitMemories('只有一条无序号记忆'), ['只有一条无序号记忆']);
 });
 
 test('parseNpcBlock new format with file/dynamic fields', () => {

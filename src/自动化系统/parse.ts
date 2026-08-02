@@ -103,10 +103,36 @@ function splitPipe(raw: string): string[] {
     .filter(Boolean);
 }
 
-function splitMemories(raw: string): string[] {
-  return raw
-    .split(/[;；]/)
-    .map(s => softTrim(s.replace(/^\d+[.、.)．]\s*/, '')))
+/**
+ * 拆分记忆条目。
+ * 支持 `1.a;2.b`，以及无分号的连写 `1.a。2.b。3.c` / `1、a 2、b`。
+ */
+export function splitMemories(raw: string): string[] {
+  const text = softTrim(String(raw ?? ''));
+  if (!text) return [];
+
+  /** 下一条序号前拆分：2. / 2、 / 2) ，序号后需空白或中文/引号/字母 */
+  const numberedBoundary =
+    /(?=\d{1,2}[.、.)．](?:\s|(?=[\u4e00-\u9fff「『“A-Za-z])))/;
+
+  let parts = text
+    .split(/[;；]+/)
+    .map(s => softTrim(s))
+    .filter(Boolean);
+  if (!parts.length) parts = [text];
+
+  parts = parts.flatMap(part => {
+    const pieces = part
+      .split(numberedBoundary)
+      .map(s => softTrim(s))
+      .filter(Boolean);
+    if (pieces.length <= 1) return [part];
+    const numbered = pieces.filter(p => /^\d{1,2}[.、.)．]/.test(p));
+    return numbered.length >= 2 ? pieces : [part];
+  });
+
+  return parts
+    .map(s => softTrim(s.replace(/^\d{1,2}[.、.)．]\s*/, '')))
     .filter(Boolean);
 }
 
