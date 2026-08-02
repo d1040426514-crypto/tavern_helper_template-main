@@ -603,6 +603,7 @@
   margin: 8px 0;
   font-family: var(--font-body);
   color: var(--text-primary);
+  overflow-x: hidden;
   overflow-wrap: anywhere;
   -webkit-text-size-adjust: 100%;
 
@@ -620,10 +621,12 @@
     --space-3: 6px;
     --space-4: 8px;
     --space-5: 10px;
-    --card-pad: 7px 8px;
+    --card-pad: 8px 9px;
     --panel-pad-x: 8px;
     --touch-min: 40px;
     --radius-md: 9px;
     --radius-lg: 11px;
+    --mobile-text-scale: 1.02;
+    font-size: calc(16px * var(--mobile-text-scale, 1));
   }
 }

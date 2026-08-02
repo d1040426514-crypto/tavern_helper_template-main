@@ -166,6 +166,7 @@ const open = ref(true);
 @media (max-width: 640px) {
   .major-panel {
     margin-bottom: 6px;
+    overflow-x: hidden;
   }
 
   .npc-grid {
@@ -176,6 +177,14 @@ const open = ref(true);
     padding: 8px 8px 8px 10px;
     font-size: 0.75rem;
     min-height: var(--touch-min);
+  }
+
+  .panel-label {
+    gap: 4px;
+  }
+
+  .panel-badge {
+    font-size: 0.5rem;
   }
 
   .panel-caret {

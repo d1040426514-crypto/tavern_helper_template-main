@@ -989,7 +989,118 @@ const backgroundRows = computed(() => {
   }
 }
 
-@media (max-width: 560px) {
+/* 移动端统一断点：≤640px */
+@media (max-width: 640px) {
+  .npc-card {
+    overflow-x: hidden;
+    gap: 0.5em;
+  }
+
+  .npc-card-top {
+    align-items: flex-start;
+    column-gap: 0.4em;
+    row-gap: 0.35em;
+    padding-right: 1.6em;
+  }
+
+  .npc-avatar {
+    width: 1.55em;
+    height: 1.55em;
+    font-size: 0.78em;
+  }
+
+  .npc-name {
+    flex: 1 1 calc(100% - 3em);
+    flex-shrink: 1;
+    min-width: 0;
+    max-width: 100%;
+    font-size: 0.9em;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+
+  .npc-card-caret {
+    position: absolute;
+    top: 0.15em;
+    right: 0;
+    margin-left: 0;
+    width: var(--touch-min);
+    height: var(--touch-min);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .npc-rep-inline {
+    flex: 1 1 100%;
+    order: 3;
+    row-gap: 0.3em;
+    gap: 0.25em;
+  }
+
+  .npc-chip {
+    white-space: normal;
+    font-size: 0.56em;
+  }
+
+  .npc-wealth-tag {
+    order: 4;
+    margin-left: 0;
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: anywhere;
+    font-size: 0.58em;
+  }
+
+  .npc-life-row {
+    gap: 0.28em;
+  }
+
+  .npc-life-chip {
+    font-size: 0.64em;
+  }
+
+  /* 当前状态：两列 + 通栏 */
+  .npc-status-grid {
+    &--mapped {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        'action wear'
+        'world place'
+        'env env'
+        'doing doing';
+    }
+
+    &--mapped:not(.npc-status-grid--has-doing) {
+      grid-template-areas:
+        'action wear'
+        'world place'
+        'env env';
+    }
+
+    &:not(.npc-status-grid--mapped) {
+      grid-template-columns: 1fr 1fr;
+
+      .npc-status-cell--doing {
+        grid-column: 1 / -1;
+      }
+    }
+  }
+
+  .npc-status-cell {
+    padding: 0.35em 0.42em;
+  }
+
+  .npc-status-k {
+    font-size: 0.62em;
+  }
+
+  .npc-status-v {
+    font-size: 0.74em;
+    line-height: 1.4;
+  }
+
+  /* 人际容器：单列 */
   .npc-relations {
     padding: 0.45em 0.5em 0.5em;
   }
@@ -1011,11 +1122,68 @@ const backgroundRows = computed(() => {
   }
 
   .npc-chip-flow--fill {
-    grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr));
   }
 
   .npc-meta-strip--fill {
     grid-template-columns: repeat(auto-fill, minmax(7.5em, 1fr));
+  }
+
+  /* 目标/打算：单列 */
+  .npc-duo {
+    grid-template-columns: 1fr;
+  }
+
+  /* 任务：单列 */
+  .npc-quest-logs {
+    grid-template-columns: 1fr;
+  }
+
+  /* 记忆：≤640 才单列 */
+  .npc-memory-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .npc-chain-section {
+    padding: 0.5em 0.65em;
+  }
+
+  .chain-arrow {
+    display: none;
+  }
+
+  .chain-step,
+  .chain-predict {
+    flex: 1 1 100%;
+    font-size: 0.78em;
+    line-height: 1.45;
+    padding: 0.35em 0.5em;
+  }
+
+  .npc-subcard {
+    padding: 0.55em 0.6em 0.6em;
+    gap: 0.45em;
+  }
+
+  .npc-memory-col {
+    padding: 0.5em 0.55em;
+  }
+
+  .npc-memory-list {
+    gap: 0.4em;
+  }
+
+  .npc-memory-list li {
+    line-height: 1.55;
+  }
+
+  .npc-social-row {
+    grid-template-columns: 1fr;
+  }
+
+  .npc-plan-line {
+    grid-template-columns: 2.4em minmax(0, 1fr);
+    font-size: 0.74em;
   }
 }
 
@@ -1587,114 +1755,5 @@ const backgroundRows = computed(() => {
   flex: 1 1 100%;
   color: var(--text-secondary);
   word-break: break-word;
-}
-
-@media (max-width: 900px) {
-  .npc-memory-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-@media (max-width: 720px) {
-  .npc-status-grid {
-    &--mapped {
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        'action wear'
-        'world place'
-        'env env'
-        'doing doing';
-    }
-
-    &--mapped:not(.npc-status-grid--has-doing) {
-      grid-template-areas:
-        'action wear'
-        'world place'
-        'env env';
-    }
-
-    &:not(.npc-status-grid--mapped) {
-      grid-template-columns: 1fr 1fr;
-
-      .npc-status-cell--doing {
-        grid-column: 1 / -1;
-      }
-    }
-  }
-
-  .npc-wealth-tag {
-    margin-left: 0;
-  }
-
-  .npc-card-top {
-    align-items: flex-start;
-  }
-}
-
-@media (max-width: 640px) {
-  .npc-card {
-    overflow-x: hidden;
-    gap: 0.55em;
-  }
-
-  .npc-name {
-    flex-shrink: 1;
-    min-width: 0;
-    max-width: 100%;
-    word-break: break-word;
-  }
-
-  .npc-rep-inline {
-    flex: 1 1 100%;
-    order: 3;
-    row-gap: 0.35em;
-  }
-
-  .npc-chip {
-    white-space: normal;
-  }
-
-  .npc-wealth-tag {
-    order: 4;
-    white-space: normal;
-    word-break: break-word;
-  }
-
-  .npc-chain-section {
-    padding: 0.5em 0.65em;
-  }
-
-  .chain-arrow {
-    display: none;
-  }
-
-  .chain-step,
-  .chain-predict {
-    flex: 1 1 100%;
-    font-size: 0.78em;
-    line-height: 1.45;
-    padding: 0.35em 0.5em;
-  }
-
-  .npc-subcard {
-    padding: 0.55em 0.6em 0.6em;
-    gap: 0.45em;
-  }
-
-  .npc-memory-col {
-    padding: 0.5em 0.55em;
-  }
-
-  .npc-memory-list {
-    gap: 0.4em;
-  }
-
-  .npc-memory-list li {
-    line-height: 1.55;
-  }
-
-  .npc-social-row {
-    grid-template-columns: 1fr;
-  }
 }
 </style>

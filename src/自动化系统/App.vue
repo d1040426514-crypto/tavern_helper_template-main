@@ -129,6 +129,16 @@ onMounted(() => {
     padding: var(--space-4, 8px) var(--panel-pad-x, 8px);
     font-size: 0.75rem;
     color: var(--text-muted, #888);
+    overflow-wrap: anywhere;
+    word-break: break-word;
+
+    code {
+      display: inline;
+      max-width: 100%;
+      white-space: normal;
+      overflow-wrap: anywhere;
+      word-break: break-all;
+    }
   }
 }
 </style>

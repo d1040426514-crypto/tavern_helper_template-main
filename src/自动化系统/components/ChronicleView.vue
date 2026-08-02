@@ -470,6 +470,10 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
+  .chronicle-container {
+    overflow-x: hidden;
+  }
+
   .chronicle-container::before {
     inset: 3px;
   }
@@ -484,12 +488,20 @@ onBeforeUnmount(() => {
     flex-wrap: wrap;
     row-gap: 6px;
     min-height: var(--touch-min);
+    align-items: center;
+  }
+
+  .header-title-area {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .header-controls {
-    flex-wrap: wrap;
-    row-gap: 6px;
+    flex-wrap: nowrap;
+    row-gap: 0;
+    margin-left: auto;
     justify-content: flex-end;
+    gap: 4px;
   }
 
   .header-title {

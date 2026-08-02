@@ -205,6 +205,7 @@ const open = ref(true);
 @media (max-width: 640px) {
   .major-panel {
     margin-bottom: 6px;
+    overflow-x: hidden;
   }
 
   .panel-header {
@@ -223,16 +224,36 @@ const open = ref(true);
   }
 
   .ix-list {
+    display: flex;
+    flex-direction: column;
     gap: var(--space-3);
   }
 
   .ix-card {
     padding: var(--card-pad);
+    gap: 5px;
+  }
+
+  .ix-top {
+    gap: 4px 6px;
+  }
+
+  .ix-id {
+    font-size: 0.72rem;
+  }
+
+  .ix-roles {
+    font-size: 0.74rem;
+    line-height: 1.4;
+    overflow-wrap: anywhere;
+    word-break: break-word;
   }
 
   .ix-row {
     flex-direction: column;
     gap: 3px;
+    font-size: 0.74rem;
+    line-height: 1.5;
   }
 
   .ix-label {
@@ -241,7 +262,8 @@ const open = ref(true);
 
   .ix-value {
     font-size: 0.76rem;
-    line-height: 1.45;
+    line-height: 1.5;
+    overflow-wrap: anywhere;
   }
 }
 </style>
