@@ -4,6 +4,7 @@ import type {
   AttrMap,
   BusinessData,
   CurrencyBlock,
+  DispatchData,
   EntityData,
   LedgerData,
   LedgerTimeData,
@@ -23,7 +24,7 @@ function normalizeMarkup(text: string): string {
   return toLedgerSimplified(text)
     .replace(/<!--[\s\S]*?-->/g, '')
     .replace(
-      /<(本期结算|外因|内因|产业流动资金|流动资金|实体|经营|运营|基建|基础设施|仓库|人员|收入|支出|产能|订单|履约|在途|本期可交付|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
+      /<(本期结算|外因|内因|产业流动资金|流动资金|实体|经营|运营|外派|基建|基础设施|仓库|人员|收入|支出|产能|订单|履约|在途|本期可交付|可交付|闭环校验|净值|主管|执事|项目|币种|折合基准|物资|装备|产线|条目|季节|治安|市况|事件|工艺|士气|制度|设施|职级|核心人物|配装|装|品项)([\u4e00-\u9fff\w.-]+\s*=)/g,
       '<$1 $2',
     );
 }
@@ -167,6 +168,27 @@ function parseCash(body: string): { note: string; currencies: CurrencyBlock[]; c
   };
 }
 
+/** 解析 <配装> 内全部 <装>（成对或自闭合） */
+function parseKit(source: string): NamedBlock[] {
+  const kit = findFirstPair(source, '配装');
+  if (!kit) return [];
+  return findAllPairs(kit.inner, '装').map(h => ({
+    attrs: h.attrs,
+    text: softTrim(h.inner),
+  }));
+}
+
+function parseStaffBlock(hit: TagHit): NamedBlock {
+  const kit = parseKit(hit.inner);
+  // 去掉配装后的剩余正文（通常为空）
+  let text = softTrim(hit.inner.replace(/<\s*配装[\s\S]*?<\/\s*配装\s*>/gi, ''));
+  return {
+    attrs: hit.attrs,
+    text,
+    ...(kit.length ? { children: kit } : {}),
+  };
+}
+
 function parseEntity(hit: TagHit): EntityData {
   const name = pickAttr(hit.attrs, 'name') || '未命名实体';
   const infra = findFirstPair(hit.inner, '基建') ?? findFirstPair(hit.inner, '基础设施');
@@ -180,8 +202,8 @@ function parseEntity(hit: TagHit): EntityData {
   const equipments = namedFromHits(findAllPairs(whInner, '装备'));
 
   const staff = findFirstPair(hit.inner, '人员');
-  const roles = staff ? findAllSelfClosing(staff.inner, '职级') : [];
-  const keyPersons = staff ? namedFromHits(findAllPairs(staff.inner, '核心人物')) : [];
+  const roles = staff ? findAllPairs(staff.inner, '职级').map(parseStaffBlock) : [];
+  const keyPersons = staff ? findAllPairs(staff.inner, '核心人物').map(parseStaffBlock) : [];
 
   return {
     name,
@@ -193,9 +215,28 @@ function parseEntity(hit: TagHit): EntityData {
     equipments,
     staffTotal: staff ? pickAttr(staff.attrs, 'total') : '',
     staffOnDuty: staff ? pickAttr(staff.attrs, '在岗') : '',
+    staffDispatched: staff ? pickAttr(staff.attrs, '外派') : '',
     staffNote: staff ? pickAttr(staff.attrs, 'note') : '',
     roles,
     keyPersons,
+  };
+}
+
+function parseDispatch(hit: TagHit): DispatchData {
+  const kit = parseKit(hit.inner);
+  const text = softTrim(hit.inner.replace(/<\s*配装[\s\S]*?<\/\s*配装\s*>/gi, ''));
+  return {
+    id: pickAttr(hit.attrs, 'id'),
+    name: pickAttr(hit.attrs, 'name') || '未命名实体',
+    who: pickAttr(hit.attrs, 'who'),
+    dest: pickAttr(hit.attrs, 'dest'),
+    mission: pickAttr(hit.attrs, 'mission'),
+    since: pickAttr(hit.attrs, 'since'),
+    eta: pickAttr(hit.attrs, 'eta'),
+    status: pickAttr(hit.attrs, 'status'),
+    attrs: hit.attrs,
+    text,
+    kit,
   };
 }
 
@@ -297,6 +338,7 @@ export function parseLedgerBody(inner: string): Omit<LedgerData, 'ledgerTime'> {
   const entities = findAllPairs(content, '实体').map(parseEntity);
   const businesses = findAllPairs(content, '经营').map(parseBusiness);
   const operations = findAllPairs(content, '运营').map(parseOperations);
+  const dispatches = findAllPairs(content, '外派').map(parseDispatch);
 
   const headline = deriveHeadline(periodSummary);
   if (!headline.duration && rootAttrs.period) headline.duration = rootAttrs.period;
@@ -314,6 +356,7 @@ export function parseLedgerBody(inner: string): Omit<LedgerData, 'ledgerTime'> {
     entities,
     businesses,
     operations,
+    dispatches,
     headline,
   };
 }
@@ -334,6 +377,7 @@ export function isLedgerEmpty(data: LedgerData): boolean {
     !data.entities.length &&
     !data.businesses.length &&
     !data.operations.length &&
+    !data.dispatches.length &&
     !data.currencies.length
   );
 }

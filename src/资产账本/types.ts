@@ -17,9 +17,29 @@ export type EntityData = {
   equipments: NamedBlock[];
   staffTotal: string;
   staffOnDuty: string;
+  /** <人员 外派> 人数 */
+  staffDispatched: string;
   staffNote: string;
-  roles: AttrMap[];
+  /** 职级；children 为 <配装>/<装> */
+  roles: NamedBlock[];
+  /** 核心人物；children 为配装；attrs 可含 dispatch */
   keyPersons: NamedBlock[];
+};
+
+/** 顶层 <外派> 任务块 */
+export type DispatchData = {
+  id: string;
+  name: string;
+  who: string;
+  dest: string;
+  mission: string;
+  since: string;
+  eta: string;
+  status: string;
+  attrs: AttrMap;
+  text: string;
+  /** <配装>/<装> */
+  kit: NamedBlock[];
 };
 
 export type OpsLine = NamedBlock & { attrs: AttrMap };
@@ -88,6 +108,8 @@ export type LedgerData = {
   entities: EntityData[];
   businesses: BusinessData[];
   operations: OperationsData[];
+  /** 与 <运营> 平级的外派任务 */
+  dispatches: DispatchData[];
   /** 顶栏摘要：优先本期结算，其次根属性推断 */
   headline: {
     duration: string;

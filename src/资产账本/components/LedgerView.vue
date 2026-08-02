@@ -230,12 +230,26 @@
           >
             <p v-if="ent.staffNote" class="muted staff-note">{{ ent.staffNote }}</p>
             <div v-for="(r, ri) in ent.roles" :key="'r-' + ri" class="item-row">
-              <strong>{{ r.role || '职级' }}</strong>
-              <span v-if="r.count" class="muted"> ×{{ r.count }}</span>
-              <span v-if="r.level" class="muted"> · {{ r.level }}</span>
-              <span v-if="r['变动']" class="muted"> · 变动:{{ r['变动'] }}</span>
-              <span v-if="r.status" class="tag" :class="statusTagClass(r.status)">{{ r.status }}</span>
-              <AttrChips :attrs="r" :hide="['role', 'count', 'level', '变动', 'status']" />
+              <strong>{{ pick(r.attrs, 'role') || '职级' }}</strong>
+              <span v-if="pick(r.attrs, 'count')" class="muted"> ×{{ pick(r.attrs, 'count') }}</span>
+              <span v-if="pick(r.attrs, 'level')" class="muted"> · {{ pick(r.attrs, 'level') }}</span>
+              <span v-if="pick(r.attrs, '变动')" class="muted"> · 变动:{{ pick(r.attrs, '变动') }}</span>
+              <span
+                v-if="pick(r.attrs, 'status')"
+                class="tag"
+                :class="statusTagClass(pick(r.attrs, 'status'))"
+              >
+                {{ pick(r.attrs, 'status') }}
+              </span>
+              <AttrChips
+                :attrs="r.attrs"
+                :hide="['role', 'count', 'level', '变动', 'status']"
+              />
+              <div v-if="r.children?.length" class="kit-list">
+                <div v-for="(k, ki) in r.children" :key="'rk-' + ki" class="kit-item muted">
+                  {{ kitLine(k) }}
+                </div>
+              </div>
             </div>
             <div v-for="(kp, ki) in ent.keyPersons" :key="'kp-' + ki" class="item-row">
               <strong>{{ pick(kp.attrs, 'name') || '核心人物' }}</strong>
@@ -251,10 +265,18 @@
               >
                 {{ pick(kp.attrs, 'status') }}
               </span>
+              <span v-if="pick(kp.attrs, 'dispatch')" class="muted">
+                · 任务:{{ pick(kp.attrs, 'dispatch') }}</span
+              >
               <AttrChips
                 :attrs="kp.attrs"
-                :hide="['name', 'role', 'level', 'loyalty', 'status']"
+                :hide="['name', 'role', 'level', 'loyalty', 'status', 'dispatch']"
               />
+              <div v-if="kp.children?.length" class="kit-list">
+                <div v-for="(k, kki) in kp.children" :key="'kk-' + kki" class="kit-item muted">
+                  {{ kitLine(k) }}
+                </div>
+              </div>
             </div>
           </FoldPanel>
         </FoldPanel>
@@ -508,6 +530,53 @@
         </FoldPanel>
       </FoldPanel>
 
+      <!-- 5 外派任务 -->
+      <FoldPanel
+        v-if="data.dispatches.length"
+        variant="section"
+        title="外派任务"
+        emoji="🚩"
+        badge="DISPATCH"
+        :summary="`${data.dispatches.length} 项`"
+        :default-open="false"
+        :forced-open="forcedOpen"
+      >
+        <FoldPanel
+          v-for="(d, di) in data.dispatches"
+          :key="'d-' + di"
+          variant="entity"
+          :title="dispatchTitle(d)"
+          emoji="🚩"
+          :summary="dispatchSummary(d)"
+          :badge="d.status || undefined"
+          :badge-class="dispatchBadgeClass(d.status)"
+          :default-open="false"
+          :forced-open="forcedOpen"
+        >
+          <div class="entity-meta">
+            <span v-if="d.name" class="entity-meta__loc">实体:{{ d.name }}</span>
+            <span v-if="d.who" class="muted"> · 人员:{{ d.who }}</span>
+            <span v-if="d.dest" class="muted"> · 目的地:{{ d.dest }}</span>
+            <span v-if="d.mission" class="muted"> · 任务:{{ d.mission }}</span>
+          </div>
+          <div v-if="d.since || d.eta" class="muted staff-note">
+            <span v-if="d.since">出发:{{ d.since }}</span>
+            <span v-if="d.since && d.eta"> · </span>
+            <span v-if="d.eta">预计归期:{{ d.eta }}</span>
+          </div>
+          <AttrChips
+            :attrs="d.attrs"
+            :hide="['id', 'name', 'who', 'dest', 'mission', 'since', 'eta', 'status']"
+          />
+          <div v-if="d.kit.length" class="kit-list">
+            <div v-for="(k, kdi) in d.kit" :key="'dk-' + kdi" class="kit-item muted">
+              {{ kitLine(k) }}
+            </div>
+          </div>
+          <StatRow v-if="d.text" :text="d.text" />
+        </FoldPanel>
+      </FoldPanel>
+
       <div class="footer-note">✧ 通用资产账簿 · 自动生成 ✧</div>
     </div>
   </div>
@@ -521,7 +590,14 @@ import PreLine from './PreLine.vue';
 import ProgressBar from './ProgressBar.vue';
 import StatRow from './StatRow.vue';
 import { parseCashMetrics, parseProductionSplit } from '../parse';
-import type { BusinessData, EntityData, LedgerData, NamedBlock, OperationsData } from '../types';
+import type {
+  BusinessData,
+  DispatchData,
+  EntityData,
+  LedgerData,
+  NamedBlock,
+  OperationsData,
+} from '../types';
 
 defineProps<{
   data: LedgerData;
@@ -583,10 +659,57 @@ function staffSummary(ent: EntityData): string {
   const parts = [
     ent.staffTotal ? `共 ${ent.staffTotal}` : '',
     ent.staffOnDuty ? `在岗 ${ent.staffOnDuty}` : '',
+    ent.staffDispatched ? `外派 ${ent.staffDispatched}` : '',
     ent.roles.length ? `职级 ${ent.roles.length}` : '',
     ent.keyPersons.length ? `核心 ${ent.keyPersons.length}` : '',
   ].filter(Boolean);
   return parts.join(' · ');
+}
+
+function kitLine(k: NamedBlock): string {
+  const kind = pick(k.attrs, 'kind');
+  const kindLabel = kind === 'supply' ? '物资' : kind === 'equip' ? '装备' : kind || '装';
+  const name = pick(k.attrs, 'name') || '未命名';
+  const qty = pick(k.attrs, 'qty');
+  const unit = pick(k.attrs, 'unit');
+  const quality = pick(k.attrs, 'quality');
+  const use = pick(k.attrs, 'use');
+  const from = pick(k.attrs, 'from');
+  const slot = pick(k.attrs, 'slot');
+  const bind = pick(k.attrs, 'bind');
+  const qtyPart = qty ? ` ×${qty}${unit || ''}` : unit ? ` (${unit})` : '';
+  const extras = [
+    quality ? `品质:${quality}` : '',
+    slot ? `位:${slot}` : '',
+    bind ? `编制:${bind}` : '',
+    use || '',
+    from ? `来源:${from}` : '',
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  return `[${kindLabel}] ${name}${qtyPart}${extras ? ` · ${extras}` : ''}`;
+}
+
+function dispatchTitle(d: DispatchData): string {
+  const id = d.id ? `${d.id} · ` : '';
+  return `${id}${d.mission || d.who || d.name || '外派'}`;
+}
+
+function dispatchSummary(d: DispatchData): string {
+  const parts = [
+    d.who || '',
+    d.dest || '',
+    d.status || '',
+    d.kit.length ? `配装 ${d.kit.length}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
+}
+
+function dispatchBadgeClass(status: string): string {
+  const s = status.toLowerCase();
+  if (s.includes('返程') || s.includes('驻留')) return 'is-plus';
+  if (s.includes('逾期') || s.includes('战损')) return 'is-minus';
+  return '';
 }
 
 function moneySummary(total: string, period: string): string {
@@ -675,13 +798,19 @@ function whItemTitle(attrs: Record<string, string>, fallback: string): string {
   return `${name}${unit}${quality}`;
 }
 
-/** 仓库折叠标题：仅显示期末与 Δ */
+/** 仓库折叠标题：期末 / Δ / 配装占用 / 可用库存 */
 function warehouseSummary(text: string): string {
   const { total, change } = parseCashMetrics(text);
-  if (!total && !change) return '';
-  if (total && change) return `期末 ${total} (Δ ${change})`;
-  if (total) return `期末 ${total}`;
-  return `Δ ${change}`;
+  const t = String(text ?? '');
+  const assigned = t.match(/配装占用\s*[:：]?\s*([+\-]?[\d,.]+(?:\.\d+)?)/)?.[1] ?? '';
+  const available = t.match(/可用库存\s*[:：]?\s*([+\-]?[\d,.]+(?:\.\d+)?)/)?.[1] ?? '';
+  const parts = [
+    total ? `期末 ${total}` : '',
+    change ? `Δ ${change}` : '',
+    assigned ? `占用 ${assigned}` : '',
+    available ? `可用 ${available}` : '',
+  ].filter(Boolean);
+  return parts.join(' · ');
 }
 
 function reconcileClass(attrs: Record<string, string>): string {
@@ -704,7 +833,8 @@ function statusTagClass(status: string): string {
     s.includes('normal') ||
     s.includes('正常') ||
     s.includes('满编') ||
-    s.includes('在岗')
+    s.includes('在岗') ||
+    s.includes('返程')
   ) {
     return 'tag-green';
   }
@@ -715,7 +845,8 @@ function statusTagClass(status: string): string {
     s.includes('闲') ||
     s.includes('缺编') ||
     s.includes('伤病') ||
-    s.includes('暂离')
+    s.includes('暂离') ||
+    s.includes('逾期')
   ) {
     return 'tag-red';
   }
@@ -1023,6 +1154,19 @@ function statusTagClass(status: string): string {
 .muted {
   color: var(--text-tertiary);
   font-size: 0.85em;
+}
+
+.kit-list {
+  margin: 4px 0 0;
+  padding-left: 0.6em;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kit-item {
+  font-size: 0.92em;
+  line-height: 1.35;
 }
 
 .staff-note {

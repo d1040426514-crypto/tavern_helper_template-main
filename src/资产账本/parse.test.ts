@@ -280,20 +280,97 @@ test('parse staff meta, roles and key persons', () => {
   assert.equal(ent?.location, '北岸码头');
   assert.equal(ent?.staffTotal, '12');
   assert.equal(ent?.staffOnDuty, '11');
+  assert.equal(ent?.staffDispatched, '');
   assert.equal(ent?.staffNote, '1人外派押运');
-  assert.equal(ent?.roles[0]?.role, '工匠');
-  assert.equal(ent?.roles[0]?.count, '8');
-  assert.equal(ent?.roles[0]?.level, '熟练');
-  assert.equal(ent?.roles[0]?.cost, '2银/人/周');
-  assert.equal(ent?.roles[0]?.costType, '薪饷');
-  assert.equal(ent?.roles[0]?.['变动'], '0');
-  assert.equal(ent?.roles[0]?.status, '满编');
+  assert.equal(ent?.roles[0]?.attrs.role, '工匠');
+  assert.equal(ent?.roles[0]?.attrs.count, '8');
+  assert.equal(ent?.roles[0]?.attrs.level, '熟练');
+  assert.equal(ent?.roles[0]?.attrs.cost, '2银/人/周');
+  assert.equal(ent?.roles[0]?.attrs.costType, '薪饷');
+  assert.equal(ent?.roles[0]?.attrs['变动'], '0');
+  assert.equal(ent?.roles[0]?.attrs.status, '满编');
+  assert.equal(ent?.roles[0]?.children, undefined);
   assert.equal(ent?.keyPersons[0]?.attrs.name, '老刘');
   assert.equal(ent?.keyPersons[0]?.attrs.role, '主管');
   assert.equal(ent?.keyPersons[0]?.attrs.loyalty, '高');
   assert.equal(ent?.keyPersons[0]?.attrs.level, '老练');
   assert.equal(ent?.keyPersons[0]?.attrs.status, '在岗');
   assert.equal(ent?.keyPersons[0]?.text, '');
+});
+
+test('parse staff kit, dispatched count and top-level dispatches', () => {
+  const body = parseLedgerBody(`
+<实体 name="北岸商栈" location="北岸">
+  <仓库>
+    <物资 name="干粮" unit="人日" quality="普通">
+      期初100 +流入0 -流出20 =期末80 (Δ-20)
+      (配装占用:10 | 可用库存:70)
+    </物资>
+    <装备 name="制式矛" unit="柄" quality="普通">
+      期初30 +新增0 -报废0 -调出20 =期末30
+      (完好:100% | 折损:0 | 配装占用:20 | 可用库存:10)
+    </装备>
+  </仓库>
+  <人员 total="20" 在岗="15" 外派="5" note="">
+    <职级 role="护卫" count="12" level="精锐" status="满编">
+      <配装>
+        <装 kind="equip" name="制式矛" qty="12" unit="柄" quality="普通"
+          bind="编制总数" from="仓库调出" />
+        <装 kind="supply" name="干粮" qty="24" unit="人日" quality="普通"
+          bind="人均" from="仓库调出" use="本期消耗" />
+      </配装>
+    </职级>
+    <核心人物 name="阿强" role="押运长" status="外派" dispatch="D-01">
+      <配装>
+        <装 kind="equip" name="制式矛" qty="1" unit="柄" from="沿用编制" />
+        <装 kind="supply" name="外伤药" qty="2" unit="份" from="仓库调出" use="携行占用" />
+      </配装>
+    </核心人物>
+  </人员>
+</实体>
+<外派 id="D-01" name="北岸商栈"
+  who="阿强 + 护卫×4" dest="东路驿站" mission="护送"
+  since="3年2月1日" eta="3年2月5日" status="途中">
+  <配装>
+    <装 kind="equip" name="制式矛" qty="5" unit="柄" from="沿用编制" />
+    <装 kind="supply" name="干粮" qty="20" unit="人日" from="仓库调出" use="本期消耗" />
+  </配装>
+  进展:按期推进 | 风险:低 | 费用口径:差旅
+</外派>
+`);
+  const ent = body.entities[0];
+  assert.equal(ent?.staffDispatched, '5');
+  assert.equal(ent?.staffOnDuty, '15');
+  assert.equal(ent?.materials[0]?.attrs.name, '干粮');
+  assert.match(ent?.materials[0]?.text ?? '', /配装占用:10/);
+  assert.match(ent?.equipments[0]?.text ?? '', /可用库存:10/);
+
+  const role = ent?.roles[0];
+  assert.equal(role?.attrs.role, '护卫');
+  assert.equal(role?.children?.length, 2);
+  assert.equal(role?.children?.[0]?.attrs.kind, 'equip');
+  assert.equal(role?.children?.[0]?.attrs.name, '制式矛');
+  assert.equal(role?.children?.[1]?.attrs.kind, 'supply');
+  assert.equal(role?.children?.[1]?.attrs.use, '本期消耗');
+
+  const kp = ent?.keyPersons[0];
+  assert.equal(kp?.attrs.dispatch, 'D-01');
+  assert.equal(kp?.attrs.status, '外派');
+  assert.equal(kp?.children?.length, 2);
+  assert.equal(kp?.children?.[1]?.attrs.name, '外伤药');
+
+  assert.equal(body.dispatches.length, 1);
+  const d = body.dispatches[0];
+  assert.equal(d?.id, 'D-01');
+  assert.equal(d?.name, '北岸商栈');
+  assert.equal(d?.who, '阿强 + 护卫×4');
+  assert.equal(d?.dest, '东路驿站');
+  assert.equal(d?.mission, '护送');
+  assert.equal(d?.status, '途中');
+  assert.equal(d?.kit.length, 2);
+  assert.equal(d?.kit[0]?.attrs.kind, 'equip');
+  assert.equal(d?.kit[1]?.attrs.use, '本期消耗');
+  assert.match(d?.text ?? '', /进展:按期推进/);
 });
 
 test('parse revenue type and recurring attrs', () => {
