@@ -1,9 +1,13 @@
-import { buildChronicle, parseNpcBlock, parsePreview } from './parse';
-import type { ChronicleData, NpcCard } from './types';
+import { buildChronicle, parseInteractions, parseNpcBlock, splitNameList } from './parse';
+import {
+  BACK_TASK_NAME,
+  FRONT_TASK_NAME,
+  type ChronicleData,
+  type NpcCard,
+} from './types';
 
 export const PREVIEW_TAG = '后台角色交互预演';
 export const NPC_ACT_GROUP = 'npc_act';
-export const NPC_ACT_SPEC = 'npc@act';
 export const REPLICA_STATE_KEY = '_post_process_replica_state';
 
 type ReplicaRootState = {
@@ -14,6 +18,7 @@ type ReplicaRootState = {
 
 type ReplicaTask = {
   id: string;
+  name?: string;
   replicaFamilyRootId?: string;
   replicaFamilySpec?: string;
   replicaFamilyEnumSpec?: string;
@@ -27,7 +32,8 @@ type ReplicaApi = {
 export type ChronicleSources = {
   previewRaw: string;
   npcByName: Record<string, string>;
-  launchedNames: string[] | null;
+  frontNames: string[];
+  backNames: string[];
 };
 
 function getReplicaApi(): ReplicaApi | null {
@@ -41,16 +47,16 @@ function getReplicaApi(): ReplicaApi | null {
   return null;
 }
 
-function findNpcActRoot(api: ReplicaApi | null): ReplicaTask | null {
+function findRootByTaskName(api: ReplicaApi | null, taskName: string): ReplicaTask | null {
   if (!api) return null;
-  const spec = NPC_ACT_SPEC.toLowerCase();
+  const target = taskName.trim().toLowerCase();
+  if (!target) return null;
   return (
     api.listTasks().find(t => {
       if (t.replicaFamilyRootId) return false;
-      const a = String(t.replicaFamilyEnumSpec || t.replicaFamilySpec || '')
+      return String(t.name ?? '')
         .trim()
-        .toLowerCase();
-      return a === spec;
+        .toLowerCase() === target;
     }) ?? null
   );
 }
@@ -68,6 +74,43 @@ function listLastLaunched(
   const fallback = mode === 'manual' ? enums : launched;
   const chosen = primary.length ? primary : fallback;
   return [...new Set(chosen)];
+}
+
+/** 从宏展开结果或顿号名单解析角色名 */
+export function parseLaunchedNameList(raw: string): string[] {
+  return splitNameList(raw);
+}
+
+function trySubstituteMacro(macro: string): string | null {
+  try {
+    const parentWin = window.parent as Window & {
+      substituteParams?: (s: string) => string;
+    };
+    const fn = parentWin?.substituteParams;
+    if (typeof fn !== 'function') return null;
+    const out = String(fn(macro) ?? '');
+    // 未展开时宏原文仍在
+    if (!out || out.includes('{{replica:launched:')) return null;
+    return out.trim();
+  } catch {
+    return null;
+  }
+}
+
+function resolveLaunchedNamesByTask(
+  taskName: string,
+  api: ReplicaApi | null,
+  snapshot: Record<string, ReplicaRootState>,
+): string[] {
+  const macro = `{{replica:launched:${taskName}}}`;
+  const fromMacro = trySubstituteMacro(macro);
+  if (fromMacro != null && fromMacro.length) {
+    return parseLaunchedNameList(fromMacro);
+  }
+
+  const root = findRootByTaskName(api, taskName);
+  if (!root) return [];
+  return listLastLaunched(root, snapshot);
 }
 
 /** 从 post_process_tags 扁平/嵌套读取全部 npc@act=* 内文 */
@@ -102,22 +145,22 @@ function readReplicaSnapshot(messageId: number): Record<string, ReplicaRootState
   }
 }
 
-/**
- * 读取本楼 chronicle 原始素材。
- * launchedNames === null 表示无法取得 last-launched 名单，调用方应回退为角色集交集。
- */
+/** 读取本楼 chronicle 原始素材（前台/后台名单 + npc 正文 + 预演原文） */
 export function readChronicleSources(messageId?: number): ChronicleSources {
-  const mid = messageId ?? (() => {
-    try {
-      return getCurrentMessageId();
-    } catch {
-      return -1;
-    }
-  })();
+  const mid =
+    messageId ??
+    (() => {
+      try {
+        return getCurrentMessageId();
+      } catch {
+        return -1;
+      }
+    })();
 
   let previewRaw = '';
   let npcByName: Record<string, string> = {};
-  let launchedNames: string[] | null = null;
+  let frontNames: string[] = [];
+  let backNames: string[] = [];
 
   try {
     const vars = getVariables({ type: 'message', message_id: mid }) ?? {};
@@ -130,43 +173,28 @@ export function readChronicleSources(messageId?: number): ChronicleSources {
 
   try {
     const api = getReplicaApi();
-    const root = findNpcActRoot(api);
-    if (root) {
-      const snap = readReplicaSnapshot(mid);
-      const list = listLastLaunched(root, snap);
-      if (list.length) launchedNames = list;
-    }
+    const snap = readReplicaSnapshot(mid);
+    frontNames = resolveLaunchedNamesByTask(FRONT_TASK_NAME, api, snap);
+    backNames = resolveLaunchedNamesByTask(BACK_TASK_NAME, api, snap);
   } catch {
     /* ignore */
   }
 
-  return { previewRaw, npcByName, launchedNames };
-}
-
-/** 按 last-launched 过滤；无名单时保留全部（再由角色集裁剪） */
-export function filterNpcByLaunched(
-  npcByName: Record<string, string>,
-  launchedNames: string[] | null,
-): Record<string, string> {
-  if (!launchedNames || !launchedNames.length) return { ...npcByName };
-  const allow = new Set(launchedNames);
-  const out: Record<string, string> = {};
-  for (const [name, body] of Object.entries(npcByName)) {
-    if (allow.has(name)) out[name] = body;
-  }
-  return out;
+  return { previewRaw, npcByName, frontNames, backNames };
 }
 
 export function loadChronicle(messageId?: number): ChronicleData {
-  const { previewRaw, npcByName, launchedNames } = readChronicleSources(messageId);
-  const preview = parsePreview(previewRaw);
-  const filtered = filterNpcByLaunched(npcByName, launchedNames);
-  return buildChronicle(preview, filtered);
+  const { previewRaw, npcByName, frontNames, backNames } = readChronicleSources(messageId);
+  const interactions = parseInteractions(previewRaw);
+  return buildChronicle({ frontNames, backNames, interactions }, npcByName);
 }
 
 export function hasChronicleSource(messageId?: number): boolean {
-  const { previewRaw, npcByName } = readChronicleSources(messageId);
-  return !!previewRaw || Object.keys(npcByName).length > 0;
+  const { previewRaw, npcByName, frontNames, backNames } = readChronicleSources(messageId);
+  if (frontNames.length || backNames.length) return true;
+  if (Object.keys(npcByName).length > 0) return true;
+  if (previewRaw && parseInteractions(previewRaw).length > 0) return true;
+  return false;
 }
 
 /** 供测试：内文 → NpcCard 映射 */

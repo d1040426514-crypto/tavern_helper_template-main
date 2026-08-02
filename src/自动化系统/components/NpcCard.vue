@@ -40,6 +40,18 @@
     </button>
 
     <div v-show="expanded && hasBody" class="npc-card-body">
+      <!-- 生命档案：紧凑标签行 -->
+      <div v-if="lifeChips.length" class="npc-life-row" aria-label="生命档案">
+        <span
+          v-for="chip in lifeChips"
+          :key="chip.key"
+          class="npc-life-chip"
+        >
+          <span class="npc-life-k">{{ chip.label }}</span>
+          <span class="npc-life-v">{{ chip.value }}</span>
+        </span>
+      </div>
+
       <!-- 行为链紧贴名字下方 -->
       <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
         <div class="chain-label">⚡ 行为链</div>
@@ -56,7 +68,7 @@
         </div>
       </div>
 
-      <!-- 当前状态：标签在上、内容在下的信息格；「正在做」可通栏 -->
+      <!-- 当前状态：6 格；「正在做的事」通栏 -->
       <section v-if="statusCells.length" class="npc-section">
         <header class="npc-section-head">📍 当前状态</header>
         <div class="npc-status-grid" :class="{ 'has-doing': !!doingCell }">
@@ -67,6 +79,24 @@
           <div v-if="doingCell" class="npc-status-cell npc-status-cell--doing">
             <div class="npc-status-k">{{ doingCell.label }}</div>
             <div class="npc-status-v">{{ doingCell.value }}</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 身边人物 -->
+      <section v-if="npc.companions.length" class="npc-section">
+        <header class="npc-section-head">👥 身边人物</header>
+        <div class="npc-subcard npc-companions-card">
+          <div class="npc-subcard-body">
+            <div v-for="(g, gi) in npc.companions" :key="'cmp' + gi" class="npc-social-row">
+              <span class="npc-social-cat">{{ g.category }}</span>
+              <div class="npc-social-people">
+                <div v-for="(p, pi) in g.people" :key="'cp' + gi + '-' + pi" class="npc-person">
+                  <span class="npc-person-name">{{ p.name }}</span>
+                  <span v-if="p.note" class="npc-person-note">{{ p.note }}</span>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </section>
@@ -255,12 +285,24 @@ const showBackgroundCard = computed(() => {
   return !!(b.group || b.circle || b.event);
 });
 
+const lifeChips = computed(() => {
+  const life = props.npc.lifeArchive;
+  const rows: Array<{ key: string; label: string; value: string }> = [];
+  if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
+  if (life.race) rows.push({ key: 'race', label: '种族', value: life.race });
+  if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
+  if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
+  return rows;
+});
+
 const hasBody = computed(() => {
   const n = props.npc;
   return !!(
+    lifeChips.value.length ||
     n.actionChain.length ||
     n.predict ||
     n.statusParts.length ||
+    n.companions.length ||
     n.socialNetwork.length ||
     showBackgroundCard.value ||
     n.longGoal ||
@@ -278,6 +320,8 @@ function toggleExpanded(): void {
   expanded.value = !expanded.value;
 }
 
+const DOING_LABEL = '正在做的事';
+
 const statusCells = computed(() =>
   props.npc.statusParts.map((value, i) => ({
     label: statusLabels[i] || `详情${i + 1}`,
@@ -286,10 +330,12 @@ const statusCells = computed(() =>
 );
 
 const statusMainCells = computed(() =>
-  statusCells.value.filter(c => c.label !== '正在做'),
+  statusCells.value.filter(c => c.label !== DOING_LABEL),
 );
 
-const doingCell = computed(() => statusCells.value.find(c => c.label === '正在做') ?? null);
+const doingCell = computed(
+  () => statusCells.value.find(c => c.label === DOING_LABEL) ?? null,
+);
 
 const NEAR_PLAN_LABELS = ['事件', '行为', '时段'] as const;
 
@@ -666,17 +712,53 @@ const backgroundRows = computed(() => {
   color: var(--accent-lavender);
 }
 
-/* 当前状态：前三项等宽格，「正在做」通栏 */
+/* 生命档案：紧凑标签行 */
+.npc-life-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3em;
+  width: 100%;
+}
+
+.npc-life-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.25em;
+  max-width: 100%;
+  padding: 0.2em 0.45em;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--accent-mint) 14%, var(--bg-step));
+  border: 1px solid color-mix(in srgb, var(--accent-mint) 35%, var(--border-subtle));
+  font-size: 0.68em;
+  line-height: 1.35;
+}
+
+.npc-life-k {
+  font-weight: 700;
+  color: var(--accent-mint);
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
+.npc-life-v {
+  color: var(--text-primary);
+  word-break: break-word;
+  min-width: 0;
+}
+
+.npc-companions-card {
+  width: 100%;
+}
+
+/* 当前状态：主格自适应；「正在做的事」通栏 */
 .npc-status-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
   gap: 0.35em;
   width: 100%;
 
   &.has-doing {
-    grid-template-areas:
-      'a b c'
-      'd d d';
+    grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
   }
 }
 
@@ -687,23 +769,9 @@ const backgroundRows = computed(() => {
   background: var(--bg-step);
   border: 1px solid var(--border-subtle);
 
-  &:nth-child(1) {
-    grid-area: a;
-  }
-  &:nth-child(2) {
-    grid-area: b;
-  }
-  &:nth-child(3) {
-    grid-area: c;
-  }
-
   &--doing {
-    grid-area: d;
+    grid-column: 1 / -1;
   }
-}
-
-.npc-status-grid:not(.has-doing) .npc-status-cell {
-  grid-area: auto;
 }
 
 .npc-status-k {
@@ -1192,11 +1260,10 @@ const backgroundRows = computed(() => {
   }
 
   .npc-status-grid {
-    grid-template-columns: 1fr;
-    grid-template-areas: none !important;
+    grid-template-columns: 1fr 1fr;
 
-    .npc-status-cell {
-      grid-area: auto !important;
+    .npc-status-cell--doing {
+      grid-column: 1 / -1;
     }
   }
 

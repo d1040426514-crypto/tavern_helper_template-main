@@ -9,9 +9,8 @@
         <span class="header-icon-main">🎭</span>
       </div>
       <div class="header-title-area">
-        <div class="header-title">后台动态观测</div>
+        <div class="header-title">角色动态观测</div>
       </div>
-      <div v-if="data.timeBadge" class="header-time-badge">{{ data.timeBadge }}</div>
       <div class="header-controls">
         <span class="toggle-badge">{{ expanded ? '收起' : '展开' }}</span>
         <span class="header-caret" :style="{ transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)' }">
@@ -96,7 +95,7 @@
           <CategoryPanel v-for="sec in data.sections" :key="sec.key" :section="sec" />
           <InteractionPanel :interactions="data.interactions" />
         </template>
-        <div v-else class="empty-hint">📭 暂无后台动态数据</div>
+        <div v-else class="empty-hint">📭 暂无角色动态数据</div>
       </div>
       <div class="footer-line">✧ 角色观测终端 ✧</div>
     </div>
@@ -260,23 +259,6 @@ onBeforeUnmount(() => {
   color: var(--text-header);
   line-height: 1.2;
   white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.header-time-badge {
-  font-family: var(--font-mono);
-  font-size: 0.58em;
-  font-weight: 500;
-  color: var(--text-on-chip);
-  background: var(--bg-chip);
-  padding: 2px 7px;
-  border-radius: 10px;
-  border: 1px solid var(--border-subtle);
-  white-space: nowrap;
-  flex-shrink: 1;
-  min-width: 0;
-  max-width: 42%;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -487,12 +469,6 @@ onBeforeUnmount(() => {
   letter-spacing: 1.2px;
 }
 
-@media (max-width: 900px) {
-  .header-time-badge {
-    max-width: 36%;
-  }
-}
-
 @media (max-width: 640px) {
   .chronicle-container::before {
     inset: 3px;
@@ -518,18 +494,6 @@ onBeforeUnmount(() => {
 
   .header-title {
     font-size: 0.82em;
-  }
-
-  .header-time-badge {
-    order: 10;
-    flex-basis: 100%;
-    max-width: 100%;
-    width: 100%;
-    white-space: normal;
-    word-break: break-word;
-    font-size: 0.58em;
-    padding: 4px 8px;
-    line-height: 1.35;
   }
 
   .toggle-badge {

@@ -1,9 +1,9 @@
 <template>
   <div class="chronicle-root" :class="`theme-${themeId}`">
-    <div v-if="loading" class="app-hint">读取后台角色变量…</div>
+    <div v-if="loading" class="app-hint">读取角色动态变量…</div>
     <div v-else-if="empty" class="app-hint">
-      本层暂无 <code>post_process_tags.后台角色交互预演</code> /
-      <code>post_process_tags.npc_act</code>
+      本层暂无前台/后台角色名单、<code>post_process_tags.npc_act</code>
+      或预演中的 <code>&lt;交互&gt;</code>
     </div>
     <ChronicleView
       v-else

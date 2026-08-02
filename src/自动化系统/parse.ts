@@ -2,11 +2,12 @@ import {
   CATEGORY_META,
   type AttrMap,
   type CategorySection,
+  type ChronicleBuildInput,
   type ChronicleData,
   type InteractionEvent,
   type NpcCard,
   type NpcCategoryKey,
-  type PreviewData,
+  type NpcLifeArchive,
   type QuestArchiveEntry,
   type QuestItem,
   type QuestItemStatus,
@@ -123,33 +124,33 @@ function parseReputation(raw: string): NpcCard['reputation'] {
   return out.filter(r => r.value);
 }
 
-function parseSocialNetwork(raw: string): NpcCard['socialNetwork'] {
+/**
+ * 分类用 `|` 分隔，分类内关系人用 `;` 分隔。
+ * 例：`[恩怨]甲(注);乙(注)|[邻里]丙(注)`
+ */
+function parseGroupedPeople(raw: string): NpcCard['socialNetwork'] {
   if (!raw) return [];
   const groups: NpcCard['socialNetwork'] = [];
-  const byCat = new Map<string, NpcCard['socialNetwork'][number]['people']>();
 
-  const entries = raw
-    .split(/[|;；]/)
-    .map(s => softTrim(s))
-    .filter(Boolean);
-
-  for (const entry of entries) {
-    const catMatch = entry.match(/^\[([^\]]+)\]\s*(.*)$/);
+  for (const catChunk of splitPipe(raw)) {
+    const catMatch = catChunk.match(/^\[([^\]]+)\]\s*(.*)$/);
     const category = catMatch ? softTrim(catMatch[1] ?? '') || '关系' : '关系';
-    const personRaw = catMatch ? softTrim(catMatch[2] ?? '') : entry;
-    if (!personRaw) continue;
-    const pm = personRaw.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
-    const person = pm
-      ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
-      : { name: personRaw, note: '' };
-    if (!person.name) continue;
-    const list = byCat.get(category) ?? [];
-    list.push(person);
-    byCat.set(category, list);
-  }
+    const peopleRaw = catMatch ? softTrim(catMatch[2] ?? '') : catChunk;
+    if (!peopleRaw) continue;
 
-  for (const [category, people] of byCat) {
-    groups.push({ category, people });
+    const people: NpcCard['socialNetwork'][number]['people'] = [];
+    for (const personRaw of peopleRaw
+      .split(/[;；]/)
+      .map(s => softTrim(s))
+      .filter(Boolean)) {
+      const pm = personRaw.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
+      const person = pm
+        ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
+        : { name: personRaw, note: '' };
+      if (!person.name) continue;
+      people.push(person);
+    }
+    if (people.length) groups.push({ category, people });
   }
   return groups;
 }
@@ -164,6 +165,24 @@ function parseBackground(raw: string): NpcCard['background'] {
   if (circle) bg.circle = softTrim(circle[1] ?? '');
   if (event) bg.event = softTrim(event[1] ?? '');
   return bg;
+}
+
+function emptyLifeArchive(): NpcLifeArchive {
+  return { birthday: '', race: '', age: '', remainingLife: '' };
+}
+
+function parseLifeArchive(raw: string): NpcLifeArchive {
+  const life = emptyLifeArchive();
+  if (!raw) return life;
+  const birthday = raw.match(/\[生日\]\s*([^|\[\]]*)/);
+  const race = raw.match(/\[种族\]\s*([^|\[\]]*)/);
+  const age = raw.match(/\[年龄\]\s*([^|\[\]]*)/);
+  const remaining = raw.match(/\[剩余寿命\]\s*([^|\[\]]*)/);
+  if (birthday) life.birthday = softTrim(birthday[1] ?? '');
+  if (race) life.race = softTrim(race[1] ?? '');
+  if (age) life.age = softTrim(age[1] ?? '');
+  if (remaining) life.remainingLife = softTrim(remaining[1] ?? '');
+  return life;
 }
 
 function emptyBackground(): NpcCard['background'] {
@@ -272,10 +291,11 @@ function emptyNpc(name: string): NpcCard {
     wealth: '',
     reputation: [],
     socialNetwork: [],
+    companions: [],
     background: emptyBackground(),
+    lifeArchive: emptyLifeArchive(),
     longGoal: '',
     nearPlan: [],
-    relatedEvent: '',
     recentMemories: [],
     settledMemories: [],
     coreMemories: [],
@@ -283,6 +303,10 @@ function emptyNpc(name: string): NpcCard {
     questArchive: [],
     empty: true,
   };
+}
+
+function hasLifeArchive(life: NpcLifeArchive): boolean {
+  return !!(life.birthday || life.race || life.age || life.remainingLife);
 }
 
 /** 解析单个 npc 内文（可含或不含外层 <npc> 标签） */
@@ -327,30 +351,16 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   const statusRaw = fieldLine(body, '当前状态');
   if (statusRaw) npc.statusParts = splitPipe(statusRaw);
 
+  npc.lifeArchive = parseLifeArchive(fieldLine(body, '生命档案'));
   npc.wealth = fieldLine(body, '资金状况');
   npc.reputation = parseReputation(fieldLine(body, '声誉'));
-  npc.socialNetwork = parseSocialNetwork(fieldLine(body, '社交网络'));
+  npc.socialNetwork = parseGroupedPeople(fieldLine(body, '社交网络'));
+  npc.companions = parseGroupedPeople(fieldLine(body, '身边人物'));
   npc.background = parseBackground(fieldLine(body, '背景关联'));
   npc.longGoal = fieldLine(body, '长期目标');
 
   const planRaw = fieldLine(body, '近期打算');
   if (planRaw) npc.nearPlan = splitPipe(planRaw);
-
-  // 旧「关联事件」回退；新格式优先背景关联.事件
-  const eventMatch = body.match(/关联事件\s*[:：]\s*\[([^\]]*)\]/);
-  if (eventMatch) npc.relatedEvent = softTrim(eventMatch[1] ?? '');
-  else {
-    const eventLine = fieldLine(body, '关联事件');
-    if (eventLine) {
-      const bracket = eventLine.match(/\[([^\]]*)\]/);
-      npc.relatedEvent = bracket ? softTrim(bracket[1] ?? '') : eventLine;
-    }
-  }
-  if (npc.background.event) {
-    npc.relatedEvent = npc.background.event;
-  } else if (npc.relatedEvent) {
-    npc.background.event = npc.relatedEvent;
-  }
 
   const recent = fieldLine(body, '近期记忆');
   if (recent) npc.recentMemories = splitMemories(recent);
@@ -358,12 +368,6 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   if (settled) npc.settledMemories = splitMemories(settled);
   const core = fieldLine(body, '核心记忆');
   if (core) npc.coreMemories = splitMemories(core);
-
-  // 兼容旧「关键记忆」单行
-  if (!npc.recentMemories.length && !npc.settledMemories.length && !npc.coreMemories.length) {
-    const legacy = fieldLine(body, '关键记忆');
-    if (legacy) npc.recentMemories = splitMemories(legacy);
-  }
 
   const questLogs: QuestLog[] = [];
   for (const hit of findAllPairs(body, 'quest_log')) {
@@ -388,6 +392,8 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     !npc.longGoal &&
     !npc.reputation.length &&
     !npc.socialNetwork.length &&
+    !npc.companions.length &&
+    !hasLifeArchive(npc.lifeArchive) &&
     !hasBg &&
     !hasQuest
   ) {
@@ -396,7 +402,7 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   return npc;
 }
 
-/** 拆分角色列表字符串 */
+/** 拆分角色列表字符串（逗号/顿号等） */
 export function splitNameList(raw: string): string[] {
   return String(raw ?? '')
     .split(/[,，、;；|/]+/)
@@ -404,59 +410,33 @@ export function splitNameList(raw: string): string[] {
     .filter(Boolean);
 }
 
-/** 解析 <后台角色交互预演> 内文（可含或不含外层标签） */
-export function parsePreview(text: string): PreviewData {
+/**
+ * 从 <后台角色交互预演> 仅抽取 <交互> 列表（可含或不含外层标签）。
+ * 不再解析角色集与起止时间。
+ */
+export function parseInteractions(text: string): InteractionEvent[] {
   const raw = stripComments(String(text ?? ''));
-  const result: PreviewData = {
-    startTime: '',
-    endTime: '',
-    timeBadge: '',
-    relationNames: [],
-    plotNames: [],
-    worldNames: [],
-    interactions: [],
-  };
+  if (!raw.trim()) return [];
 
   let body = raw;
   const root = findAllPairs(raw, '后台角色交互预演');
   if (root.length) body = root[0]!.inner;
 
-  const starts = findAllPairs(body, '起始时间');
-  if (starts.length) result.startTime = softTrim(starts[0]!.attrs.time ?? '');
-  const ends = findAllPairs(body, '结束时间');
-  if (ends.length) result.endTime = softTrim(ends[0]!.attrs.time ?? '');
-
-  if (result.startTime && result.endTime) {
-    result.timeBadge = `${result.startTime} — ${result.endTime}`;
-  } else {
-    result.timeBadge = result.startTime || result.endTime;
-  }
-
-  const roleSets = findAllPairs(body, '角色集');
-  for (const hit of roleSets) {
-    const type = softTrim(hit.attrs['类型'] ?? hit.attrs.type ?? '');
-    const list = splitNameList(hit.attrs['列表'] ?? hit.attrs.list ?? '');
-    if (type.includes('关系')) result.relationNames = list;
-    else if (type.includes('剧情')) result.plotNames = list;
-    else if (type.includes('时局')) result.worldNames = list;
-  }
-
-  const interactions = findAllPairs(body, '交互');
-  for (const hit of interactions) {
+  const out: InteractionEvent[] = [];
+  for (const hit of findAllPairs(body, '交互')) {
     const id = softTrim(hit.attrs['编号'] ?? hit.attrs.id ?? '');
     const roles = splitNameList(hit.attrs['角色'] ?? hit.attrs.roles ?? '');
     const summary = fieldLine(hit.inner, '简述');
     const resultLine = fieldLine(hit.inner, '结果');
     if (!id && !roles.length && !summary && !resultLine) continue;
-    result.interactions.push({
-      id: id || `E${String(result.interactions.length + 1).padStart(3, '0')}`,
+    out.push({
+      id: id || `E${String(out.length + 1).padStart(3, '0')}`,
       roles,
       summary,
       result: resultLine,
-    } satisfies InteractionEvent);
+    });
   }
-
-  return result;
+  return out;
 }
 
 export function getWealthClass(wealth: string): WealthClass {
@@ -499,11 +479,11 @@ export function getReputationClass(value: string): ReputationClass {
 }
 
 /**
- * 按角色集归类 NPC。同名只出现一次，优先顺序：关系 → 剧情 → 时局。
+ * 按前台/后台名单归类 NPC。同名只出现一次，优先前台。
  * 名单有名但无行动数据时仍出空卡。
  */
 export function buildChronicle(
-  preview: PreviewData,
+  input: ChronicleBuildInput,
   npcByName: Record<string, NpcCard | string>,
 ): ChronicleData {
   const used = new Set<string>();
@@ -538,13 +518,11 @@ export function buildChronicle(
   }
 
   return {
-    timeBadge: preview.timeBadge,
     sections: [
-      buildSection('relation', preview.relationNames),
-      buildSection('plot', preview.plotNames),
-      buildSection('world', preview.worldNames),
+      buildSection('front', input.frontNames),
+      buildSection('back', input.backNames),
     ],
-    interactions: preview.interactions,
+    interactions: input.interactions ?? [],
   };
 }
 

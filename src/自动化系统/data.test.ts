@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
-import { filterNpcByLaunched, flattenNpcActTags } from './data';
-import { buildChronicle, parsePreview } from './parse';
+import { flattenNpcActTags, parseLaunchedNameList } from './data';
+import { buildChronicle, parseInteractions } from './parse';
 
 function test(name: string, fn: () => void): void {
   try {
@@ -22,21 +22,17 @@ test('flattenNpcActTags nested and flat keys', () => {
   assert.equal(flat['赵铁'], '长期目标: 求学');
 });
 
-test('filterNpcByLaunched null keeps all', () => {
-  const src = { 甲: 'a', 乙: 'b' };
-  assert.deepEqual(filterNpcByLaunched(src, null), src);
-  assert.deepEqual(filterNpcByLaunched(src, []), src);
+test('parseLaunchedNameList splits dunhao lists', () => {
+  assert.deepEqual(parseLaunchedNameList('李明、王芳、赵铁'), ['李明', '王芳', '赵铁']);
+  assert.deepEqual(parseLaunchedNameList(''), []);
 });
 
-test('filterNpcByLaunched keeps only launched', () => {
-  const src = { 甲: 'a', 乙: 'b', 丙: 'c' };
-  assert.deepEqual(filterNpcByLaunched(src, ['乙', '丁']), { 乙: 'b' });
-});
-
-test('end-to-end preview + filtered npc map', () => {
-  const preview = parsePreview(`
-    <角色集 类型="不在场关系列表角色" 列表="李明,王芳" />
-    <角色集 类型="不在场时局背景角色" 列表="周监" />
+test('end-to-end front/back lists + interactions + npc map', () => {
+  const interactions = parseInteractions(`
+    <交互 编号="E01" 角色="李明,王芳">
+简述: 街头偶遇
+结果: 交换情报
+    </交互>
   `);
   const all = flattenNpcActTags({
     npc_act: {
@@ -44,10 +40,21 @@ test('end-to-end preview + filtered npc map', () => {
       无关人: '行为链: X',
     },
   });
-  const filtered = filterNpcByLaunched(all, ['李明', '无关人']);
-  const data = buildChronicle(preview, filtered);
+  const data = buildChronicle(
+    {
+      frontNames: ['李明'],
+      backNames: ['王芳', '周监'],
+      interactions,
+    },
+    all,
+  );
+  assert.equal(data.sections[0]?.key, 'front');
   assert.equal(data.sections[0]?.npcs[0]?.name, '李明');
   assert.equal(data.sections[0]?.npcs[0]?.wealth, '手头宽裕');
-  assert.equal(data.sections[0]?.npcs[1]?.empty, true);
-  assert.equal(data.sections[2]?.npcs[0]?.empty, true);
+  assert.equal(data.sections[1]?.npcs[0]?.name, '王芳');
+  assert.equal(data.sections[1]?.npcs[0]?.empty, true);
+  assert.equal(data.sections[1]?.npcs[1]?.name, '周监');
+  assert.equal(data.sections[1]?.npcs[1]?.empty, true);
+  assert.equal(data.interactions.length, 1);
+  assert.equal(data.interactions[0]?.summary, '街头偶遇');
 });

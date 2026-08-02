@@ -1,5 +1,9 @@
 <template>
-  <div v-if="section.npcs.length" class="major-panel">
+  <div
+    v-if="section.npcs.length"
+    class="major-panel"
+    :class="'major-panel--' + section.key"
+  >
     <div class="panel-header" @click="open = !open">
       <span class="panel-icon">{{ section.icon }}</span>
       <span class="panel-label">
@@ -27,6 +31,9 @@ const open = ref(true);
 
 <style lang="scss" scoped>
 .major-panel {
+  --panel-accent-a: var(--accent-lavender);
+  --panel-accent-b: var(--accent-rose);
+  --panel-accent-c: var(--accent-sky);
   background: var(--bg-panel);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-lg);
@@ -47,9 +54,26 @@ const open = ref(true);
     left: 0;
     width: 2px;
     height: 100%;
-    background: linear-gradient(180deg, var(--accent-lavender) 0%, var(--accent-rose) 45%, var(--accent-sky) 100%);
+    background: linear-gradient(
+      180deg,
+      var(--panel-accent-a) 0%,
+      var(--panel-accent-b) 45%,
+      var(--panel-accent-c) 100%
+    );
     border-radius: var(--radius-lg) 0 0 var(--radius-lg);
     opacity: 0.85;
+  }
+
+  &--front {
+    --panel-accent-a: var(--accent-coral);
+    --panel-accent-b: var(--accent-gold);
+    --panel-accent-c: var(--accent-rose);
+  }
+
+  &--back {
+    --panel-accent-a: var(--accent-sky);
+    --panel-accent-b: var(--accent-lavender);
+    --panel-accent-c: var(--accent-mint);
   }
 }
 

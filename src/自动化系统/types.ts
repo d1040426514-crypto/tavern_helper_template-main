@@ -1,6 +1,6 @@
 export type AttrMap = Record<string, string>;
 
-export type NpcCategoryKey = 'relation' | 'plot' | 'world';
+export type NpcCategoryKey = 'front' | 'back';
 
 export type NpcReputationItem = {
   label: string;
@@ -21,6 +21,13 @@ export type NpcBackground = {
   group: string;
   circle: string;
   event: string;
+};
+
+export type NpcLifeArchive = {
+  birthday: string;
+  race: string;
+  age: string;
+  remainingLife: string;
 };
 
 export type QuestItemStatus = 'done' | 'active' | 'todo';
@@ -56,11 +63,11 @@ export type NpcCard = {
   wealth: string;
   reputation: NpcReputationItem[];
   socialNetwork: NpcSocialGroup[];
+  companions: NpcSocialGroup[];
   background: NpcBackground;
+  lifeArchive: NpcLifeArchive;
   longGoal: string;
   nearPlan: string[];
-  /** 兼容旧字段；新格式取自 background.event */
-  relatedEvent: string;
   recentMemories: string[];
   settledMemories: string[];
   coreMemories: string[];
@@ -88,18 +95,13 @@ export type InteractionEvent = {
   result: string;
 };
 
-export type PreviewData = {
-  startTime: string;
-  endTime: string;
-  timeBadge: string;
-  relationNames: string[];
-  plotNames: string[];
-  worldNames: string[];
+export type ChronicleBuildInput = {
+  frontNames: string[];
+  backNames: string[];
   interactions: InteractionEvent[];
 };
 
 export type ChronicleData = {
-  timeBadge: string;
   sections: CategorySection[];
   interactions: InteractionEvent[];
 };
@@ -108,24 +110,29 @@ export const CATEGORY_META: Record<
   NpcCategoryKey,
   { typeLabel: string; badge: string; icon: string }
 > = {
-  relation: {
-    typeLabel: '不在场关系列表角色',
-    badge: 'RELATIONS',
-    icon: '🤝',
+  front: {
+    typeLabel: '前台角色',
+    badge: 'FRONT',
+    icon: '🎭',
   },
-  plot: {
-    typeLabel: '不在场剧情关联背景角色',
-    badge: 'PLOT',
-    icon: '📖',
-  },
-  world: {
-    typeLabel: '不在场时局背景角色',
-    badge: 'WORLD',
-    icon: '🌍',
+  back: {
+    typeLabel: '后台角色',
+    badge: 'BACK',
+    icon: '🔭',
   },
 };
 
-export const STATUS_LABELS = ['动作', '穿着', '位置', '正在做'] as const;
+export const STATUS_LABELS = [
+  '动作',
+  '穿着',
+  '正在做的事',
+  '所处世界',
+  '位置',
+  '环境',
+] as const;
+
+export const FRONT_TASK_NAME = '前台角色';
+export const BACK_TASK_NAME = '后台角色';
 
 export type WealthClass =
   | 'wealth-destitute'

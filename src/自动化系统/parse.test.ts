@@ -5,8 +5,8 @@ import {
   getWealthClass,
   isChronicleEmpty,
   parseAttrs,
+  parseInteractions,
   parseNpcBlock,
-  parsePreview,
   parseQuestArchive,
   parseQuestLog,
   splitNameList,
@@ -23,38 +23,59 @@ function test(name: string, fn: () => void): void {
 }
 
 test('parseAttrs supports Chinese attr names', () => {
-  const attrs = parseAttrs('<角色集 类型="不在场关系列表角色" 列表="甲,乙" />');
-  assert.equal(attrs['类型'], '不在场关系列表角色');
-  assert.equal(attrs['列表'], '甲,乙');
+  const attrs = parseAttrs('<交互 编号="E01" 角色="甲,乙" />');
+  assert.equal(attrs['编号'], 'E01');
+  assert.equal(attrs['角色'], '甲,乙');
 });
 
 test('splitNameList handles comma and顿号', () => {
   assert.deepEqual(splitNameList('甲,乙、丙；丁'), ['甲', '乙', '丙', '丁']);
 });
 
-test('parseNpcBlock legacy format fields still work', () => {
+test('parseNpcBlock new format with file/dynamic fields', () => {
   const block = `<npc act="李明">
-行为链: 巡街→查账→后续预测: 明日回府 **[准备登场]**
-当前状态: 行走|青衫|城西巷|盘问路人
+<file>
+最后更新时间: 大明-1520年-3月-1日-周一-08:00
+生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[年龄]30岁(青年)|[剩余寿命]50年
 资金状况: 手头宽裕
+声誉: [官方]小有名气|[民间]受人尊敬
+社交网络: [职场]王芳(同僚/互助);赵铁(上司/敬畏)|[恩怨]周监(宿怨/对峙)
+背景关联: [团体]巡城司|[社交圈]城西巷邻里|[事件]走私案
+</file>
+<dynamic>
+行为链: 巡街→查账→后续预测: 明日回府 **[准备登场]**
+当前状态: 行走|青衫|盘问路人|大明京城|城西巷|细雨巷口
+身边人物: [同行]王芳(探路/警惕)|[随从]小厮二人(提灯/待命)
 长期目标: 光复家业
 近期打算: 调查走私|暗访|2026年7月1日8时—2026年7月3日18时
-关联事件: [走私案]
 近期记忆: 1.昨夜见黑影;2.收到密信
 沉淀记忆: 1.三年前出走
 核心记忆: 1.父亲托付玉佩
+</dynamic>
 </npc>`;
   const npc = parseNpcBlock(block);
   assert.equal(npc.name, '李明');
   assert.deepEqual(npc.actionChain, ['巡街', '查账']);
   assert.equal(npc.predict, '明日回府');
   assert.equal(npc.debutReady, true);
-  assert.deepEqual(npc.statusParts, ['行走', '青衫', '城西巷', '盘问路人']);
+  assert.deepEqual(npc.statusParts, ['行走', '青衫', '盘问路人', '大明京城', '城西巷', '细雨巷口']);
+  assert.equal(npc.lifeArchive.birthday, '大明-1490年-1月-1日');
+  assert.equal(npc.lifeArchive.race, '人族');
+  assert.equal(npc.lifeArchive.age, '30岁(青年)');
+  assert.equal(npc.lifeArchive.remainingLife, '50年');
   assert.equal(npc.wealth, '手头宽裕');
   assert.equal(npc.longGoal, '光复家业');
   assert.equal(npc.nearPlan.length, 3);
-  assert.equal(npc.relatedEvent, '走私案');
   assert.equal(npc.background.event, '走私案');
+  assert.equal(npc.socialNetwork.length, 2);
+  assert.equal(npc.socialNetwork[0]!.category, '职场');
+  assert.equal(npc.socialNetwork[0]!.people.length, 2);
+  assert.equal(npc.socialNetwork[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.socialNetwork[1]!.category, '恩怨');
+  assert.equal(npc.companions.length, 2);
+  assert.equal(npc.companions[0]!.category, '同行');
+  assert.equal(npc.companions[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.companions[1]!.category, '随从');
   assert.deepEqual(npc.recentMemories, ['昨夜见黑影', '收到密信']);
   assert.deepEqual(npc.settledMemories, ['三年前出走']);
   assert.deepEqual(npc.coreMemories, ['父亲托付玉佩']);
@@ -63,13 +84,14 @@ test('parseNpcBlock legacy format fields still work', () => {
   assert.equal(npc.empty, false);
 });
 
-test('parseNpcBlock new format reputation social background', () => {
+test('parseNpcBlock reputation social background companions', () => {
   const block = `<npc act="佐久夜">
 行为链: 观测→锁定→后续预测: 继续巡狩
-当前状态: 甩干水迹|黑大衣|黑水巷|清洗手帕
+当前状态: 甩干水迹|黑大衣|清洗手帕|索伦蒂斯|黑水巷|雨雾
 资金状况: 略有盈余
 声誉: [官方]声名狼藉|[民间]天怒人怨|[暗域]小有名气|[业界]声名狼藉
-社交网络: [恩怨]已故血族主人(仇恨/已终结);[邻里]黑水巷酒鬼(厌恶/潜在猎物)|[职场]女仆公会(无视/潜在关联)
+社交网络: [恩怨]已故血族主人(仇恨/已终结);黑衣人(警惕/未明)|[邻里]黑水巷酒鬼(厌恶/潜在猎物)|[职场]女仆公会(无视/潜在关联)
+身边人物: [集群]雾中黑影数人(围观/疏远)
 背景关联: [团体]无|[社交圈]索伦蒂斯深夜游荡者|[事件]无
 长期目标: 寻找到一位完美主人
 近期打算: 清理不洁根源|猎杀行动|复兴纪元488年4月15日23:30—4月16日03:00
@@ -84,20 +106,17 @@ test('parseNpcBlock new format reputation social background', () => {
   assert.deepEqual(npc.reputation[2], { label: '暗域', value: '小有名气' });
   assert.equal(npc.socialNetwork.length, 3);
   assert.equal(npc.socialNetwork[0]!.category, '恩怨');
+  assert.equal(npc.socialNetwork[0]!.people.length, 2);
   assert.equal(npc.socialNetwork[0]!.people[0]!.name, '已故血族主人');
-  assert.equal(npc.socialNetwork[0]!.people[0]!.note, '仇恨/已终结');
+  assert.equal(npc.socialNetwork[0]!.people[1]!.name, '黑衣人');
   assert.equal(npc.socialNetwork[1]!.category, '邻里');
-  assert.equal(npc.socialNetwork[1]!.people[0]!.name, '黑水巷酒鬼');
   assert.equal(npc.socialNetwork[2]!.category, '职场');
-  assert.equal(npc.socialNetwork[2]!.people[0]!.name, '女仆公会');
+  assert.equal(npc.companions[0]!.category, '集群');
   assert.equal(npc.background.group, '无');
   assert.equal(npc.background.circle, '索伦蒂斯深夜游荡者');
   assert.equal(npc.background.event, '无');
-  assert.equal(npc.relatedEvent, '无');
   assert.equal(npc.coreMemories.length, 3);
   assert.equal(npc.wealth, '略有盈余');
-  assert.deepEqual(npc.questLogs, []);
-  assert.deepEqual(npc.questArchive, []);
 });
 
 test('parseNpcBlock accepts inner-only text with fallback name', () => {
@@ -111,6 +130,7 @@ test('parseNpcBlock accepts inner-only text with fallback name', () => {
   assert.equal(getWealthClass(npc.wealth), 'wealth-destitute');
   assert.deepEqual(npc.reputation, []);
   assert.deepEqual(npc.socialNetwork, []);
+  assert.deepEqual(npc.companions, []);
 });
 
 test('getWealthClass includes 富甲天下', () => {
@@ -128,47 +148,56 @@ test('getReputationClass maps six reputation tiers', () => {
   assert.equal(getReputationClass('其它'), 'rep-default');
 });
 
-test('parsePreview extracts time role sets and interactions', () => {
+test('parseInteractions extracts only interaction events', () => {
   const xml = `<后台角色交互预演>
   <后台角色行动时间段>
     <起始时间 time="大明-1520年-3月-1日-周一-08:00" />
     <结束时间 time="大明-1520年-3月-1日-周一-18:00" />
   </后台角色行动时间段>
   <角色集 类型="不在场关系列表角色" 列表="李明,王芳" />
-  <角色集 类型="不在场剧情关联背景角色" 列表="赵铁" />
-  <角色集 类型="不在场时局背景角色" 列表="" />
   <交互 编号="E01" 角色="李明,王芳">
 简述: 街头偶遇
 结果: 交换情报
   </交互>
 </后台角色交互预演>`;
-  const preview = parsePreview(xml);
-  assert.ok(preview.timeBadge.includes('1520'));
-  assert.deepEqual(preview.relationNames, ['李明', '王芳']);
-  assert.deepEqual(preview.plotNames, ['赵铁']);
-  assert.equal(preview.interactions.length, 1);
-  assert.equal(preview.interactions[0]!.summary, '街头偶遇');
+  const interactions = parseInteractions(xml);
+  assert.equal(interactions.length, 1);
+  assert.equal(interactions[0]!.id, 'E01');
+  assert.deepEqual(interactions[0]!.roles, ['李明', '王芳']);
+  assert.equal(interactions[0]!.summary, '街头偶遇');
+  assert.equal(interactions[0]!.result, '交换情报');
 });
 
-test('buildChronicle prefers relation over plot for same name', () => {
-  const preview = parsePreview(`<后台角色交互预演>
-  <起始时间 time="t1" />
-  <结束时间 time="t2" />
-  <角色集 类型="不在场关系列表角色" 列表="李明" />
-  <角色集 类型="不在场剧情关联背景角色" 列表="李明,赵铁" />
-</后台角色交互预演>`);
-  const chronicle = buildChronicle(preview, {
-    李明: `行为链: 巡街→查账
+test('buildChronicle prefers front over back for same name', () => {
+  const chronicle = buildChronicle(
+    {
+      frontNames: ['李明'],
+      backNames: ['李明', '赵铁'],
+      interactions: [{ id: 'E01', roles: ['李明'], summary: '偶遇', result: '点头' }],
+    },
+    {
+      李明: `行为链: 巡街→查账
 资金状况: 略有盈余`,
-    赵铁: `行为链: X`,
-  });
-  const relation = chronicle.sections.find(s => s.key === 'relation')!;
-  const plot = chronicle.sections.find(s => s.key === 'plot')!;
-  assert.equal(relation.npcs.length, 1);
-  assert.equal(relation.npcs[0]!.name, '李明');
-  assert.equal(plot.npcs.length, 1);
-  assert.equal(plot.npcs[0]!.name, '赵铁');
+      赵铁: `行为链: X`,
+    },
+  );
+  const front = chronicle.sections.find(s => s.key === 'front')!;
+  const back = chronicle.sections.find(s => s.key === 'back')!;
+  assert.equal(front.npcs.length, 1);
+  assert.equal(front.npcs[0]!.name, '李明');
+  assert.equal(back.npcs.length, 1);
+  assert.equal(back.npcs[0]!.name, '赵铁');
+  assert.equal(chronicle.interactions.length, 1);
   assert.equal(isChronicleEmpty(chronicle), false);
+});
+
+test('buildChronicle empty names still yield empty card when listed', () => {
+  const chronicle = buildChronicle(
+    { frontNames: ['幽灵'], backNames: [], interactions: [] },
+    {},
+  );
+  assert.equal(chronicle.sections[0]!.npcs[0]!.name, '幽灵');
+  assert.equal(chronicle.sections[0]!.npcs[0]!.empty, true);
 });
 
 test('parseQuestLog parses items children and climax', () => {
@@ -212,6 +241,7 @@ test('parseNpcBlock optional quest_log and quest_archive', () => {
   const block = `<npc act="菲莉亚娜">
 行为链: 审阅卷宗→回信→后续预测: 晨祷前小憩
 近期打算: 流民安置|协调药剂|复兴纪元488年4月15日23:30—4月16日01:30
+<quest>
 <quest_log>
 【委托】夜巡补给
   任务简述:为哨所送灯油
@@ -230,6 +260,7 @@ test('parseNpcBlock optional quest_log and quest_archive', () => {
 【支线】旧日巡诊 | 复兴纪元488年3月 | 贫民窟疫病暂缓
 【主线】圣堂扩建募捐 | 复兴纪元488年2月 | 款项到位开工
 </quest_archive>
+</quest>
 </npc>`;
   const npc = parseNpcBlock(block);
   assert.equal(npc.questLogs.length, 2);
