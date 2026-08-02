@@ -126,30 +126,51 @@ function parseReputation(raw: string): NpcCard['reputation'] {
 
 /**
  * 分类用 `|` 分隔，分类内关系人用 `;` 分隔。
- * 例：`[恩怨]甲(注);乙(注)|[邻里]丙(注)`
+ * 亦兼容 `;[分类]人名`（漏写 `|` 时仍切换分类）。
  */
 function parseGroupedPeople(raw: string): NpcCard['socialNetwork'] {
   if (!raw) return [];
-  const groups: NpcCard['socialNetwork'] = [];
+  const byCat = new Map<string, NpcCard['socialNetwork'][number]['people']>();
+  let currentCategory = '关系';
+
+  function pushPerson(category: string, personRaw: string) {
+    const text = softTrim(personRaw);
+    if (!text) return;
+    const pm = text.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
+    const person = pm
+      ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
+      : { name: text, note: '' };
+    if (!person.name) return;
+    const list = byCat.get(category) ?? [];
+    list.push(person);
+    byCat.set(category, list);
+  }
 
   for (const catChunk of splitPipe(raw)) {
-    const catMatch = catChunk.match(/^\[([^\]]+)\]\s*(.*)$/);
-    const category = catMatch ? softTrim(catMatch[1] ?? '') || '关系' : '关系';
-    const peopleRaw = catMatch ? softTrim(catMatch[2] ?? '') : catChunk;
-    if (!peopleRaw) continue;
+    let rest = catChunk;
+    const catMatch = rest.match(/^\[([^\]]+)\]\s*(.*)$/);
+    if (catMatch) {
+      currentCategory = softTrim(catMatch[1] ?? '') || '关系';
+      rest = softTrim(catMatch[2] ?? '');
+    }
+    if (!rest) continue;
 
-    const people: NpcCard['socialNetwork'][number]['people'] = [];
-    for (const personRaw of peopleRaw
+    for (const personRaw of rest
       .split(/[;；]/)
       .map(s => softTrim(s))
       .filter(Boolean)) {
-      const pm = personRaw.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
-      const person = pm
-        ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
-        : { name: personRaw, note: '' };
-      if (!person.name) continue;
-      people.push(person);
+      const nested = personRaw.match(/^\[([^\]]+)\]\s*(.*)$/);
+      if (nested) {
+        currentCategory = softTrim(nested[1] ?? '') || currentCategory;
+        pushPerson(currentCategory, nested[2] ?? '');
+      } else {
+        pushPerson(currentCategory, personRaw);
+      }
     }
+  }
+
+  const groups: NpcCard['socialNetwork'] = [];
+  for (const [category, people] of byCat) {
     if (people.length) groups.push({ category, people });
   }
   return groups;

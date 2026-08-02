@@ -94,53 +94,54 @@
         </div>
       </section>
 
-      <!-- 身边人物 -->
+      <!-- 身边人物：标签流 -->
       <section v-if="npc.companions.length" class="npc-section">
         <header class="npc-section-head">👥 身边人物</header>
-        <div class="npc-subcard npc-companions-card">
-          <div class="npc-subcard-body">
-            <div v-for="(g, gi) in npc.companions" :key="'cmp' + gi" class="npc-social-row">
-              <span class="npc-social-cat">{{ g.category }}</span>
-              <div class="npc-social-people">
-                <div v-for="(p, pi) in g.people" :key="'cp' + gi + '-' + pi" class="npc-person">
-                  <span class="npc-person-name">{{ p.name }}</span>
-                  <span v-if="p.note" class="npc-person-note">{{ p.note }}</span>
-                </div>
-              </div>
-            </div>
+        <div class="npc-chip-flow">
+          <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
+            <span
+              v-for="(p, pi) in g.people"
+              :key="'cp' + gi + '-' + pi"
+              class="npc-person-chip"
+            >
+              <span class="npc-person-chip-cat">{{ g.category }}</span>
+              <span class="npc-person-chip-name">{{ p.name }}</span>
+              <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+            </span>
+          </template>
+        </div>
+      </section>
+
+      <!-- 社交网络：标签流 -->
+      <section v-if="npc.socialNetwork.length" class="npc-section">
+        <header class="npc-section-head">🤝 社交网络</header>
+        <div class="npc-chip-flow">
+          <template v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi">
+            <span
+              v-for="(p, pi) in g.people"
+              :key="'p' + gi + '-' + pi"
+              class="npc-person-chip"
+            >
+              <span class="npc-person-chip-cat">{{ g.category }}</span>
+              <span class="npc-person-chip-name">{{ p.name }}</span>
+              <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+            </span>
+          </template>
+        </div>
+      </section>
+
+      <!-- 背景关联：三枚联排 -->
+      <section v-if="showBackgroundCard" class="npc-section">
+        <header class="npc-section-head">🔗 背景关联</header>
+        <div class="npc-meta-strip">
+          <div v-for="row in backgroundRows" :key="row.key" class="npc-meta-chip">
+            <span class="npc-meta-k">{{ row.label }}</span>
+            <span class="npc-meta-v" :class="{ muted: row.empty }">{{ row.value }}</span>
           </div>
         </div>
       </section>
 
-      <!-- 社交 / 背景：并排双卡，窄屏堆叠 -->
-      <div v-if="npc.socialNetwork.length || showBackgroundCard" class="npc-duo">
-        <article v-if="npc.socialNetwork.length" class="npc-subcard">
-          <header class="npc-subcard-head">🤝 社交网络</header>
-          <div class="npc-subcard-body">
-            <div v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi" class="npc-social-row">
-              <span class="npc-social-cat">{{ g.category }}</span>
-              <div class="npc-social-people">
-                <div v-for="(p, pi) in g.people" :key="'p' + gi + '-' + pi" class="npc-person">
-                  <span class="npc-person-name">{{ p.name }}</span>
-                  <span v-if="p.note" class="npc-person-note">{{ p.note }}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </article>
-
-        <article v-if="showBackgroundCard" class="npc-subcard">
-          <header class="npc-subcard-head">🔗 背景关联</header>
-          <div class="npc-subcard-body npc-bg-rows">
-            <div v-for="row in backgroundRows" :key="row.key" class="npc-bg-row">
-              <span class="npc-bg-key">{{ row.label }}</span>
-              <span class="npc-bg-val" :class="{ muted: row.empty }">{{ row.value }}</span>
-            </div>
-          </div>
-        </article>
-      </div>
-
-      <!-- 长期目标 / 近期打算：并排双卡；近期按 事件|行为|时段 拆行 -->
+      <!-- 长期目标 / 近期打算：并排；近期内联键值 -->
       <div v-if="npc.longGoal || npc.nearPlan.length" class="npc-duo">
         <article v-if="npc.longGoal" class="npc-subcard">
           <header class="npc-subcard-head">🎯 长期目标</header>
@@ -148,10 +149,10 @@
         </article>
         <article v-if="npc.nearPlan.length" class="npc-subcard">
           <header class="npc-subcard-head">📅 近期打算</header>
-          <div class="npc-subcard-body npc-bg-rows">
-            <div v-for="row in nearPlanRows" :key="row.key" class="npc-bg-row">
-              <span class="npc-bg-key">{{ row.label }}</span>
-              <span class="npc-bg-val">{{ row.value }}</span>
+          <div class="npc-plan-compact">
+            <div v-for="row in nearPlanRows" :key="row.key" class="npc-plan-line">
+              <span class="npc-plan-k">{{ row.label }}</span>
+              <span class="npc-plan-v">{{ row.value }}</span>
             </div>
           </div>
         </article>
@@ -781,6 +782,112 @@ const backgroundRows = computed(() => {
   width: 100%;
 }
 
+/* 人物/社交：标签流，按内容收窄，自动换行 */
+.npc-chip-flow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  width: 100%;
+}
+
+.npc-person-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 0.35em;
+  max-width: 100%;
+  padding: 0.28em 0.5em;
+  border-radius: 8px;
+  background: var(--memory-bg, rgba(0, 0, 0, 0.04));
+  border: 1px solid var(--memory-bd, var(--border-subtle));
+  line-height: 1.35;
+}
+
+.npc-person-chip-cat {
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent-sky);
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+}
+
+.npc-person-chip-name {
+  font-size: 0.76em;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.npc-person-chip-note {
+  font-size: 0.68em;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+/* 背景关联：短值联排，避免整行空盒 */
+.npc-meta-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+  width: 100%;
+}
+
+.npc-meta-chip {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3em;
+  max-width: 100%;
+  padding: 0.28em 0.5em;
+  border-radius: 8px;
+  background: rgba(120, 150, 200, 0.08);
+  border: 1px solid rgba(120, 150, 200, 0.2);
+}
+
+.npc-meta-k {
+  font-size: 0.62em;
+  font-weight: 700;
+  color: var(--accent-sky);
+  flex-shrink: 0;
+}
+
+.npc-meta-v {
+  font-size: 0.76em;
+  color: var(--text-primary);
+  word-break: break-word;
+
+  &.muted {
+    color: var(--text-muted, var(--text-secondary));
+    opacity: 0.75;
+  }
+}
+
+/* 近期打算：紧凑键值行 */
+.npc-plan-compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25em;
+}
+
+.npc-plan-line {
+  display: grid;
+  grid-template-columns: 2.6em minmax(0, 1fr);
+  gap: 0.35em 0.45em;
+  align-items: baseline;
+  font-size: 0.76em;
+  line-height: 1.45;
+}
+
+.npc-plan-k {
+  font-size: 0.9em;
+  font-weight: 700;
+  color: var(--accent-sky);
+}
+
+.npc-plan-v {
+  color: var(--text-primary);
+  word-break: break-word;
+  min-width: 0;
+}
+
 /* 当前状态：语义分区网格（动作/穿着 → 世界/位置/环境 → 正在做） */
 .npc-status-grid {
   display: grid;
@@ -860,10 +967,10 @@ const backgroundRows = computed(() => {
   word-break: break-word;
 }
 
-/* 双卡：宽屏并排，等高拉伸 */
+/* 双卡：够宽则并排，否则自动折行 */
 .npc-duo {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(12em, 1fr));
   gap: 0.5em;
   width: 100%;
   align-items: stretch;
@@ -929,13 +1036,13 @@ const backgroundRows = computed(() => {
 
 .npc-social-people {
   display: flex;
-  flex-direction: column;
+  flex-wrap: wrap;
   gap: 0.25em;
   min-width: 0;
 }
 
 .npc-person {
-  display: flex;
+  display: inline-flex;
   flex-wrap: wrap;
   align-items: baseline;
   gap: 0.15em 0.4em;
@@ -943,6 +1050,7 @@ const backgroundRows = computed(() => {
   border-radius: 6px;
   background: var(--memory-bg, rgba(0, 0, 0, 0.04));
   border: 1px solid var(--memory-bd, var(--border-subtle));
+  max-width: 100%;
 }
 
 .npc-person-name {
@@ -1326,10 +1434,6 @@ const backgroundRows = computed(() => {
 }
 
 @media (max-width: 720px) {
-  .npc-duo {
-    grid-template-columns: 1fr;
-  }
-
   .npc-status-grid {
     &--mapped {
       grid-template-columns: 1fr 1fr;
