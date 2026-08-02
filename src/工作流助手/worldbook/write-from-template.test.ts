@@ -144,10 +144,21 @@ test('buildWorldbookEntryPartial invalid order falls back to minimum 1', () => {
   assert.equal(partial.position?.order, 1);
 });
 
-test('buildWorldbookEntryPartial preventRecursion maps to prevent_outgoing', () => {
+test('buildWorldbookEntryPartial preventRecursion maps to both incoming and outgoing', () => {
   const on = buildWorldbookEntryPartial(baseRule({ preventRecursion: true }), 'content');
   const off = buildWorldbookEntryPartial(baseRule({ preventRecursion: false }), 'content');
+  assert.equal(on.recursion?.prevent_incoming, true);
   assert.equal(on.recursion?.prevent_outgoing, true);
+  assert.equal(off.recursion?.prevent_incoming, false);
+  assert.equal(off.recursion?.prevent_outgoing, false);
+});
+
+test('buildWrapperEntryPartial preventRecursion maps to both incoming and outgoing', () => {
+  const on = buildWrapperEntryPartial(baseRule({ preventRecursion: true }), 'before');
+  const off = buildWrapperEntryPartial(baseRule({ preventRecursion: false }), 'after');
+  assert.equal(on.recursion?.prevent_incoming, true);
+  assert.equal(on.recursion?.prevent_outgoing, true);
+  assert.equal(off.recursion?.prevent_incoming, false);
   assert.equal(off.recursion?.prevent_outgoing, false);
 });
 

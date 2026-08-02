@@ -93,6 +93,15 @@ function buildPositionWithOrder(rule: ChatWorldbookWriteRule, order: number): Wo
   };
 }
 
+function buildRecursion(rule: ChatWorldbookWriteRule): WorldbookEntry['recursion'] {
+  const prevent = rule.preventRecursion !== false;
+  return {
+    prevent_incoming: prevent,
+    prevent_outgoing: prevent,
+    delay_until: null,
+  };
+}
+
 /** 包裹条目固定 constant；order 为规则 order±1 */
 export function buildWrapperEntryPartial(
   rule: ChatWorldbookWriteRule,
@@ -113,11 +122,7 @@ export function buildWrapperEntryPartial(
     },
     position: buildPositionWithOrder(rule, order),
     probability: 100,
-    recursion: {
-      prevent_incoming: false,
-      prevent_outgoing: rule.preventRecursion !== false,
-      delay_until: null,
-    },
+    recursion: buildRecursion(rule),
     effect: {
       sticky: null,
       cooldown: null,
@@ -227,11 +232,7 @@ export function buildWorldbookEntryPartial(
     },
     position: buildPosition(rule),
     probability: 100,
-    recursion: {
-      prevent_incoming: false,
-      prevent_outgoing: rule.preventRecursion !== false,
-      delay_until: null,
-    },
+    recursion: buildRecursion(rule),
     effect: {
       sticky: null,
       cooldown: null,
