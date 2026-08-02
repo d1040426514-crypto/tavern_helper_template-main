@@ -164,7 +164,7 @@ const open = ref(true);
 
 .ix-id {
   font-family: var(--font-mono);
-  font-size: 0.62rem;
+  font-size: 0.7rem;
   font-weight: 700;
   color: var(--accent-coral);
   background: var(--debut-bg);
@@ -174,7 +174,7 @@ const open = ref(true);
 }
 
 .ix-roles {
-  font-size: 0.62rem;
+  font-size: 0.72rem;
   color: var(--text-secondary);
   min-width: 0;
   word-break: break-word;
@@ -184,14 +184,14 @@ const open = ref(true);
   display: flex;
   flex-wrap: wrap;
   gap: 2px 6px;
-  font-size: 0.62rem;
-  line-height: 1.4;
+  font-size: 0.72rem;
+  line-height: 1.45;
 }
 
 .ix-label {
   font-weight: 700;
   color: var(--accent-sky);
-  font-size: 0.58rem;
+  font-size: 0.66rem;
   letter-spacing: 0.2px;
 }
 
@@ -236,11 +236,11 @@ const open = ref(true);
   }
 
   .ix-label {
-    font-size: 0.62rem;
+    font-size: 0.7rem;
   }
 
   .ix-value {
-    font-size: 0.68rem;
+    font-size: 0.76rem;
     line-height: 1.45;
   }
 }
