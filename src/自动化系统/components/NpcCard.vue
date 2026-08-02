@@ -94,49 +94,68 @@
         </div>
       </section>
 
-      <!-- 身边人物：标签流 -->
-      <section v-if="npc.companions.length" class="npc-section">
-        <header class="npc-section-head">👥 身边人物</header>
-        <div class="npc-chip-flow">
-          <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
-            <span
-              v-for="(p, pi) in g.people"
-              :key="'cp' + gi + '-' + pi"
-              class="npc-person-chip"
-            >
-              <span class="npc-person-chip-cat">{{ g.category }}</span>
-              <span class="npc-person-chip-name">{{ p.name }}</span>
-              <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
-            </span>
-          </template>
-        </div>
-      </section>
+      <!-- 人际与背景：统一容器 -->
+      <section
+        v-if="npc.companions.length || npc.socialNetwork.length || showBackgroundCard"
+        class="npc-relations"
+      >
+        <div class="npc-relations-grid">
+          <div v-if="npc.companions.length" class="npc-relations-block npc-relations-block--near">
+            <header class="npc-relations-head">
+              <span class="npc-relations-ico" aria-hidden="true">👥</span>
+              <span>身边人物</span>
+              <span class="npc-relations-count">{{ companionCount }}</span>
+            </header>
+            <div class="npc-chip-flow npc-chip-flow--fill">
+              <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
+                <span
+                  v-for="(p, pi) in g.people"
+                  :key="'cp' + gi + '-' + pi"
+                  class="npc-person-chip"
+                >
+                  <span class="npc-person-chip-cat">{{ g.category }}</span>
+                  <span class="npc-person-chip-name">{{ p.name }}</span>
+                  <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+                </span>
+              </template>
+            </div>
+          </div>
 
-      <!-- 社交网络：标签流 -->
-      <section v-if="npc.socialNetwork.length" class="npc-section">
-        <header class="npc-section-head">🤝 社交网络</header>
-        <div class="npc-chip-flow">
-          <template v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi">
-            <span
-              v-for="(p, pi) in g.people"
-              :key="'p' + gi + '-' + pi"
-              class="npc-person-chip"
-            >
-              <span class="npc-person-chip-cat">{{ g.category }}</span>
-              <span class="npc-person-chip-name">{{ p.name }}</span>
-              <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
-            </span>
-          </template>
-        </div>
-      </section>
+          <div v-if="showBackgroundCard" class="npc-relations-block npc-relations-block--bg">
+            <header class="npc-relations-head">
+              <span class="npc-relations-ico" aria-hidden="true">🔗</span>
+              <span>背景关联</span>
+            </header>
+            <div class="npc-meta-strip npc-meta-strip--fill">
+              <div v-for="row in backgroundRows" :key="row.key" class="npc-meta-chip">
+                <span class="npc-meta-k">{{ row.label }}</span>
+                <span class="npc-meta-v" :class="{ muted: row.empty }">{{ row.value }}</span>
+              </div>
+            </div>
+          </div>
 
-      <!-- 背景关联：三枚联排 -->
-      <section v-if="showBackgroundCard" class="npc-section">
-        <header class="npc-section-head">🔗 背景关联</header>
-        <div class="npc-meta-strip">
-          <div v-for="row in backgroundRows" :key="row.key" class="npc-meta-chip">
-            <span class="npc-meta-k">{{ row.label }}</span>
-            <span class="npc-meta-v" :class="{ muted: row.empty }">{{ row.value }}</span>
+          <div
+            v-if="npc.socialNetwork.length"
+            class="npc-relations-block npc-relations-block--social"
+          >
+            <header class="npc-relations-head">
+              <span class="npc-relations-ico" aria-hidden="true">🤝</span>
+              <span>社交网络</span>
+              <span class="npc-relations-count">{{ socialCount }}</span>
+            </header>
+            <div class="npc-chip-flow npc-chip-flow--fill">
+              <template v-for="(g, gi) in npc.socialNetwork" :key="'soc' + gi">
+                <span
+                  v-for="(p, pi) in g.people"
+                  :key="'p' + gi + '-' + pi"
+                  class="npc-person-chip"
+                >
+                  <span class="npc-person-chip-cat">{{ g.category }}</span>
+                  <span class="npc-person-chip-name">{{ p.name }}</span>
+                  <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+                </span>
+              </template>
+            </div>
           </div>
         </div>
       </section>
@@ -296,6 +315,14 @@ const showBackgroundCard = computed(() => {
   const b = props.npc.background;
   return !!(b.group || b.circle || b.event);
 });
+
+const companionCount = computed(() =>
+  props.npc.companions.reduce((n, g) => n + g.people.length, 0),
+);
+
+const socialCount = computed(() =>
+  props.npc.socialNetwork.reduce((n, g) => n + g.people.length, 0),
+);
 
 const lifeChips = computed(() => {
   const life = props.npc.lifeArchive;
@@ -782,81 +809,213 @@ const backgroundRows = computed(() => {
   width: 100%;
 }
 
-/* 人物/社交：标签流，按内容收窄，自动换行 */
+/* 人际与背景：统一容器 */
+.npc-relations {
+  width: 100%;
+  padding: 0.55em 0.6em 0.6em;
+  border-radius: var(--radius-md);
+  background:
+    linear-gradient(
+      145deg,
+      color-mix(in srgb, var(--accent-sky) 8%, var(--bg-panel, var(--bg-step))) 0%,
+      color-mix(in srgb, var(--accent-lavender) 6%, var(--bg-card)) 55%,
+      var(--bg-panel, var(--bg-step)) 100%
+    );
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 28%, var(--border-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
+}
+
+.npc-relations-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 0.55em 0.65em;
+  width: 100%;
+  align-items: start;
+}
+
+.npc-relations-block {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+
+  &--near {
+    grid-column: 1;
+    grid-row: 1;
+  }
+
+  &--bg {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  &--social {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    padding-top: 0.45em;
+    border-top: 1px dashed color-mix(in srgb, var(--accent-lavender) 35%, var(--border-subtle));
+  }
+}
+
+/* 仅身边或仅背景时通栏 */
+.npc-relations-grid:not(:has(.npc-relations-block--near)) .npc-relations-block--bg,
+.npc-relations-grid:not(:has(.npc-relations-block--bg)) .npc-relations-block--near {
+  grid-column: 1 / -1;
+}
+
+.npc-relations-grid:not(:has(.npc-relations-block--near)):not(:has(.npc-relations-block--bg))
+  .npc-relations-block--social {
+  padding-top: 0;
+  border-top: none;
+}
+
+.npc-relations-head {
+  display: flex;
+  align-items: center;
+  gap: 0.3em;
+  font-family: var(--font-mono);
+  font-size: 0.7em;
+  font-weight: 700;
+  letter-spacing: 0.35px;
+  color: var(--accent-lavender);
+  line-height: 1.2;
+}
+
+.npc-relations-ico {
+  font-size: 0.95em;
+  line-height: 1;
+}
+
+.npc-relations-count {
+  margin-left: auto;
+  font-size: 0.9em;
+  font-weight: 600;
+  color: var(--text-muted, var(--text-secondary));
+  background: color-mix(in srgb, var(--accent-lavender) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 22%, var(--border-subtle));
+  border-radius: 999px;
+  padding: 0.05em 0.45em;
+  letter-spacing: 0;
+}
+
+/* 人物/社交：自适应填满行宽 */
 .npc-chip-flow {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35em;
   width: 100%;
+
+  &--fill {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11.5em, 1fr));
+    gap: 0.35em;
+  }
 }
 
 .npc-person-chip {
-  display: inline-flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 0.2em 0.35em;
-  max-width: 100%;
-  padding: 0.28em 0.5em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.12em;
+  min-width: 0;
+  padding: 0.35em 0.5em;
   border-radius: 8px;
-  background: var(--memory-bg, rgba(0, 0, 0, 0.04));
-  border: 1px solid var(--memory-bd, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-card) 72%, transparent);
+  border: 1px solid var(--border-subtle);
   line-height: 1.35;
+  box-shadow: 0 1px 0 color-mix(in srgb, #000 4%, transparent);
 }
 
 .npc-person-chip-cat {
-  font-size: 0.62em;
+  font-size: 0.6em;
   font-weight: 700;
   color: var(--accent-sky);
-  letter-spacing: 0.2px;
-  flex-shrink: 0;
+  letter-spacing: 0.25px;
 }
 
 .npc-person-chip-name {
   font-size: 0.76em;
   font-weight: 700;
   color: var(--text-primary);
+  word-break: break-word;
 }
 
 .npc-person-chip-note {
-  font-size: 0.68em;
+  font-size: 0.66em;
   color: var(--text-secondary);
   word-break: break-word;
 }
 
-/* 背景关联：短值联排，避免整行空盒 */
+/* 背景关联：格内铺满 */
 .npc-meta-strip {
   display: flex;
   flex-wrap: wrap;
   gap: 0.35em;
   width: 100%;
+
+  &--fill {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 0.3em;
+  }
 }
 
 .npc-meta-chip {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 0.3em;
-  max-width: 100%;
-  padding: 0.28em 0.5em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1em;
+  min-width: 0;
+  padding: 0.32em 0.48em;
   border-radius: 8px;
-  background: rgba(120, 150, 200, 0.08);
-  border: 1px solid rgba(120, 150, 200, 0.2);
+  background: color-mix(in srgb, var(--accent-sky) 8%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent-sky) 22%, var(--border-subtle));
 }
 
 .npc-meta-k {
-  font-size: 0.62em;
+  font-size: 0.58em;
   font-weight: 700;
   color: var(--accent-sky);
-  flex-shrink: 0;
+  letter-spacing: 0.2px;
 }
 
 .npc-meta-v {
-  font-size: 0.76em;
+  font-size: 0.74em;
   color: var(--text-primary);
   word-break: break-word;
+  line-height: 1.35;
 
   &.muted {
     color: var(--text-muted, var(--text-secondary));
     opacity: 0.75;
+  }
+}
+
+@media (max-width: 560px) {
+  .npc-relations {
+    padding: 0.45em 0.5em 0.5em;
+  }
+
+  .npc-relations-grid {
+    grid-template-columns: 1fr;
+    gap: 0.45em;
+  }
+
+  .npc-relations-block--near,
+  .npc-relations-block--bg,
+  .npc-relations-block--social {
+    grid-column: 1;
+    grid-row: auto;
+  }
+
+  .npc-relations-block--social {
+    padding-top: 0.4em;
+  }
+
+  .npc-chip-flow--fill {
+    grid-template-columns: repeat(auto-fill, minmax(9.5em, 1fr));
+  }
+
+  .npc-meta-strip--fill {
+    grid-template-columns: repeat(auto-fill, minmax(7.5em, 1fr));
   }
 }
 
