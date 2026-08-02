@@ -6,8 +6,9 @@ import {
   storedTagValueToInner,
 } from '../tasks/tag-extract';
 import { removeTagKeyFromRawContainer } from '../tasks/tag-variables-nested';
+import { resolveAppliedExtraKeys } from './entry-keys';
 import { ledgerEntryKey } from './write-ledger-utils';
-import { defaultWorldbookEntryName, resolveStableEntryName } from './write-from-template';
+import { defaultWorldbookEntryName, resolveEntryKeys, resolveStableEntryName } from './write-from-template';
 import type { WorldbookWriteAppliedEntry } from './write-sync';
 
 export type AppliedLedgerOwnerEntry = WorldbookWriteAppliedEntry & {
@@ -23,6 +24,9 @@ export type RunLogWorldbookRow = {
   bookName: string;
   ownerMessageId: number;
   content: string;
+  entryType: ChatWorldbookWriteRule['entryType'];
+  defaultKeys: string[];
+  extraKeys: string[];
 };
 
 export { removeTagKeyFromRawContainer };
@@ -101,6 +105,10 @@ export function buildRunLogWorldbookRow(
   const content = (liveContent ?? fallback).trim();
   if (!content && !fallback) return null;
 
+  const defaultKeys =
+    rule.entryType === 'keyword' ? resolveEntryKeys(rule, tagKey) : [];
+  const extraKeys = rule.entryType === 'keyword' ? resolveAppliedExtraKeys(entry) : [];
+
   return {
     rowKey: ledgerEntryKey(entry.bookName, entry.stableName),
     ruleId: entry.ruleId,
@@ -110,5 +118,8 @@ export function buildRunLogWorldbookRow(
     bookName: entry.bookName,
     ownerMessageId: entry.ownerMessageId,
     content: content || fallback,
+    entryType: rule.entryType,
+    defaultKeys,
+    extraKeys,
   };
 }

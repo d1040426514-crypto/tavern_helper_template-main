@@ -11,17 +11,29 @@ import {
 import { writeFloorTagValues } from '../tasks/tag-variables';
 import { normalizePlotWorldbookPosition, normalizeWorldbookWritePlacement } from './entry-order';
 import {
+  mergeEntryKeys,
+  resolveAppliedExtraKeys,
+} from './entry-keys';
+import {
   appendAppliedToMessage,
+  appliedLedgerKey,
+  POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
   reloadWorldInfoEditorIfSelected,
   withWorldbookWriteLock,
   type WorldbookWriteAppliedEntry,
 } from './write-sync';
-import { resolveWrapperStableNames } from './write-ledger-utils';
+import { mergeAppliedLedgerEntries, resolveWrapperStableNames } from './write-ledger-utils';
 import type { ChatWorldbookWriteRule, ScriptSettings } from '../tasks/schema';
 import type { TaskRunResult } from '../tasks/runtime';
 import { parseCommaSeparatedList } from '../tasks/comma-separated';
 
 export { resolveWrapperEntryBaseName, resolveWrapperStableNames } from './write-ledger-utils';
+export {
+  diffExtraKeys,
+  mergeEntryKeys,
+  normalizeKeywordList,
+  resolveAppliedExtraKeys,
+} from './entry-keys';
 
 export const POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY = '_post_process_worldbook_write_snapshots';
 
@@ -218,8 +230,9 @@ export function buildWorldbookEntryPartial(
   rule: ChatWorldbookWriteRule,
   content: string,
   compositeKey?: string,
+  extraKeys: string[] = [],
 ): Partial<WorldbookEntry> {
-  const keys = resolveEntryKeys(rule, compositeKey);
+  const keys = mergeEntryKeys(resolveEntryKeys(rule, compositeKey), extraKeys);
   const strategyType = rule.entryType === 'keyword' ? 'selective' : 'constant';
   return {
     enabled: true,
@@ -239,6 +252,39 @@ export function buildWorldbookEntryPartial(
       delay: null,
     },
   };
+}
+
+function readAppliedFromMessageData(messageId: number): WorldbookWriteAppliedEntry[] {
+  const msg = getChatMessages(messageId)[0];
+  if (!msg || msg.role !== 'assistant') return [];
+  const data = (msg.data ?? {}) as Record<string, unknown>;
+  const raw = data[POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY];
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (item): item is WorldbookWriteAppliedEntry =>
+      !!item &&
+      typeof item === 'object' &&
+      typeof (item as WorldbookWriteAppliedEntry).bookName === 'string' &&
+      typeof (item as WorldbookWriteAppliedEntry).stableName === 'string' &&
+      !!(item as WorldbookWriteAppliedEntry).partial,
+  );
+}
+
+/** 收集截至 maxMessageId 的 applied 账本（含当前楼），供阶段重写保留 extraKeys */
+function collectAppliedLedgerUpTo(maxMessageId: number): Map<string, WorldbookWriteAppliedEntry> {
+  if (maxMessageId < 0) return new Map();
+  let msgs;
+  try {
+    msgs = getChatMessages(`0-${maxMessageId}`);
+  } catch {
+    return new Map();
+  }
+  const batches: WorldbookWriteAppliedEntry[][] = [];
+  for (const msg of msgs) {
+    if (msg.role !== 'assistant') continue;
+    batches.push(readAppliedFromMessageData(msg.message_id));
+  }
+  return mergeAppliedLedgerEntries(batches);
 }
 
 export async function upsertEntryByStableName(
@@ -403,6 +449,7 @@ export async function applyChatWorldbookWriteAfterStage(
   await withWorldbookWriteLock(async () => {
     const assistantTags = settings.chatExtractTags?.assistant ?? [];
     const writtenBooks = new Set<string>();
+    const priorLedger = collectAppliedLedgerUpTo(messageId);
 
     for (const rule of rules) {
       if (!isWorldbookWriteRuleActive(rule, assistantTags, stageResults)) continue;
@@ -437,10 +484,15 @@ export async function applyChatWorldbookWriteAfterStage(
         const parsed = useSplit ? parseCompositeKey(tagKey) : null;
         const attrValue = parsed?.attrValue;
         const stableName = resolveStableEntryName(rule, attrValue);
-        const keys = resolveEntryKeys(rule, useSplit ? tagKey : undefined);
-        if (rule.entryType === 'keyword' && keys.length === 0) continue;
+        const compositeKey = useSplit ? tagKey : undefined;
+        const defaultKeys = resolveEntryKeys(rule, compositeKey);
+        if (rule.entryType === 'keyword' && defaultKeys.length === 0) continue;
 
-        const partial = buildWorldbookEntryPartial(rule, content, useSplit ? tagKey : undefined);
+        const ledgerKey = appliedLedgerKey(bookName, stableName);
+        const extraKeys =
+          rule.entryType === 'keyword' ? resolveAppliedExtraKeys(priorLedger.get(ledgerKey)) : [];
+
+        const partial = buildWorldbookEntryPartial(rule, content, compositeKey, extraKeys);
         partial.name = stableName;
 
         const { previous } = await upsertEntryByStableName(bookName, stableName, partial);
@@ -455,8 +507,10 @@ export async function applyChatWorldbookWriteAfterStage(
           bookName,
           stableName,
           partial: appliedPartial,
+          ...(rule.entryType === 'keyword' ? { extraKeys } : {}),
         };
         await appendAppliedToMessage(messageId, applied);
+        priorLedger.set(ledgerKey, applied);
         writtenBooks.add(bookName);
         writtenCount += 1;
       }

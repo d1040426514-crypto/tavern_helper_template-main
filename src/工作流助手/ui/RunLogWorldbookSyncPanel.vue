@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { storeToRefs } from 'pinia';
+import { formatCommaSeparatedList } from '../tasks/comma-separated';
 import { useSettingsStore } from '../settings';
+import { normalizeKeywordList } from '../worldbook/entry-keys';
 import {
   applyRunLogWorldbookEdit,
   collectRunLogWorldbookRows,
@@ -19,6 +21,7 @@ const { settings } = storeToRefs(store);
 
 const rows = ref<RunLogWorldbookRow[]>([]);
 const drafts = ref<Record<string, string>>({});
+const extraKeyDrafts = ref<Record<string, string>>({});
 const loading = ref(false);
 const editMode = ref(false);
 const busyRowKey = ref<string | null>(null);
@@ -55,12 +58,20 @@ const summaryLabel = computed(() => {
   return '条目列表 · 暂无条目';
 });
 
+function formatDefaultKeysHint(row: RunLogWorldbookRow): string {
+  if (!row.defaultKeys.length) return '（无）';
+  return row.defaultKeys.join('、');
+}
+
 function syncDraftsFromRows(nextRows: RunLogWorldbookRow[]): void {
-  const next: Record<string, string> = {};
+  const nextContent: Record<string, string> = {};
+  const nextExtra: Record<string, string> = {};
   for (const row of nextRows) {
-    next[row.rowKey] = row.content;
+    nextContent[row.rowKey] = row.content;
+    nextExtra[row.rowKey] = formatCommaSeparatedList(row.extraKeys);
   }
-  drafts.value = next;
+  drafts.value = nextContent;
+  extraKeyDrafts.value = nextExtra;
 }
 
 async function refreshRows(): Promise<void> {
@@ -68,6 +79,7 @@ async function refreshRows(): Promise<void> {
   if (floorId == null || !rules.value.length) {
     rows.value = [];
     drafts.value = {};
+    extraKeyDrafts.value = {};
     return;
   }
   loading.value = true;
@@ -88,8 +100,20 @@ watch([messageId, runAt, rules], () => {
   void refreshRows();
 }, { immediate: true, deep: true });
 
-function isRowDirty(row: RunLogWorldbookRow): boolean {
+function isContentDirty(row: RunLogWorldbookRow): boolean {
   return String(drafts.value[row.rowKey] ?? '').trim() !== row.content.trim();
+}
+
+function isExtraKeysDirty(row: RunLogWorldbookRow): boolean {
+  if (row.entryType !== 'keyword') return false;
+  const draft = normalizeKeywordList(extraKeyDrafts.value[row.rowKey] ?? '');
+  const saved = normalizeKeywordList(row.extraKeys);
+  if (draft.length !== saved.length) return true;
+  return draft.some((k, i) => k !== saved[i]);
+}
+
+function isRowDirty(row: RunLogWorldbookRow): boolean {
+  return isContentDirty(row) || isExtraKeysDirty(row);
 }
 
 function hasDirtyDrafts(): boolean {
@@ -117,7 +141,11 @@ async function saveRow(row: RunLogWorldbookRow): Promise<void> {
   }
   busyRowKey.value = row.rowKey;
   try {
-    await applyRunLogWorldbookEdit(row, content);
+    const extraKeys =
+      row.entryType === 'keyword'
+        ? normalizeKeywordList(extraKeyDrafts.value[row.rowKey] ?? '')
+        : undefined;
+    await applyRunLogWorldbookEdit(row, content, extraKeys);
     acuToast('success', `已同步「${row.stableName}」到世界书与标签变量`);
     await refreshRows();
   } catch (e) {
@@ -206,12 +234,12 @@ function isRowBusy(row: RunLogWorldbookRow): boolean {
       >
         <p class="acu-notes acu-notes--sm" style="margin: 0">
           列出截至当前运行楼仍有效的全部世界书写入条目（含未出现在「消息楼层标签变量注入」模板中的规则）。保存以世界书正文为准，并同步 owner 楼
-          <code>post_process_tags</code> 对应 tag。
+          <code>post_process_tags</code> 对应 tag。绿灯条目可设置「额外关键词」，叠在默认关键词之上；额外词保存在 owner 楼 applied 账本中，同聊天再次写入会保留，换聊天不继承。
         </p>
       </AcuHelpPanel>
 
       <p class="acu-notes acu-notes--sm acu-run-log-wb-sync__hint">
-        保存以世界书正文为准，并同步 owner 楼标签变量。
+        保存以世界书正文为准，并同步 owner 楼标签变量。绿灯条目的额外关键词随账本持久化。
       </p>
 
       <div v-if="messageId == null" class="acu-run-log-wb-sync__empty">
@@ -258,6 +286,22 @@ function isRowBusy(row: RunLogWorldbookRow): boolean {
                 :readonly="!editMode"
                 rows="5"
               />
+              <div v-if="row.entryType === 'keyword'" class="acu-run-log-wb-sync__keys">
+                <div class="acu-notes acu-notes--sm acu-run-log-wb-sync__keys-default">
+                  默认关键词：{{ formatDefaultKeysHint(row) }}
+                </div>
+                <label class="acu-run-log-wb-sync__keys-label">
+                  <span class="acu-notes acu-notes--sm">额外关键词</span>
+                  <input
+                    v-model="extraKeyDrafts[row.rowKey]"
+                    type="text"
+                    class="acu-input acu-run-log-wb-sync__keys-input"
+                    :class="{ 'acu-run-log-tags__input--locked': !editMode }"
+                    :readonly="!editMode"
+                    placeholder="逗号分隔，叠在默认关键词之上"
+                  />
+                </label>
+              </div>
               <div class="acu-run-log-wb-sync__actions">
                 <button
                   type="button"

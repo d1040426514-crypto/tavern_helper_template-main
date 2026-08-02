@@ -9,6 +9,8 @@ export type WorldbookWriteAppliedEntry = {
   bookName: string;
   stableName: string;
   partial: Partial<WorldbookEntry>;
+  /** 绿灯条目在默认 keys 之上的额外关键词；缺省视为 [] */
+  extraKeys?: string[];
 };
 
 export function appliedLedgerKey(bookName: string, stableName: string): string {

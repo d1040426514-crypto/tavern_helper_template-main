@@ -4,6 +4,7 @@ import {
   buildWorldbookEntryPartial,
   buildWrapperEntryPartial,
   defaultWorldbookEntryName,
+  mergeEntryKeys,
   resolveEntryKeys,
   resolveStableEntryName,
   resolveWrapTagName,
@@ -115,6 +116,16 @@ test('buildWorldbookEntryPartial keyword selective', () => {
   assert.deepEqual(partial.strategy?.keys, ['圣剑']);
   assert.equal(partial.position?.type, 'at_depth');
   assert.equal(partial.position?.depth, 2);
+});
+
+test('buildWorldbookEntryPartial merges extraKeys onto defaults', () => {
+  const partial = buildWorldbookEntryPartial(baseRule(), 'content', 'item@name=圣剑', ['别名', '圣剑']);
+  assert.deepEqual(partial.strategy?.keys, ['圣剑', '别名']);
+});
+
+test('mergeEntryKeys used by rewrite path preserves extras over defaults', () => {
+  const defaults = resolveEntryKeys(baseRule({ keywords: 'static' }), 'item@name=圣剑');
+  assert.deepEqual(mergeEntryKeys(defaults, ['extra']), ['圣剑', 'static', 'extra']);
 });
 
 test('buildWorldbookEntryPartial before_char position', () => {

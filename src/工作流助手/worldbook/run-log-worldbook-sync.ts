@@ -10,6 +10,7 @@ import {
   extractTagInnerFromWorldbookContent,
   type RunLogWorldbookRow,
 } from './run-log-worldbook-sync-utils';
+import { mergeEntryKeys, normalizeKeywordList } from './entry-keys';
 import { POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY, scheduleWorldbookReconcile } from './write-reconcile';
 import { upsertEntryByStableName } from './write-from-template';
 import { appendAppliedToMessage, withWorldbookWriteLock, type WorldbookWriteAppliedEntry } from './write-sync';
@@ -116,9 +117,16 @@ export async function collectRunLogWorldbookRows(options: {
 export async function applyRunLogWorldbookEdit(
   row: RunLogWorldbookRow,
   nextContent: string,
+  nextExtraKeys?: string[] | string,
 ): Promise<void> {
   const trimmedContent = nextContent.trim();
   if (!trimmedContent) throw new Error('条目内容不能为空');
+
+  const isKeyword = row.entryType === 'keyword';
+  const extraKeys = isKeyword
+    ? normalizeKeywordList(nextExtraKeys ?? row.extraKeys)
+    : [];
+  const defaultKeys = isKeyword ? row.defaultKeys : [];
 
   await withWorldbookWriteLock(async () => {
     const inner = extractTagInnerFromWorldbookContent(row.tagKey, trimmedContent);
@@ -129,12 +137,26 @@ export async function applyRunLogWorldbookEdit(
     partial.content = trimmedContent;
     partial.name = row.stableName;
 
+    if (isKeyword) {
+      const mergedKeys = mergeEntryKeys(defaultKeys, extraKeys);
+      partial.strategy = {
+        ...(partial.strategy ?? {
+          type: 'selective' as const,
+          keys_secondary: { logic: 'and_any' as const, keys: [] },
+          scan_depth: 'same_as_global' as const,
+        }),
+        type: 'selective',
+        keys: mergedKeys,
+      };
+    }
+
     await upsertEntryByStableName(row.bookName, row.stableName, partial);
     await appendAppliedToMessage(row.ownerMessageId, {
       ruleId: row.ruleId,
       bookName: row.bookName,
       stableName: row.stableName,
       partial,
+      ...(isKeyword ? { extraKeys } : {}),
     });
   });
 

@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import type { ChatWorldbookWriteRule } from '../tasks/schema';
 import { removeTagKeyFromRawContainer } from '../tasks/tag-variables-nested';
 import {
+  buildRunLogWorldbookRow,
   collectAppliedLedgerWithOwnersFromBatches,
   extractTagInnerFromWorldbookContent,
   resolveTagKeyForRow,
@@ -27,12 +28,18 @@ function baseRule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldboo
   };
 }
 
-function applied(stableName: string, bookName = 'BookA', ruleId = 'r1'): WorldbookWriteAppliedEntry {
+function applied(
+  stableName: string,
+  bookName = 'BookA',
+  ruleId = 'r1',
+  overrides: Partial<WorldbookWriteAppliedEntry> = {},
+): WorldbookWriteAppliedEntry {
   return {
     ruleId,
     bookName,
     stableName,
     partial: { name: stableName, content: 'content', enabled: true },
+    ...overrides,
   };
 }
 
@@ -100,6 +107,93 @@ test('removeTagKeyFromRawContainer removes nested composite key', () => {
   );
   assert.deepEqual(raw.item_name, { 断剑: 'b' });
   assert.equal(raw['item@name=圣剑'], undefined);
+});
+
+test('buildRunLogWorldbookRow exposes defaultKeys and extraKeys', () => {
+  const rule = baseRule();
+  const entry = {
+    ...applied('WorkflowHelper-item name-圣剑', 'BookA', 'r1', {
+      extraKeys: ['别名'],
+      partial: {
+        name: 'WorkflowHelper-item name-圣剑',
+        content: '<item name="圣剑">\nx\n</item>',
+        enabled: true,
+        strategy: {
+          type: 'selective',
+          keys: ['圣剑', '别名'],
+          keys_secondary: { logic: 'and_any', keys: [] },
+          scan_depth: 'same_as_global',
+        },
+      },
+    }),
+    ownerMessageId: 2,
+  };
+  const row = buildRunLogWorldbookRow(entry, rule, { 'item@name=圣剑': 'x' }, entry.partial.content!);
+  assert.ok(row);
+  assert.equal(row!.entryType, 'keyword');
+  assert.deepEqual(row!.defaultKeys, ['圣剑']);
+  assert.deepEqual(row!.extraKeys, ['别名']);
+});
+
+test('buildRunLogWorldbookRow without extraKeys field yields empty extras', () => {
+  const rule = baseRule({ keywords: 'static' });
+  const entry = {
+    ...applied('WorkflowHelper-item name-圣剑', 'BookA', 'r1', {
+      partial: {
+        name: 'WorkflowHelper-item name-圣剑',
+        content: '<item name="圣剑">\nx\n</item>',
+        enabled: true,
+        strategy: {
+          type: 'selective',
+          keys: ['圣剑', 'static', 'extra'],
+          keys_secondary: { logic: 'and_any', keys: [] },
+          scan_depth: 'same_as_global',
+        },
+      },
+    }),
+    ownerMessageId: 2,
+  };
+  const row = buildRunLogWorldbookRow(entry, rule, {}, entry.partial.content!);
+  assert.ok(row);
+  assert.deepEqual(row!.defaultKeys, ['圣剑', 'static']);
+  assert.deepEqual(row!.extraKeys, []);
+});
+
+test('buildRunLogWorldbookRow explicit empty extraKeys ignores strategy.keys leftovers', () => {
+  const rule = baseRule();
+  const entry = {
+    ...applied('WorkflowHelper-item name-圣剑', 'BookA', 'r1', {
+      extraKeys: [],
+      partial: {
+        name: 'WorkflowHelper-item name-圣剑',
+        content: '<item name="圣剑">\nx\n</item>',
+        enabled: true,
+        strategy: {
+          type: 'selective',
+          keys: ['圣剑', 'stale'],
+          keys_secondary: { logic: 'and_any', keys: [] },
+          scan_depth: 'same_as_global',
+        },
+      },
+    }),
+    ownerMessageId: 2,
+  };
+  const row = buildRunLogWorldbookRow(entry, rule, {}, entry.partial.content!);
+  assert.ok(row);
+  assert.deepEqual(row!.extraKeys, []);
+});
+
+test('buildRunLogWorldbookRow constant entry has empty keys', () => {
+  const rule = baseRule({ entryType: 'constant', splitByAttr: false, targetTag: 'world' });
+  const entry = {
+    ...applied('WorkflowHelper-world', 'BookA', 'r1'),
+    ownerMessageId: 1,
+  };
+  const row = buildRunLogWorldbookRow(entry, rule, { world: 'body' }, '<world>\nbody\n</world>');
+  assert.ok(row);
+  assert.equal(row!.entryType, 'constant');
+  assert.deepEqual(row!.defaultKeys, []);
+  assert.deepEqual(row!.extraKeys, []);
 });
 
 console.log('run-log-worldbook-sync.test.ts: all passed');

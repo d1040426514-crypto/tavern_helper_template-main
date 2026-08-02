@@ -2576,6 +2576,28 @@
   margin-bottom: 8px;
 }
 
+.acu-run-log-wb-sync__keys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.acu-run-log-wb-sync__keys-default {
+  margin: 0;
+  color: var(--acu-text-3, var(--acu-text-2));
+}
+
+.acu-run-log-wb-sync__keys-label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.acu-run-log-wb-sync__keys-input {
+  width: 100%;
+}
+
 .acu-run-log-wb-sync__actions {
   display: flex;
   flex-wrap: wrap;
