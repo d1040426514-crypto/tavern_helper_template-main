@@ -202,8 +202,8 @@ test('applyReplicaFamilyCleanup ignores specs absent from keep map', () => {
     const worldRoot = baseTask({
       id: 'world',
       name: '世界时局与经济简报',
-      replicaFamilySpec: '世界锚定@world',
-      replicaFamilyEnumSpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
+      replicaFamilyEnumSpec: '世界状态摘要@world',
       replicaFamilyBaseName: '世界时局与经济简报',
     });
     const worldA = baseTask({
@@ -212,7 +212,7 @@ test('applyReplicaFamilyCleanup ignores specs absent from keep map', () => {
       syncAsReplicaFamily: false,
       replicaFamilyRootId: 'world',
       replicaFamilyAttrValue: '阿斯塔利亚',
-      replicaFamilySpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
     });
     const worldB = baseTask({
       ...worldA,
@@ -223,7 +223,7 @@ test('applyReplicaFamilyCleanup ignores specs absent from keep map', () => {
     const settings = baseSettings({
       tasks: [...baseSettings().tasks, worldRoot, worldA, worldB],
     });
-    const next = applyReplicaFamilyCleanup(settings, { '世界锚定@world': ['阿斯塔利亚'] }, 0);
+    const next = applyReplicaFamilyCleanup(settings, { '世界状态摘要@world': ['阿斯塔利亚'] }, 0);
     assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'root').length, 2);
     assert.equal(next.tasks.filter(t => t.replicaFamilyRootId === 'world').length, 1);
     assert.ok(next.tasks.find(t => t.replicaFamilyAttrValue === '阿斯塔利亚'));

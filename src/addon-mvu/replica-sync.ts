@@ -1,7 +1,7 @@
 import type { AddonData } from './schema';
 import { getWorldMap } from './schema';
 
-export const WORLD_REPLICA_SPEC = '世界锚定@world';
+export const WORLD_REPLICA_SPEC = '世界状态摘要@world';
 
 type ReplicaApi = {
   listTasks: () => Array<{
@@ -77,7 +77,7 @@ export async function syncReplicaLaunched(data: AddonData): Promise<string[]> {
 
   const root = findWorldReplicaRoot(api);
   if (!root) {
-    warnings.push('未找到规格为 世界锚定@world 的世界副本族');
+    warnings.push(`未找到规格为 ${WORLD_REPLICA_SPEC} 的世界副本族`);
     return warnings;
   }
 
@@ -134,7 +134,7 @@ export async function ensureWorldReplicaMember(worldName: string, launched: bool
 
   const root = findWorldReplicaRoot(api);
   if (!root) {
-    warnings.push('未找到规格为 世界锚定@world 的世界副本族，跳过副本创建');
+    warnings.push(`未找到规格为 ${WORLD_REPLICA_SPEC} 的世界副本族，跳过副本创建`);
     return warnings;
   }
 

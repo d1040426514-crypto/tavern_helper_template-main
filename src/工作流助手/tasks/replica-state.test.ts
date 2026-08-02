@@ -108,13 +108,13 @@ test('rerun empty history state does not wipe UI world member', () => {
   const tasks = [
     rootTask({
       name: '世界时局与经济简报',
-      replicaFamilySpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
       replicaFamilyBaseName: '世界时局与经济简报',
       replicaFamilyScheduleMode: 'manual',
     }),
     memberTask('阿斯塔利亚', {
       name: '世界时局与经济简报 阿斯塔利亚',
-      replicaFamilySpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
       replicaFamilyLaunched: true,
     }),
   ];
@@ -169,13 +169,13 @@ test('rerun merge then apply keeps manual launched members when history empty', 
   const tasks = [
     rootTask({
       name: '世界时局',
-      replicaFamilySpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
       replicaFamilyBaseName: '世界时局',
       replicaFamilyScheduleMode: 'manual',
     }),
     memberTask('阿斯塔利亚', {
       name: '世界时局 阿斯塔利亚',
-      replicaFamilySpec: '世界锚定@world',
+      replicaFamilySpec: '世界状态摘要@world',
       replicaFamilyLaunched: true,
     }),
   ];
