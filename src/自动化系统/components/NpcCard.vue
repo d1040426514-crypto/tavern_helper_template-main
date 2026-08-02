@@ -573,11 +573,11 @@ const backgroundRows = computed(() => {
 
 .npc-wealth-tag {
   font-family: var(--font-mono);
-  font-size: 0.7em;
+  font-size: 0.6em;
   font-weight: 600;
-  padding: 0.15em 0.45em;
-  border-radius: 6px;
-  letter-spacing: 0.2px;
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  letter-spacing: 0.15px;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
@@ -627,10 +627,10 @@ const backgroundRows = computed(() => {
 }
 
 .npc-chip {
-  font-size: 0.68em;
-  line-height: 1.35;
-  padding: 0.12em 0.4em;
-  border-radius: 6px;
+  font-size: 0.58em;
+  line-height: 1.32;
+  padding: 0.1em 0.36em;
+  border-radius: 5px;
   max-width: 100%;
   word-break: break-word;
   border: 1px solid var(--border-subtle);
@@ -640,7 +640,7 @@ const backgroundRows = computed(() => {
 
   &--rep {
     font-weight: 600;
-    letter-spacing: 0.15px;
+    letter-spacing: 0.1px;
   }
 }
 
