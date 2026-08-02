@@ -262,6 +262,28 @@ function isWorldPrefixOnlyRewrite(rewrites: string[]): boolean {
   return rewrites.length > 0 && rewrites.every(r => r === '补容器段 /世界');
 }
 
+const WORLD_PREFIX_REWRITE = '补容器段 /世界';
+
+/** 去掉顺带补 `/世界`，去重保序，供 heal 文案前置展示 */
+export function significantPathRewrites(rewrites: string[]): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const r of rewrites) {
+    if (r === WORLD_PREFIX_REWRITE) continue;
+    if (seen.has(r)) continue;
+    seen.add(r);
+    out.push(r);
+  }
+  return out;
+}
+
+/** heal 文案：原因前置，适配变更页 truncate(40) */
+export function formatPathCanonicalizeHealMessage(pathPart: string, rewrites: string[]): string {
+  const reasons = significantPathRewrites(rewrites);
+  if (reasons.length === 0) return `路径规范化: ${pathPart}`;
+  return `${reasons.join('、')}: ${pathPart}`;
+}
+
 export function canonicalizePatchOps(
   ops: MvuJsonPatchOp[],
   base: AddonData,
@@ -276,7 +298,10 @@ export function canonicalizePatchOps(
       if (rewrites.length > 0 && !isWorldPrefixOnlyRewrite(rewrites)) {
         issues.push({
           kind: 'heal',
-          message: `路径规范化: ${op.from} → ${from.path}; ${op.to} → ${to.path}`,
+          message: formatPathCanonicalizeHealMessage(
+            `${op.from} → ${from.path}; ${op.to} → ${to.path}`,
+            rewrites,
+          ),
           op: canonOp,
         });
       }
@@ -288,7 +313,7 @@ export function canonicalizePatchOps(
     if (rewrites.length > 0 && !isWorldPrefixOnlyRewrite(rewrites)) {
       issues.push({
         kind: 'heal',
-        message: `路径规范化: ${op.path} → ${path}`,
+        message: formatPathCanonicalizeHealMessage(`${op.path} → ${path}`, rewrites),
         op: canonOp,
       });
     }

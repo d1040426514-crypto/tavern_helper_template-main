@@ -8,6 +8,8 @@ import {
   canonicalizeJsonPointer,
   canonicalizePatchOps,
   canonicalizeSegments,
+  formatPathCanonicalizeHealMessage,
+  significantPathRewrites,
   verifyCanonicalWrites,
 } from './patch-canonicalize';
 import { AddonSchema, normalizeAddonData, type AddonData } from './schema';
@@ -161,16 +163,74 @@ test('canonicalizePatchOps world-prefix-only emits no issue', () => {
   assert.equal(issues.length, 0);
 });
 
-test('canonicalizePatchOps emits heal issue on schema rewrite', () => {
+test('significantPathRewrites drops world prefix and dedupes', () => {
+  assert.deepEqual(
+    significantPathRewrites(['补容器段 /世界', '补全固定段 /贸易格局', '补容器段 /世界', '补全固定段 /贸易格局']),
+    ['补全固定段 /贸易格局'],
+  );
+});
+
+test('formatPathCanonicalizeHealMessage puts reasons first', () => {
+  assert.equal(
+    formatPathCanonicalizeHealMessage('/a → /世界/a/x', ['补容器段 /世界', '补全固定段 /大宗商品市场']),
+    '补全固定段 /大宗商品市场: /a → /世界/a/x',
+  );
+  assert.equal(formatPathCanonicalizeHealMessage('/a → /世界/a', ['补容器段 /世界']), '路径规范化: /a → /世界/a');
+});
+
+test('canonicalizePatchOps emits heal with fixed-segment reason first', () => {
   const { ops, issues } = canonicalizePatchOps(
     [{ op: 'replace', path: '/阿斯塔利亚/世界经济简报/贸易政策/帝国', value: 'x' }],
     baseWorld(),
   );
-  const heal = issues.find(i => i.kind === 'heal' && i.message.includes('路径规范化'));
+  const heal = issues.find(i => i.kind === 'heal');
   assert.ok(heal);
+  assert.ok(heal!.message.startsWith('补全固定段 /贸易格局:'));
+  assert.ok(heal!.message.includes('/阿斯塔利亚/世界经济简报/贸易政策/帝国 →'));
   assert.equal(
     (heal!.op as { path: string }).path,
     '/世界/阿斯塔利亚/世界经济简报/贸易格局/贸易政策/帝国',
   );
   assert.deepEqual(heal!.op, ops[0]);
+});
+
+test('canonicalizePatchOps heal message for 大宗商品市场', () => {
+  const { issues } = canonicalizePatchOps(
+    [{ op: 'replace', path: '/阿斯塔利亚/世界经济简报/粮食/供需', value: '紧缺' }],
+    baseWorld(),
+  );
+  const heal = issues.find(i => i.kind === 'heal');
+  assert.ok(heal);
+  assert.ok(heal!.message.startsWith('补全固定段 /大宗商品市场:'));
+  assert.equal(
+    (heal!.op as { path: string }).path,
+    '/世界/阿斯塔利亚/世界经济简报/大宗商品市场/粮食/供需',
+  );
+});
+
+test('canonicalizePatchOps heal message for 货币与金融', () => {
+  const { issues } = canonicalizePatchOps(
+    [{ op: 'replace', path: '/阿斯塔利亚/世界经济简报/流通货币/兽盟币(BE)/汇率/本期', value: '1' }],
+    baseWorld(),
+  );
+  const heal = issues.find(i => i.kind === 'heal');
+  assert.ok(heal);
+  assert.ok(heal!.message.startsWith('补全固定段 /货币与金融:'));
+});
+
+test('canonicalizePatchOps move heal dedupes fixed-segment reason', () => {
+  const { issues } = canonicalizePatchOps(
+    [
+      {
+        op: 'move',
+        from: '/阿斯塔利亚/世界经济简报/贸易政策/旧势力',
+        to: '/阿斯塔利亚/世界经济简报/贸易政策/新势力',
+      },
+    ],
+    baseWorld(),
+  );
+  const heal = issues.find(i => i.kind === 'heal');
+  assert.ok(heal);
+  assert.ok(heal!.message.startsWith('补全固定段 /贸易格局:'));
+  assert.equal((heal!.message.match(/补全固定段 \/贸易格局/g) ?? []).length, 1);
 });
