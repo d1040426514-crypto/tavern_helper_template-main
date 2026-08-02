@@ -68,11 +68,22 @@
         </div>
       </div>
 
-      <!-- 当前状态：6 格；「正在做的事」通栏 -->
+      <!-- 当前状态：动作/穿着 → 世界/位置/环境 → 正在做的事通栏 -->
       <section v-if="statusCells.length" class="npc-section">
         <header class="npc-section-head">📍 当前状态</header>
-        <div class="npc-status-grid" :class="{ 'has-doing': !!doingCell }">
-          <div v-for="cell in statusMainCells" :key="cell.label" class="npc-status-cell">
+        <div
+          class="npc-status-grid"
+          :class="{
+            'npc-status-grid--mapped': statusLayoutMapped,
+            'npc-status-grid--has-doing': !!doingCell,
+          }"
+        >
+          <div
+            v-for="cell in statusMainCells"
+            :key="cell.label"
+            class="npc-status-cell"
+            :class="statusCellClass(cell.label)"
+          >
             <div class="npc-status-k">{{ cell.label }}</div>
             <div class="npc-status-v">{{ cell.value }}</div>
           </div>
@@ -322,6 +333,15 @@ function toggleExpanded(): void {
 
 const DOING_LABEL = '正在做的事';
 
+const STATUS_AREA_KEYS: Record<string, string> = {
+  动作: 'action',
+  穿着: 'wear',
+  正在做的事: 'doing',
+  所处世界: 'world',
+  位置: 'place',
+  环境: 'env',
+};
+
 const statusCells = computed(() =>
   props.npc.statusParts.map((value, i) => ({
     label: statusLabels[i] || `详情${i + 1}`,
@@ -336,6 +356,17 @@ const statusMainCells = computed(() =>
 const doingCell = computed(
   () => statusCells.value.find(c => c.label === DOING_LABEL) ?? null,
 );
+
+/** 六段标准字段齐全时启用语义网格，否则回退自适应 */
+const statusLayoutMapped = computed(() => {
+  const labels = new Set(statusCells.value.map(c => c.label));
+  return ['动作', '穿着', '所处世界', '位置', '环境'].every(l => labels.has(l));
+});
+
+function statusCellClass(label: string): string {
+  const key = STATUS_AREA_KEYS[label];
+  return key ? `npc-status-cell--${key}` : '';
+}
 
 const NEAR_PLAN_LABELS = ['事件', '行为', '时段'] as const;
 
@@ -750,27 +781,67 @@ const backgroundRows = computed(() => {
   width: 100%;
 }
 
-/* 当前状态：主格自适应；「正在做的事」通栏 */
+/* 当前状态：语义分区网格（动作/穿着 → 世界/位置/环境 → 正在做） */
 .npc-status-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
-  gap: 0.35em;
+  gap: 0.4em;
   width: 100%;
+  align-items: stretch;
+  grid-template-columns: repeat(auto-fit, minmax(7.5em, 1fr));
 
-  &.has-doing {
-    grid-template-columns: repeat(auto-fit, minmax(5.5em, 1fr));
+  &--mapped {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1.35fr);
+    grid-template-areas:
+      'action wear wear'
+      'world place place'
+      'env env env'
+      'doing doing doing';
+  }
+
+  &--mapped:not(.npc-status-grid--has-doing) {
+    grid-template-areas:
+      'action wear wear'
+      'world place place'
+      'env env env';
   }
 }
 
 .npc-status-cell {
   min-width: 0;
-  padding: 0.35em 0.45em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.4em 0.5em;
   border-radius: 6px;
   background: var(--bg-step);
   border: 1px solid var(--border-subtle);
 
   &--doing {
     grid-column: 1 / -1;
+    background: color-mix(in srgb, var(--accent-sky) 10%, var(--bg-step));
+    border-color: color-mix(in srgb, var(--accent-sky) 28%, var(--border-subtle));
+  }
+}
+
+.npc-status-grid--mapped {
+  .npc-status-cell--action {
+    grid-area: action;
+  }
+  .npc-status-cell--wear {
+    grid-area: wear;
+  }
+  .npc-status-cell--world {
+    grid-area: world;
+  }
+  .npc-status-cell--place {
+    grid-area: place;
+  }
+  .npc-status-cell--env {
+    grid-area: env;
+  }
+  .npc-status-cell--doing {
+    grid-area: doing;
+    grid-column: auto;
   }
 }
 
@@ -1260,10 +1331,28 @@ const backgroundRows = computed(() => {
   }
 
   .npc-status-grid {
-    grid-template-columns: 1fr 1fr;
+    &--mapped {
+      grid-template-columns: 1fr 1fr;
+      grid-template-areas:
+        'action wear'
+        'world place'
+        'env env'
+        'doing doing';
+    }
 
-    .npc-status-cell--doing {
-      grid-column: 1 / -1;
+    &--mapped:not(.npc-status-grid--has-doing) {
+      grid-template-areas:
+        'action wear'
+        'world place'
+        'env env';
+    }
+
+    &:not(.npc-status-grid--mapped) {
+      grid-template-columns: 1fr 1fr;
+
+      .npc-status-cell--doing {
+        grid-column: 1 / -1;
+      }
     }
   }
 
