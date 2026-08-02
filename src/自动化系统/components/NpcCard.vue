@@ -1360,14 +1360,17 @@ const backgroundRows = computed(() => {
 }
 
 .npc-quest-logs {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(14em, 1fr));
   gap: 0.45em;
   width: 100%;
+  align-items: stretch;
 }
 
 .npc-quest-card {
-  min-height: 0;
+  min-width: 0;
+  min-height: 100%;
+  height: 100%;
 }
 
 .npc-quest-card-top {
