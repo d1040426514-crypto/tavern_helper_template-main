@@ -175,12 +175,36 @@ test('expandUserInputEndInjectTemplate uses lastRunStatus relay and floor histor
     getLastMessageId: g.getLastMessageId,
     formatAsTavernRegexedString: g.formatAsTavernRegexedString,
     substitudeMacros: g.substitudeMacros,
+    window: g.window,
   };
 
   const floorVars: Record<number, Record<string, unknown>> = {
     0: { [TAG_DATA_ROOT_KEY]: { archived: 'from-ai-floor' } },
     1: { [TAG_DATA_ROOT_KEY]: { archived: 'from-user-floor', userTag: 'u1' } },
   };
+
+  const chat = [
+    {
+      is_user: false,
+      mes: 'ai text',
+      acu_workflow_run_status: {
+        messageId: 0,
+        at: 1,
+        taskResults: [
+          {
+            taskId: 't1',
+            taskName: '任务甲',
+            success: true,
+            extractedTags: { onlyRelay: 'RELAY_ONLY', shared: 'x' },
+            promptMessages: [],
+            aiOutput: '',
+            aiReasoning: '',
+          },
+        ],
+      },
+    },
+    { is_user: true, mes: 'user text' },
+  ];
 
   g.getChatMessages = (id: number) => {
     if (id === 1) return [{ message_id: 1, role: 'user', message: 'user text', data: {} }];
@@ -197,27 +221,23 @@ test('expandUserInputEndInjectTemplate uses lastRunStatus relay and floor histor
   g.getLastMessageId = () => 1;
   g.formatAsTavernRegexedString = (text: string) => text;
   g.substitudeMacros = (text: string) => text;
+  g.window = {
+    parent: {
+      SillyTavern: {
+        getContext: () => ({
+          chat,
+          saveChat: async () => {},
+        }),
+      },
+    },
+  };
 
   try {
     const settings = ScriptSettingsSchema.parse({
       enabled: true,
       userInputEndInjectTemplate: 'R={{onlyRelay}} H={{archived}} T={{task:任务甲}}',
       tasks: [],
-      lastRunStatus: {
-        messageId: 0,
-        at: 1,
-        taskResults: [
-          {
-            taskId: 't1',
-            taskName: '任务甲',
-            success: true,
-            extractedTags: { onlyRelay: 'RELAY_ONLY', shared: 'x' },
-            promptMessages: [],
-            aiOutput: '',
-            aiReasoning: '',
-          },
-        ],
-      },
+      lastRunStatus: { taskResults: [] },
     }) as ScriptSettings;
 
     const out = await expandUserInputEndInjectTemplate(settings, 1);
@@ -233,6 +253,72 @@ test('expandUserInputEndInjectTemplate uses lastRunStatus relay and floor histor
     g.getLastMessageId = prev.getLastMessageId;
     g.formatAsTavernRegexedString = prev.formatAsTavernRegexedString;
     g.substitudeMacros = prev.substitudeMacros;
+    g.window = prev.window;
+  }
+});
+
+test('expandUserInputEndInjectTemplate falls back to settings cache when mes missing', async () => {
+  const g = globalThis as Record<string, unknown>;
+  const prev = {
+    getChatMessages: g.getChatMessages,
+    getVariables: g.getVariables,
+    getLastMessageId: g.getLastMessageId,
+    formatAsTavernRegexedString: g.formatAsTavernRegexedString,
+    substitudeMacros: g.substitudeMacros,
+    window: g.window,
+  };
+
+  g.getChatMessages = (id: number) => {
+    if (id === 1) return [{ message_id: 1, role: 'user', message: 'user text', data: {} }];
+    if (id === 0) return [{ message_id: 0, role: 'assistant', message: 'ai text', data: {} }];
+    return [];
+  };
+  g.getVariables = () => ({});
+  g.getLastMessageId = () => 1;
+  g.formatAsTavernRegexedString = (text: string) => text;
+  g.substitudeMacros = (text: string) => text;
+  g.window = {
+    parent: {
+      SillyTavern: {
+        getContext: () => ({
+          chat: [{ is_user: false, mes: 'ai' }, { is_user: true, mes: 'u' }],
+          saveChat: async () => {},
+        }),
+      },
+    },
+  };
+
+  try {
+    const settings = ScriptSettingsSchema.parse({
+      enabled: true,
+      userInputEndInjectTemplate: 'R={{onlyRelay}}',
+      tasks: [],
+      lastRunStatus: {
+        messageId: 0,
+        at: 1,
+        taskResults: [
+          {
+            taskId: 't1',
+            taskName: '任务甲',
+            success: true,
+            extractedTags: { onlyRelay: 'FROM_CACHE' },
+            promptMessages: [],
+            aiOutput: '',
+            aiReasoning: '',
+          },
+        ],
+      },
+    }) as ScriptSettings;
+
+    const out = await expandUserInputEndInjectTemplate(settings, 1);
+    assert.match(out, /FROM_CACHE/);
+  } finally {
+    g.getChatMessages = prev.getChatMessages;
+    g.getVariables = prev.getVariables;
+    g.getLastMessageId = prev.getLastMessageId;
+    g.formatAsTavernRegexedString = prev.formatAsTavernRegexedString;
+    g.substitudeMacros = prev.substitudeMacros;
+    g.window = prev.window;
   }
 });
 

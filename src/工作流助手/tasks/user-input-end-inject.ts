@@ -21,6 +21,7 @@ import {
   POST_PROCESS_REPLICA_STATE_KEY,
   type ReplicaStateSnapshot,
 } from './replica-state';
+import { resolveRunStatusForFloor } from './run-status';
 import type { RunLogTaskResult, ScriptSettings } from './schema';
 
 function readReplicaStateFromAssistantFloor(messageId: number): ReplicaStateSnapshot {
@@ -76,7 +77,11 @@ export async function expandUserInputEndInjectTemplate(
   if (!msg || msg.role !== 'user') return '';
 
   const prevAiId = findLatestAssistantFloorId(userMessageId - 1);
-  const { relay, taskBlocks } = buildRelayFromLastRunStatus(settings.lastRunStatus, prevAiId);
+  const floorStatus = resolveRunStatusForFloor(prevAiId);
+  const runStatus =
+    floorStatus ??
+    (settings.lastRunStatus?.messageId === prevAiId ? settings.lastRunStatus : undefined);
+  const { relay, taskBlocks } = buildRelayFromLastRunStatus(runStatus, prevAiId);
   const historyMap = buildCurrentFloorTagMap(userMessageId);
 
   let out = template;

@@ -9,6 +9,7 @@ import { registerUserInputEndInjectTrigger } from './tasks/user-input-end-inject
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { registerReplicaReconcile } from './tasks/replica-reconcile';
+import { registerRunStatusRetarget } from './tasks/run-status';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import {
   registerExtensionsMenuEntry,
@@ -68,6 +69,7 @@ $(() => {
   const offChat = reloadOnChatChange({ beforeReload: markExtensionsMenuSoftUnload });
   const offWorldbookReconcile = registerWorldbookWriteReconcile();
   const offReplicaReconcile = registerReplicaReconcile();
+  const offRunStatusRetarget = registerRunStatusRetarget();
   const offPlaceholderMacros = registerPlaceholderMacros();
 
   mountAcuPostProcessAPI();
@@ -97,6 +99,7 @@ $(() => {
     offChat.stop();
     offWorldbookReconcile.stop();
     offReplicaReconcile.stop();
+    offRunStatusRetarget.stop();
     offPlaceholderMacros.stop();
     offTasksReload.stop();
     offChatScopeNotify.stop();

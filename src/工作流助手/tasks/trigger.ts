@@ -68,13 +68,14 @@ import {
   resolveManualRerunFloorId,
   resolveAutoTriggerMessageId,
 } from './message-floor';
+import { writeRunStatusToMessage } from './run-status';
 
-function persistRunStatus(
+async function persistRunStatus(
   settings: ReturnType<typeof loadSettings>,
   messageId: number,
   results: Awaited<ReturnType<typeof runPostProcessTasks>>['results'],
 ) {
-  settings.lastRunStatus = {
+  const status = {
     messageId,
     at: Date.now(),
     taskResults: results.map(r => ({
@@ -93,6 +94,8 @@ function persistRunStatus(
       apiPresetUsed: r.apiPresetUsed,
     })),
   };
+  await writeRunStatusToMessage(messageId, status);
+  settings.lastRunStatus = status;
   saveSettings(settings);
 }
 
@@ -320,7 +323,7 @@ export async function handleMessageReceived(
       );
 
       baseSettings.scheduleState = _.cloneDeep(settings.scheduleState);
-      persistRunStatus(baseSettings, targetId, results);
+      await persistRunStatus(baseSettings, targetId, results);
 
       if (cancelled) {
         acuToast('warning', '工作流已由用户取消');
