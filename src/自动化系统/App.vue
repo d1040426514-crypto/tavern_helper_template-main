@@ -3,7 +3,7 @@
     <div v-if="loading" class="app-hint">读取角色动态变量…</div>
     <div v-else-if="empty" class="app-hint">
       本层暂无前台/后台角色名单、<code>post_process_tags.npc_act</code>
-      或预演中的 <code>&lt;交互&gt;</code>
+      或本楼运行快照中的 <code>&lt;交互&gt;</code> 预演
     </div>
     <ChronicleView
       v-else

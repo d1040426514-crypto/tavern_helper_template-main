@@ -60,6 +60,7 @@ const expectedMethods = [
   'applyTaskWorkflowPreset',
   'deleteTaskWorkflowPreset',
   'getLastRunStatus',
+  'getRunStatusForFloor',
   'listApiPresets',
   'resolveTaskApiPresetName',
   'resetTaskScheduleState',
@@ -87,7 +88,7 @@ async function main(): Promise<void> {
     const { acuPostProcessTaskApi } = await import('./post-process-api.js');
     const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
     assert.deepEqual(missing, []);
-    assert.equal(expectedMethods.length, 60);
+    assert.equal(expectedMethods.length, 61);
 
     const exposed = acuPostProcessTaskApi.getEffectiveSettings();
     assert.equal(exposed.apiConfig.apiKey, '');

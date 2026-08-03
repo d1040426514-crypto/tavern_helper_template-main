@@ -10,6 +10,7 @@ import {
   getChatScopeState,
   getEffectiveSettings,
   getLastRunStatus,
+  getRunStatusForFloor,
   getTask,
   listApiPresetNames,
   listReplicaFamilyMembers,
@@ -170,6 +171,7 @@ export interface AcuPostProcessTaskAPI {
   applyTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
   deleteTaskWorkflowPreset(taskId: string, name: string): Promise<PostProcessTask>;
   getLastRunStatus(): ReturnType<typeof getLastRunStatus>;
+  getRunStatusForFloor(messageId: number): ReturnType<typeof getRunStatusForFloor>;
   listApiPresets(): string[];
   resolveTaskApiPresetName(taskId: string): string;
   resetTaskScheduleState(taskId?: string): Promise<void>;
@@ -283,6 +285,7 @@ export const acuPostProcessTaskApi: AcuPostProcessTaskAPI = {
   deleteTaskWorkflowPreset: (taskId, name) =>
     apiCall(() => deleteTaskWorkflowPreset(taskId, name, 'api')) as Promise<PostProcessTask>,
   getLastRunStatus: () => getLastRunStatus(),
+  getRunStatusForFloor: (messageId: number) => getRunStatusForFloor(messageId),
   listApiPresets: () => listApiPresetNames(),
   resolveTaskApiPresetName: (taskId: string) => resolveTaskApiPresetName(taskId),
   resetTaskScheduleState: (taskId?: string) =>

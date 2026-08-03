@@ -25,8 +25,18 @@ type ReplicaTask = {
   replicaFamilyScheduleMode?: 'auto' | 'manual';
 };
 
+type RunStatusLike = {
+  messageId?: number;
+  taskResults?: Array<{
+    skipped?: boolean;
+    success?: boolean;
+    extractedTags?: Record<string, string>;
+  }>;
+};
+
 type ReplicaApi = {
   listTasks: () => ReplicaTask[];
+  getRunStatusForFloor?: (messageId: number) => RunStatusLike | null;
 };
 
 export type ChronicleSources = {
@@ -36,7 +46,7 @@ export type ChronicleSources = {
   backNames: string[];
 };
 
-function getReplicaApi(): ReplicaApi | null {
+function getChronicleApi(): ReplicaApi | null {
   try {
     const parentWin = window.parent as Window & { AcuPostProcessAPI?: ReplicaApi };
     const api = parentWin?.AcuPostProcessAPI;
@@ -45,6 +55,20 @@ function getReplicaApi(): ReplicaApi | null {
     /* cross-origin / unavailable */
   }
   return null;
+}
+
+/** 从本楼运行快照的 extractedTags 取预演原文（跳过 skipped / 失败） */
+export function extractPreviewFromRunStatus(
+  status: RunStatusLike | null | undefined,
+  tagName: string = PREVIEW_TAG,
+): string {
+  if (!status || !Array.isArray(status.taskResults)) return '';
+  for (const r of status.taskResults) {
+    if (!r || r.skipped || r.success === false) continue;
+    const text = String(r.extractedTags?.[tagName] ?? '').trim();
+    if (text) return text;
+  }
+  return '';
 }
 
 function findRootByTaskName(api: ReplicaApi | null, taskName: string): ReplicaTask | null {
@@ -113,6 +137,15 @@ function resolveLaunchedNamesByTask(
   return listLastLaunched(root, snapshot);
 }
 
+function readPreviewRawFromFloor(messageId: number, api: ReplicaApi | null): string {
+  if (!api || typeof api.getRunStatusForFloor !== 'function') return '';
+  try {
+    return extractPreviewFromRunStatus(api.getRunStatusForFloor(messageId));
+  } catch {
+    return '';
+  }
+}
+
 /** 从 post_process_tags 扁平/嵌套读取全部 npc@act=* 内文 */
 export function flattenNpcActTags(tags: Record<string, unknown>): Record<string, string> {
   const out: Record<string, string> = {};
@@ -162,17 +195,18 @@ export function readChronicleSources(messageId?: number): ChronicleSources {
   let frontNames: string[] = [];
   let backNames: string[] = [];
 
+  const api = getChronicleApi();
+  previewRaw = readPreviewRawFromFloor(mid, api);
+
   try {
     const vars = getVariables({ type: 'message', message_id: mid }) ?? {};
     const tags = (vars.post_process_tags ?? {}) as Record<string, unknown>;
-    previewRaw = String(tags[PREVIEW_TAG] ?? '').trim();
     npcByName = flattenNpcActTags(tags);
   } catch {
     /* ignore */
   }
 
   try {
-    const api = getReplicaApi();
     const snap = readReplicaSnapshot(mid);
     frontNames = resolveLaunchedNamesByTask(FRONT_TASK_NAME, api, snap);
     backNames = resolveLaunchedNamesByTask(BACK_TASK_NAME, api, snap);

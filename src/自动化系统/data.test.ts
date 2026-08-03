@@ -1,5 +1,10 @@
 import assert from 'node:assert/strict';
-import { flattenNpcActTags, parseLaunchedNameList } from './data';
+import {
+  extractPreviewFromRunStatus,
+  flattenNpcActTags,
+  parseLaunchedNameList,
+  PREVIEW_TAG,
+} from './data';
 import { buildChronicle, parseInteractions } from './parse';
 
 function test(name: string, fn: () => void): void {
@@ -25,6 +30,34 @@ test('flattenNpcActTags nested and flat keys', () => {
 test('parseLaunchedNameList splits dunhao lists', () => {
   assert.deepEqual(parseLaunchedNameList('李明、王芳、赵铁'), ['李明', '王芳', '赵铁']);
   assert.deepEqual(parseLaunchedNameList(''), []);
+});
+
+test('extractPreviewFromRunStatus skips failed and skipped tasks', () => {
+  const raw = extractPreviewFromRunStatus({
+    messageId: 3,
+    taskResults: [
+      {
+        skipped: true,
+        extractedTags: { [PREVIEW_TAG]: '<交互 编号="X">简述: skip</交互>' },
+      },
+      {
+        success: false,
+        extractedTags: { [PREVIEW_TAG]: '<交互 编号="Y">简述: fail</交互>' },
+      },
+      {
+        success: true,
+        extractedTags: {
+          [PREVIEW_TAG]: `<交互 编号="E01" 角色="李明,王芳">
+简述: 街头偶遇
+结果: 交换情报
+</交互>`,
+        },
+      },
+    ],
+  });
+  assert.match(raw, /街头偶遇/);
+  assert.equal(extractPreviewFromRunStatus(null), '');
+  assert.equal(extractPreviewFromRunStatus({ taskResults: [] }), '');
 });
 
 test('end-to-end front/back lists + interactions + npc map', () => {

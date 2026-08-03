@@ -18,7 +18,7 @@ import { applyPresetFieldsToSettings, resolveEffectiveSettings } from './effecti
 import { emitChatScopeChanged, emitTasksChanged } from './events';
 import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
 import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
-import { resolveLastRunStatus } from './run-status';
+import { resolveLastRunStatus, resolveRunStatusForFloor } from './run-status';
 import {
   PostProcessPresetSchema,
   PostProcessTaskSchema,
@@ -995,6 +995,12 @@ export async function renameTask(
 
 export function getLastRunStatus(): ScriptSettings['lastRunStatus'] {
   return resolveLastRunStatus();
+}
+
+export function getRunStatusForFloor(
+  messageId: number,
+): ScriptSettings['lastRunStatus'] | null {
+  return resolveRunStatusForFloor(messageId);
 }
 
 export function listApiPresetNames(): string[] {
