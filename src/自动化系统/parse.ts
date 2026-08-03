@@ -508,8 +508,8 @@ export function getWealthEmoji(wealth: string): string {
     'wealth-balanced': '💵',
     'wealth-comfortable': '💎',
     'wealth-welloff': '🏦',
-    'wealth-rich': '👑',
-    'wealth-tycoon': '🏰',
+    'wealth-rich': '🏰',
+    'wealth-tycoon': '👑',
   };
   return map[cls];
 }
