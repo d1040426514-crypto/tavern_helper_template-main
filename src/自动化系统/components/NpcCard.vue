@@ -1139,9 +1139,18 @@ const backgroundRows = computed(() => {
     grid-template-columns: 1fr;
   }
 
-  /* 记忆：≤640 才单列 */
-  .npc-memory-grid {
-    grid-template-columns: 1fr;
+  /* 记忆：窄屏由 container / auto-fit 自行单列；此处只调可读性 */
+  .npc-memory-col {
+    padding: 0.55em 0.65em;
+  }
+
+  .npc-memory-list {
+    gap: 0.45em;
+  }
+
+  .npc-memory-list li {
+    font-size: 0.8em;
+    line-height: 1.55;
   }
 
   .npc-chain-section {
@@ -1163,18 +1172,6 @@ const backgroundRows = computed(() => {
   .npc-subcard {
     padding: 0.55em 0.6em 0.6em;
     gap: 0.45em;
-  }
-
-  .npc-memory-col {
-    padding: 0.5em 0.55em;
-  }
-
-  .npc-memory-list {
-    gap: 0.4em;
-  }
-
-  .npc-memory-list li {
-    line-height: 1.55;
   }
 
   .npc-social-row {
@@ -1425,25 +1422,34 @@ const backgroundRows = computed(() => {
   }
 }
 
-/* 记忆：等宽分栏 + 有序列表 */
+/* 记忆：按卡片实际宽度自适应；窄屏单列，宽屏再分栏（iframe 内 media 常不准） */
 .npc-memory-section {
-  gap: 0.4em;
+  gap: 0.45em;
+  container-type: inline-size;
+  container-name: npc-memory;
 }
 
 .npc-memory-grid {
   display: grid;
-  grid-template-columns: repeat(var(--mem-cols, 3), minmax(0, 1fr));
-  gap: 0.5em;
+  grid-template-columns: 1fr;
+  gap: 0.55em;
   width: 100%;
   align-items: stretch;
+}
+
+@container npc-memory (min-width: 36rem) {
+  .npc-memory-grid {
+    grid-template-columns: repeat(var(--mem-cols, 3), minmax(0, 1fr));
+    gap: 0.5em;
+  }
 }
 
 .npc-memory-col {
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: 0.35em;
   min-width: 0;
-  padding: 0.4em 0.5em;
+  padding: 0.5em 0.65em;
   border-radius: var(--radius-sm);
   border: 1px solid var(--border-subtle);
   background: var(--memory-bg, var(--bg-step));
@@ -1465,11 +1471,11 @@ const backgroundRows = computed(() => {
   align-items: center;
   gap: 0.3em;
   font-family: var(--font-mono);
-  font-size: 0.7em;
+  font-size: 0.72em;
   font-weight: 700;
   color: var(--accent-lavender);
   letter-spacing: 0.3px;
-  padding-bottom: 0.25em;
+  padding-bottom: 0.3em;
   border-bottom: 1px dashed var(--border-subtle);
 }
 
@@ -1486,18 +1492,19 @@ const backgroundRows = computed(() => {
 
 .npc-memory-list {
   margin: 0;
-  padding: 0 0 0 1.15em;
+  padding: 0 0 0 1.2em;
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
+  gap: 0.4em;
   list-style: decimal;
 }
 
 .npc-memory-list li {
-  font-size: 0.74em;
-  line-height: 1.45;
+  font-size: 0.78em;
+  line-height: 1.55;
   color: var(--text-secondary);
   word-break: break-word;
+  overflow-wrap: anywhere;
   padding-left: 0.15em;
 }
 
