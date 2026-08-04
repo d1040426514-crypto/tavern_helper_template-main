@@ -16,6 +16,21 @@ export function isAccessibleMessageFloor(message_id: number): boolean {
   }
 }
 
+/**
+ * 消息楼层变量 / 运行快照清理共用的保留窗口。
+ * 与历史变量清理一致：空聊天返回 null；last 取 getLastMessageId()。
+ */
+export function resolveMessageRetentionCutoff(keepFloors: number): {
+  keep: number;
+  last: number;
+  cutoff: number;
+} | null {
+  if (getChatMessages(-1).length === 0) return null;
+  const keep = Math.max(1, Math.floor(keepFloors));
+  const last = getLastMessageId();
+  return { keep, last, cutoff: last - keep };
+}
+
 export function findLatestAccessibleFloorId(): number | null {
   try {
     const latest = getChatMessages(-1)[0];

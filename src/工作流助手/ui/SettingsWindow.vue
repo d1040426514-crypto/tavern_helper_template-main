@@ -2541,7 +2541,8 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes acu-notes--sm" style="margin: 0">
                 每次工作流执行完成后，自动删除更早楼层的<strong>全部</strong>消息楼层变量（含
                 <code>stat_data</code> 与
-                <code>post_process_tags</code>），<strong>不可恢复</strong>。最新楼始终保留，不影响变量继承。
+                <code>post_process_tags</code>），并清理过旧楼层上的
+                <code>acu_workflow_run_status</code> 运行快照（保留楼若仍是肥快照会压成轻量），<strong>不可恢复</strong>。最新楼始终保留，不影响变量继承。
               </p>
             </AcuHelpPanel>
           </div>

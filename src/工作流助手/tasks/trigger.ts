@@ -68,7 +68,7 @@ import {
   resolveManualRerunFloorId,
   resolveAutoTriggerMessageId,
 } from './message-floor';
-import { writeRunStatusToMessage } from './run-status';
+import { writeRunStatusToMessage, cleanupOldRunStatusSnapshots } from './run-status';
 
 async function persistRunStatus(
   settings: ReturnType<typeof loadSettings>,
@@ -344,6 +344,7 @@ export async function handleMessageReceived(
       if (settings.messageVarRetention?.enabled) {
         const { cleanupOldMessageFloorVariables } = await import('./message-var-retention');
         cleanupOldMessageFloorVariables(settings.messageVarRetention.keepFloors);
+        await cleanupOldRunStatusSnapshots(settings.messageVarRetention.keepFloors);
       }
 
       hideTaskProgressToast();

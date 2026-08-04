@@ -1,4 +1,4 @@
-import { isAccessibleMessageFloor } from './message-floor';
+import { isAccessibleMessageFloor, resolveMessageRetentionCutoff } from './message-floor';
 
 /**
  * 保留最近 `keepFloors` 楼，清空更早楼层的全部消息楼层变量（含 stat_data、addon_data、post_process_tags 等）。
@@ -11,13 +11,10 @@ import { isAccessibleMessageFloor } from './message-floor';
  * @returns 实际被清空的楼层数
  */
 export function cleanupOldMessageFloorVariables(keepFloors: number): number {
-  if (getChatMessages(-1).length === 0) return 0;
+  const window = resolveMessageRetentionCutoff(keepFloors);
+  if (!window || window.cutoff < 0) return 0;
 
-  const keep = Math.max(1, Math.floor(keepFloors));
-  const last = getLastMessageId();
-  const cutoff = last - keep;
-  if (cutoff < 0) return 0;
-
+  const { keep, cutoff } = window;
   let cleared = 0;
   for (let message_id = 0; message_id <= cutoff; message_id++) {
     if (!isAccessibleMessageFloor(message_id)) continue;

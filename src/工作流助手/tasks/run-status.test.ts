@@ -11,6 +11,8 @@ const g = globalThis as typeof globalThis & {
   getVariables?: (opt: unknown) => Record<string, unknown>;
   insertOrAssignVariables?: (data: unknown, opt: unknown) => void;
   getScriptId?: () => string;
+  getChatMessages?: (id: number) => Array<{ message_id: number; role: string }>;
+  getLastMessageId?: () => number;
   defineStore?: (...args: unknown[]) => unknown;
   ref?: <T>(v: T) => { value: T };
   watchEffect?: (fn: () => void) => void;
@@ -36,6 +38,17 @@ g.getVariables = () => ({ ...savedVars });
 g.insertOrAssignVariables = (data: unknown) => {
   Object.assign(savedVars, data as Record<string, unknown>);
 };
+g.getChatMessages = (id: number) => {
+  if (id === -1) {
+    if (chat.length === 0) return [];
+    return [{ message_id: chat.length - 1, role: 'assistant' }];
+  }
+  if (id >= 0 && id < chat.length) {
+    return [{ message_id: id, role: chat[id]?.is_user ? 'user' : 'assistant' }];
+  }
+  return [];
+};
+g.getLastMessageId = () => Math.max(0, chat.length - 1);
 g.defineStore = () => () => ({});
 g.ref = <T>(v: T) => ({ value: v });
 g.watchEffect = () => {};
@@ -81,6 +94,9 @@ void (async () => {
     resolveRunStatusForFloor,
     retargetRunStatusCache,
     resolveLastRunStatus,
+    toFloorRunStatus,
+    cleanupOldRunStatusSnapshots,
+    runStatusIsHeavy,
   } = await import('./run-status');
   const { loadSettings, saveSettings } = await import('../settings');
 
@@ -97,6 +113,23 @@ void (async () => {
         promptMessages: [],
         aiOutput: '',
         aiReasoning: '',
+      },
+    ],
+  });
+
+  const heavyStatus = (messageId: number, tag: string) => ({
+    messageId,
+    at: 100 + messageId,
+    taskResults: [
+      {
+        taskId: 't1',
+        taskName: '任务',
+        success: true,
+        skipped: false,
+        extractedTags: { onlyRelay: tag },
+        promptMessages: [{ role: 'user', content: 'HUGE_PROMPT' }],
+        aiOutput: 'HUGE_OUTPUT',
+        aiReasoning: 'HUGE_REASON',
       },
     ],
   });
@@ -118,6 +151,19 @@ void (async () => {
     );
     // 不写 message.data
     assert.equal(chat[1]?.data, undefined);
+  });
+
+  test('writeRunStatusToMessage strips heavy fields', async () => {
+    resetChat([{ is_user: false, mes: 'ai' }]);
+    await writeRunStatusToMessage(0, heavyStatus(0, 'LIGHT'));
+    const stored = chat[0]?.[ACU_WORKFLOW_RUN_STATUS_KEY] as {
+      taskResults: Array<{ aiOutput: string; aiReasoning: string; promptMessages: unknown[]; extractedTags: Record<string, string> }>;
+    };
+    assert.equal(stored.taskResults[0]?.extractedTags.onlyRelay, 'LIGHT');
+    assert.equal(stored.taskResults[0]?.aiOutput, '');
+    assert.equal(stored.taskResults[0]?.aiReasoning, '');
+    assert.deepEqual(stored.taskResults[0]?.promptMessages, []);
+    assert.equal(runStatusIsHeavy(toFloorRunStatus(heavyStatus(0, 'X'))), false);
   });
 
   test('read / resolveRunStatusForFloor', async () => {
@@ -159,6 +205,20 @@ void (async () => {
     assert.equal(after.taskResults[0]?.extractedTags?.onlyRelay, 'KEEP');
   });
 
+  test('retargetRunStatusCache does not overwrite full settings when floor exists', () => {
+    resetChat([
+      { is_user: false, mes: 'ai', [ACU_WORKFLOW_RUN_STATUS_KEY]: sampleStatus(0, 'LIGHT_MES') },
+    ]);
+    const settings = loadSettings();
+    settings.lastRunStatus = heavyStatus(0, 'FULL_SETTINGS');
+    saveSettings(settings);
+
+    retargetRunStatusCache();
+    const after = loadSettings().lastRunStatus;
+    assert.equal(after.taskResults[0]?.extractedTags?.onlyRelay, 'FULL_SETTINGS');
+    assert.equal(after.taskResults[0]?.aiOutput, 'HUGE_OUTPUT');
+  });
+
   test('retargetRunStatusCache clears when no snapshots remain', () => {
     resetChat([{ is_user: false, mes: 'ai' }, { is_user: true, mes: 'u' }]);
     const settings = loadSettings();
@@ -169,7 +229,18 @@ void (async () => {
     assert.deepEqual(loadSettings().lastRunStatus.taskResults, []);
   });
 
-  test('resolveLastRunStatus prefers mes over settings cache', () => {
+  test('resolveLastRunStatus prefers settings when its floor still exists', () => {
+    resetChat([
+      { is_user: false, mes: 'ai', [ACU_WORKFLOW_RUN_STATUS_KEY]: sampleStatus(0, 'MES') },
+    ]);
+    const settings = loadSettings();
+    settings.lastRunStatus = heavyStatus(0, 'SETTINGS');
+    saveSettings(settings);
+    assert.equal(resolveLastRunStatus().taskResults[0]?.extractedTags?.onlyRelay, 'SETTINGS');
+    assert.equal(resolveLastRunStatus().taskResults[0]?.aiOutput, 'HUGE_OUTPUT');
+  });
+
+  test('resolveLastRunStatus falls back to mes when settings floor gone', () => {
     resetChat([
       { is_user: false, mes: 'ai', [ACU_WORKFLOW_RUN_STATUS_KEY]: sampleStatus(0, 'MES') },
     ]);
@@ -177,6 +248,63 @@ void (async () => {
     settings.lastRunStatus = sampleStatus(99, 'CACHE');
     saveSettings(settings);
     assert.equal(resolveLastRunStatus().taskResults[0]?.extractedTags?.onlyRelay, 'MES');
+  });
+
+  test('cleanupOldRunStatusSnapshots deletes old and slims kept heavy', async () => {
+    // 5 floors, keep 2 → cutoff = 2; delete 0..2, slim 3..4 if heavy
+    resetChat([
+      { is_user: false, mes: 'a0', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(0, 'OLD0') },
+      { is_user: true, mes: 'u1' },
+      { is_user: false, mes: 'a2', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(2, 'OLD2') },
+      { is_user: false, mes: 'a3', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(3, 'KEEP3') },
+      { is_user: false, mes: 'a4', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(4, 'KEEP4') },
+    ]);
+    const n = await cleanupOldRunStatusSnapshots(2);
+    assert.ok(n >= 3);
+    assert.equal(chat[0]?.[ACU_WORKFLOW_RUN_STATUS_KEY], undefined);
+    assert.equal(chat[2]?.[ACU_WORKFLOW_RUN_STATUS_KEY], undefined);
+    const keep3 = chat[3]?.[ACU_WORKFLOW_RUN_STATUS_KEY] as {
+      taskResults: Array<{ aiOutput: string; extractedTags: Record<string, string> }>;
+    };
+    assert.equal(keep3.taskResults[0]?.extractedTags.onlyRelay, 'KEEP3');
+    assert.equal(keep3.taskResults[0]?.aiOutput, '');
+    assert.equal(saveChatCalls, 1);
+  });
+
+  test('cleanup uses getLastMessageId cutoff even if chat.length differs', async () => {
+    const { resolveMessageRetentionCutoff } = await import('./message-floor');
+    resetChat([
+      { is_user: false, mes: 'a0', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(0, 'A') },
+      { is_user: false, mes: 'a1', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(1, 'B') },
+      { is_user: false, mes: 'a2', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(2, 'C') },
+      { is_user: false, mes: 'a3', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(3, 'D') },
+      { is_user: false, mes: 'a4', [ACU_WORKFLOW_RUN_STATUS_KEY]: heavyStatus(4, 'E') },
+    ]);
+    // 假装 getLastMessageId 比 chat.length-1 小 1
+    const prevLast = g.getLastMessageId;
+    g.getLastMessageId = () => 3;
+    try {
+      const w = resolveMessageRetentionCutoff(2);
+      assert.equal(w?.last, 3);
+      assert.equal(w?.cutoff, 1);
+      await cleanupOldRunStatusSnapshots(2);
+      assert.equal(chat[0]?.[ACU_WORKFLOW_RUN_STATUS_KEY], undefined);
+      assert.equal(chat[1]?.[ACU_WORKFLOW_RUN_STATUS_KEY], undefined);
+      // 2、3 在保留窗内应被压扁保留；4 > last 不压扁也不删（仍在 chat 里）
+      assert.ok(chat[2]?.[ACU_WORKFLOW_RUN_STATUS_KEY]);
+      assert.equal(
+        (chat[2]?.[ACU_WORKFLOW_RUN_STATUS_KEY] as { taskResults: Array<{ aiOutput: string }> }).taskResults[0]
+          ?.aiOutput,
+        '',
+      );
+      assert.equal(
+        (chat[4]?.[ACU_WORKFLOW_RUN_STATUS_KEY] as { taskResults: Array<{ aiOutput: string }> }).taskResults[0]
+          ?.aiOutput,
+        'HUGE_OUTPUT',
+      );
+    } finally {
+      g.getLastMessageId = prevLast;
+    }
   });
 
   test('read rebinds stale embedded messageId to current floor', () => {
