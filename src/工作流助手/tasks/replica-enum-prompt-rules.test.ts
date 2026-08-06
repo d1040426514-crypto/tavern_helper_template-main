@@ -32,6 +32,8 @@ test('rules cover spec values task renames enums and registry semantics', () => 
   assert.match(content, /"enums"/);
   assert.match(content, /renames\.to/);
   assert.match(content, /整包跳过/);
+  assert.match(content, /最后一个 <ReplicaEnum> 块/);
+  assert.match(content, /仅最后一块生效/);
 });
 
 test('rules group attaches to PostProcessTask schema', () => {

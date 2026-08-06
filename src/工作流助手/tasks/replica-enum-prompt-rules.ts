@@ -17,14 +17,14 @@ export function buildReplicaEnumPromptGroupContent(): string {
 - 同轮链式 rename（如 a→b 与 b→c）按依赖顺序逐条应用；当前成员不在某条 from 上时跳过该边
 - registry 只注册 values ∪ renames.to，不注册 from
 - 纯 renames 可不带 values；values 与 renames 可同块出现
-- 支持批量 {"enums":[...]}；正文可含其它叙述，解析器只提取 <ReplicaEnum> 块
+- 支持批量 {"enums":[...]}；解析器只认全文最后一个 <ReplicaEnum> 块（多块时较早块忽略）；推荐单块 + {"enums":[...]}
 
 ## 单条广播（无 task）
 <ReplicaEnum>{"spec":"item@name","values":["断剑","药剂"]}</ReplicaEnum>
 
 ## 定向（有 task）
-<ReplicaEnum>{"spec":"item@name","values":["断剑"],"task":"副本族处理"}</ReplicaEnum>
-<ReplicaEnum>{"spec":"item@name","values":["药剂"],"task":"副本族旁注"}</ReplicaEnum>
+同轮多个 task 应合并为一块 {"enums":[...]}；若分写多块 XML，仅最后一块生效。
+<ReplicaEnum>{"enums":[{"spec":"item@name","values":["断剑"],"task":"副本族处理"},{"spec":"item@name","values":["药剂"],"task":"副本族旁注"}]}</ReplicaEnum>
 
 ## 改名 + 枚举（renames 与 values 同块）
 <ReplicaEnum>{"spec":"item@name","renames":[{"from":"断剑","to":"锈剑"}],"values":["锈剑","药剂"]}</ReplicaEnum>

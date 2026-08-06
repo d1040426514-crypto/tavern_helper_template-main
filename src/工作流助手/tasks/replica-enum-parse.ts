@@ -140,6 +140,12 @@ export function extractReplicaEnumBlockInners(text: string): string[] {
   return findAllTagInstances(source, REPLICA_ENUM_TAG).map(inst => inst.inner.trim()).filter(Boolean);
 }
 
+/** 全文最后一个非空 <ReplicaEnum> 块内文；与 inject 裸标签「只取最后一次」语义对齐 */
+export function extractLastReplicaEnumBlockInner(text: string): string | null {
+  const inners = extractReplicaEnumBlockInners(text);
+  return inners.length ? inners[inners.length - 1]! : null;
+}
+
 export function parseReplicaEnumJson(inner: string): ReplicaEnumParseResult {
   const result: ReplicaEnumParseResult = { entries: [] };
   const trimmed = String(inner ?? '').trim();
@@ -169,14 +175,9 @@ export function parseReplicaEnumJson(inner: string): ReplicaEnumParseResult {
 }
 
 export function parseReplicaEnumFromResponse(text: string): ReplicaEnumParseResult {
-  const merged: ReplicaEnumParseResult = { entries: [] };
-  for (const inner of extractReplicaEnumBlockInners(text)) {
-    const block = parseReplicaEnumJson(inner);
-    for (const entry of block.entries) {
-      mergeEnumEntry(merged.entries, entry);
-    }
-  }
-  return merged;
+  const inner = extractLastReplicaEnumBlockInner(text);
+  if (!inner) return { entries: [] };
+  return parseReplicaEnumJson(inner);
 }
 
 /** 从解析结果抽出待应用改名列表（顺序保留；同 from 后写覆盖已在 merge 完成） */

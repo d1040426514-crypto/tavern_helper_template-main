@@ -52,24 +52,36 @@ test('parse batch enums array', () => {
   assert.deepEqual(findEntry(parsed, 'item@id')?.values, ['1', '2']);
 });
 
-test('merge multiple ReplicaEnum blocks same bucket', () => {
+test('uses last ReplicaEnum block when multiple present', () => {
   const text = [
     '<ReplicaEnum>{"spec":"item@id","values":["1"]}</ReplicaEnum>',
     '叙述文字',
     '<ReplicaEnum>{"spec":"item@id","values":["2"]}</ReplicaEnum>',
   ].join('\n');
   const parsed = parseReplicaEnumFromResponse(text);
-  assert.deepEqual(findEntry(parsed, 'item@id')?.values, ['1', '2']);
+  assert.deepEqual(findEntry(parsed, 'item@id')?.values, ['2']);
 });
 
-test('merge keeps directed and broadcast separate', () => {
+test('multiple blocks uses last only directed entry', () => {
   const text = [
     '<ReplicaEnum>{"spec":"item@id","values":["1","2"]}</ReplicaEnum>',
     '<ReplicaEnum>{"spec":"item@id","values":["1"],"task":"族A"}</ReplicaEnum>',
   ].join('');
   const parsed = parseReplicaEnumFromResponse(text);
-  assert.deepEqual(findEntry(parsed, 'item@id')?.values, ['1', '2']);
+  assert.equal(findEntry(parsed, 'item@id')?.values, undefined);
   assert.deepEqual(findEntry(parsed, 'item@id', '族A')?.values, ['1']);
+});
+
+test('thinking draft then body final uses body only', () => {
+  const text = [
+    '<think>',
+    '草稿',
+    '<ReplicaEnum>{"spec":"npc@act","values":["草稿角色"],"task":"后台角色"}</ReplicaEnum>',
+    '</think>',
+    '<ReplicaEnum>{"spec":"npc@act","values":["正式角色"],"task":"后台角色"}</ReplicaEnum>',
+  ].join('\n');
+  const parsed = parseReplicaEnumFromResponse(text);
+  assert.deepEqual(findEntry(parsed, 'npc@act', '后台角色')?.values, ['正式角色']);
 });
 
 test('ignore invalid entry block', () => {
@@ -275,7 +287,7 @@ test('normalize renames drops empty and from===to; later from wins', () => {
   assert.deepEqual(findEntry(parsed, 'item@id')?.renames, [{ from: 'a', to: 'c' }]);
 });
 
-test('merge renames across blocks same bucket', () => {
+test('multiple blocks uses last renames only', () => {
   const text = [
     '<ReplicaEnum>{"spec":"item@id","renames":[{"from":"a","to":"b"}]}</ReplicaEnum>',
     '<ReplicaEnum>{"spec":"item@id","renames":[{"from":"c","to":"d"}],"values":["d"]}</ReplicaEnum>',
@@ -283,10 +295,7 @@ test('merge renames across blocks same bucket', () => {
   const parsed = parseReplicaEnumFromResponse(text);
   const entry = findEntry(parsed, 'item@id');
   assert.deepEqual(entry?.values, ['d']);
-  assert.deepEqual(entry?.renames, [
-    { from: 'a', to: 'b' },
-    { from: 'c', to: 'd' },
-  ]);
+  assert.deepEqual(entry?.renames, [{ from: 'c', to: 'd' }]);
 });
 
 test('registry registers rename to values not from', () => {
