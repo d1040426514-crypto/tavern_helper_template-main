@@ -15,6 +15,8 @@ import {
   tryMarkProcessing,
   unmarkProcessing,
 } from './runtime';
+import { clearPendingReplicaRenames } from './replica-enum-pending';
+import { applyPendingReplicaRenames } from './replica-enum-rename';
 import { applyAssistantChatTagExtract } from './chat-tag-extract';
 import {
   clearStalePostProcessRunMarkers,
@@ -288,6 +290,8 @@ export async function handleMessageReceived(
       updateTaskProgressToast(update);
     };
 
+    let newlyCreatedReplicaIds: string[] = [];
+
     try {
       if (isRerun) {
         restorePostProcessTagsFromPreviousFloor(targetId);
@@ -308,8 +312,10 @@ export async function handleMessageReceived(
       }
       applyAssistantChatTagExtract(targetId, settings, { isRerun });
 
+      clearPendingReplicaRenames(targetId);
+
       const snapshot = captureDataSnapshot();
-      const { results, cancelled, newlyCreatedReplicaIds, executedMemberIds } = await runPostProcessTasks(
+      const runResult = await runPostProcessTasks(
         settings,
         snapshot,
         targetId,
@@ -321,11 +327,14 @@ export async function handleMessageReceived(
           taskIdFilter: options?.taskIdFilter,
         },
       );
+      const { results, cancelled, newlyCreatedReplicaIds: createdIds, executedMemberIds } = runResult;
+      newlyCreatedReplicaIds = createdIds;
 
       baseSettings.scheduleState = _.cloneDeep(settings.scheduleState);
       await persistRunStatus(baseSettings, targetId, results);
 
       if (cancelled) {
+        clearPendingReplicaRenames(targetId);
         acuToast('warning', '工作流已由用户取消');
         return;
       }
@@ -357,9 +366,22 @@ export async function handleMessageReceived(
         return;
       }
       if (e instanceof RunCancelledError) {
+        clearPendingReplicaRenames(targetId);
         acuToast('warning', '工作流已由用户取消');
         return;
       }
+      try {
+        settings.tasks = await applyPendingReplicaRenames({
+          messageId: targetId,
+          tasks: settings.tasks,
+          rules: settings.chatWorldbookWriteRules ?? [],
+          settings,
+        });
+        await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
+      } catch (flushErr) {
+        console.warn('[工作流助手] 异常后 flush pending rename 失败:', flushErr);
+      }
+      clearPendingReplicaRenames(targetId);
       console.error(SCRIPT_LOG_PREFIX, e);
       acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);
     } finally {

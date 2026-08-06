@@ -2,6 +2,8 @@ import assert from 'node:assert/strict';
 import {
   buildDirectedEnumRegistryKey,
   collectEnumRegistryAttrValues,
+  collectReplicaEnumRenames,
+  composePendingReplicaRenames,
   ENUM_REGISTRY_MARKER,
   parseReplicaEnumFromResponse,
   replicaEnumResultToRegistryTags,
@@ -249,6 +251,123 @@ test('two families same spec: directed vs broadcast', () => {
     preparedB.tasks.map(t => t.replicaFamilyAttrValue).sort(),
     ['1', '2'],
   );
+});
+
+test('parse renames with values', () => {
+  const text = `<ReplicaEnum>{"spec":"item@id","renames":[{"from":"断剑","to":"锈剑"}],"values":["锈剑","药剂"]}</ReplicaEnum>`;
+  const parsed = parseReplicaEnumFromResponse(text);
+  const entry = findEntry(parsed, 'item@id');
+  assert.deepEqual(entry?.values, ['锈剑', '药剂']);
+  assert.deepEqual(entry?.renames, [{ from: '断剑', to: '锈剑' }]);
+});
+
+test('parse pure renames without values', () => {
+  const text = `<ReplicaEnum>{"spec":"item@id","renames":[{"from":"a","to":"b"}]}</ReplicaEnum>`;
+  const parsed = parseReplicaEnumFromResponse(text);
+  const entry = findEntry(parsed, 'item@id');
+  assert.deepEqual(entry?.values, []);
+  assert.deepEqual(entry?.renames, [{ from: 'a', to: 'b' }]);
+});
+
+test('normalize renames drops empty and from===to; later from wins', () => {
+  const text = `<ReplicaEnum>{"spec":"item@id","renames":[{"from":"","to":"x"},{"from":"a","to":"a"},{"from":"a","to":"b"},{"from":"a","to":"c"}]}</ReplicaEnum>`;
+  const parsed = parseReplicaEnumFromResponse(text);
+  assert.deepEqual(findEntry(parsed, 'item@id')?.renames, [{ from: 'a', to: 'c' }]);
+});
+
+test('merge renames across blocks same bucket', () => {
+  const text = [
+    '<ReplicaEnum>{"spec":"item@id","renames":[{"from":"a","to":"b"}]}</ReplicaEnum>',
+    '<ReplicaEnum>{"spec":"item@id","renames":[{"from":"c","to":"d"}],"values":["d"]}</ReplicaEnum>',
+  ].join('');
+  const parsed = parseReplicaEnumFromResponse(text);
+  const entry = findEntry(parsed, 'item@id');
+  assert.deepEqual(entry?.values, ['d']);
+  assert.deepEqual(entry?.renames, [
+    { from: 'a', to: 'b' },
+    { from: 'c', to: 'd' },
+  ]);
+});
+
+test('registry registers rename to values not from', () => {
+  const tags = replicaEnumResultToRegistryTags({
+    entries: [
+      {
+        specKey: 'item@id',
+        values: ['药剂'],
+        renames: [{ from: '断剑', to: '锈剑' }],
+      },
+    ],
+  });
+  assert.equal(tags['item@id=锈剑'], ENUM_REGISTRY_MARKER);
+  assert.equal(tags['item@id=药剂'], ENUM_REGISTRY_MARKER);
+  assert.equal(tags['item@id=断剑'], undefined);
+});
+
+test('registry pure renames registers to', () => {
+  const tags = replicaEnumResultToRegistryTags({
+    entries: [{ specKey: 'item@id', values: [], renames: [{ from: 'a', to: 'b' }] }],
+  });
+  assert.equal(tags['item@id=b'], ENUM_REGISTRY_MARKER);
+  assert.equal(tags['item@id=a'], undefined);
+});
+
+test('collectReplicaEnumRenames extracts pending list', () => {
+  const parsed = parseReplicaEnumFromResponse(
+    `<ReplicaEnum>{"spec":"item@id","renames":[{"from":"a","to":"b"}],"task":"族A"}</ReplicaEnum>`,
+  );
+  assert.deepEqual(collectReplicaEnumRenames(parsed), [
+    { specKey: 'item@id', taskRef: '族A', from: 'a', to: 'b' },
+  ]);
+});
+
+test('composePendingReplicaRenames merges chain in same bucket', () => {
+  assert.deepEqual(
+    composePendingReplicaRenames([
+      { specKey: 'item@id', from: 'a', to: 'b' },
+      { specKey: 'item@id', from: 'b', to: 'c' },
+    ]),
+    [
+      { specKey: 'item@id', from: 'a', to: 'b', taskRef: undefined },
+      { specKey: 'item@id', from: 'b', to: 'c', taskRef: undefined },
+    ],
+  );
+});
+
+test('composePendingReplicaRenames topologically sorts out-of-order edges', () => {
+  assert.deepEqual(
+    composePendingReplicaRenames([
+      { specKey: 'item@id', from: 'b', to: 'c' },
+      { specKey: 'item@id', from: 'a', to: 'b' },
+    ]),
+    [
+      { specKey: 'item@id', from: 'a', to: 'b', taskRef: undefined },
+      { specKey: 'item@id', from: 'b', to: 'c', taskRef: undefined },
+    ],
+  );
+});
+
+test('composePendingReplicaRenames drops cyclic edges', () => {
+  assert.deepEqual(
+    composePendingReplicaRenames([
+      { specKey: 'item@id', from: 'a', to: 'b' },
+      { specKey: 'item@id', from: 'b', to: 'a' },
+    ]),
+    [],
+  );
+});
+
+test('directed renames register directed keys for to', () => {
+  const tags = replicaEnumResultToRegistryTags(
+    {
+      entries: [
+        { specKey: 'item@id', values: [], renames: [{ from: '1', to: '9' }], taskRef: '族A' },
+      ],
+    },
+    taskRef => (taskRef === '族A' ? { rootId: 'root-a', specKey: 'item@id' } : null),
+  );
+  assert.equal(tags[buildDirectedEnumRegistryKey('root-a', 'item', 'id', '9')], ENUM_REGISTRY_MARKER);
+  assert.equal(tags['item@id=9'], undefined);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

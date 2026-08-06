@@ -13,6 +13,7 @@ import {
   listReplicaFamilyCleanupCandidates,
   migrateLastManualKeepByRootToSpec,
   pruneFloorTagKeysForReplica,
+  migrateFloorTagKeysForReplica,
   shouldTriggerCleanup,
   tickCleanupRound,
 } from './replica-family-cleanup';
@@ -516,6 +517,59 @@ test('pruneFloorTagKeysForReplica skips inaccessible message floor', () => {
   pruneFloorTagKeysForReplica('item@id', ['2'], 0);
   assert.equal(updateCalled, false);
   assert.equal((vars.post_process_tags as Record<string, unknown>)['item@id=2'], 'flat-drop');
+});
+
+test('migrateFloorTagKeysForReplica moves nested and flat keys', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    let vars: Record<string, unknown> = {
+      post_process_tags: {
+        item_id: { '断剑': 'content-a', '药剂': 'keep' },
+        'item@id=断剑': 'flat-a',
+        'item@id=药剂': 'flat-keep',
+      },
+    };
+    g.updateVariablesWith = (
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      _opts: unknown,
+    ) => {
+      vars = fn(vars);
+      return vars;
+    };
+    const ok = migrateFloorTagKeysForReplica('item@id', '断剑', '锈剑', 0);
+    assert.equal(ok, true);
+    const tags = vars.post_process_tags as Record<string, unknown>;
+    assert.deepEqual(tags.item_id, { '锈剑': 'content-a', '药剂': 'keep' });
+    assert.equal(tags['item@id=锈剑'], 'flat-a');
+    assert.equal(tags['item@id=断剑'], undefined);
+    assert.equal(tags['item@id=药剂'], 'flat-keep');
+  });
+});
+
+test('migrateFloorTagKeysForReplica skips when target exists', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    let vars: Record<string, unknown> = {
+      post_process_tags: {
+        item_id: { a: 'from', b: 'to-keep' },
+        'item@id=a': 'flat-from',
+        'item@id=b': 'flat-to',
+      },
+    };
+    g.updateVariablesWith = (
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      _opts: unknown,
+    ) => {
+      vars = fn(vars);
+      return vars;
+    };
+    const ok = migrateFloorTagKeysForReplica('item@id', 'a', 'b', 0);
+    assert.equal(ok, false);
+    const tags = vars.post_process_tags as Record<string, unknown>;
+    assert.deepEqual(tags.item_id, { a: 'from', b: 'to-keep' });
+    assert.equal(tags['item@id=a'], 'flat-from');
+    assert.equal(tags['item@id=b'], 'flat-to');
+  });
 });
 
 test('incrementReplicaRunCounts accumulates per member', () => {

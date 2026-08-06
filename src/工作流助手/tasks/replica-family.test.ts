@@ -27,6 +27,7 @@ import {
   mergeReplicaFamilyFromRelay,
   mirrorAllReplicaFamilies,
   promoteReplicaApiPatchToCustom,
+  renameReplicaFamilyMemberAttr,
   stripReplicaFamilyMembers,
   prunePromptAutoSegmentInsertedOverrides,
   patchPromptAutoSegmentInsertedOverride,
@@ -1002,6 +1003,56 @@ test('assertReplicaMemberPatchAllowed allows promptAutoSegmentInsertedOverrides'
     assertReplicaMemberPatchAllowed(member, { promptAutoSegmentInsertedOverrides: { a: true } }),
   );
   assert.throws(() => assertReplicaMemberPatchAllowed(member, { promptGroups: [] }));
+});
+
+test('renameReplicaFamilyMemberAttr keeps id launched and remirrors name', () => {
+  const root = baseTask({
+    syncAsReplicaFamily: true,
+    replicaFamilyBaseName: '处理 item',
+    replicaFamilySpec: 'item@id',
+  });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['断剑'], [root]).tasks;
+  const member = tasks.find(t => t.replicaFamilyAttrValue === '断剑')!;
+  const memberId = member.id;
+  tasks = tasks.map(t =>
+    t.id === memberId ? { ...t, replicaFamilyLaunched: true, apiPresetMode: 'custom' as const, apiPresetName: '专属' } : t,
+  );
+  const liveRoot = tasks.find(t => t.id === root.id)!;
+  const result = renameReplicaFamilyMemberAttr(liveRoot, '断剑', '锈剑', tasks);
+  assert.equal(result.renamed, true);
+  const renamed = result.tasks.find(t => t.id === memberId)!;
+  assert.equal(renamed.replicaFamilyAttrValue, '锈剑');
+  assert.equal(renamed.name, '处理 item 锈剑');
+  assert.equal(renamed.replicaFamilyLaunched, true);
+  assert.equal(renamed.apiPresetMode, 'custom');
+  assert.equal(renamed.apiPresetName, '专属');
+  assert.ok(renamed.promptGroups[0]?.content.includes('{{item@id=锈剑}}'));
+});
+
+test('renameReplicaFamilyMemberAttr skips when to exists', () => {
+  const root = baseTask({ syncAsReplicaFamily: true, replicaFamilyBaseName: '处理 item' });
+  const tasks = mergeReplicaFamilyFromRelay(root, ['1', '2'], [root]).tasks;
+  const liveRoot = tasks.find(t => t.id === root.id)!;
+  const result = renameReplicaFamilyMemberAttr(liveRoot, '1', '2', tasks);
+  assert.equal(result.renamed, false);
+  assert.ok(result.skipReason?.includes('已存在'));
+  assert.equal(tasks.find(t => t.replicaFamilyAttrValue === '1')?.replicaFamilyAttrValue, '1');
+});
+
+test('rename then merge with new value does not create duplicate', () => {
+  const root = baseTask({ syncAsReplicaFamily: true, replicaFamilyBaseName: '处理 item' });
+  let tasks = mergeReplicaFamilyFromRelay(root, ['断剑'], [root]).tasks;
+  const memberId = tasks.find(t => t.replicaFamilyAttrValue === '断剑')!.id;
+  const liveRoot = tasks.find(t => t.id === root.id)!;
+  tasks = renameReplicaFamilyMemberAttr(liveRoot, '断剑', '锈剑', tasks).tasks;
+  const merged = mergeReplicaFamilyFromRelay(
+    tasks.find(t => t.id === root.id)!,
+    ['锈剑'],
+    tasks,
+  );
+  assert.equal(merged.newlyCreatedIds.length, 0);
+  assert.equal(merged.tasks.filter(t => t.replicaFamilyRootId === root.id).length, 1);
+  assert.equal(merged.tasks.find(t => t.id === memberId)?.replicaFamilyAttrValue, '锈剑');
 });
 
 if (process.exitCode) process.exit(process.exitCode);

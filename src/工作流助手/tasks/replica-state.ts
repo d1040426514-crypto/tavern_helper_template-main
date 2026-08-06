@@ -5,6 +5,7 @@ import {
   mergeReplicaFamilyFromRelay,
 } from './replica-family';
 import type { PostProcessTask } from './schema';
+import { sortAttrValues } from './tag-extract';
 
 export const POST_PROCESS_REPLICA_STATE_KEY = '_post_process_replica_state';
 
@@ -174,6 +175,43 @@ export function applyLastEnumToReplicaSnapshot(
     };
   }
   return out;
+}
+
+/** 将某 root 快照中的 attrValue 列表 from→to（去重排序） */
+export function remapReplicaRootAttrValueInSnapshot(
+  snapshot: ReplicaStateSnapshot,
+  rootId: string,
+  fromAttr: string,
+  toAttr: string,
+): ReplicaStateSnapshot {
+  const from = String(fromAttr ?? '').trim();
+  const to = String(toAttr ?? '').trim();
+  const state = snapshot[rootId];
+  if (!state || !from || !to || from === to) return snapshot;
+
+  const remapList = (list?: string[]): string[] | undefined => {
+    if (!list?.length) return list;
+    const next = sortAttrValues([...new Set(list.map(v => (v === from ? to : v)).filter(Boolean))]);
+    return next.length ? next : undefined;
+  };
+
+  const attrValues = remapList(state.attrValues) ?? [];
+  if (!attrValues.length) {
+    const { [rootId]: _removed, ...rest } = snapshot;
+    return rest;
+  }
+
+  const launchedAttrValues = remapList(state.launchedAttrValues);
+  const lastEnumAttrValues = remapList(state.lastEnumAttrValues);
+
+  return {
+    ...snapshot,
+    [rootId]: {
+      attrValues,
+      ...(launchedAttrValues ? { launchedAttrValues } : {}),
+      ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
+    },
+  };
 }
 
 /** 依据快照期望的 attrValue 列表，将 tasks 中副本成员重放为一致状态 */

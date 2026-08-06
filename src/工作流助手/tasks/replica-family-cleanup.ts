@@ -414,6 +414,166 @@ export function pruneFloorTagKeysForReplica(
   );
 }
 
+/**
+ * 将当前楼 post_process_tags 中某 spec 的 attrValue 从 from 迁到 to（nested + flat）。
+ * 目标键已存在时跳过（不覆盖）；返回是否发生了迁移。
+ */
+export function readFloorTagContainerRaw(messageId: number): TagContainerRaw {
+  if (!isAccessibleMessageFloor(messageId)) return {};
+  try {
+    const variables = getVariables({ type: 'message', message_id: messageId });
+    return readTagContainerRaw(variables);
+  } catch {
+    return {};
+  }
+}
+
+function attrValueExistsInTagContainer(
+  raw: TagContainerRaw,
+  groupKey: string,
+  flatKey: string,
+  attrValue: string,
+): boolean {
+  const existing = raw[groupKey];
+  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+    if (Object.prototype.hasOwnProperty.call(existing as Record<string, string>, attrValue)) {
+      return true;
+    }
+  }
+  return Object.prototype.hasOwnProperty.call(raw, flatKey);
+}
+
+/** 只读 preflight：from 存在且 to 已在 nested/flat 任一处存在则不可迁移 */
+export function canMigrateFloorTagKeysForReplica(
+  spec: string,
+  fromAttr: string,
+  toAttr: string,
+  messageId: number,
+): boolean {
+  const from = String(fromAttr ?? '').trim();
+  const to = String(toAttr ?? '').trim();
+  if (!from || !to || from === to) return true;
+  if (!isAccessibleMessageFloor(messageId)) return true;
+  const parsed = parseExtractTagSpec(spec);
+  if (!parsed?.attrName) return true;
+
+  const raw = readFloorTagContainerRaw(messageId);
+  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
+  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
+  const flatTo = buildCompositeKey(parsed.tagName, parsed.attrName, to);
+
+  const fromExists =
+    attrValueExistsInTagContainer(raw, groupKey, flatFrom, from) ||
+    Object.prototype.hasOwnProperty.call(raw, flatFrom);
+  if (!fromExists) return true;
+
+  return !attrValueExistsInTagContainer(raw, groupKey, flatTo, to) && !Object.prototype.hasOwnProperty.call(raw, flatTo);
+}
+
+/** 只读：当前楼 post_process_tags 是否含 from 键 */
+export function floorTagFromExistsForReplica(
+  spec: string,
+  fromAttr: string,
+  messageId: number,
+): boolean {
+  const from = String(fromAttr ?? '').trim();
+  if (!from || !isAccessibleMessageFloor(messageId)) return false;
+  const parsed = parseExtractTagSpec(spec);
+  if (!parsed?.attrName) return false;
+  const raw = readFloorTagContainerRaw(messageId);
+  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
+  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
+  return (
+    attrValueExistsInTagContainer(raw, groupKey, flatFrom, from) ||
+    Object.prototype.hasOwnProperty.call(raw, flatFrom)
+  );
+}
+
+export function migrateFloorTagKeysForReplica(
+  spec: string,
+  fromAttr: string,
+  toAttr: string,
+  messageId: number,
+): boolean {
+  const from = String(fromAttr ?? '').trim();
+  const to = String(toAttr ?? '').trim();
+  if (!from || !to || from === to) return false;
+  if (!isAccessibleMessageFloor(messageId)) return false;
+  const parsed = parseExtractTagSpec(spec);
+  if (!parsed?.attrName) return false;
+  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
+  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
+  const flatTo = buildCompositeKey(parsed.tagName, parsed.attrName, to);
+  let migrated = false;
+
+  updateVariablesWith(
+    variables => {
+      const raw = readTagContainerRaw(variables);
+      let changed = false;
+
+      const existing = raw[groupKey];
+      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+        const merged = { ...(existing as Record<string, string>) };
+        if (Object.prototype.hasOwnProperty.call(merged, from)) {
+          if (!Object.prototype.hasOwnProperty.call(merged, to)) {
+            merged[to] = merged[from]!;
+            delete merged[from];
+            changed = true;
+          }
+        }
+        if (Object.keys(merged).length) {
+          raw[groupKey] = merged;
+        } else {
+          delete raw[groupKey];
+        }
+      }
+
+      if (Object.prototype.hasOwnProperty.call(raw, flatFrom)) {
+        if (!Object.prototype.hasOwnProperty.call(raw, flatTo)) {
+          raw[flatTo] = raw[flatFrom];
+          delete raw[flatFrom];
+          changed = true;
+        }
+      }
+
+      if (changed) {
+        variables[TAG_DATA_ROOT_KEY] = raw;
+        migrated = true;
+      }
+      return variables;
+    },
+    { type: 'message', message_id: messageId },
+  );
+
+  return migrated;
+}
+
+/** 将 cleanup 记忆中某 spec 的 attrValue from→to */
+export function remapLastManualKeepAttrValue(
+  settings: ScriptSettings,
+  spec: string,
+  fromAttr: string,
+  toAttr: string,
+): void {
+  const from = String(fromAttr ?? '').trim();
+  const to = String(toAttr ?? '').trim();
+  if (!from || !to || from === to) return;
+  const state = ensureReplicaFamilyCleanupDefaults(settings);
+  const key = findKeepKeyForSpec(state.lastManualKeepBySpec ?? {}, spec);
+  if (!key) return;
+  const list = state.lastManualKeepBySpec![key];
+  if (!Array.isArray(list) || !list.length) return;
+  const next = sortAttrValues([
+    ...new Set(list.map(v => (String(v).trim() === from ? to : v)).filter(Boolean)),
+  ]);
+  if (!next.length) {
+    delete state.lastManualKeepBySpec![key];
+  } else {
+    state.lastManualKeepBySpec![key] = next;
+  }
+  state.lastManualKeepBySpec = canonicalizeLastManualKeepMap(state.lastManualKeepBySpec);
+}
+
 function collectExtractSpecsFromMembers(members: PostProcessTask[]): string[] {
   const specs = new Set<string>();
   for (const member of members) {

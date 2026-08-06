@@ -318,6 +318,54 @@ export function getReplicaTasks(rootId: string, allTasks: PostProcessTask[]): Po
   return allTasks.filter(t => t.replicaFamilyRootId === rootId);
 }
 
+export type RenameReplicaMemberResult = {
+  tasks: PostProcessTask[];
+  /** 是否成功改名 */
+  renamed: boolean;
+  /** 跳过/失败原因（未改名时） */
+  skipReason?: string;
+  memberId?: string;
+};
+
+/**
+ * 将副本族成员的 identity（replicaFamilyAttrValue）从 from 改为 to，保留 id / launched 等，并 remirror。
+ * 同族已存在 to 时跳过；找不到 from 时跳过。
+ */
+export function renameReplicaFamilyMemberAttr(
+  root: PostProcessTask,
+  fromAttr: string,
+  toAttr: string,
+  allTasks: PostProcessTask[],
+): RenameReplicaMemberResult {
+  const from = String(fromAttr ?? '').trim();
+  const to = String(toAttr ?? '').trim();
+  if (!from || !to || from === to) {
+    return { tasks: allTasks, renamed: false, skipReason: '无效改名' };
+  }
+  const members = getReplicaTasks(root.id, allTasks);
+  const source = members.find(m => (m.replicaFamilyAttrValue ?? '').trim() === from);
+  if (!source) {
+    return { tasks: allTasks, renamed: false, skipReason: `未找到属性值「${from}」的副本` };
+  }
+  const conflict = members.find(m => (m.replicaFamilyAttrValue ?? '').trim() === to);
+  if (conflict) {
+    return {
+      tasks: allTasks,
+      renamed: false,
+      skipReason: `目标属性值「${to}」已存在`,
+      memberId: source.id,
+    };
+  }
+
+  const withNewAttr: PostProcessTask = {
+    ...source,
+    replicaFamilyAttrValue: to,
+  };
+  const synced = syncReplicaFromRoot(withNewAttr, root);
+  const tasks = allTasks.map(t => (t.id === source.id ? synced : t));
+  return { tasks, renamed: true, memberId: source.id };
+}
+
 export function deleteReplicaFamilyTasks(rootId: string, allTasks: PostProcessTask[]): PostProcessTask[] {
   return allTasks.filter(t => t.replicaFamilyRootId !== rootId);
 }

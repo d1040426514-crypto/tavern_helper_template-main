@@ -25,9 +25,12 @@ import {
   type RelayTagMap,
 } from './utils';
 import {
+  collectReplicaEnumRenames,
   parseReplicaEnumFromResponse,
   replicaEnumResultToRegistryTags,
 } from './replica-enum-parse';
+import { recordPendingReplicaRenames } from './replica-enum-pending';
+import { applyPendingReplicaRenames } from './replica-enum-rename';
 import {
   extractStrictVariableResponse,
   hasCompleteVariableXml,
@@ -318,6 +321,7 @@ async function runSingleTask(
 
   const plotExtraction = extractPlotTagsFromResponse(processedResponse || rawResponse, task.extractInjectTags ?? []);
   const enumParsed = parseReplicaEnumFromResponse(processedResponse || rawResponse);
+  recordPendingReplicaRenames(ctx.messageId, collectReplicaEnumRenames(enumParsed));
   const enumRegistryTags = replicaEnumResultToRegistryTags(enumParsed, taskRef =>
     resolveReplicaEnumTaskRef(taskRef, ctx.settings.tasks),
   );
@@ -517,6 +521,13 @@ export async function runPostProcessTasks(
       checkRunCancelled(options?.signal);
       const stageNo = stageTasksRaw[0]?.stage ?? 1;
 
+      settings.tasks = await applyPendingReplicaRenames({
+        messageId,
+        tasks: settings.tasks,
+        rules: settings.chatWorldbookWriteRules ?? [],
+        settings,
+      });
+
       const prepared = prepareStageTasksWithReplicaSync(stageTasksRaw, settings.tasks, aggregatedRelayTags);
       settings.tasks = prepared.allTasks;
       allNewlyCreatedReplicaIds.push(...prepared.newlyCreatedReplicaIds);
@@ -596,6 +607,15 @@ export async function runPostProcessTasks(
     } else {
       throw e;
     }
+  }
+
+  if (!cancelled) {
+    settings.tasks = await applyPendingReplicaRenames({
+      messageId,
+      tasks: settings.tasks,
+      rules: settings.chatWorldbookWriteRules ?? [],
+      settings,
+    });
   }
 
   return {

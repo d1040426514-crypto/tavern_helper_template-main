@@ -16,15 +16,30 @@ export const ENUM_REGISTRY_MARKER = '\u0000';
 export const REPLICA_ENUM_DIRECTED_PREFIX = '#replica:';
 export const REPLICA_ENUM_DIRECTED_SEP = '|';
 
+export type ReplicaEnumRename = {
+  from: string;
+  to: string;
+};
+
 export type ReplicaEnumEntry = {
   specKey: string;
   values: string[];
+  /** 已有副本身份改名：from → to；缺省视为 [] */
+  renames?: ReplicaEnumRename[];
   /** 原始 task 引用（任务名 / baseName / id），未解析 */
   taskRef?: string;
 };
 
 export type ReplicaEnumParseResult = {
   entries: ReplicaEnumEntry[];
+};
+
+/** 待应用的改名指令（含 spec / 可选定向 task） */
+export type PendingReplicaRename = {
+  specKey: string;
+  taskRef?: string;
+  from: string;
+  to: string;
 };
 
 export type ResolveReplicaEnumTaskRef = (
@@ -51,21 +66,55 @@ function normalizeValues(values: unknown): string[] {
   return sortAttrValues([...new Set(out)]);
 }
 
+function normalizeRenames(renames: unknown): ReplicaEnumRename[] {
+  if (!Array.isArray(renames)) return [];
+  const byFrom = new Map<string, string>();
+  for (const item of renames) {
+    if (!isPlainObject(item)) continue;
+    const from = String(item.from ?? '').trim();
+    const to = String(item.to ?? '').trim();
+    if (!from || !to || from === to) continue;
+    byFrom.set(from, to);
+  }
+  return [...byFrom.entries()].map(([from, to]) => ({ from, to }));
+}
+
+function entryRenames(entry: ReplicaEnumEntry): ReplicaEnumRename[] {
+  return entry.renames ?? [];
+}
+
+/** 写入 registry 的属性值：values ∪ renames.to */
+export function registryAttrValuesForEntry(entry: ReplicaEnumEntry): string[] {
+  const set = new Set<string>(entry.values);
+  for (const r of entryRenames(entry)) set.add(r.to);
+  return sortAttrValues([...set]);
+}
+
 function entryBucketKey(specKey: string, taskRef?: string): string {
   return `${specKey}\0${taskRef ?? ''}`;
 }
 
+function mergeRenames(existing: ReplicaEnumRename[], incoming: ReplicaEnumRename[]): ReplicaEnumRename[] {
+  const byFrom = new Map<string, string>();
+  for (const r of existing) byFrom.set(r.from, r.to);
+  for (const r of incoming) byFrom.set(r.from, r.to);
+  return [...byFrom.entries()].map(([from, to]) => ({ from, to }));
+}
+
 function mergeEnumEntry(target: ReplicaEnumEntry[], entry: ReplicaEnumEntry): void {
-  if (!entry.values.length) return;
+  const renames = entryRenames(entry);
+  if (!entry.values.length && !renames.length) return;
   const key = entryBucketKey(entry.specKey, entry.taskRef);
   const existing = target.find(e => entryBucketKey(e.specKey, e.taskRef) === key);
   if (existing) {
     existing.values = sortAttrValues([...new Set([...existing.values, ...entry.values])]);
+    existing.renames = mergeRenames(entryRenames(existing), renames);
     return;
   }
   target.push({
     specKey: entry.specKey,
     values: [...entry.values],
+    renames: [...renames],
     taskRef: entry.taskRef,
   });
 }
@@ -74,11 +123,13 @@ function parseEnumEntry(obj: Record<string, unknown>): ReplicaEnumEntry | null {
   const specKey = normalizeSpecKey(String(obj.spec ?? ''));
   if (!specKey) return null;
   const values = normalizeValues(obj.values);
-  if (!values.length) return null;
+  const renames = normalizeRenames(obj.renames);
+  if (!values.length && !renames.length) return null;
   const taskRaw = String(obj.task ?? '').trim();
   return {
     specKey,
     values,
+    renames,
     taskRef: taskRaw || undefined,
   };
 }
@@ -126,6 +177,92 @@ export function parseReplicaEnumFromResponse(text: string): ReplicaEnumParseResu
     }
   }
   return merged;
+}
+
+/** 从解析结果抽出待应用改名列表（顺序保留；同 from 后写覆盖已在 merge 完成） */
+export function collectReplicaEnumRenames(result: ReplicaEnumParseResult): PendingReplicaRename[] {
+  const out: PendingReplicaRename[] = [];
+  for (const entry of result.entries) {
+    for (const r of entryRenames(entry)) {
+      out.push({
+        specKey: entry.specKey,
+        taskRef: entry.taskRef,
+        from: r.from,
+        to: r.to,
+      });
+    }
+  }
+  return composePendingReplicaRenames(out);
+}
+
+function renameBucketKey(specKey: string, taskRef?: string): string {
+  return `${specKey.toLowerCase()}\0${taskRef ?? ''}`;
+}
+
+/** 对 bucket 内 from→to 边做 Kahn 拓扑排序；环上边丢弃 */
+function topologicalSortRenameEdges(edges: Map<string, string>): Array<[string, string]> {
+  if (!edges.size) return [];
+  const nodes = new Set<string>();
+  for (const [from, to] of edges) {
+    nodes.add(from);
+    nodes.add(to);
+  }
+  const inDegree = new Map<string, number>();
+  for (const n of nodes) inDegree.set(n, 0);
+  for (const [, to] of edges) {
+    inDegree.set(to, (inDegree.get(to) ?? 0) + 1);
+  }
+
+  const queue = [...nodes].filter(n => inDegree.get(n) === 0).sort();
+  const sorted: Array<[string, string]> = [];
+  while (queue.length) {
+    const from = queue.shift()!;
+    const to = edges.get(from);
+    if (to === undefined) continue;
+    sorted.push([from, to]);
+    const nextDeg = (inDegree.get(to) ?? 1) - 1;
+    inDegree.set(to, nextDeg);
+    if (nextDeg === 0) {
+      queue.push(to);
+      queue.sort();
+    }
+  }
+  if (sorted.length < edges.size) {
+    console.warn('[工作流助手] ReplicaEnum rename 链存在环，已忽略环上边');
+  }
+  return sorted;
+}
+
+/**
+ * 同 spec/task bucket 内对 rename 边拓扑排序（a→b + b→c 保为两条有序边），并检测环。
+ */
+export function composePendingReplicaRenames(renames: PendingReplicaRename[]): PendingReplicaRename[] {
+  if (!renames.length) return [];
+  const byBucket = new Map<string, PendingReplicaRename[]>();
+  for (const r of renames) {
+    const key = renameBucketKey(r.specKey, r.taskRef);
+    const list = byBucket.get(key) ?? [];
+    list.push(r);
+    byBucket.set(key, list);
+  }
+
+  const out: PendingReplicaRename[] = [];
+  for (const list of byBucket.values()) {
+    const sample = list[0]!;
+    const edges = new Map<string, string>();
+    for (const r of list) {
+      edges.set(r.from, r.to);
+    }
+    for (const [from, to] of topologicalSortRenameEdges(edges)) {
+      out.push({
+        specKey: sample.specKey,
+        taskRef: sample.taskRef,
+        from,
+        to,
+      });
+    }
+  }
+  return out;
 }
 
 export function isEnumRegistryMarker(value: string): boolean {
@@ -178,10 +315,12 @@ export function replicaEnumResultToRegistryTags(
     const parsed = parseExtractTagSpec(entry.specKey);
     if (!parsed?.attrName) continue;
     const specLower = entry.specKey.toLowerCase();
+    const attrValues = registryAttrValuesForEntry(entry);
+    if (!attrValues.length) continue;
 
     if (!entry.taskRef) {
       if (directedIntentSpecs.has(specLower)) continue;
-      for (const attrValue of entry.values) {
+      for (const attrValue of attrValues) {
         const key = buildCompositeKey(parsed.tagName, parsed.attrName, attrValue);
         out[key] = ENUM_REGISTRY_MARKER;
       }
@@ -203,7 +342,7 @@ export function replicaEnumResultToRegistryTags(
       );
       continue;
     }
-    for (const attrValue of entry.values) {
+    for (const attrValue of attrValues) {
       const key = buildDirectedEnumRegistryKey(
         resolved.rootId,
         parsed.tagName,

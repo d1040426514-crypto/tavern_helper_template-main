@@ -491,7 +491,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
     steps: [
       {
         title: '1. 上一阶段枚举',
-        desc: '在较早阶段任务输出 <ReplicaEnum> 包裹的 JSON。单条：{"spec":"item@id","values":["1","2"]}；可选 task 定向：{"spec":"item@id","values":["1"],"task":"副本族处理"}；批量 {"enums":[...]}。无 task 时广播给所有声明该 spec 的副本族；有 task 时仅喂给该副本族（且与广播互斥）。正文可含其它叙述；不再从 XML item@id 摘取枚举。',
+        desc: '在较早阶段任务输出 <ReplicaEnum> 包裹的 JSON。单条：{"spec":"item@id","values":["1","2"]}；可选 task 定向：{"spec":"item@id","values":["1"],"task":"副本族处理"}；可选改名：{"spec":"item@id","renames":[{"from":"断剑","to":"锈剑"}],"values":["锈剑"]}（纯 renames 亦可，不必带 values）；批量 {"enums":[...]}。无 task 时广播给所有声明该 spec 的副本族；有 task 时仅喂给该副本族（且与广播互斥）。改名在下一阶段开头或本轮 workflow 结束前生效；若目标 to 已存在（成员/tags/世界书）则整包跳过、不覆盖。同轮链式 rename（如 a→b 与 b→c）按依赖顺序逐条应用；当前成员不在某条 from 上时跳过该条、继续后续边。正文可含其它叙述；不再从 XML item@id 摘取枚举。',
       },
       {
         title: '2. 配置副本族任务',
@@ -523,7 +523,7 @@ export const EXTRACT_INJECT_TAGS_HELP = {
       '{{total:…}} / {{total:launched:…}} / {{total:last-launched:…}} / {{replica:launched:…}} 亦注册为酒馆助手宏，可在主聊天提示词等宏管线中使用。',
     ],
     example:
-      'S1「枚举」（<ReplicaEnum> 可无 task 广播或带 task 定向）→ S2 多个副本族可共用同一 spec（如 {{item@id}}）→ 运行时各自按名单增量生成副本并并行执行',
+      'S1「枚举」（<ReplicaEnum> 可 values / renames，可无 task 广播或带 task 定向）→ S2 多个副本族可共用同一 spec（如 {{item@id}}）→ 运行时先应用 renames 再按名单增量生成副本并并行执行',
   },
   relay:
     '同轮 relay 优先；提示词与聊天注入在 relay 缺省时从 post_process_tags 回退（不限于提取写入标签白名单）。副本族借 ReplicaEnum 注册的 relay key 增量新增副本（广播或按 task 定向，无内文），占位符内容读楼层变量（旧 key 保留）。同 key 跨任务/跨阶段内文以 \\n\\n 合并为单段（共用一个外层标签）。引用外层标签时内层已配置提取标签会随 relay 刷新。重跑工作流读上一楼。',
