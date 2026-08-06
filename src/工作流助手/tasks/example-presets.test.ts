@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { BUILTIN_PRESETS } from './example-presets';
+import { REPLICA_ENUM_PROMPT_GROUP_NAME } from './replica-enum-prompt-rules';
 import { PostProcessPresetSchema } from './schema';
 
 test('all builtin presets parse with PostProcessPresetSchema', () => {
@@ -33,9 +34,16 @@ test('副本族与动态占位符示例 preset configures replica family task', 
   assert.ok(enumTask);
   assert.equal(enumTask.enabled, true);
   assert.equal(enumTask.stage, 1);
-  assert.ok(enumTask.promptGroups.some(g => g.content.includes('item@name')));
-  assert.ok(enumTask.promptGroups.some(g => g.content.includes('副本族旁注')));
-  assert.ok(enumTask.promptGroups.some(g => g.content.includes('断剑')));
+  const rulesGroup = enumTask.promptGroups.find(g => g.name === REPLICA_ENUM_PROMPT_GROUP_NAME);
+  assert.ok(rulesGroup, 'should have ReplicaEnum rules prompt group');
+  assert.equal(rulesGroup.role, 'system');
+  assert.ok(rulesGroup.content.includes('item@name'));
+  assert.ok(rulesGroup.content.includes('副本族旁注'));
+  assert.ok(rulesGroup.content.includes('断剑'));
+  assert.ok(rulesGroup.content.includes('renames'));
+  assert.ok(rulesGroup.content.includes('<ReplicaEnum>'));
+  assert.equal(enumTask.promptGroups.length, 3);
+  assert.ok(enumTask.promptGroups.some(g => g.content.includes('ReplicaEnum 输出规则') && g.name === ''));
 
   const replicaTask = preset.tasks.find(t => t.id === 'example-replica-family');
   assert.ok(replicaTask);

@@ -1,4 +1,8 @@
 import type { PostProcessPreset } from './schema';
+import {
+  buildReplicaEnumPromptGroupContent,
+  REPLICA_ENUM_PROMPT_GROUP_NAME,
+} from './replica-enum-prompt-rules';
 
 export const BUILTIN_PRESETS: PostProcessPreset[] = [
   {
@@ -57,14 +61,20 @@ export const BUILTIN_PRESETS: PostProcessPreset[] = [
             name: '',
             role: 'system',
             content:
-              '你是工作流助手。根据当前 AI 回复识别物品名称，可先输出简短分析，再输出 <ReplicaEnum> 包裹的 JSON 枚举块。单条广播：{"spec":"item@name","values":["断剑","药剂"]}（无 task 时，所有声明该 spec 的副本族都会收到名单，本示例中即「副本族处理」与「副本族旁注」）；可选 task 定向：{"spec":"item@name","values":["断剑"],"task":"副本族处理"} 或 {"spec":"item@name","values":["药剂"],"task":"副本族旁注"}；已有副本改名：{"spec":"item@name","renames":[{"from":"断剑","to":"锈剑"}],"values":["锈剑","药剂"]}；批量：{"enums":[{"spec":"item@name","values":["断剑","药剂"]},{"spec":"npc@id","values":["a","b"]}]}。可选另输出 <result> 摘要。',
+              '你是工作流助手。根据当前 AI 回复识别物品名称。按「ReplicaEnum 输出规则」输出枚举 JSON；可先写简短分析，可选另输出 <result> 摘要。',
+            enabled: true,
+          },
+          {
+            name: REPLICA_ENUM_PROMPT_GROUP_NAME,
+            role: 'system',
+            content: buildReplicaEnumPromptGroupContent(),
             enabled: true,
           },
           {
             name: '',
             role: 'user',
             content:
-              '当前 AI 回复：\n$7\n\n请输出分析（可选）与 <ReplicaEnum>…</ReplicaEnum> 枚举 JSON（values 填真实物品名）。不要再用 XML 标签枚举。',
+              '当前 AI 回复：\n$7\n\n请按 ReplicaEnum 输出规则输出分析（可选）与 <ReplicaEnum>…</ReplicaEnum> 枚举 JSON（values 填真实物品名）。',
             enabled: true,
           },
         ],
