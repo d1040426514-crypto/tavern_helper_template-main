@@ -84,6 +84,34 @@ test('thinking draft then body final uses body only', () => {
   assert.deepEqual(findEntry(parsed, 'npc@act', '后台角色')?.values, ['正式角色']);
 });
 
+test('orphan open in thinking does not swallow body ReplicaEnum', () => {
+  const text = [
+    '<think>',
+    '预演核对，勿输出 <ReplicaEnum> 标签；名单：佐久夜',
+    '还要检查 Step 4',
+    '</think>',
+    '<ReplicaEnum>',
+    '{"enums":[{"spec":"npc@act","values":["佐久夜"],"task":"后台角色"}]}',
+    '</ReplicaEnum>',
+  ].join('\n');
+  const parsed = parseReplicaEnumFromResponse(text);
+  assert.deepEqual(findEntry(parsed, 'npc@act', '后台角色')?.values, ['佐久夜']);
+});
+
+test('unclosed open in thinking pairs with body close — last open wins', () => {
+  const text = [
+    '<think>',
+    '格式：<ReplicaEnum>',
+    '还要检查',
+    '</think>',
+    '<ReplicaEnum>',
+    '{"enums":[{"spec":"npc@act","values":["正式角色"],"task":"后台角色"}]}',
+    '</ReplicaEnum>',
+  ].join('\n');
+  const parsed = parseReplicaEnumFromResponse(text);
+  assert.deepEqual(findEntry(parsed, 'npc@act', '后台角色')?.values, ['正式角色']);
+});
+
 test('ignore invalid entry block', () => {
   const text = [
     '<ReplicaEnum>{"spec":"","values":["1"]}</ReplicaEnum>',

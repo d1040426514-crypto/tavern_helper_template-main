@@ -1,6 +1,7 @@
 import {
   buildCompositeKey,
   findAllTagInstances,
+  findLastTagInstance,
   parseCompositeKey,
   parseExtractTagSpec,
   sortAttrValues,
@@ -140,10 +141,11 @@ export function extractReplicaEnumBlockInners(text: string): string[] {
   return findAllTagInstances(source, REPLICA_ENUM_TAG).map(inst => inst.inner.trim()).filter(Boolean);
 }
 
-/** 全文最后一个非空 <ReplicaEnum> 块内文；与 inject 裸标签「只取最后一次」语义对齐 */
+/** 全文最后一个开标签配对的闭合块内文（对齐 inject 裸标签 findLastTagInstance，避免思维链孤儿开标签吞掉正文） */
 export function extractLastReplicaEnumBlockInner(text: string): string | null {
-  const inners = extractReplicaEnumBlockInners(text);
-  return inners.length ? inners[inners.length - 1]! : null;
+  const last = findLastTagInstance(text, REPLICA_ENUM_TAG);
+  const inner = last?.inner.trim() ?? '';
+  return inner || null;
 }
 
 export function parseReplicaEnumJson(inner: string): ReplicaEnumParseResult {
