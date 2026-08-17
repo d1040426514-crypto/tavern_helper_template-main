@@ -3595,7 +3595,10 @@ function saveRunLogTaskTags(taskId: string): void {
             <AcuHelpPanel v-model:open="finalInjectHelpOpen" id="final-inject-help" label="AI楼层文末注入说明">
               <p class="acu-notes acu-notes--sm" style="margin: 0">
                 渲染后原样追加到 AI 回复文末；请在模板内自行编写所需内容与 <code v-pre>{{ 标签名 }}</code
-                >。仅作展示，不写入消息楼层变量，也不再因文末块触发变量更新。 任务输出含
+                >。仅作展示，不写入消息楼层变量，也不再因文末块触发变量更新。本轮任务全部跳过或失败时仍会注入（<code
+                  v-pre
+                  >{{task:…}}</code
+                > 清空，标签走当前楼历史回退）。任务输出含
                 <code>&lt;UpdateVariable&gt;</code> 时，在该阶段结果写入 relay 后立即更新本楼
                 MVU <code>stat_data</code> / <code>addon_data</code>，供后续阶段读取。
               </p>

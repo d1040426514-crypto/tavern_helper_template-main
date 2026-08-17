@@ -342,10 +342,10 @@ export async function handleMessageReceived(
       const hasSuccess = results.some(r => r.success && !r.skipped);
       if (hasSuccess) {
         await applyTagVariableInjectTemplate(settings, results, targetId);
-
-        const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
-        await injectToAiFloor(targetId, aiBlock, { isRerun });
       }
+
+      const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
+      await injectToAiFloor(targetId, aiBlock, { isRerun });
 
       incrementReplicaRunCounts(settings, executedMemberIds);
       await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
