@@ -55,6 +55,7 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
 生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[年龄]30岁(青年)|[剩余寿命]50年
 资金状况: 手头宽裕
 声誉: [官方]小有名气|[民间]受人尊敬
+社会身份: 巡城司百户;城西商会理事
 社交网络: [职场]王芳(同僚/互助);赵铁(上司/敬畏)|[恩怨]周监(宿怨/对峙)
 背景关联: [团体]巡城司|[社交圈]城西巷邻里|[事件]走私案
 </file>
@@ -80,6 +81,7 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
   assert.equal(npc.wealth, '手头宽裕');
+  assert.deepEqual(npc.socialIdentity, ['巡城司百户', '城西商会理事']);
   assert.equal(npc.longGoal, '光复家业');
   assert.equal(npc.nearPlan.length, 3);
   assert.equal(npc.background.event, '走私案');
@@ -106,6 +108,7 @@ test('parseNpcBlock reputation social background companions', () => {
 当前状态: 甩干水迹|黑大衣|清洗手帕|索伦蒂斯|黑水巷|雨雾
 资金状况: 略有盈余
 声誉: [官方]声名狼藉|[民间]天怒人怨|[暗域]小有名气|[业界]声名狼藉
+社会身份: 流浪血族猎手
 社交网络: [恩怨]已故血族主人(仇恨/已终结);黑衣人(警惕/未明)|[邻里]黑水巷酒鬼(厌恶/潜在猎物)|[职场]女仆公会(无视/潜在关联)
 身边人物: [集群]雾中黑影数人(围观/疏远)
 背景关联: [团体]无|[社交圈]索伦蒂斯深夜游荡者|[事件]无
@@ -117,6 +120,7 @@ test('parseNpcBlock reputation social background companions', () => {
 </npc>`;
   const npc = parseNpcBlock(block);
   assert.equal(npc.name, '佐久夜');
+  assert.deepEqual(npc.socialIdentity, ['流浪血族猎手']);
   assert.equal(npc.reputation.length, 4);
   assert.deepEqual(npc.reputation[0], { label: '官方', value: '声名狼藉' });
   assert.deepEqual(npc.reputation[2], { label: '暗域', value: '小有名气' });

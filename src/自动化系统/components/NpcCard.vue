@@ -3,7 +3,7 @@
     class="npc-card"
     :class="{ 'npc-card--empty': npc.empty, 'npc-card--open': expanded }"
   >
-    <!-- 顶栏：可点击折叠；头像 + 名字 | 声誉 | 资金 | 箭头 -->
+    <!-- 顶栏：可点击折叠；头像 + 名字 | 社会身份 | 箭头 -->
     <button
       type="button"
       class="npc-card-top"
@@ -17,20 +17,14 @@
         <span class="npc-name-icon">💠</span>
         {{ npc.name }}
       </div>
-      <div v-if="npc.reputation.length" class="npc-rep-inline" title="声誉">
+      <div v-if="npc.socialIdentity.length" class="npc-identity-inline" title="社会身份">
         <span
-          v-for="(r, i) in npc.reputation"
-          :key="'rep' + i"
-          class="npc-chip npc-chip--rep"
-          :class="getReputationClass(r.value)"
-        >
-          <template v-if="r.label">[{{ r.label }}]</template>{{ r.value }}
-        </span>
+          v-for="(id, i) in npc.socialIdentity"
+          :key="'id' + i"
+          class="npc-identity-tag"
+        >{{ id }}</span>
       </div>
-      <span v-if="npc.wealth" class="npc-wealth-tag" :class="wealthCls">
-        {{ wealthEmoji }} {{ npc.wealth }}
-      </span>
-      <span v-else-if="npc.empty" class="npc-wealth-tag wealth-balanced">暂无行动数据</span>
+      <span v-else-if="npc.empty" class="npc-identity-empty">暂无行动数据</span>
       <span
         v-if="hasBody"
         class="npc-card-caret"
@@ -50,6 +44,23 @@
           <span class="npc-life-k">{{ chip.label }}</span>
           <span class="npc-life-v">{{ chip.value }}</span>
         </span>
+      </div>
+
+      <!-- 社会档案：资金 + 声誉 -->
+      <div v-if="npc.wealth || npc.reputation.length" class="npc-social-profile">
+        <span v-if="npc.wealth" class="npc-wealth-tag" :class="wealthCls">
+          {{ wealthEmoji }} {{ npc.wealth }}
+        </span>
+        <div v-if="npc.reputation.length" class="npc-rep-inline" title="声誉">
+          <span
+            v-for="(r, i) in npc.reputation"
+            :key="'rep' + i"
+            class="npc-chip npc-chip--rep"
+            :class="getReputationClass(r.value)"
+          >
+            <template v-if="r.label">[{{ r.label }}]</template>{{ r.value }}
+          </span>
+        </div>
       </div>
 
       <!-- 行为链紧贴名字下方 -->
@@ -338,6 +349,8 @@ const hasBody = computed(() => {
   const n = props.npc;
   return !!(
     lifeChips.value.length ||
+    n.wealth ||
+    n.reputation.length ||
     n.actionChain.length ||
     n.predict ||
     n.statusParts.length ||
@@ -469,7 +482,7 @@ const backgroundRows = computed(() => {
   }
 }
 
-/* 顶栏：可点击折叠；名字靠左，声誉与资金靠右 */
+/* 顶栏：可点击折叠；名字靠左，社会身份靠右 */
 .npc-card-top {
   display: flex;
   flex-wrap: wrap;
@@ -561,6 +574,44 @@ const backgroundRows = computed(() => {
   color: var(--accent-gold);
 }
 
+.npc-identity-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25em;
+  flex: 1 1 auto;
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.npc-identity-tag {
+  font-size: 0.62em;
+  font-weight: 600;
+  line-height: 1.32;
+  padding: 0.1em 0.4em;
+  border-radius: 5px;
+  max-width: 100%;
+  word-break: break-word;
+  white-space: nowrap;
+  background: color-mix(in srgb, var(--accent-gold) 14%, var(--bg-step));
+  color: var(--accent-gold);
+  border: 1px solid color-mix(in srgb, var(--accent-gold) 35%, var(--border-subtle));
+  letter-spacing: 0.1px;
+}
+
+.npc-identity-empty {
+  font-family: var(--font-mono);
+  font-size: 0.6em;
+  font-weight: 600;
+  padding: 0.12em 0.4em;
+  border-radius: 5px;
+  color: var(--text-muted, var(--text-secondary));
+  background: var(--bg-step);
+  border: 1px solid var(--border-subtle);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 .npc-rep-inline {
   display: flex;
   flex-wrap: wrap;
@@ -582,7 +633,19 @@ const backgroundRows = computed(() => {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
-  margin-left: auto;
+}
+
+.npc-social-profile {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3em 0.4em;
+  width: 100%;
+
+  .npc-rep-inline {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 }
 
 .wealth-destitute {
@@ -1031,25 +1094,40 @@ const backgroundRows = computed(() => {
     justify-content: center;
   }
 
-  .npc-rep-inline {
+  .npc-identity-inline {
     flex: 1 1 100%;
     order: 3;
     row-gap: 0.3em;
     gap: 0.25em;
   }
 
-  .npc-chip {
+  .npc-identity-tag {
     white-space: normal;
-    font-size: 0.56em;
+    font-size: 0.58em;
   }
 
-  .npc-wealth-tag {
-    order: 4;
-    margin-left: 0;
+  .npc-identity-empty {
+    order: 3;
     white-space: normal;
     word-break: break-word;
     overflow-wrap: anywhere;
     font-size: 0.58em;
+  }
+
+  .npc-social-profile {
+    gap: 0.28em;
+
+    .npc-chip {
+      white-space: normal;
+      font-size: 0.56em;
+    }
+
+    .npc-wealth-tag {
+      white-space: normal;
+      word-break: break-word;
+      overflow-wrap: anywhere;
+      font-size: 0.58em;
+    }
   }
 
   .npc-life-row {

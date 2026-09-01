@@ -337,6 +337,7 @@ function emptyNpc(name: string): NpcCard {
     statusParts: [],
     wealth: '',
     reputation: [],
+    socialIdentity: [],
     socialNetwork: [],
     companions: [],
     background: emptyBackground(),
@@ -401,6 +402,10 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   npc.lifeArchive = parseLifeArchive(fieldLine(body, '生命档案'));
   npc.wealth = fieldLine(body, '资金状况');
   npc.reputation = parseReputation(fieldLine(body, '声誉'));
+  npc.socialIdentity = fieldLine(body, '社会身份')
+    .split(/[;；]+/)
+    .map(s => softTrim(s))
+    .filter(Boolean);
   npc.socialNetwork = parseGroupedPeople(fieldLine(body, '社交网络'));
   npc.companions = parseGroupedPeople(fieldLine(body, '身边人物'));
   npc.background = parseBackground(fieldLine(body, '背景关联'));

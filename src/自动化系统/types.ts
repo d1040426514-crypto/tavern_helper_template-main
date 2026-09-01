@@ -62,6 +62,8 @@ export type NpcCard = {
   statusParts: string[];
   wealth: string;
   reputation: NpcReputationItem[];
+  /** 社会身份，可多值（分号分隔） */
+  socialIdentity: string[];
   socialNetwork: NpcSocialGroup[];
   companions: NpcSocialGroup[];
   background: NpcBackground;
