@@ -122,7 +122,11 @@ async function runReplicaFamilyCleanupIfDue(
   newlyCreatedReplicaIds: string[] = [],
 ): Promise<void> {
   tickCleanupRound(effectiveSettings);
-  if (!shouldTriggerCleanup(effectiveSettings)) return;
+  if (!shouldTriggerCleanup(effectiveSettings)) {
+    // 未到周期也要落盘，否则下一轮 loadSettings 会丢弃 tick（N>1 永远到不了阈值）
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return;
+  }
 
   const cleanup = effectiveSettings.replicaFamilyCleanup;
   if (cleanup.mode === 'auto') {
@@ -144,7 +148,11 @@ async function runReplicaFamilyCleanupIfDue(
   });
 
   const result = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
-  if (!result) return;
+  if (!result) {
+    // 跳过/无候选：仍落盘当前计数，避免下一轮回退；阈值已达则会在下轮再次触发
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return;
+  }
   const removedOut: RemovedReplicaCleanupInfo[] = [];
   const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepBySpec, messageId, {
     ...(result.persistManualKeep ? { persistManualKeepBySpec: result.keepBySpec } : {}),
