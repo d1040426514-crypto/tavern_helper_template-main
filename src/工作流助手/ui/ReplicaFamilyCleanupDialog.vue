@@ -84,7 +84,7 @@ function onCancel(): void {
                   'acu-auto-segment-chip--on': isSelected(group.spec, member.attrValue),
                   'acu-auto-segment-chip--off': !isSelected(group.spec, member.attrValue),
                 }"
-                :title="`执行 ${member.runCount} 次，活跃度 ${member.activityScore.toFixed(2)}`"
+                :title="`调度尝试 ${member.opportunityCount} 次，等待 ${member.scheduleWaitCount} 次，成功 ${member.runCount} 次`"
                 @click="toggleMember(group.spec, member.attrValue)"
               >
                 {{ member.attrValue }}

@@ -394,10 +394,17 @@ export const ScriptSettingsSchema = z
       .object({
         enabled: z.boolean().default(false),
         cycleRounds: z.number().int().min(1).default(10),
-        activityRatio: z.number().min(0).max(1).default(0.5),
+        /** 本周期最少调度放行（试过）次数才算活跃；0=关闭活跃过滤 */
+        minActivityTries: z.number().int().min(0).default(1),
+        /** @deprecated 由 ensureReplicaFamilyCleanupDefaults 迁入 minActivityTries 后删除 */
+        activityRatio: z.number().min(0).max(1).optional(),
         mode: z.enum(['auto', 'manual']).default('manual'),
         roundsSinceCleanup: z.number().int().min(0).default(0),
         cycleRunCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+        /** 本清理周期内调度放行次数（试过）；活跃判定用，须 ≥ cycleRunCounts */
+        cycleOpportunityCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+        /** 本周期已进 runnable 但调度未放行（等间隔/时间）次数；>0 视为仍有效 */
+        cycleScheduleWaitCounts: z.record(z.string(), z.number().int().min(0)).default({}),
         lastManualKeepBySpec: z.record(z.string(), z.array(z.string())).default({}),
         /** @deprecated 加载后由 ensureReplicaFamilyCleanupDefaults 迁入 lastManualKeepBySpec */
         lastManualKeepByRoot: z.record(z.string(), z.array(z.string())).optional(),
@@ -406,10 +413,12 @@ export const ScriptSettingsSchema = z
       .default({
         enabled: false,
         cycleRounds: 10,
-        activityRatio: 0.5,
+        minActivityTries: 1,
         mode: 'manual',
         roundsSinceCleanup: 0,
         cycleRunCounts: {},
+        cycleOpportunityCounts: {},
+        cycleScheduleWaitCounts: {},
         lastManualKeepBySpec: {},
         lastCleanupRound: 0,
       }),

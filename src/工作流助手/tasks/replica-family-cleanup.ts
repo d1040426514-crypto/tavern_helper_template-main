@@ -23,7 +23,10 @@ export type ReplicaCleanupCandidate = {
   name: string;
   launched: boolean;
   runCount: number;
-  activityScore: number;
+  /** 本周期调度放行（试过）次数取 max */
+  opportunityCount: number;
+  /** 本周期调度等待（已进 runnable 未放行）次数取 max */
+  scheduleWaitCount: number;
   defaultSelected: boolean;
 };
 
@@ -35,6 +38,8 @@ export type ReplicaCleanupCandidateGroup = {
 type AttrAgg = {
   attrValue: string;
   runCountMax: number;
+  opportunityCountMax: number;
+  scheduleWaitCountMax: number;
   anyLaunched: boolean;
   anyProtected: boolean;
   displayName: string;
@@ -110,10 +115,12 @@ export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): Re
   return {
     enabled: hasReplicaFamily,
     cycleRounds: 10,
-    activityRatio: 0.5,
+    minActivityTries: 1,
     mode: hasReplicaFamily ? 'auto' : 'manual',
     roundsSinceCleanup: 0,
     cycleRunCounts: {},
+    cycleOpportunityCounts: {},
+    cycleScheduleWaitCounts: {},
     lastManualKeepBySpec: {},
     lastCleanupRound: 0,
   };
@@ -124,13 +131,46 @@ export function isReplicaFamilyCleanupAtFactoryDefaults(state: ReplicaFamilyClea
     !state.enabled &&
     state.mode === 'manual' &&
     state.cycleRounds === 10 &&
-    state.activityRatio === 0.5 &&
+    (state.minActivityTries ?? 1) === 1 &&
     (state.roundsSinceCleanup ?? 0) === 0 &&
     (state.lastCleanupRound ?? 0) === 0 &&
     Object.keys(state.cycleRunCounts ?? {}).length === 0 &&
+    Object.keys(state.cycleOpportunityCounts ?? {}).length === 0 &&
+    Object.keys(state.cycleScheduleWaitCounts ?? {}).length === 0 &&
     Object.keys(state.lastManualKeepBySpec ?? {}).length === 0 &&
-    Object.keys(state.lastManualKeepByRoot ?? {}).length === 0
+    Object.keys(state.lastManualKeepByRoot ?? {}).length === 0 &&
+    state.activityRatio === undefined
   );
+}
+
+/** 维持 opportunity ≥ runCount（升级回填 + 不变量） */
+export function reconcileOpportunityCountsWithRuns(state: ReplicaFamilyCleanupConfig): void {
+  if (!state.cycleOpportunityCounts) state.cycleOpportunityCounts = {};
+  if (!state.cycleRunCounts) state.cycleRunCounts = {};
+  const ids = new Set([
+    ...Object.keys(state.cycleRunCounts),
+    ...Object.keys(state.cycleOpportunityCounts),
+  ]);
+  for (const id of ids) {
+    const run = state.cycleRunCounts[id] ?? 0;
+    const opp = state.cycleOpportunityCounts[id] ?? 0;
+    if (run > opp) state.cycleOpportunityCounts[id] = run;
+  }
+}
+
+/** 将遗留 activityRatio 迁入 minActivityTries */
+export function migrateActivityRatioToMinTries(state: ReplicaFamilyCleanupConfig): void {
+  const legacy = state.activityRatio;
+  if (legacy !== undefined) {
+    // 旧档带 activityRatio：按规则写入（zod 可能已填默认 min=1，仍以 ratio 为准）
+    state.minActivityTries = legacy <= 0 ? 0 : 1;
+    delete state.activityRatio;
+  }
+  if (typeof state.minActivityTries !== 'number' || !Number.isFinite(state.minActivityTries) || state.minActivityTries < 0) {
+    state.minActivityTries = 1;
+  } else {
+    state.minActivityTries = Math.floor(state.minActivityTries);
+  }
 }
 
 /** 将遗留 lastManualKeepByRoot 并入 lastManualKeepBySpec 后删除旧键 */
@@ -166,9 +206,17 @@ export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): Re
     return settings.replicaFamilyCleanup;
   }
   migrateLastManualKeepByRootToSpec(settings);
+  migrateActivityRatioToMinTries(settings.replicaFamilyCleanup);
   settings.replicaFamilyCleanup.lastManualKeepBySpec = canonicalizeLastManualKeepMap(
     settings.replicaFamilyCleanup.lastManualKeepBySpec,
   );
+  if (!settings.replicaFamilyCleanup.cycleOpportunityCounts) {
+    settings.replicaFamilyCleanup.cycleOpportunityCounts = {};
+  }
+  if (!settings.replicaFamilyCleanup.cycleScheduleWaitCounts) {
+    settings.replicaFamilyCleanup.cycleScheduleWaitCounts = {};
+  }
+  reconcileOpportunityCountsWithRuns(settings.replicaFamilyCleanup);
   if (hasReplica && isReplicaFamilyCleanupAtFactoryDefaults(settings.replicaFamilyCleanup)) {
     settings.replicaFamilyCleanup.enabled = true;
     settings.replicaFamilyCleanup.mode = 'auto';
@@ -201,6 +249,29 @@ export function incrementReplicaRunCounts(settings: ScriptSettings, executedMemb
   for (const id of executedMemberIds) {
     state.cycleRunCounts[id] = (state.cycleRunCounts[id] ?? 0) + 1;
   }
+  reconcileOpportunityCountsWithRuns(state);
+}
+
+export function incrementReplicaOpportunityCounts(
+  settings: ScriptSettings,
+  opportunityMemberIds: string[],
+): void {
+  if (!opportunityMemberIds.length) return;
+  const state = ensureCleanupState(settings);
+  for (const id of opportunityMemberIds) {
+    state.cycleOpportunityCounts[id] = (state.cycleOpportunityCounts[id] ?? 0) + 1;
+  }
+}
+
+export function incrementReplicaScheduleWaitCounts(
+  settings: ScriptSettings,
+  scheduleWaitMemberIds: string[],
+): void {
+  if (!scheduleWaitMemberIds.length) return;
+  const state = ensureCleanupState(settings);
+  for (const id of scheduleWaitMemberIds) {
+    state.cycleScheduleWaitCounts[id] = (state.cycleScheduleWaitCounts[id] ?? 0) + 1;
+  }
 }
 
 export function tickCleanupRound(settings: ScriptSettings): void {
@@ -214,11 +285,6 @@ export function shouldTriggerCleanup(settings: ScriptSettings): boolean {
   if (!state.enabled) return false;
   if (!hasReplicaFamilyTasks(settings.tasks)) return false;
   return (state.roundsSinceCleanup ?? 0) >= state.cycleRounds;
-}
-
-function computeMemberActivityScore(runCount: number, cycleRounds: number): number {
-  if (cycleRounds <= 0) return 0;
-  return runCount / cycleRounds;
 }
 
 function isMemberProtectedThisRound(memberId: string, protectMemberIds?: readonly string[]): boolean {
@@ -248,6 +314,8 @@ function buildSpecBuckets(
       const attr = (member.replicaFamilyAttrValue ?? '').trim();
       if (!attr) continue;
       const runCount = state.cycleRunCounts[member.id] ?? 0;
+      const opportunityCount = state.cycleOpportunityCounts[member.id] ?? 0;
+      const scheduleWaitCount = state.cycleScheduleWaitCounts[member.id] ?? 0;
       const existing = bucket.byAttr.get(attr);
       const launched =
         getReplicaFamilyScheduleMode(root) === 'manual' && isReplicaLaunched(member);
@@ -256,12 +324,16 @@ function buildSpecBuckets(
         bucket.byAttr.set(attr, {
           attrValue: attr,
           runCountMax: runCount,
+          opportunityCountMax: opportunityCount,
+          scheduleWaitCountMax: scheduleWaitCount,
           anyLaunched: launched,
           anyProtected: protectedMember,
           displayName: member.name,
         });
       } else {
         existing.runCountMax = Math.max(existing.runCountMax, runCount);
+        existing.opportunityCountMax = Math.max(existing.opportunityCountMax, opportunityCount);
+        existing.scheduleWaitCountMax = Math.max(existing.scheduleWaitCountMax, scheduleWaitCount);
         existing.anyLaunched = existing.anyLaunched || launched;
         existing.anyProtected = existing.anyProtected || protectedMember;
       }
@@ -273,23 +345,22 @@ function buildSpecBuckets(
 
 function isAttrKeepByScheduleAndActivity(
   agg: AttrAgg,
-  cycleRounds: number,
-  activityRatio: number,
+  minActivityTries: number,
 ): boolean {
   if (agg.anyProtected) return true;
   if (agg.anyLaunched) return true;
-  return computeMemberActivityScore(agg.runCountMax, cycleRounds) >= activityRatio;
+  if (agg.scheduleWaitCountMax > 0) return true;
+  return agg.opportunityCountMax >= minActivityTries;
 }
 
 function isAttrManualDialogDefault(
   agg: AttrAgg,
-  cycleRounds: number,
-  activityRatio: number,
+  minActivityTries: number,
   lastManualKeep: string[],
 ): boolean {
   if (agg.anyProtected) return true;
   if (lastManualKeep.includes(agg.attrValue)) return true;
-  return isAttrKeepByScheduleAndActivity(agg, cycleRounds, activityRatio);
+  return isAttrKeepByScheduleAndActivity(agg, minActivityTries);
 }
 
 function collectKeepAttrsForBucket(
@@ -312,7 +383,7 @@ export function computeAutoKeepSet(
   const result: Record<string, string[]> = {};
   for (const bucket of buildSpecBuckets(settings, protectMemberIds)) {
     result[bucket.spec] = collectKeepAttrsForBucket(bucket, agg =>
-      isAttrKeepByScheduleAndActivity(agg, state.cycleRounds, state.activityRatio),
+      isAttrKeepByScheduleAndActivity(agg, state.minActivityTries ?? 1),
     );
   }
   return result;
@@ -327,7 +398,7 @@ export function computeManualDialogDefaultSelection(
   for (const bucket of buildSpecBuckets(settings, protectMemberIds)) {
     const lastManualKeep = getLastManualKeepForSpec(state, bucket.spec);
     result[bucket.spec] = collectKeepAttrsForBucket(bucket, agg =>
-      isAttrManualDialogDefault(agg, state.cycleRounds, state.activityRatio, lastManualKeep),
+      isAttrManualDialogDefault(agg, state.minActivityTries ?? 1, lastManualKeep),
     );
   }
   return result;
@@ -357,11 +428,11 @@ export function listReplicaFamilyCleanupCandidates(
         name: agg.displayName,
         launched: agg.anyLaunched,
         runCount: agg.runCountMax,
-        activityScore: computeMemberActivityScore(agg.runCountMax, state.cycleRounds),
+        opportunityCount: agg.opportunityCountMax,
+        scheduleWaitCount: agg.scheduleWaitCountMax,
         defaultSelected: isAttrManualDialogDefault(
           agg,
-          state.cycleRounds,
-          state.activityRatio,
+          state.minActivityTries ?? 1,
           lastManualKeep,
         ),
       };
@@ -642,6 +713,8 @@ export function applyReplicaFamilyCleanup(
     tasks = tasks.filter(t => !removeMemberIds.includes(t.id));
     for (const id of removeMemberIds) {
       delete state.cycleRunCounts[id];
+      delete state.cycleOpportunityCounts[id];
+      delete state.cycleScheduleWaitCounts[id];
     }
 
     const primaryRootId = bucket.roots[0]?.id ?? '';
@@ -671,6 +744,8 @@ export function applyReplicaFamilyCleanup(
 
   state.roundsSinceCleanup = 0;
   state.cycleRunCounts = {};
+  state.cycleOpportunityCounts = {};
+  state.cycleScheduleWaitCounts = {};
   state.lastCleanupRound = countAssistantRounds();
 
   return { ...settings, tasks };
@@ -692,4 +767,6 @@ export function resetReplicaFamilyCleanupCycle(settings: ScriptSettings): void {
   const state = ensureCleanupState(settings);
   state.roundsSinceCleanup = 0;
   state.cycleRunCounts = {};
+  state.cycleOpportunityCounts = {};
+  state.cycleScheduleWaitCounts = {};
 }

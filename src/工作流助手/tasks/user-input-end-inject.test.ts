@@ -167,7 +167,7 @@ test('expandUserInputEndInjectTemplate empty / disabled / non-user', async () =>
   }
 });
 
-test('expandUserInputEndInjectTemplate uses lastRunStatus relay and floor history', async () => {
+test('expandUserInputEndInjectTemplate uses lastRunStatus relay only (no floor history)', async () => {
   const g = globalThis as Record<string, unknown>;
   const prev = {
     getChatMessages: g.getChatMessages,
@@ -242,11 +242,103 @@ test('expandUserInputEndInjectTemplate uses lastRunStatus relay and floor histor
 
     const out = await expandUserInputEndInjectTemplate(settings, 1);
     assert.match(out, /RELAY_ONLY/);
-    assert.match(out, /from-user-floor/);
     assert.match(out, /onlyRelay|RELAY_ONLY/);
+    assert.ok(!out.includes('from-user-floor'));
+    assert.ok(!out.includes('from-ai-floor'));
+    assert.match(out, /H=\s*T=/);
     assert.ok(!out.includes('{{onlyRelay}}'));
     assert.ok(!out.includes('{{archived}}'));
     assert.ok(!out.includes('{{task:任务甲}}'));
+  } finally {
+    g.getChatMessages = prev.getChatMessages;
+    g.getVariables = prev.getVariables;
+    g.getLastMessageId = prev.getLastMessageId;
+    g.formatAsTavernRegexedString = prev.formatAsTavernRegexedString;
+    g.substitudeMacros = prev.substitudeMacros;
+    g.window = prev.window;
+  }
+});
+
+test('expandUserInputEndInjectTemplate ignores inherited tags when previous AI has no run', async () => {
+  const g = globalThis as Record<string, unknown>;
+  const prev = {
+    getChatMessages: g.getChatMessages,
+    getVariables: g.getVariables,
+    getLastMessageId: g.getLastMessageId,
+    formatAsTavernRegexedString: g.formatAsTavernRegexedString,
+    substitudeMacros: g.substitudeMacros,
+    window: g.window,
+  };
+
+  const floorVars: Record<number, Record<string, unknown>> = {
+    3: { [TAG_DATA_ROOT_KEY]: { archived: 'inherited-old', onlyRelay: 'stale' } },
+  };
+
+  const chat = [
+    { is_user: false, mes: 'old ai with extracts' },
+    { is_user: true, mes: 'u1' },
+    { is_user: false, mes: 'new ai no workflow' },
+    { is_user: true, mes: 'u2' },
+  ];
+
+  g.getChatMessages = (id: number) => {
+    if (id === 3) return [{ message_id: 3, role: 'user', message: 'u2', data: {} }];
+    if (id === 2) return [{ message_id: 2, role: 'assistant', message: 'new ai', data: {} }];
+    if (id === 1) return [{ message_id: 1, role: 'user', message: 'u1', data: {} }];
+    if (id === 0) return [{ message_id: 0, role: 'assistant', message: 'old ai', data: {} }];
+    return [];
+  };
+  g.getVariables = (opt: { type: string; message_id?: number }) => {
+    if (opt.type === 'message' && typeof opt.message_id === 'number') {
+      return { ...(floorVars[opt.message_id] ?? {}) };
+    }
+    return {};
+  };
+  g.getLastMessageId = () => 3;
+  g.formatAsTavernRegexedString = (text: string) => text;
+  g.substitudeMacros = (text: string) => text;
+  g.window = {
+    parent: {
+      SillyTavern: {
+        getContext: () => ({
+          chat,
+          saveChat: async () => {},
+        }),
+      },
+    },
+  };
+
+  try {
+    const settings = ScriptSettingsSchema.parse({
+      enabled: true,
+      userInputEndInjectTemplate: 'R={{onlyRelay}} H={{archived}}',
+      tasks: [],
+      // 旧 AI 楼的缓存，messageId 与当前上一 AI(2) 不对齐
+      lastRunStatus: {
+        messageId: 0,
+        at: 1,
+        taskResults: [
+          {
+            taskId: 't1',
+            taskName: '旧任务',
+            success: true,
+            extractedTags: { onlyRelay: 'OLD_RELAY', archived: 'OLD_ARCH' },
+            promptMessages: [],
+            aiOutput: '',
+            aiReasoning: '',
+          },
+        ],
+      },
+    }) as ScriptSettings;
+
+    const out = await expandUserInputEndInjectTemplate(settings, 3);
+    assert.ok(!out.includes('inherited-old'));
+    assert.ok(!out.includes('stale'));
+    assert.ok(!out.includes('OLD_RELAY'));
+    assert.ok(!out.includes('OLD_ARCH'));
+    assert.ok(!out.includes('{{onlyRelay}}'));
+    assert.ok(!out.includes('{{archived}}'));
+    assert.match(out, /^R=\s*H=\s*$/);
   } finally {
     g.getChatMessages = prev.getChatMessages;
     g.getVariables = prev.getVariables;

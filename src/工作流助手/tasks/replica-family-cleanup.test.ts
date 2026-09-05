@@ -8,12 +8,16 @@ import {
   computeManualDialogDefaultSelection,
   createDefaultReplicaFamilyCleanup,
   ensureReplicaFamilyCleanupDefaults,
+  incrementReplicaOpportunityCounts,
   incrementReplicaRunCounts,
+  incrementReplicaScheduleWaitCounts,
   listAllAttrValuesForEnumSpec,
   listReplicaFamilyCleanupCandidates,
+  migrateActivityRatioToMinTries,
   migrateLastManualKeepByRootToSpec,
   pruneFloorTagKeysForReplica,
   migrateFloorTagKeysForReplica,
+  reconcileOpportunityCountsWithRuns,
   shouldTriggerCleanup,
   tickCleanupRound,
 } from './replica-family-cleanup';
@@ -101,10 +105,13 @@ function baseSettings(overrides: Partial<ScriptSettings> = {}): ScriptSettings {
     replicaFamilyCleanup: {
       enabled: true,
       cycleRounds: 4,
-      activityRatio: 0.5,
+      minActivityTries: 1,
       mode: 'auto',
       roundsSinceCleanup: 0,
-      cycleRunCounts: { 'rep-1': 2, 'rep-2': 1 },
+      // 仅 rep-1 有成功/试过；rep-2 无记录则不靠活跃保留（仍可被 launched/保护保留）
+      cycleRunCounts: { 'rep-1': 2 },
+      cycleOpportunityCounts: { 'rep-1': 2 },
+      cycleScheduleWaitCounts: {},
       lastManualKeepBySpec: {},
       lastCleanupRound: 0,
     },
@@ -309,10 +316,11 @@ test('dual family same spec: active attr kept on both; inactive removed from bot
       replicaFamilyCleanup: {
         enabled: true,
         cycleRounds: 4,
-        activityRatio: 0.5,
+        minActivityTries: 1,
         mode: 'auto',
         roundsSinceCleanup: 0,
-        cycleRunCounts: { 'a-1': 2, 'a-2': 0, 'b-1': 0, 'b-2': 0 },
+        cycleRunCounts: { 'a-1': 2 },
+        cycleOpportunityCounts: { 'a-1': 2 },
         lastManualKeepBySpec: {},
         lastCleanupRound: 0,
       },
@@ -576,12 +584,61 @@ test('incrementReplicaRunCounts accumulates per member', () => {
   const settings = baseSettings();
   incrementReplicaRunCounts(settings, ['rep-1', 'rep-1']);
   assert.equal(settings.replicaFamilyCleanup!.cycleRunCounts['rep-1'], 4);
+  // 不变量：opportunity ≥ run
+  assert.equal(settings.replicaFamilyCleanup!.cycleOpportunityCounts['rep-1'], 4);
+});
+
+test('incrementReplicaOpportunityCounts marks try without success', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: {},
+    },
+  });
+  incrementReplicaOpportunityCounts(settings, ['rep-2']);
+  assert.equal(settings.replicaFamilyCleanup!.cycleOpportunityCounts['rep-2'], 1);
+  assert.equal(settings.replicaFamilyCleanup!.cycleRunCounts['rep-2'], undefined);
+  const keep = computeAutoKeepSet(settings);
+  assert.deepEqual(keep['item@id']!.sort(), ['1', '2']);
+});
+
+test('reconcileOpportunityCountsWithRuns seeds from runCount', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      cycleRunCounts: { 'rep-2': 3 },
+      cycleOpportunityCounts: {},
+    },
+  });
+  reconcileOpportunityCountsWithRuns(settings.replicaFamilyCleanup!);
+  assert.equal(settings.replicaFamilyCleanup!.cycleOpportunityCounts['rep-2'], 3);
+  const keep = computeAutoKeepSet(settings);
+  assert.ok(keep['item@id']!.includes('2'));
+});
+
+test('applyReplicaFamilyCleanup clears opportunity counts', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings({
+      replicaFamilyCleanup: {
+        ...baseSettings().replicaFamilyCleanup!,
+        cycleOpportunityCounts: { 'rep-1': 2, 'rep-2': 1 },
+      },
+    });
+    const next = applyReplicaFamilyCleanup(settings, { 'item@id': ['1'] }, 0);
+    assert.deepEqual(next.replicaFamilyCleanup.cycleOpportunityCounts, {});
+    assert.deepEqual(next.replicaFamilyCleanup.cycleRunCounts, {});
+  });
 });
 
 test('createDefaultReplicaFamilyCleanup enables auto mode when replica family exists', () => {
   const defaults = createDefaultReplicaFamilyCleanup(true);
   assert.equal(defaults.enabled, true);
   assert.equal(defaults.mode, 'auto');
+  assert.deepEqual(defaults.cycleOpportunityCounts, {});
+  assert.deepEqual(defaults.cycleScheduleWaitCounts, {});
 });
 
 test('createDefaultReplicaFamilyCleanup stays disabled when no replica family', () => {
@@ -599,4 +656,106 @@ test('ensureReplicaFamilyCleanupDefaults upgrades untouched factory defaults', (
   assert.equal(settings.replicaFamilyCleanup!.mode, 'auto');
 });
 
-if (process.exitCode) process.exit(process.exitCode);
+test('listReplicaFamilyCleanupCandidates exposes opportunityCount', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: { 'rep-2': 1 },
+    },
+  });
+  const groups = listReplicaFamilyCleanupCandidates(settings);
+  const rep2 = groups[0]!.members.find(m => m.attrValue === '2');
+  assert.equal(rep2?.opportunityCount, 1);
+  assert.equal(rep2?.runCount, 0);
+  assert.equal(rep2?.defaultSelected, true);
+});
+
+test('minActivityTries=2 requires two opportunities', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      minActivityTries: 2,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: { 'rep-2': 1 },
+    },
+  });
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id'], ['1']);
+  settings.replicaFamilyCleanup!.cycleOpportunityCounts['rep-2'] = 2;
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id']!.sort(), ['1', '2']);
+});
+
+test('minActivityTries=0 keeps inactive by activity gate', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      minActivityTries: 0,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: {},
+    },
+  });
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id']!.sort(), ['1', '2']);
+});
+
+test('migrateActivityRatioToMinTries maps ratio to tries', () => {
+  const zero = {
+    ...createDefaultReplicaFamilyCleanup(false),
+    activityRatio: 0,
+    minActivityTries: 1,
+  };
+  migrateActivityRatioToMinTries(zero);
+  assert.equal(zero.minActivityTries, 0);
+  assert.equal(zero.activityRatio, undefined);
+
+  const half = {
+    ...createDefaultReplicaFamilyCleanup(false),
+    activityRatio: 0.5,
+    minActivityTries: 1,
+  };
+  migrateActivityRatioToMinTries(half);
+  assert.equal(half.minActivityTries, 1);
+  assert.equal(half.activityRatio, undefined);
+});
+
+test('schedule wait keeps member without opportunity', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      minActivityTries: 1,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: {},
+      cycleScheduleWaitCounts: { 'rep-2': 1 },
+    },
+  });
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id']!.sort(), ['1', '2']);
+});
+
+test('no wait and no opportunity is inactive', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: {
+      ...baseSettings().replicaFamilyCleanup!,
+      cycleRunCounts: {},
+      cycleOpportunityCounts: {},
+      cycleScheduleWaitCounts: {},
+    },
+  });
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id'], ['1']);
+});
+
+test('incrementReplicaScheduleWaitCounts and apply clears waits', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings({
+      replicaFamilyCleanup: {
+        ...baseSettings().replicaFamilyCleanup!,
+        cycleScheduleWaitCounts: {},
+      },
+    });
+    incrementReplicaScheduleWaitCounts(settings, ['rep-2', 'rep-2']);
+    assert.equal(settings.replicaFamilyCleanup!.cycleScheduleWaitCounts['rep-2'], 2);
+    const next = applyReplicaFamilyCleanup(settings, { 'item@id': ['1'] }, 0);
+    assert.deepEqual(next.replicaFamilyCleanup.cycleScheduleWaitCounts, {});
+  });
+});
+

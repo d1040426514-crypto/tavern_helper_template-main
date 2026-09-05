@@ -6,10 +6,7 @@ import {
   isChatMessageFloorAccessible,
 } from './message-floor';
 import { processTemplateText } from './template-process';
-import {
-  buildCurrentFloorTagMap,
-  buildExtractedBlockFromTags,
-} from './tag-variables';
+import { buildExtractedBlockFromTags } from './tag-variables';
 import {
   clearUnresolvedTaskPlaceholders,
   mergeRelayTagMap,
@@ -82,7 +79,6 @@ export async function expandUserInputEndInjectTemplate(
     floorStatus ??
     (settings.lastRunStatus?.messageId === prevAiId ? settings.lastRunStatus : undefined);
   const { relay, taskBlocks } = buildRelayFromLastRunStatus(runStatus, prevAiId);
-  const historyMap = buildCurrentFloorTagMap(userMessageId);
 
   let out = template;
   for (const r of taskBlocks) {
@@ -94,7 +90,9 @@ export async function expandUserInputEndInjectTemplate(
   const replicaState =
     prevAiId != null ? readReplicaStateFromAssistantFloor(prevAiId) : {};
 
-  out = replacePlotTagPlaceholdersWithHistory(out, relay, historyMap, new Set(), {
+  // 仅用上一 AI 楼工作流摘取（relay）；不用本楼继承的 post_process_tags 回退，
+  // 避免后续用户楼在未跑工作流时仍注入历史标签。
+  out = replacePlotTagPlaceholdersWithHistory(out, relay, new Map(), new Set(), {
     historyFallback: 'all-tags',
     allTasks: settings.tasks,
     replicaState,

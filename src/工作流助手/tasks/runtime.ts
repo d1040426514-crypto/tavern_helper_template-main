@@ -62,6 +62,8 @@ export interface TaskRunResult {
   success: boolean;
   skipped?: boolean;
   skipReason?: string;
+  /** 已过任务调度门（shouldRunTask）；用于副本清理「试过」计数 */
+  schedulePassed?: boolean;
   /** 全部摘取内容，用于 {{task:任务名}} */
   extractedBlock: string;
   extractedTags: Record<string, string>;
@@ -168,6 +170,7 @@ async function runSingleTask(
       success: false,
       skipped: true,
       skipReason: scheduleCheck.reason,
+      schedulePassed: false,
       extractedBlock: '',
       extractedTags: {},
       injectOnlyTagNames: [],
@@ -186,6 +189,7 @@ async function runSingleTask(
       success: false,
       skipped: true,
       skipReason: 'AI 正文已含跳过标签',
+      schedulePassed: true,
       extractedBlock: '',
       extractedTags: {},
       injectOnlyTagNames: [],
@@ -216,6 +220,7 @@ async function runSingleTask(
       taskName: task.name,
       success: false,
       skipReason: '无有效提示词',
+      schedulePassed: true,
       extractedBlock: '',
       extractedTags: {},
       injectOnlyTagNames: [],
@@ -344,6 +349,7 @@ async function runSingleTask(
     taskName: task.name,
     success,
     skipReason: success ? undefined : lastError || '提取失败',
+    schedulePassed: true,
     extractedBlock,
     extractedTags,
     injectOnlyTagNames: plotExtraction.injectOnlyTagNames,
@@ -451,6 +457,8 @@ export type RunPostProcessResult = {
   cancelled?: boolean;
   newlyCreatedReplicaIds: string[];
   executedMemberIds: string[];
+  opportunityMemberIds: string[];
+  scheduleWaitMemberIds: string[];
 };
 
 export async function runPostProcessTasks(
@@ -470,6 +478,8 @@ export async function runPostProcessTasks(
   let enabledTasks = settings.tasks.filter(t => t.enabled);
   const allNewlyCreatedReplicaIds: string[] = [];
   const allExecutedMemberIds: string[] = [];
+  const allOpportunityMemberIds: string[] = [];
+  const allScheduleWaitMemberIds: string[] = [];
   if (options?.taskIdFilter) {
     enabledTasks = enabledTasks.filter(t => t.id === options.taskIdFilter);
     if (!enabledTasks.length) {
@@ -477,7 +487,14 @@ export async function runPostProcessTasks(
     }
   }
   if (!enabledTasks.length) {
-    return { results: [], ctx, newlyCreatedReplicaIds: [], executedMemberIds: [] };
+    return {
+      results: [],
+      ctx,
+      newlyCreatedReplicaIds: [],
+      executedMemberIds: [],
+      opportunityMemberIds: [],
+      scheduleWaitMemberIds: [],
+    };
   }
 
   options?.onProgress?.('正在准备工作流任务...');
@@ -503,11 +520,14 @@ export async function runPostProcessTasks(
     reporter.setFinished(task.id, result);
     checkRunCancelled(options?.signal);
     await applyVariableUpdatesAfterStage(messageId, [result]);
+    const isMember = !!task.replicaFamilyRootId;
     return {
       results: [result],
       ctx,
       newlyCreatedReplicaIds: [],
-      executedMemberIds: result.success && !result.skipped && task.replicaFamilyRootId ? [task.id] : [],
+      executedMemberIds: result.success && !result.skipped && isMember ? [task.id] : [],
+      opportunityMemberIds: result.schedulePassed && isMember ? [task.id] : [],
+      scheduleWaitMemberIds: result.schedulePassed === false && isMember ? [task.id] : [],
     };
   }
 
@@ -575,6 +595,13 @@ export async function runPostProcessTasks(
           const task = settings.tasks.find(t => t.id === r.taskId);
           if (task?.replicaFamilyRootId) allExecutedMemberIds.push(r.taskId);
         }
+        if (r.schedulePassed) {
+          const task = settings.tasks.find(t => t.id === r.taskId);
+          if (task?.replicaFamilyRootId) allOpportunityMemberIds.push(r.taskId);
+        } else if (r.schedulePassed === false) {
+          const task = settings.tasks.find(t => t.id === r.taskId);
+          if (task?.replicaFamilyRootId) allScheduleWaitMemberIds.push(r.taskId);
+        }
         if (r.success && Object.keys(r.extractedTags).length) {
           mergeRelayTagMap(aggregatedRelayTags, r.extractedTags);
         }
@@ -624,5 +651,7 @@ export async function runPostProcessTasks(
     cancelled,
     newlyCreatedReplicaIds: allNewlyCreatedReplicaIds,
     executedMemberIds: allExecutedMemberIds,
+    opportunityMemberIds: allOpportunityMemberIds,
+    scheduleWaitMemberIds: allScheduleWaitMemberIds,
   };
 }

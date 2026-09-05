@@ -54,6 +54,8 @@ import {
   applyReplicaFamilyCleanup,
   computeAutoKeepSet,
   incrementReplicaRunCounts,
+  incrementReplicaOpportunityCounts,
+  incrementReplicaScheduleWaitCounts,
   shouldTriggerCleanup,
   tickCleanupRound,
   type RemovedReplicaCleanupInfo,
@@ -335,7 +337,14 @@ export async function handleMessageReceived(
           taskIdFilter: options?.taskIdFilter,
         },
       );
-      const { results, cancelled, newlyCreatedReplicaIds: createdIds, executedMemberIds } = runResult;
+      const {
+        results,
+        cancelled,
+        newlyCreatedReplicaIds: createdIds,
+        executedMemberIds,
+        opportunityMemberIds,
+        scheduleWaitMemberIds,
+      } = runResult;
       newlyCreatedReplicaIds = createdIds;
 
       baseSettings.scheduleState = _.cloneDeep(settings.scheduleState);
@@ -355,6 +364,8 @@ export async function handleMessageReceived(
       const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
       await injectToAiFloor(targetId, aiBlock, { isRerun });
 
+      incrementReplicaScheduleWaitCounts(settings, scheduleWaitMemberIds);
+      incrementReplicaOpportunityCounts(settings, opportunityMemberIds);
       incrementReplicaRunCounts(settings, executedMemberIds);
       await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
 

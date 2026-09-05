@@ -3639,9 +3639,12 @@ function saveRunLogTaskTags(taskId: string): void {
               <p class="acu-notes acu-notes--sm">
                 占位符同 AI 楼文末注入：<code v-pre>{{标签名}}</code> /
                 <code v-pre>{{task:任务名}}</code> / 酒馆宏。脚本认领的占位符无数据时清空；
-                <code v-pre>{{user}}</code> 等核心宏留给酒馆宏管线。可读取上一 AI 楼
-                <code>lastRunStatus</code> 中仅进 relay、未写入
-                <code>post_process_tags</code> 的提取标签。
+                <code v-pre>{{user}}</code> 等核心宏留给酒馆宏管线。
+                <strong>只</strong>读上一 AI 楼工作流摘取（楼层
+                <code>runStatus</code> / 对齐的 <code>lastRunStatus</code>），含仅进
+                relay、未写入 <code>post_process_tags</code> 的标签；
+                <strong>不会</strong>用本楼继承的 <code>post_process_tags</code> 回退。
+                因此每轮 AI 结果只作用于紧随其后的那句用户输入注入。
               </p>
               <p class="acu-notes acu-notes--sm" style="margin-bottom: 0">
                 限制：Prompt 预览（<code>dry_run</code>）会跳过
