@@ -66,6 +66,7 @@ async function main() {
     applyScriptLevelSettings,
     saveScriptLevelSettingsFrom,
     savePresetsCatalogToDisk,
+    saveProgressHudPosition,
   } = await import('./settings');
   const { writeChatTaskScope, clearChatTaskScope, buildChatSnapshotFromSettings } = await import(
     './tasks/chat-task-scope'
@@ -189,12 +190,25 @@ async function main() {
     const from = _.cloneDeep(loadSettings());
     from.enabled = true;
     from.uiThemeId = 'dark-test';
+    from.progressHudPosition = { x: 0.25, y: 0.4 };
     const target = _.cloneDeep(loadSettings());
     applyScriptLevelSettings(from, target);
     assert.equal(target.enabled, true);
     assert.equal(target.uiThemeId, 'dark-test');
+    assert.deepEqual(target.progressHudPosition, { x: 0.25, y: 0.4 });
     assert.equal(target.tasks[0]?.id, 't1');
     console.log('ok applyScriptLevelSettings copies script fields only');
+  }
+
+  {
+    resetState();
+    await clearChatTaskScope();
+    saveSettings(loadSettings());
+    saveProgressHudPosition({ x: 0.3, y: 0.55 });
+    assert.deepEqual(loadSettings().progressHudPosition, { x: 0.3, y: 0.55 });
+    saveProgressHudPosition(null);
+    assert.equal(loadSettings().progressHudPosition, null);
+    console.log('ok saveProgressHudPosition writes and clears script vars');
   }
 
   {

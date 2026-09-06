@@ -423,6 +423,14 @@ export const ScriptSettingsSchema = z
         lastCleanupRound: 0,
       }),
     uiThemeId: z.string().default('creamy-minimal'),
+    /** 进度 HUD 自定义位置（视口比例）；null = CSS 默认右上角 */
+    progressHudPosition: z
+      .object({
+        x: z.number().min(0).max(1),
+        y: z.number().min(0).max(1),
+      })
+      .nullable()
+      .default(null),
   })
   .prefault({});
 

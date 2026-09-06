@@ -1,3 +1,4 @@
+import { getActivePinia } from 'pinia';
 import { getDefaultSettingsPartial } from './tasks/example-presets';
 import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
@@ -169,6 +170,7 @@ export function applyScriptLevelSettings(from: ScriptSettings, target: ScriptSet
   target.messageVarRetention = _.cloneDeep(from.messageVarRetention);
   target.replicaFamilyCleanup = _.cloneDeep(from.replicaFamilyCleanup);
   target.uiThemeId = from.uiThemeId;
+  target.progressHudPosition = _.cloneDeep(from.progressHudPosition);
 }
 
 /** 有快照时：以磁盘全局为底，只合并脚本级字段后保存 */
@@ -402,3 +404,20 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     deleteTaskPreset,
   };
 });
+
+/** 进度 HUD 位置：脚本变量落盘，并同步已挂载的 Pinia store，避免设置窗 persist 冲掉 */
+export function saveProgressHudPosition(
+  ratio: NonNullable<ScriptSettings['progressHudPosition']> | null,
+): void {
+  const next = ratio == null ? null : _.cloneDeep(ratio);
+  const settings = loadSettings();
+  settings.progressHudPosition = next;
+  saveSettings(settings);
+  try {
+    if (!getActivePinia()) return;
+    useSettingsStore().settings.progressHudPosition =
+      next == null ? null : _.cloneDeep(next);
+  } catch {
+    /* Pinia 未就绪时仅磁盘已更新 */
+  }
+}
