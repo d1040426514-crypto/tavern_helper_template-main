@@ -1,6 +1,7 @@
 import { resolveStableEntryName, resolveWriteTargetBookName } from '../worldbook/write-from-template';
 import {
   POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
+  reloadWorldInfoEditorIfSelected,
   type WorldbookWriteAppliedEntry,
 } from '../worldbook/write-sync';
 import type { ChatWorldbookWriteRule } from './schema';
@@ -69,6 +70,7 @@ export async function deleteWorldbookEntriesByStableName(
       console.warn('[工作流助手] 删除副本世界书条目失败:', bookName, e);
     }
   }
+  reloadWorldInfoEditorIfSelected(byBook.keys());
 }
 
 /** 从全部 assistant 楼的 applied 账本中移除命中的 stableName 记录 */

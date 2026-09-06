@@ -298,6 +298,7 @@ export async function reconcileWorldbookWritesFromChat(
       await deleteOrphanManagedWorldbookEntries(bookNames, rules, ledger);
 
       if (!ledger.size) {
+        reloadWorldInfoEditorIfSelected(bookNames);
         if (isInit || reason === 'chat_changed' || reason === 'ledger_retry') {
           initReconcileSucceeded = true;
           lastInitReconcileLedgerSize = 0;

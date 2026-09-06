@@ -43,14 +43,38 @@ export async function withWorldbookWriteLock<T>(fn: () => Promise<T>): Promise<T
   return run;
 }
 
-/** 酒馆世界书编辑器当前选中的书名（用于仅刷新当前打开的编辑器） */
+function readWorldInfoSelect(selector: string): {
+  label: string | null;
+  value: string | null;
+  hasSelect: boolean;
+} {
+  const sel = (parent as unknown as { document?: Document })?.document?.querySelector?.(
+    selector,
+  ) as HTMLSelectElement | null;
+  const label = sel?.selectedOptions?.[0]?.textContent?.trim() || null;
+  const value = sel?.value != null ? String(sel.value).trim() : null;
+  return { label, value, hasSelect: !!sel };
+}
+
+function isWorldEditorPlaceholder(label: string | null, value: string | null): boolean {
+  if (!label) return true;
+  if (!value) return true;
+  return label.startsWith('---');
+}
+
+/**
+ * 世界书管理器当前正在编辑的书名（`#world_editor_select`）。
+ * 不要读 `#world_info`：那是角色卡附加世界书，经常与管理器打开的书不同。
+ */
 export function getSelectedWorldInfoBookName(): string | null {
   try {
-    const sel = (parent as unknown as { document?: Document })?.document?.querySelector?.(
-      '#world_info',
-    ) as HTMLSelectElement | null;
-    const label = sel?.selectedOptions?.[0]?.textContent?.trim();
-    return label || null;
+    const editor = readWorldInfoSelect('#world_editor_select');
+    const char = readWorldInfoSelect('#world_info');
+    const editorPlaceholder = isWorldEditorPlaceholder(editor.label, editor.value);
+    if (editor.hasSelect) {
+      return editorPlaceholder ? null : editor.label;
+    }
+    return char.label && char.value ? char.label : null;
   } catch {
     return null;
   }
@@ -64,11 +88,10 @@ export function reloadSelectedWorldInfoEditor(bookName: string): boolean {
   const trimmed = bookName.trim();
   if (!trimmed) return false;
   try {
+    type ST = { reloadWorldInfoEditor?: (file: string, loadIfNotSelected?: boolean) => void };
     const st =
-      (globalThis as { SillyTavern?: { reloadWorldInfoEditor?: (file: string, loadIfNotSelected?: boolean) => void } })
-        .SillyTavern ??
-      (parent as unknown as { SillyTavern?: { reloadWorldInfoEditor?: (file: string, loadIfNotSelected?: boolean) => void } })
-        ?.SillyTavern;
+      (globalThis as { SillyTavern?: ST }).SillyTavern ??
+      (parent as unknown as { SillyTavern?: ST })?.SillyTavern;
     if (typeof st?.reloadWorldInfoEditor !== 'function') return false;
     st.reloadWorldInfoEditor(trimmed, false);
     return true;
