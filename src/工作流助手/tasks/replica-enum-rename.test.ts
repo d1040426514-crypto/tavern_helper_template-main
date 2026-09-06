@@ -204,6 +204,7 @@ async function main(): Promise<void> {
       ],
       'WorkflowHelper-item id-断剑',
       'WorkflowHelper-item id-锈剑',
+      'BookA',
     );
     assert.equal(changed, 1);
     assert.equal(next[0]!.entryName, 'WorkflowHelper-item id-锈剑');

@@ -3805,6 +3805,9 @@ function saveRunLogTaskTags(taskId: string): void {
                 <code>item@name=圣剑</code>）可自动作为 keyword。
               </p>
               <p class="acu-notes acu-notes--sm">
+                绿灯关键词若含间隔号 <code>·</code> / <code>・</code> / <code>･</code>，会自动追加拆分段（如西方人名的名或姓单独出现也可触发）。
+              </p>
+              <p class="acu-notes acu-notes--sm">
                 同一标签可配置多条规则。写入结果保存在 assistant 楼
                 message.data；换聊天或删楼时会按聊天历史自动重算世界书（先清理托管条目再重放）。重跑 /
                 滑楼（切换候选回复，Swipe）本层会先回放到上一层状态再重新写入，并同步恢复对应的任务副本。

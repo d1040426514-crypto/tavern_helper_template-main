@@ -110,6 +110,16 @@ test('resolveEntryKeys bare tag keyword defaults to tag name', () => {
   assert.deepEqual(keys, ['result']);
 });
 
+test('resolveEntryKeys expands name-separator attr values', () => {
+  const keys = resolveEntryKeys(baseRule(), 'item@name=阿尔伯特·爱因斯坦');
+  assert.deepEqual(keys, ['阿尔伯特·爱因斯坦', '阿尔伯特', '爱因斯坦']);
+});
+
+test('buildWorldbookEntryPartial writes expanded name-separator keys', () => {
+  const partial = buildWorldbookEntryPartial(baseRule(), 'content', 'item@name=阿尔伯特·爱因斯坦');
+  assert.deepEqual(partial.strategy?.keys, ['阿尔伯特·爱因斯坦', '阿尔伯特', '爱因斯坦']);
+});
+
 test('buildWorldbookEntryPartial keyword selective', () => {
   const partial = buildWorldbookEntryPartial(baseRule(), 'content', 'item@name=圣剑');
   assert.equal(partial.strategy?.type, 'selective');

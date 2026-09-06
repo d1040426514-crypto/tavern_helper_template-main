@@ -1,17 +1,22 @@
+import type { WorldbookEntry } from '@types/function/worldbook';
 import {
   POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
   POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY,
+  resolveEntryKeys,
   resolveStableEntryName,
   resolveWriteTargetBookName,
   upsertEntryByStableName,
   type WorldbookWriteSnapshotEntry,
 } from '../worldbook/write-from-template';
+import { type WorldbookWriteAppliedEntry } from '../worldbook/write-sync';
 import {
-  type WorldbookWriteAppliedEntry,
-} from '../worldbook/write-sync';
-import { normalizeKeywordList } from '../worldbook/entry-keys';
+  diffExtraKeys,
+  mergeEntryKeys,
+  normalizeKeywordList,
+  resolveAppliedExtraKeys,
+} from '../worldbook/entry-keys';
 import type { ChatWorldbookWriteRule } from './schema';
-import { parseExtractTagSpec } from './tag-extract';
+import { buildCompositeKey, parseExtractTagSpec } from './tag-extract';
 import { deleteWorldbookEntriesByStableName } from './prune-applied-for-replica';
 
 export type ReplicaAttrRenameTarget = {
@@ -71,27 +76,65 @@ function remapExactKeyword(list: string[] | undefined, from: string, to: string)
   return normalizeKeywordList(list).map(k => (k === from ? to : k));
 }
 
+function compositeTagKeyForAttr(rule: ChatWorldbookWriteRule, attrValue: string): string | undefined {
+  const spec = parseExtractTagSpec(rule.targetTag.trim());
+  if (!spec) return undefined;
+  if (!spec.attrName) return spec.tagName;
+  return buildCompositeKey(spec.tagName, spec.attrName, attrValue);
+}
+
+/** 按规则重算默认 keys，再叠 extraKeys（含间隔号展开） */
+export function rebuildKeywordKeysAfterAttrRename(
+  rule: ChatWorldbookWriteRule,
+  toAttr: string,
+  extraKeys: string[] | undefined,
+): string[] {
+  return mergeEntryKeys(resolveEntryKeys(rule, compositeTagKeyForAttr(rule, toAttr)), extraKeys ?? []);
+}
+
+/** live 世界书：新默认 ∪ 账本 extra ∪ 条目上多出来的非默认词 */
+export function rebuildLiveWorldbookKeysAfterAttrRename(
+  rule: ChatWorldbookWriteRule,
+  fromAttr: string,
+  toAttr: string,
+  oldKeys: string[] | undefined,
+  ledgerExtraKeys: string[] | undefined,
+): string[] {
+  const oldDefaults = resolveEntryKeys(rule, compositeTagKeyForAttr(rule, fromAttr));
+  const liveOnly = remapExactKeyword(diffExtraKeys(oldKeys ?? [], oldDefaults), fromAttr, toAttr) ?? [];
+  const ledgerExtras = remapExactKeyword(ledgerExtraKeys, fromAttr, toAttr) ?? [];
+  return rebuildKeywordKeysAfterAttrRename(rule, toAttr, [...liveOnly, ...ledgerExtras]);
+}
+
+function namesMatch(left: string | undefined, right: string): boolean {
+  return (left ?? '').trim() === right.trim();
+}
+
 /** 纯函数：将 applied 条目的 stableName / keys / extraKeys 从旧身份迁到新身份；不匹配则返回 null */
 export function rewriteAppliedEntryForAttrRename(
   entry: WorldbookWriteAppliedEntry,
   oldStableName: string,
   newStableName: string,
+  bookName: string,
   fromAttr: string,
   toAttr: string,
+  rule: ChatWorldbookWriteRule,
 ): WorldbookWriteAppliedEntry | null {
-  if ((entry.stableName ?? '').trim() !== oldStableName.trim()) return null;
+  if (!namesMatch(entry.bookName, bookName) || !namesMatch(entry.stableName, oldStableName)) {
+    return null;
+  }
   const partial = { ...(entry.partial ?? {}) } as WorldbookWriteAppliedEntry['partial'];
   partial.name = newStableName;
-  if (partial.strategy && typeof partial.strategy === 'object') {
-    const strategy = { ...partial.strategy };
-    if (Array.isArray(strategy.keys)) {
-      strategy.keys = remapExactKeyword(strategy.keys, fromAttr, toAttr) ?? [];
-    }
-    partial.strategy = strategy;
-  }
   const extraKeys = Array.isArray(entry.extraKeys)
     ? remapExactKeyword(entry.extraKeys, fromAttr, toAttr)
     : undefined;
+  if (partial.strategy && typeof partial.strategy === 'object') {
+    const strategy = { ...partial.strategy };
+    if (Array.isArray(strategy.keys)) {
+      strategy.keys = rebuildKeywordKeysAfterAttrRename(rule, toAttr, extraKeys);
+    }
+    partial.strategy = strategy;
+  }
   return {
     ...entry,
     stableName: newStableName,
@@ -100,19 +143,23 @@ export function rewriteAppliedEntryForAttrRename(
   };
 }
 
-/** 纯函数：改写一整楼 applied 列表；若 newStable 已存在则跳过该条（不覆盖） */
+/** 纯函数：改写一整楼 applied 列表；同书已有 newStable 则跳过该条（不覆盖） */
 export function rewriteAppliedListForAttrRename(
   list: WorldbookWriteAppliedEntry[],
   oldStableName: string,
   newStableName: string,
+  bookName: string,
   fromAttr: string,
   toAttr: string,
+  rule: ChatWorldbookWriteRule,
 ): { next: WorldbookWriteAppliedEntry[]; changed: number } {
-  const hasNew = list.some(e => (e.stableName ?? '').trim() === newStableName.trim());
+  const hasNew = list.some(
+    e => namesMatch(e.bookName, bookName) && namesMatch(e.stableName, newStableName),
+  );
   let changed = 0;
   const next: WorldbookWriteAppliedEntry[] = [];
   for (const entry of list) {
-    if ((entry.stableName ?? '').trim() !== oldStableName.trim()) {
+    if (!namesMatch(entry.bookName, bookName) || !namesMatch(entry.stableName, oldStableName)) {
       next.push(entry);
       continue;
     }
@@ -124,8 +171,10 @@ export function rewriteAppliedListForAttrRename(
       entry,
       oldStableName,
       newStableName,
+      bookName,
       fromAttr,
       toAttr,
+      rule,
     );
     if (rewritten) {
       next.push(rewritten);
@@ -142,11 +191,16 @@ export function rewriteSnapshotListForAttrRename(
   snapshots: WorldbookWriteSnapshotEntry[],
   oldStableName: string,
   newStableName: string,
+  bookName: string,
 ): { next: WorldbookWriteSnapshotEntry[]; changed: number } {
-  const hasNew = snapshots.some(s => (s.entryName ?? '').trim() === newStableName.trim());
+  const hasNew = snapshots.some(
+    s => namesMatch(s.bookName, bookName) && namesMatch(s.entryName, newStableName),
+  );
   let changed = 0;
   const next = snapshots.map(snap => {
-    if ((snap.entryName ?? '').trim() !== oldStableName.trim()) return snap;
+    if (!namesMatch(snap.bookName, bookName) || !namesMatch(snap.entryName, oldStableName)) {
+      return snap;
+    }
     if (hasNew) return snap;
     changed += 1;
     return { ...snap, entryName: newStableName };
@@ -185,6 +239,8 @@ async function rewriteMessageWorldbookDataForAttrRename(
   newStableName: string,
   fromAttr: string,
   toAttr: string,
+  rule: ChatWorldbookWriteRule,
+  bookName: string,
 ): Promise<number> {
   const lastId = getLastMessageId();
   if (lastId < 0) return 0;
@@ -210,8 +266,10 @@ async function rewriteMessageWorldbookDataForAttrRename(
         rawApplied as WorldbookWriteAppliedEntry[],
         oldStableName,
         newStableName,
+        bookName,
         fromAttr,
         toAttr,
+        rule,
       );
       if (changed > 0) {
         data[POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY] = next;
@@ -226,6 +284,7 @@ async function rewriteMessageWorldbookDataForAttrRename(
         rawSnapshots as WorldbookWriteSnapshotEntry[],
         oldStableName,
         newStableName,
+        bookName,
       );
       if (changed > 0) {
         data[POST_PROCESS_WORLDBOOK_WRITE_SNAPSHOT_KEY] = next;
@@ -253,8 +312,44 @@ async function rewriteAppliedLedgerAttrRenameInChat(
   newStableName: string,
   fromAttr: string,
   toAttr: string,
+  rule: ChatWorldbookWriteRule,
+  bookName: string,
 ): Promise<number> {
-  return rewriteMessageWorldbookDataForAttrRename(oldStableName, newStableName, fromAttr, toAttr);
+  return rewriteMessageWorldbookDataForAttrRename(
+    oldStableName,
+    newStableName,
+    fromAttr,
+    toAttr,
+    rule,
+    bookName,
+  );
+}
+
+function extraKeysFromChatLedger(bookName: string, stableName: string): string[] {
+  const lastId = getLastMessageId();
+  if (lastId < 0) return [];
+  let msgs;
+  try {
+    msgs = getChatMessages(`0-${lastId}`);
+  } catch {
+    return [];
+  }
+  const book = bookName.trim();
+  const name = stableName.trim();
+  let found: WorldbookWriteAppliedEntry | undefined;
+  for (const msg of msgs) {
+    if (msg.role !== 'assistant') continue;
+    const data = (msg.data ?? {}) as Record<string, unknown>;
+    const raw = data[POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY];
+    if (!Array.isArray(raw)) continue;
+    for (const item of raw) {
+      const entry = item as WorldbookWriteAppliedEntry;
+      if ((entry?.bookName ?? '').trim() === book && (entry?.stableName ?? '').trim() === name) {
+        found = entry;
+      }
+    }
+  }
+  return resolveAppliedExtraKeys(found);
 }
 
 async function readWorldbookEntryPartial(
@@ -311,17 +406,22 @@ export async function migrateWorldbookForReplicaAttrRename(
     const oldPartial = await readWorldbookEntryPartial(bookName, oldStableName);
     if (oldPartial) {
       expectedEntryMigrations += 1;
-      const remappedKeys = remapExactKeyword(
-        (oldPartial.strategy as { keys?: string[] } | undefined)?.keys,
-        from,
-        to,
-      );
+      const oldKeys = (oldPartial.strategy as { keys?: string[] } | undefined)?.keys;
       const partial: Partial<WorldbookEntry> = {
         ...oldPartial,
         name: newStableName,
       };
-      if (partial.strategy && typeof partial.strategy === 'object' && remappedKeys) {
-        partial.strategy = { ...partial.strategy, keys: remappedKeys };
+      if (partial.strategy && typeof partial.strategy === 'object' && Array.isArray(oldKeys)) {
+        partial.strategy = {
+          ...partial.strategy,
+          keys: rebuildLiveWorldbookKeysAfterAttrRename(
+            target.rule,
+            from,
+            to,
+            oldKeys,
+            extraKeysFromChatLedger(bookName, oldStableName),
+          ),
+        };
       }
       try {
         await upsertEntryByStableName(bookName, newStableName, partial);
@@ -334,7 +434,14 @@ export async function migrateWorldbookForReplicaAttrRename(
       }
     }
 
-    await rewriteAppliedLedgerAttrRenameInChat(oldStableName, newStableName, from, to);
+    await rewriteAppliedLedgerAttrRenameInChat(
+      oldStableName,
+      newStableName,
+      from,
+      to,
+      target.rule,
+      bookName,
+    );
   }
   return { migrated, failedTargets, expectedEntryMigrations };
 }

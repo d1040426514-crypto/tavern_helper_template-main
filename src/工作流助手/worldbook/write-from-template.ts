@@ -11,6 +11,7 @@ import {
 import { writeFloorTagValues } from '../tasks/tag-variables';
 import { normalizePlotWorldbookPosition, normalizeWorldbookWritePlacement } from './entry-order';
 import {
+  expandNameSeparatorKeywords,
   mergeEntryKeys,
   resolveAppliedExtraKeys,
 } from './entry-keys';
@@ -30,8 +31,10 @@ import { parseCommaSeparatedList } from '../tasks/comma-separated';
 export { resolveWrapperEntryBaseName, resolveWrapperStableNames } from './write-ledger-utils';
 export {
   diffExtraKeys,
+  expandNameSeparatorKeywords,
   mergeEntryKeys,
   normalizeKeywordList,
+  remapKeywordsForAttrRename,
   resolveAppliedExtraKeys,
 } from './entry-keys';
 
@@ -195,16 +198,17 @@ export function resolveEntryKeys(rule: ChatWorldbookWriteRule, compositeKey?: st
   if (rule.entryType !== 'keyword') return [];
 
   const spec = parseExtractTagSpec(rule.targetTag.trim());
+  let keys: string[] = staticKeys;
   if (rule.splitByAttr && compositeKey && spec?.attrName) {
     const parsed = parseCompositeKey(compositeKey);
     if (parsed) {
-      return [...splitCommaKeywords(parsed.attrValue), ...staticKeys];
+      keys = [...splitCommaKeywords(parsed.attrValue), ...staticKeys];
     }
+  } else if (!staticKeys.length && spec && !spec.attrName) {
+    // 裸标签 keyword 条目：未填静态关键字时默认使用标签名（如 result）
+    keys = [spec.tagName];
   }
-  if (staticKeys.length) return staticKeys;
-  // 裸标签 keyword 条目：未填静态关键字时默认使用标签名（如 result）
-  if (spec && !spec.attrName) return [spec.tagName];
-  return staticKeys;
+  return expandNameSeparatorKeywords(keys);
 }
 
 function buildPosition(rule: ChatWorldbookWriteRule): WorldbookEntry['position'] {
