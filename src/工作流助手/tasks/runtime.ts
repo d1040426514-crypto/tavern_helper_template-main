@@ -47,6 +47,8 @@ import {
   restoreInjectVarBaselineForRerun,
 } from './inject-variable-update';
 import { applyChatWorldbookWriteAfterStage } from '../worldbook/write-from-template';
+import { beginWorldbookReadCache, clearWorldbookReadCache } from '../worldbook/read-cache';
+import { beginTemplateProcessMemo, endTemplateProcessMemo } from './template-process';
 import {
   buildStageProgressDisplayItems,
   disableReplicaFamilyOnTasks,
@@ -383,6 +385,7 @@ function groupTasksByStage(tasks: PostProcessTask[], listOrder: PostProcessTask[
 
 interface StageProgressReporter {
   setRunning(taskId: string): void;
+  markAllRunning(): void;
   setFinished(taskId: string, result: TaskRunResult): void;
   pushSnapshot(): void;
 }
@@ -419,6 +422,16 @@ function createStageProgressReporter(
       if (!state) return;
       state.status = 'running';
       state.detail = undefined;
+      refreshDisplayItems();
+      pushSnapshot();
+    },
+    markAllRunning() {
+      for (const task of stageTasks) {
+        const state = memberStates.get(task.id);
+        if (!state) continue;
+        state.status = 'running';
+        state.detail = undefined;
+      }
       refreshDisplayItems();
       pushSnapshot();
     },
@@ -475,6 +488,8 @@ export async function runPostProcessTasks(
 
   const ctx = await buildSharedContext(messageId, settings, snapshot, { isRerun: options?.isRerun });
   checkRunCancelled(options?.signal);
+  beginTemplateProcessMemo();
+  try {
   let enabledTasks = settings.tasks.filter(t => t.enabled);
   const allNewlyCreatedReplicaIds: string[] = [];
   const allExecutedMemberIds: string[] = [];
@@ -509,6 +524,7 @@ export async function runPostProcessTasks(
 
   if (options?.taskIdFilter) {
     const task = enabledTasks[0]!;
+    beginWorldbookReadCache();
     const routePoolRegistry = new RouteConcurrencyPoolRegistry();
     const reporter = createStageProgressReporter([task], task.stage, settings.tasks, options?.onProgress);
     reporter.pushSnapshot();
@@ -547,6 +563,7 @@ export async function runPostProcessTasks(
         rules: settings.chatWorldbookWriteRules ?? [],
         settings,
       });
+      beginWorldbookReadCache();
 
       const prepared = prepareStageTasksWithReplicaSync(stageTasksRaw, settings.tasks, aggregatedRelayTags);
       settings.tasks = prepared.allTasks;
@@ -576,12 +593,12 @@ export async function runPostProcessTasks(
 
       const reporter = createStageProgressReporter(stageTasks, stageNo, settings.tasks, options?.onProgress);
       reporter.pushSnapshot();
+      reporter.markAllRunning();
 
       const stageRelayTagMap = new Map(aggregatedRelayTags);
       const runOptions = { signal: options?.signal, routePoolRegistry };
       const stageResults = await Promise.all(
         stageTasks.map(async task => {
-          reporter.setRunning(task.id);
           const result = await runSingleTask(task, ctx, stageRelayTagMap, scheduleCtx, runOptions);
           reporter.setFinished(task.id, result);
           return result;
@@ -627,6 +644,9 @@ export async function runPostProcessTasks(
         stageResults,
         allStageResults: results,
       });
+      ctx.taskWorldbookCache.clear();
+      ctx.taskManagedWorldbookCache.clear();
+      clearWorldbookReadCache();
     }
   } catch (e) {
     if (e instanceof RunCancelledError || isRunCancelled(options?.signal)) {
@@ -654,4 +674,8 @@ export async function runPostProcessTasks(
     opportunityMemberIds: allOpportunityMemberIds,
     scheduleWaitMemberIds: allScheduleWaitMemberIds,
   };
+  } finally {
+    clearWorldbookReadCache();
+    endTemplateProcessMemo();
+  }
 }

@@ -21,6 +21,7 @@ import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { sortPlotWorldbookEntries } from './entry-order';
 import { scanTriggeredWorldbookEntries } from './scan';
+import { getWorldbookCached } from './read-cache';
 import { resolveWriteTargetBookName } from './write-from-template';
 import type { ChatWorldbookWriteRule, ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
 
@@ -146,7 +147,7 @@ export async function getWorldbookContentForPostProcess(
   let placeholderOriginalIndex = 0;
   for (const bookName of bookNames) {
     try {
-      const entries = await getWorldbook(bookName);
+      const entries = await getWorldbookCached(bookName);
       for (const entry of entries) {
         const decorated = decorateEntry(entry, bookName, placeholderOriginalIndex++);
         if (isOutlineOrSummaryIndexEntry(decorated.normalizedComment)) continue;
@@ -199,7 +200,7 @@ export async function getManagedWorldbookContentForPostProcess(
   let placeholderOriginalIndex = 0;
   for (const bookName of bookNames) {
     try {
-      const entries = await getWorldbook(bookName);
+      const entries = await getWorldbookCached(bookName);
       for (const entry of entries) {
         if (!entry.enabled) continue;
         const decorated = decorateEntry(entry, bookName, placeholderOriginalIndex++);

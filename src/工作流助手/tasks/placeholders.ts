@@ -29,7 +29,7 @@ import { sanitizeUserInputForPostProcess } from './sanitize-context';
 import { settingsWithTaskContext } from './context-config';
 import { normalizeContextTagRules } from './context-tags';
 import type { DataSnapshot } from '../bridge/database-api';
-import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
+import type { ChatWorldbookWriteRule, PlotWorldbookConfig, PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import { normalizePromptRole } from './prompt-role';
 import { buildEffectivePromptGroups, iterTaskPromptContents } from './prompt-auto-segments';
 import type { ReplicaStateSnapshot } from './replica-state';
@@ -172,6 +172,14 @@ function buildWorldbookScanText(
     .join('\n');
 }
 
+function plotWorldbookCacheKey(config: PlotWorldbookConfig, scanText: string): string {
+  return `plot\0${config.source}\0${config.manualSelection.join('\0')}\0${JSON.stringify(config.enabledEntries ?? {})}\0${scanText}`;
+}
+
+function managedWorldbookCacheKey(scanText: string, writeRules: ChatWorldbookWriteRule[]): string {
+  return `managed\0${writeRules.map(r => r.id).join(',')}\0${scanText}`;
+}
+
 export async function resolveTaskPlaceholders(
   task: PostProcessTask,
   ctx: SharedContext,
@@ -196,8 +204,9 @@ export async function resolveTaskPlaceholders(
   const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);
 
   if (needs$1) {
-    if (!ctx.taskWorldbookCache.has(task.id)) {
-      const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
+    const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
+    const cacheKey = plotWorldbookCacheKey(wbConfig, scanText);
+    if (!ctx.taskWorldbookCache.has(cacheKey)) {
       const wb = await getWorldbookContentForPostProcess(
         wbConfig,
         scanText,
@@ -205,24 +214,25 @@ export async function resolveTaskPlaceholders(
         ctx.settings.chatWorldbookWriteRules,
         ctx.snapshot.tablesJson,
       );
-      ctx.taskWorldbookCache.set(task.id, finalizePlotWorldbookPlaceholderContent(wb, excludeRules));
+      ctx.taskWorldbookCache.set(cacheKey, finalizePlotWorldbookPlaceholderContent(wb, excludeRules));
     }
-    vars.$1 = ctx.taskWorldbookCache.get(task.id) ?? '';
+    vars.$1 = ctx.taskWorldbookCache.get(cacheKey) ?? '';
   }
 
   if (needs$2) {
-    if (!ctx.taskManagedWorldbookCache.has(task.id)) {
+    const cacheKey = managedWorldbookCacheKey(scanText, ctx.settings.chatWorldbookWriteRules ?? []);
+    if (!ctx.taskManagedWorldbookCache.has(cacheKey)) {
       const wb = await getManagedWorldbookContentForPostProcess(
         scanText,
         ctx.messageId,
         ctx.settings.chatWorldbookWriteRules,
       );
       ctx.taskManagedWorldbookCache.set(
-        task.id,
+        cacheKey,
         finalizeManagedWorldbookPlaceholderContent(wb, excludeRules),
       );
     }
-    vars.$2 = ctx.taskManagedWorldbookCache.get(task.id) ?? '';
+    vars.$2 = ctx.taskManagedWorldbookCache.get(cacheKey) ?? '';
   }
 
   return vars;
