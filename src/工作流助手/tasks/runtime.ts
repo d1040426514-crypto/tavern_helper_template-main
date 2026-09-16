@@ -16,8 +16,10 @@ import { getCurrentChatKey } from '../api/chat-key';
 import {
   abortableDelay,
   checkRunCancelled,
+  createSerialGate,
   isRunCancelled,
   RunCancelledError,
+  type SerialGate,
 } from './run-control';
 import {
   extractPlotTagsFromResponse,
@@ -159,7 +161,11 @@ async function runSingleTask(
   ctx: SharedContext,
   relayTagMap: RelayTagMap,
   scheduleCtx: ScheduleContext,
-  options?: { signal?: AbortSignal; routePoolRegistry?: RouteConcurrencyPoolRegistry },
+  options?: {
+    signal?: AbortSignal;
+    routePoolRegistry?: RouteConcurrencyPoolRegistry;
+    promptPrepGate?: SerialGate;
+  },
 ): Promise<TaskRunResult> {
   const start = Date.now();
   checkRunCancelled(options?.signal);
@@ -203,19 +209,24 @@ async function runSingleTask(
     };
   }
 
-  const vars = await resolveTaskPlaceholders(task, ctx, relayTagMap);
-  checkRunCancelled(options?.signal);
-  lastPlaceholderVars = _.cloneDeep(vars);
-  const messages = await renderTaskMessages(
-    task,
-    vars,
-    relayTagMap,
-    ctx.messageVarHistoryMap,
-    ctx.injectOnlyTagsUnion,
-    ctx.messageId,
-    ctx.settings.tasks,
-    ctx.replicaState,
-  );
+  const prepareMessages = async () => {
+    const resolved = await resolveTaskPlaceholders(task, ctx, relayTagMap);
+    checkRunCancelled(options?.signal);
+    lastPlaceholderVars = _.cloneDeep(resolved);
+    return renderTaskMessages(
+      task,
+      resolved,
+      relayTagMap,
+      ctx.messageVarHistoryMap,
+      ctx.injectOnlyTagsUnion,
+      ctx.messageId,
+      ctx.settings.tasks,
+      ctx.replicaState,
+    );
+  };
+  const messages = options?.promptPrepGate
+    ? await options.promptPrepGate.run(prepareMessages, options.signal)
+    : await prepareMessages();
   if (!messages.length) {
     return {
       taskId: task.id,
@@ -596,7 +607,8 @@ export async function runPostProcessTasks(
       reporter.markAllRunning();
 
       const stageRelayTagMap = new Map(aggregatedRelayTags);
-      const runOptions = { signal: options?.signal, routePoolRegistry };
+      const promptPrepGate = createSerialGate();
+      const runOptions = { signal: options?.signal, routePoolRegistry, promptPrepGate };
       const stageResults = await Promise.all(
         stageTasks.map(async task => {
           const result = await runSingleTask(task, ctx, stageRelayTagMap, scheduleCtx, runOptions);
