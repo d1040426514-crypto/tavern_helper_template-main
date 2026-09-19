@@ -26,6 +26,7 @@ import {
 } from './replica-state';
 import type { ChatWorldbookWriteRule, PostProcessTask, ScriptSettings } from './schema';
 import { parseExtractTagSpec } from './tag-extract';
+import { replicaAttrIdentityEquals } from './replica-attr-identity';
 
 export type ApplyPendingReplicaRenamesOptions = {
   messageId: number;
@@ -67,7 +68,7 @@ function resolveRootsForRename(
 function hasReplicaToConflict(roots: PostProcessTask[], to: string, tasks: PostProcessTask[]): boolean {
   for (const root of roots) {
     const members = getReplicaTasks(root.id, tasks);
-    if (members.some(m => (m.replicaFamilyAttrValue ?? '').trim() === to)) {
+    if (members.some(m => replicaAttrIdentityEquals(m.replicaFamilyAttrValue ?? '', to))) {
       return true;
     }
   }
@@ -77,7 +78,7 @@ function hasReplicaToConflict(roots: PostProcessTask[], to: string, tasks: PostP
 function hasAnyReplicaFrom(roots: PostProcessTask[], from: string, tasks: PostProcessTask[]): boolean {
   for (const root of roots) {
     const members = getReplicaTasks(root.id, tasks);
-    if (members.some(m => (m.replicaFamilyAttrValue ?? '').trim() === from)) {
+    if (members.some(m => replicaAttrIdentityEquals(m.replicaFamilyAttrValue ?? '', from))) {
       return true;
     }
   }

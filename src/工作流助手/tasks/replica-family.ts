@@ -11,6 +11,11 @@ import {
   parseExtractTagSpec,
 } from './tag-extract';
 import { collectEnumRegistryAttrValues } from './replica-enum-parse';
+import {
+  normalizeReplicaAttrValue,
+  pickReplicaByAttrIdentity,
+  replicaAttrIdentityEquals,
+} from './replica-attr-identity';
 import { recordPendingLastEnumAttrValues } from './replica-enum-pending';
 import { newTaskId } from './task-clone';
 import { iterTaskPromptContents } from './prompt-auto-segments';
@@ -43,6 +48,30 @@ export function shouldRunReplicaAtRuntime(replica: PostProcessTask, root: PostPr
   const mode = getReplicaFamilyScheduleMode(root);
   if (mode === 'auto') return true;
   return isReplicaLaunched(replica);
+}
+
+/** auto：每个正规化 attr 最多选一个成员；manual：全部已过 shouldRun 的成员 */
+export function selectRunnableReplicasForRelay(
+  replicas: PostProcessTask[],
+  root: PostProcessTask,
+  relayAttrValues: string[],
+): PostProcessTask[] {
+  const eligible = replicas.filter(r => shouldRunReplicaAtRuntime(r, root));
+  if (getReplicaFamilyScheduleMode(root) !== 'auto') return eligible;
+
+  const claimedIds = new Set<string>();
+  const runnable: PostProcessTask[] = [];
+  const uniqueRelay = sortAttrValues([
+    ...new Set(relayAttrValues.map(v => normalizeReplicaAttrValue(v)).filter(Boolean)),
+  ]);
+  for (const attrValue of uniqueRelay) {
+    const remaining = eligible.filter(r => !claimedIds.has(r.id));
+    const picked = pickReplicaByAttrIdentity(remaining, attrValue);
+    if (!picked) continue;
+    claimedIds.add(picked.id);
+    runnable.push(picked);
+  }
+  return runnable;
 }
 
 export function scanDynamicAttrPlaceholders(task: PostProcessTask): string[] {
@@ -337,17 +366,19 @@ export function renameReplicaFamilyMemberAttr(
   toAttr: string,
   allTasks: PostProcessTask[],
 ): RenameReplicaMemberResult {
-  const from = String(fromAttr ?? '').trim();
-  const to = String(toAttr ?? '').trim();
+  const from = normalizeReplicaAttrValue(fromAttr);
+  const to = normalizeReplicaAttrValue(toAttr);
   if (!from || !to || from === to) {
     return { tasks: allTasks, renamed: false, skipReason: '无效改名' };
   }
   const members = getReplicaTasks(root.id, allTasks);
-  const source = members.find(m => (m.replicaFamilyAttrValue ?? '').trim() === from);
+  const source = pickReplicaByAttrIdentity(members, from);
   if (!source) {
     return { tasks: allTasks, renamed: false, skipReason: `未找到属性值「${from}」的副本` };
   }
-  const conflict = members.find(m => (m.replicaFamilyAttrValue ?? '').trim() === to);
+  const conflict = members.find(
+    m => m.id !== source.id && replicaAttrIdentityEquals(m.replicaFamilyAttrValue ?? '', to),
+  );
   if (conflict) {
     return {
       tasks: allTasks,
@@ -383,7 +414,9 @@ export function mergeReplicaFamilyFromRelay(
 ): MergeReplicaFamilyResult {
   const baseName = getReplicaFamilyBaseNameFromTask(root);
   const spec = root.replicaFamilySpec ?? scanDynamicAttrPlaceholders(root)[0] ?? '';
-  const relaySet = new Set(relayAttrValues);
+  const relayNormalized = sortAttrValues([
+    ...new Set(relayAttrValues.map(v => normalizeReplicaAttrValue(v)).filter(Boolean)),
+  ]);
   const newlyCreatedIds: string[] = [];
 
   const withoutReplicas = allTasks.filter(t => t.replicaFamilyRootId !== root.id);
@@ -391,7 +424,7 @@ export function mergeReplicaFamilyFromRelay(
   if (rootIdx === -1) return { tasks: allTasks, newlyCreatedIds };
 
   const existingReplicas = getReplicaTasks(root.id, allTasks);
-  const byAttr = new Map(existingReplicas.map(r => [r.replicaFamilyAttrValue ?? '', r]));
+  const claimedIds = new Set<string>();
 
   const updatedRoot: PostProcessTask = {
     ...withoutReplicas[rootIdx]!,
@@ -405,11 +438,12 @@ export function mergeReplicaFamilyFromRelay(
 
   const nextReplicas: PostProcessTask[] = [];
 
-  for (const attrValue of sortAttrValues([...relaySet])) {
-    const existing = byAttr.get(attrValue);
+  for (const attrValue of relayNormalized) {
+    const remaining = existingReplicas.filter(r => !claimedIds.has(r.id));
+    const existing = pickReplicaByAttrIdentity(remaining, attrValue);
     if (existing) {
       nextReplicas.push(syncReplicaFromRoot(existing, updatedRoot));
-      byAttr.delete(attrValue);
+      claimedIds.add(existing.id);
     } else {
       const created = buildReplicaFromRoot(updatedRoot, attrValue, baseName, allTasks);
       newlyCreatedIds.push(created.id);
@@ -417,7 +451,8 @@ export function mergeReplicaFamilyFromRelay(
     }
   }
 
-  for (const orphan of byAttr.values()) {
+  for (const orphan of existingReplicas) {
+    if (claimedIds.has(orphan.id)) continue;
     nextReplicas.push(syncReplicaFromRoot(orphan, updatedRoot));
   }
 
@@ -768,16 +803,7 @@ export function listLaunchedReplicaSuffixes(
 ): string[] {
   const replicas = getReplicaTasks(root.id, allTasks);
   const attrValues = collectAttrValuesForReplicaRoot(root, relayMap);
-  const relaySet = new Set(attrValues);
-  const mode = getReplicaFamilyScheduleMode(root);
-
-  const runnable = replicas.filter(r => {
-    if (!shouldRunReplicaAtRuntime(r, root)) return false;
-    if (mode === 'auto') {
-      return relaySet.has(r.replicaFamilyAttrValue ?? '');
-    }
-    return true;
-  });
+  const runnable = selectRunnableReplicasForRelay(replicas, root, attrValues);
 
   const suffixes = runnable
     .map(r => getReplicaDisplaySuffix(r))
@@ -882,16 +908,7 @@ export function prepareStageTasksWithReplicaSync(
       newlyCreatedReplicaIds.push(...merged.newlyCreatedIds);
       const syncedRoot = updatedAll.find(t => t.id === root.id) ?? root;
       const replicas = getReplicaTasks(syncedRoot.id, updatedAll);
-      const relaySet = new Set(attrValues);
-      const mode = getReplicaFamilyScheduleMode(syncedRoot);
-
-      const runnable = replicas.filter(r => {
-        if (!shouldRunReplicaAtRuntime(r, syncedRoot)) return false;
-        if (mode === 'auto') {
-          return relaySet.has(r.replicaFamilyAttrValue ?? '');
-        }
-        return true;
-      });
+      const runnable = selectRunnableReplicasForRelay(replicas, syncedRoot, attrValues);
 
       if (!runnable.length) {
         skippedRoots.push({

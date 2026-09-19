@@ -48,6 +48,7 @@ import {
   validateReplicaFamilyEligibility,
   stripReplicaFamilyMembers,
 } from './replica-family';
+import { normalizeReplicaAttrValue, pickReplicaByAttrIdentity } from './replica-attr-identity';
 import {
   applyReplicaFamilyCleanup,
   getReplicaFamilyCleanupConfig,
@@ -1065,7 +1066,7 @@ export async function ensureReplicaFamilyMember(
   options: { launched?: boolean } = {},
   source: TaskWriteSource = 'api',
 ): Promise<PostProcessTask> {
-  const trimmed = String(attrValue ?? '').trim();
+  const trimmed = normalizeReplicaAttrValue(String(attrValue ?? ''));
   if (!trimmed) throw new Error('副本属性值不能为空');
 
   const root = getTask(rootId);
@@ -1073,7 +1074,7 @@ export async function ensureReplicaFamilyMember(
   if (root.replicaFamilyRootId) throw new Error('任务不是副本族根模板');
 
   const all = listTasks();
-  const existing = getReplicaTasks(rootId, all).find(m => (m.replicaFamilyAttrValue ?? '').trim() === trimmed);
+  const existing = pickReplicaByAttrIdentity(getReplicaTasks(rootId, all), trimmed);
   if (existing) {
     if (options.launched !== undefined && existing.replicaFamilyLaunched !== options.launched) {
       return updateReplicaMemberSchedule(existing.id, { launched: options.launched }, source);

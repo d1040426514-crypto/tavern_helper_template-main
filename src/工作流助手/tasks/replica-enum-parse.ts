@@ -8,6 +8,7 @@ import {
   type ExtractTagSpec,
 } from './tag-extract';
 import { tryParseJsonObject } from './strict-variable-response';
+import { normalizeReplicaAttrValue } from './replica-attr-identity';
 
 export type RelayTagMap = Map<string, string[]>;
 
@@ -61,7 +62,7 @@ function normalizeValues(values: unknown): string[] {
   if (!Array.isArray(values)) return [];
   const out: string[] = [];
   for (const v of values) {
-    const text = String(v ?? '').trim();
+    const text = normalizeReplicaAttrValue(String(v ?? ''));
     if (text) out.push(text);
   }
   return sortAttrValues([...new Set(out)]);
@@ -72,8 +73,8 @@ function normalizeRenames(renames: unknown): ReplicaEnumRename[] {
   const byFrom = new Map<string, string>();
   for (const item of renames) {
     if (!isPlainObject(item)) continue;
-    const from = String(item.from ?? '').trim();
-    const to = String(item.to ?? '').trim();
+    const from = normalizeReplicaAttrValue(String(item.from ?? ''));
+    const to = normalizeReplicaAttrValue(String(item.to ?? ''));
     if (!from || !to || from === to) continue;
     byFrom.set(from, to);
   }
@@ -385,7 +386,9 @@ export function collectEnumRegistryAttrValues(
       const parsedDirected = parseDirectedEnumRegistryKey(key);
       if (!parsedDirected) continue;
       const parsed = parseCompositeKey(parsedDirected.compositeKey);
-      if (parsed) directed.push(parsed.attrValue);
+      if (!parsed) continue;
+      const attr = normalizeReplicaAttrValue(parsed.attrValue);
+      if (attr) directed.push(attr);
       continue;
     }
 
@@ -393,7 +396,10 @@ export function collectEnumRegistryAttrValues(
 
     if (keyLower.startsWith(broadcastPrefix)) {
       const parsed = parseCompositeKey(key);
-      if (parsed) broadcast.push(parsed.attrValue);
+      if (parsed) {
+        const attr = normalizeReplicaAttrValue(parsed.attrValue);
+        if (attr) broadcast.push(attr);
+      }
     }
   }
 

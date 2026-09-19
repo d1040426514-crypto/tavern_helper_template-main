@@ -1055,4 +1055,34 @@ test('rename then merge with new value does not create duplicate', () => {
   assert.equal(merged.tasks.find(t => t.id === memberId)?.replicaFamilyAttrValue, '锈剑');
 });
 
+test('merge reuses member when enum middle-dot variant differs', () => {
+  const root = baseTask({
+    replicaFamilySpec: 'npc@act',
+    replicaFamilyEnumSpec: 'npc@act',
+    promptGroups: [{ name: '', role: 'user', content: 'do {{npc@act}}', enabled: true }],
+  });
+  const merged = mergeReplicaFamilyFromRelay(root, ['波尔特・瓦伦'], [root]);
+  const member = merged.tasks.find(t => t.replicaFamilyRootId === root.id)!;
+  assert.equal(member.replicaFamilyAttrValue, '波尔特·瓦伦');
+  const patched = merged.tasks.map(t =>
+    t.id === member.id ? { ...t, replicaFamilyAttrValue: '波尔特・瓦伦' } : t,
+  );
+  const again = mergeReplicaFamilyFromRelay(
+    patched.find(t => t.id === root.id)!,
+    ['波尔特·瓦伦'],
+    patched,
+  );
+  assert.equal(again.newlyCreatedIds.length, 0);
+  assert.equal(again.tasks.filter(t => t.replicaFamilyRootId === root.id).length, 1);
+  assert.equal(again.tasks.find(t => t.id === member.id)?.id, member.id);
+});
+
+test('renameReplicaFamilyMemberAttr no-ops when from and to are the same identity', () => {
+  const root = baseTask();
+  const tasks = mergeReplicaFamilyFromRelay(root, ['波尔特・瓦伦'], [root]).tasks;
+  const liveRoot = tasks.find(t => t.id === root.id)!;
+  const result = renameReplicaFamilyMemberAttr(liveRoot, '波尔特・瓦伦', '波尔特·瓦伦', tasks);
+  assert.equal(result.renamed, false);
+});
+
 if (process.exitCode) process.exit(process.exitCode);

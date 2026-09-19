@@ -407,4 +407,20 @@ test('directed renames register directed keys for to', () => {
   assert.equal(tags['item@id=9'], undefined);
 });
 
+test('parse collapses middle-dot variants in values', () => {
+  const text = `<ReplicaEnum>{"spec":"npc@act","values":["波尔特・瓦伦","波尔特·瓦伦"]}</ReplicaEnum>`;
+  const parsed = parseReplicaEnumFromResponse(text);
+  assert.deepEqual(findEntry(parsed, 'npc@act')?.values, ['波尔特·瓦伦']);
+});
+
+test('collectEnumRegistryAttrValues unifies middle-dot variants', () => {
+  const relay = new Map<string, string[]>([
+    ['npc@act=波尔特・瓦伦', [ENUM_REGISTRY_MARKER]],
+    ['npc@act=波尔特·瓦伦', [ENUM_REGISTRY_MARKER]],
+  ]);
+  assert.deepEqual(collectEnumRegistryAttrValues(relay, { tagName: 'npc', attrName: 'act' }), [
+    '波尔特·瓦伦',
+  ]);
+});
+
 if (process.exitCode) process.exit(process.exitCode);

@@ -189,4 +189,50 @@ test('resetNewlyCreatedReplicaLaunched sets launched false', () => {
   assert.equal(updated.replicaFamilyLaunched, false);
 });
 
+test('prepareStage auto runs existing member whose stored attr uses another middle-dot', () => {
+  const root = baseTask({
+    replicaFamilySpec: 'npc@act',
+    replicaFamilyEnumSpec: 'npc@act',
+    extractInjectTags: ['npc@act'],
+    promptGroups: [{ name: '', role: 'user', content: '{{npc@act}}', enabled: true }],
+  });
+  const merged = mergeReplicaFamilyFromRelay(root, ['波尔特・瓦伦'], [root]);
+  const memberId = merged.tasks.find(t => t.replicaFamilyRootId)!.id;
+  const tasks = merged.tasks.map(t =>
+    t.id === memberId ? { ...t, replicaFamilyAttrValue: '波尔特・瓦伦' } : t,
+  );
+  const { tasks: runtime, newlyCreatedReplicaIds } = prepareStageTasksWithReplicaSync(
+    [root],
+    tasks,
+    relayMap({ 'npc@act=波尔特·瓦伦': ENUM_REGISTRY_MARKER }),
+  );
+  assert.equal(newlyCreatedReplicaIds.length, 0);
+  assert.equal(runtime.length, 1);
+  assert.equal(runtime[0]!.id, memberId);
+});
+
+test('prepareStage auto runs only one member when both middle-dot variants exist', () => {
+  const root = baseTask({
+    replicaFamilySpec: 'npc@act',
+    replicaFamilyEnumSpec: 'npc@act',
+    extractInjectTags: ['npc@act'],
+    promptGroups: [{ name: '', role: 'user', content: '{{npc@act}}', enabled: true }],
+  });
+  const merged = mergeReplicaFamilyFromRelay(root, ['波尔特·瓦伦'], [root]);
+  const first = merged.tasks.find(t => t.replicaFamilyRootId)!;
+  const duplicate = {
+    ...first,
+    id: 'dup-dot',
+    replicaFamilyAttrValue: '波尔特・瓦伦',
+    replicaFamilyLaunched: true,
+  };
+  const { tasks: runtime } = prepareStageTasksWithReplicaSync(
+    [root],
+    [...merged.tasks, duplicate],
+    relayMap({ 'npc@act=波尔特·瓦伦': ENUM_REGISTRY_MARKER }),
+  );
+  assert.equal(runtime.length, 1);
+  assert.equal(runtime[0]!.id, first.id);
+});
+
 if (process.exitCode) process.exit(process.exitCode);

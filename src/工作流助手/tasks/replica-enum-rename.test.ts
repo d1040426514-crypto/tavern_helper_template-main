@@ -234,6 +234,19 @@ async function main(): Promise<void> {
     assert.equal(result.renamed, false);
     console.log('ok renameReplicaFamilyMemberAttr missing from skips');
   }
+
+  {
+    const root = baseTask();
+    const tasks = mergeReplicaFamilyFromRelay(root, ['波尔特・瓦伦'], [root]).tasks;
+    const result = renameReplicaFamilyMemberAttr(
+      tasks.find(t => t.id === root.id)!,
+      '波尔特・瓦伦',
+      '波尔特·瓦伦',
+      tasks,
+    );
+    assert.equal(result.renamed, false);
+    console.log('ok renameReplicaFamilyMemberAttr same identity is no-op');
+  }
 }
 
 main().catch(e => {
