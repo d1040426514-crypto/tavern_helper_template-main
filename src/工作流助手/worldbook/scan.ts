@@ -1,5 +1,13 @@
 import type { WorldbookEntry } from '@types/function/worldbook';
 
+export const DEFAULT_WORLDBOOK_MAX_RECURSION_STEPS = 10;
+
+export type ScanWorldbookOptions = {
+  allowDisabled?: boolean;
+  recursionEnabled?: boolean;
+  maxRecursionSteps?: number;
+};
+
 function keywordToString(keyword: string | RegExp): string {
   return typeof keyword === 'string' ? keyword.toLowerCase() : keyword.source.toLowerCase();
 }
@@ -9,54 +17,97 @@ function getEntryKeywords(entry: WorldbookEntry): string[] {
   return keys.map(keywordToString).filter(Boolean);
 }
 
+function delayUntil(entry: WorldbookEntry): number {
+  const n = entry.recursion?.delay_until;
+  return typeof n === 'number' && n > 0 ? n : 0;
+}
+
+function isConstantEligibleAtDepth(entry: WorldbookEntry, depth: number): boolean {
+  return depth >= delayUntil(entry);
+}
+
+function isSelectiveEligibleAtDepth(entry: WorldbookEntry, depth: number): boolean {
+  if (depth > 0 && entry.recursion?.prevent_incoming) return false;
+  return depth >= delayUntil(entry);
+}
+
+function hasWaitingDelay(entries: WorldbookEntry[], depth: number): boolean {
+  return entries.some(e => delayUntil(e) > depth);
+}
+
+function matchKeywords(entry: WorldbookEntry, haystack: string): boolean {
+  const keywords = getEntryKeywords(entry);
+  if (keywords.length === 0) return false;
+  return keywords.some(kw => haystack.includes(kw));
+}
+
+function recursionHaystack(triggered: Iterable<WorldbookEntry>): string {
+  return Array.from(triggered)
+    .filter(e => !e.recursion?.prevent_outgoing)
+    .map(e => e.content || '')
+    .join('\n')
+    .toLowerCase();
+}
+
+function resolveMaxRecursionSteps(raw: number | undefined): number {
+  const n = Math.floor(Number(raw ?? DEFAULT_WORLDBOOK_MAX_RECURSION_STEPS));
+  if (!Number.isFinite(n) || n <= 0) return DEFAULT_WORLDBOOK_MAX_RECURSION_STEPS;
+  return Math.min(DEFAULT_WORLDBOOK_MAX_RECURSION_STEPS, n);
+}
+
 export function scanTriggeredWorldbookEntries(
   entries: WorldbookEntry[],
   baseScanText: string,
-  options?: { includeConstantInBaseScan?: boolean; allowDisabled?: boolean },
+  options?: ScanWorldbookOptions,
 ): WorldbookEntry[] {
-  const lowerBase = baseScanText.toLowerCase();
   const allowDisabled = options?.allowDisabled === true;
+  const recursionEnabled = options?.recursionEnabled !== false;
+  const maxRecursionSteps = resolveMaxRecursionSteps(options?.maxRecursionSteps);
   const passEnabled = (e: WorldbookEntry) => allowDisabled || e.enabled;
-  const constantEntries = entries.filter(e => e.strategy?.type === 'constant' && passEnabled(e));
-  const keywordEntries = entries.filter(e => e.strategy?.type === 'selective' && passEnabled(e));
 
-  let scanBase = lowerBase;
-  if (options?.includeConstantInBaseScan !== false) {
-    const constantText = constantEntries
-      .filter(e => !e.recursion?.prevent_outgoing)
-      .map(e => e.content || '')
-      .join('\n')
-      .toLowerCase();
-    if (constantText) scanBase = [scanBase, constantText].filter(Boolean).join('\n');
-  }
+  const pendingConstants = entries.filter(e => e.strategy?.type === 'constant' && passEnabled(e));
+  let remaining = entries.filter(e => e.strategy?.type === 'selective' && passEnabled(e));
+  const triggered = new Set<WorldbookEntry>();
+  const lowerBase = String(baseScanText || '').toLowerCase();
 
-  const triggered = new Set<WorldbookEntry>(constantEntries);
-  let remaining = [...keywordEntries];
-  const maxDepth = 10;
+  const activateConstantsAtDepth = (depth: number) => {
+    const stillPending: WorldbookEntry[] = [];
+    for (const entry of pendingConstants) {
+      if (isConstantEligibleAtDepth(entry, depth)) triggered.add(entry);
+      else stillPending.push(entry);
+    }
+    pendingConstants.length = 0;
+    pendingConstants.push(...stillPending);
+  };
 
-  for (let depth = 0; depth < maxDepth && remaining.length > 0; depth++) {
-    const recursionText = Array.from(triggered)
-      .filter(e => !e.recursion?.prevent_outgoing)
-      .map(e => e.content)
-      .join('\n')
-      .toLowerCase();
-    const fullSearch = `${scanBase}\n${recursionText}`;
+  const matchSelective = (haystack: string, depth: number) => {
     const nextRemaining: WorldbookEntry[] = [];
     for (const entry of remaining) {
-      const keywords = getEntryKeywords(entry);
-      if (keywords.length === 0) {
+      if (!isSelectiveEligibleAtDepth(entry, depth)) {
         nextRemaining.push(entry);
         continue;
       }
-      const matched = keywords.some(kw => fullSearch.includes(kw));
-      if (matched) {
-        triggered.add(entry);
-      } else {
-        nextRemaining.push(entry);
-      }
+      if (matchKeywords(entry, haystack)) triggered.add(entry);
+      else nextRemaining.push(entry);
     }
-    if (nextRemaining.length === remaining.length) break;
     remaining = nextRemaining;
+  };
+
+  activateConstantsAtDepth(0);
+  matchSelective(lowerBase, 0);
+
+  if (!recursionEnabled) return Array.from(triggered);
+
+  for (
+    let depth = 1;
+    depth <= maxRecursionSteps && remaining.length + pendingConstants.length > 0;
+    depth++
+  ) {
+    const before = triggered.size;
+    activateConstantsAtDepth(depth);
+    matchSelective(recursionHaystack(triggered), depth);
+    const waiting = hasWaitingDelay([...remaining, ...pendingConstants], depth);
+    if (triggered.size === before && !waiting) break;
   }
 
   return Array.from(triggered);
