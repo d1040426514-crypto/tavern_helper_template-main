@@ -924,11 +924,11 @@ export function replacePlaceholdersInText(text: string, vars: Record<string, str
 export const PLACEHOLDER_LEGEND: { code: string; desc: string }[] = [
   {
     code: '$1',
-    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块（不含工作流助手托管条目、纪要记忆条目与 shujuku「主角信息」CustomExport）；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}} +（提示词含 $8 时）过滤后的 $8；N 同 contextTurnCount。可按任务配置 $1 世界书',
+    desc: '剧情世界书绿灯扫描，替换为 <worldbook_context> 块（仅条目正文，不含世界书条目名称；不含工作流助手托管条目、纪要记忆条目与 shujuku「主角信息」CustomExport）；触发扫描基底之一 = 最近 N 条 AI 楼，经与 $7 相同的「提取规则 / 排除规则」处理 + 提示词内已展开的 {{标签名}} +（提示词含 $8 时）过滤后的 $8；N 同 contextTurnCount。可按任务配置 $1 世界书',
   },
   {
     code: '$2',
-    desc: '工作流助手托管世界书条目（WorkflowHelper-*）关键词扫描，替换为 <worldbook_extra> 块；扫描基底同 $1。恒定条目始终触发，绿灯按关键字命中',
+    desc: '工作流助手托管世界书条目（WorkflowHelper-*）关键词扫描，替换为 <worldbook_extra> 块（仅条目正文，不含世界书条目名称）；扫描基底同 $1。恒定条目始终触发，绿灯按关键字命中',
   },
   { code: '$5', desc: '纪要索引（世界书条目或数据库表快照；支持酒馆宏/EJS）' },
   {

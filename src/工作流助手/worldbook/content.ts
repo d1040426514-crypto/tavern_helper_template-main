@@ -12,9 +12,8 @@ import {
   resolveProtagonistTableName,
 } from './blocked';
 import {
-  normalizePlaceholderEntryContent,
+  composePlaceholderEntryBlock,
   prepareRawPlaceholderEntryContent,
-  shouldOmitEntryTitleInPlaceholder,
 } from './entry-placeholder-format';
 import { shouldIncludePlotWorldbookEntryInDollar1 } from './plot-entry-select';
 import { applyExcludeRulesToText } from '../tasks/context-tags';
@@ -116,17 +115,11 @@ async function formatWorldbookEntries(
 ): Promise<string> {
   const parts: string[] = [];
   for (const entry of entries) {
-    const title = await processTemplateText(entry.name || 'Entry', messageId, { source: 'world_info' });
     const rawContent = prepareRawPlaceholderEntryContent(entry);
     const content = await processTemplateText(rawContent, messageId, { source: 'world_info' });
-    if (!title && !content) continue;
-    const normalizedContent = normalizePlaceholderEntryContent(entry, content);
-    if (!normalizedContent) continue;
-    if (shouldOmitEntryTitleInPlaceholder(entry.normalizedComment || '')) {
-      parts.push(normalizedContent);
-    } else {
-      parts.push(`# ${title || 'Entry'}\n${normalizedContent}`);
-    }
+    const block = composePlaceholderEntryBlock(entry, content);
+    if (!block) continue;
+    parts.push(block);
   }
   return parts.join('\n\n');
 }

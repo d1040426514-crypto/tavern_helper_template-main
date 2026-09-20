@@ -64,7 +64,7 @@ export function scanTriggeredWorldbookEntries(
 
 export function formatWorldbookEntriesRaw(entries: WorldbookEntry[]): string {
   return entries
-    .map(entry => `# ${entry.name || 'Entry'}\n${entry.content || ''}`)
+    .map(entry => String(entry.content || '').trim())
     .filter(Boolean)
     .join('\n\n');
 }

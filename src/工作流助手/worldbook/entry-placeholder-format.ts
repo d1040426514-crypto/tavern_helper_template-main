@@ -2,6 +2,7 @@ import { isCustomExportIndexEntry, isDbGeneratedEntry } from './blocked';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
+/** DB 条目：剥离 shujuku 默认内标题（# 表名 + 表格）。外层条目名已统一不注入。 */
 export function shouldOmitEntryTitleInPlaceholder(normalizedComment: string): boolean {
   return isDbGeneratedEntry(String(normalizedComment || '').trim());
 }
@@ -38,4 +39,12 @@ export function normalizePlaceholderEntryContent(
   content: string,
 ): string {
   return content.trim();
+}
+
+/** 占位符条目块：仅正文，不含世界书条目名称 */
+export function composePlaceholderEntryBlock(
+  entry: Pick<WorldbookEntry, 'content'> & { normalizedComment?: string },
+  processedContent: string,
+): string {
+  return normalizePlaceholderEntryContent(entry, processedContent);
 }
