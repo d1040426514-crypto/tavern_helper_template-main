@@ -96,6 +96,9 @@ async function persistRunStatus(
       aiOutput: r.rawResponse,
       aiReasoning: r.reasoningContent?.trim() || '',
       apiPresetUsed: r.apiPresetUsed,
+      apiAttemptCount: r.apiAttemptCount,
+      apiAcceptedAttempt: r.apiAcceptedAttempt,
+      apiAttemptFailures: r.apiAttemptFailures?.map(item => ({ ...item })),
     })),
   };
   await writeRunStatusToMessage(messageId, status);

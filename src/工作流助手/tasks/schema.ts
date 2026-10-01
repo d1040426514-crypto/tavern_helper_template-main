@@ -240,6 +240,11 @@ export const RunLogMessageSchema = z.object({
   name: z.string().default(''),
 });
 
+export const ApiAttemptFailureSchema = z.object({
+  attempt: z.number().int().min(1),
+  reason: z.string(),
+});
+
 export const RunLogTaskResultSchema = z.object({
   taskId: z.string(),
   taskName: z.string(),
@@ -254,6 +259,9 @@ export const RunLogTaskResultSchema = z.object({
   aiOutput: z.string().default(''),
   aiReasoning: z.string().optional().default(''),
   apiPresetUsed: z.string().optional(),
+  apiAttemptCount: z.number().int().min(0).optional(),
+  apiAcceptedAttempt: z.number().int().min(1).optional(),
+  apiAttemptFailures: z.array(ApiAttemptFailureSchema).optional(),
 });
 
 export const ChatExtractTagsConfigSchema = z.object({
@@ -451,6 +459,7 @@ export type PostProcessPreset = z.infer<typeof PostProcessPresetSchema>;
 export type ScriptSettings = z.infer<typeof ScriptSettingsSchema>;
 export type ContextTagRule = z.infer<typeof ContextTagRuleSchema>;
 export type RunLogMessage = z.infer<typeof RunLogMessageSchema>;
+export type ApiAttemptFailure = z.infer<typeof ApiAttemptFailureSchema>;
 export type RunLogTaskResult = z.infer<typeof RunLogTaskResultSchema>;
 export type ScheduleStateEntry = z.infer<typeof ScheduleStateEntrySchema>;
 export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;

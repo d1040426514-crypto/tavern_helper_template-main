@@ -2198,6 +2198,37 @@
   padding: 12px 14px 14px;
 }
 
+.acu-run-log-attempts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--acu-border);
+  border-radius: var(--acu-radius-sm);
+  background: var(--acu-bg-1);
+}
+
+.acu-run-log-attempts__row {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  column-gap: 12px;
+  align-items: start;
+  line-height: 1.5;
+}
+
+.acu-run-log-attempts__label {
+  color: var(--acu-text-3);
+  font-size: var(--acu-font-size-caption);
+}
+
+.acu-run-log-attempts__value {
+  color: var(--acu-text-1);
+  font-size: var(--acu-font-size-body);
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .acu-run-log-task__body > .acu-run-log-label:first-child,
 .acu-run-log-task__body > .acu-run-log-tags__head:first-child {
   margin-top: 0;

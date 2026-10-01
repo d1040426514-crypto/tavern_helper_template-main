@@ -43,6 +43,7 @@ import {
   type RemovedReplicaCleanupInfo,
 } from '../tasks/replica-family-cleanup';
 import { probeTaskGameTime } from '../tasks/schedule';
+import { buildRunLogAttemptRows } from '../tasks/run-log-attempts';
 import {
   CHAT_SNAPSHOT_PRESET_NAME,
   type ChatWorldbookWriteRule,
@@ -2223,8 +2224,8 @@ function formatRunLogTime(at?: number): string {
   return new Date(at).toLocaleString('zh-CN');
 }
 
-function runLogStatusText(r: { skipped?: boolean; skipReason?: string; success?: boolean }): string {
-  if (r.skipped) return `跳过${r.skipReason ? `（${r.skipReason}）` : ''}`;
+function runLogStatusText(r: { skipped?: boolean; success?: boolean }): string {
+  if (r.skipped) return '跳过';
   if (r.success) return '成功';
   return '失败';
 }
@@ -2293,6 +2294,14 @@ function formatRunLogTaskText(task: RunLogTaskResult): string {
   if (task.durationMs != null) metaParts.push(runLogDurationText(task.durationMs));
   lines.push(metaParts.join(' · '));
   lines.push('');
+
+  const attemptRows = buildRunLogAttemptRows(task);
+  if (attemptRows.length) {
+    for (const row of attemptRows) {
+      lines.push(`${row.label}：${row.value}`);
+    }
+    lines.push('');
+  }
 
   const writable = runLogWritableTagEntries(task);
   if (writable.length) {
@@ -4101,6 +4110,16 @@ function saveRunLogTaskTags(taskId: string): void {
                   </button>
                 </summary>
                 <div class="acu-run-log-task__body">
+                  <div v-if="buildRunLogAttemptRows(r).length" class="acu-run-log-attempts">
+                    <div
+                      v-for="(row, idx) in buildRunLogAttemptRows(r)"
+                      :key="idx"
+                      class="acu-run-log-attempts__row"
+                    >
+                      <span class="acu-run-log-attempts__label">{{ row.label }}</span>
+                      <span class="acu-run-log-attempts__value">{{ row.value }}</span>
+                    </div>
+                  </div>
                   <template v-if="runLogWritableTagEntries(r).length">
                     <div class="acu-run-log-tags__head">
                       <div class="acu-run-log-label acu-run-log-tags__title">摘取标签</div>

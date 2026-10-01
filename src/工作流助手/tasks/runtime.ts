@@ -40,7 +40,7 @@ import {
   type ActiveStructuredOutputMode,
 } from './strict-variable-response';
 import { acuToast } from '../ui/toast';
-import type { PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
+import type { ApiAttemptFailure, PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { TaskProgressItem, TaskProgressSnapshot, TaskProgressUpdate } from '../ui/task-progress-toast';
 import { applyChatBodyTagReplaceAfterStage } from './chat-body-tag-replace';
@@ -84,6 +84,12 @@ export interface TaskRunResult {
   durationMs: number;
   stage: number;
   apiPresetUsed?: string;
+  /** 实际发出的 API 请求次数；跳过任务不记 */
+  apiAttemptCount?: number;
+  /** 内容被接受的那一次，从 1 起 */
+  apiAcceptedAttempt?: number;
+  /** 各次失败原因，attempt 从 1 起；中途成功也保留此前失败 */
+  apiAttemptFailures?: ApiAttemptFailure[];
 }
 
 const processingIds = new Set<number>();
@@ -262,11 +268,23 @@ async function runSingleTask(
   let processedResponse = '';
   let apiPresetUsed: string | undefined;
   let retryOnPrimaryOnly = false;
+  let apiAttemptCount = 0;
+  let apiAcceptedAttempt: number | undefined;
+  let lastFailureWasSoft = false;
+  const apiAttemptFailures: ApiAttemptFailure[] = [];
+
+  const noteAttemptFailure = (attemptNo: number, reason: string, soft: boolean) => {
+    lastError = reason;
+    lastFailureWasSoft = soft;
+    apiAttemptFailures.push({ attempt: attemptNo, reason });
+  };
 
   lastPromptMessages = _.cloneDeep(apiMessages);
 
   for (let attempt = 0; attempt < maxRetries; attempt++) {
     checkRunCancelled(options?.signal);
+    const attemptNo = attempt + 1;
+    apiAttemptCount = attemptNo;
     try {
       silentGenerationDepth++;
       const apiResult = await callTaskApiWithRouteFallback(
@@ -294,7 +312,7 @@ async function runSingleTask(
       ) {
         throw new RunCancelledError();
       }
-      lastError = e instanceof Error ? e.message : String(e);
+      noteAttemptFailure(attemptNo, e instanceof Error ? e.message : String(e), false);
       retryOnPrimaryOnly = false;
       continue;
     } finally {
@@ -316,9 +334,10 @@ async function runSingleTask(
             `变量更新：已跳过 ${resolved.skippedOpCount} 条无法解析的 MVU patch op`,
           );
         }
+        apiAcceptedAttempt = attemptNo;
         break;
       }
-      lastError = resolved.error;
+      noteAttemptFailure(attemptNo, resolved.error, true);
       retryOnPrimaryOnly = true;
       if (attempt < maxRetries - 1) {
         await abortableDelay(1000, options?.signal);
@@ -327,8 +346,11 @@ async function runSingleTask(
     }
 
     processedResponse = rawResponse;
-    if ((rawResponse?.trim().length ?? 0) >= (task.minLength ?? 0)) break;
-    lastError = '响应过短';
+    if ((rawResponse?.trim().length ?? 0) >= (task.minLength ?? 0)) {
+      apiAcceptedAttempt = attemptNo;
+      break;
+    }
+    noteAttemptFailure(attemptNo, '响应过短', true);
     retryOnPrimaryOnly = true;
     if (attempt < maxRetries - 1) {
       await abortableDelay(1000, options?.signal);
@@ -355,6 +377,13 @@ async function runSingleTask(
 
   const structuredSuccess = structuredMode != null && processedResponse.trim().length > 0;
   const success = structuredSuccess || hasTags || hasEnumRegistry || extractedBlock.length >= (task.minLength ?? 0);
+  if (success && !apiAcceptedAttempt && lastFailureWasSoft) {
+    const lastFailure = apiAttemptFailures[apiAttemptFailures.length - 1];
+    if (lastFailure?.attempt === apiAttemptCount) {
+      apiAttemptFailures.pop();
+      apiAcceptedAttempt = apiAttemptCount;
+    }
+  }
   if (success) {
     updateScheduleStateAfterRun(ctx.settings, task, scheduleCtx);
   }
@@ -375,6 +404,9 @@ async function runSingleTask(
     durationMs: Date.now() - start,
     stage: task.stage,
     apiPresetUsed,
+    apiAttemptCount: apiAttemptCount > 0 ? apiAttemptCount : undefined,
+    apiAcceptedAttempt,
+    apiAttemptFailures: apiAttemptFailures.length > 0 ? apiAttemptFailures : undefined,
   };
 }
 
