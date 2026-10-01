@@ -119,6 +119,39 @@ function baseSettings(overrides: Partial<ScriptSettings> = {}): ScriptSettings {
   } as ScriptSettings;
 }
 
+test('computeAutoKeepSet skips disabled replica family roots', () => {
+  const settings = baseSettings();
+  settings.tasks = settings.tasks.map(t => (t.id === 'root' ? { ...t, enabled: false } : t));
+  assert.deepEqual(computeAutoKeepSet(settings), {});
+  assert.equal(listReplicaFamilyCleanupCandidates(settings).length, 0);
+});
+
+test('disabled root is omitted from cleanup while an enabled family with the same spec remains', () => {
+  const settings = baseSettings();
+  const rootB = baseTask({ id: 'root-b', name: 'root b' });
+  const repB = baseTask({
+    id: 'rep-b',
+    name: 'rep b',
+    syncAsReplicaFamily: false,
+    replicaFamilyRootId: 'root-b',
+    replicaFamilyAttrValue: '9',
+    replicaFamilyLaunched: true,
+    replicaFamilySpec: 'item@id',
+  });
+  settings.tasks = [
+    ...settings.tasks.map(t => (t.id === 'root' ? { ...t, enabled: false } : t)),
+    rootB,
+    repB,
+  ];
+  assert.deepEqual(computeAutoKeepSet(settings)['item@id'], ['9']);
+  const groups = listReplicaFamilyCleanupCandidates(settings);
+  assert.equal(groups.length, 1);
+  assert.deepEqual(
+    groups[0]!.members.map(m => m.attrValue),
+    ['9'],
+  );
+});
+
 test('computeAutoKeepSet keeps launched manual and active replicas by spec', () => {
   const settings = baseSettings();
   const keep = computeAutoKeepSet(settings);

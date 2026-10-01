@@ -965,20 +965,7 @@ export function disableReplicaFamilyOnTasks(task: PostProcessTask, allTasks: Pos
     return allTasks.map(t => (t.id === task.id ? { ...t, enabled: false, syncAsReplicaFamily: false } : t));
   }
 
-  let tasks = deleteReplicaFamilyTasks(rootId, allTasks);
-  tasks = tasks.map(t => {
-    if (t.id !== rootId) return t;
-    return {
-      ...t,
-      enabled: false,
-      syncAsReplicaFamily: false,
-      replicaFamilySpec: undefined,
-      replicaFamilyEnumSpec: undefined,
-      replicaFamilyBaseName: undefined,
-      replicaFamilyScheduleMode: undefined,
-    };
-  });
-  return tasks;
+  return allTasks.map(t => (t.id === rootId ? { ...t, enabled: false } : t));
 }
 
 export function clearReplicaFamilyFieldsOnClone(task: PostProcessTask): PostProcessTask {

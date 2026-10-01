@@ -300,7 +300,7 @@ function buildSpecBuckets(
   const bySpec = new Map<string, SpecBucket>();
 
   for (const root of settings.tasks) {
-    if (!isReplicaFamilyRootTemplate(root)) continue;
+    if (!isReplicaFamilyRootTemplate(root) || !root.enabled) continue;
     const spec = canonicalSpecKey(getReplicaFamilyEnumSpecKey(root));
     if (!spec) continue;
     let bucket = bySpec.get(spec);

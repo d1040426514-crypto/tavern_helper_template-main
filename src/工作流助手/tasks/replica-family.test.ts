@@ -12,6 +12,7 @@ import {
 import {
   assertReplicaMemberPatchAllowed,
   cloneAutoSegmentsFromRoot,
+  disableReplicaFamilyOnTasks,
   expandEnabledTasksForRuntime,
   findReplicaFamilyRootByAttrSpec,
   findReplicaFamilyRootsByAttrSpec,
@@ -1099,6 +1100,37 @@ test('merge reuses member when enum middle-dot variant differs', () => {
   assert.equal(again.newlyCreatedIds.length, 0);
   assert.equal(again.tasks.filter(t => t.replicaFamilyRootId === root.id).length, 1);
   assert.equal(again.tasks.find(t => t.id === member.id)?.id, member.id);
+});
+
+test('disableReplicaFamilyOnTasks keeps replicas and still resolves the root for placeholders', () => {
+  const root = baseTask({
+    replicaFamilyBaseName: '处理 item',
+    replicaFamilyEnumSpec: 'item@id',
+    replicaFamilyScheduleMode: 'manual',
+  });
+  const member = {
+    ...baseTask({ id: 'rep-1', name: '处理 item 阿斯塔', syncAsReplicaFamily: false }),
+    replicaFamilyRootId: root.id,
+    replicaFamilyAttrValue: '阿斯塔',
+    replicaFamilyLaunched: true,
+  };
+  const next = disableReplicaFamilyOnTasks(member, [root, member]);
+  assert.equal(next.length, 2);
+  const nextRoot = next.find(t => t.id === root.id)!;
+  const nextMember = next.find(t => t.id === 'rep-1')!;
+  assert.equal(nextRoot.enabled, false);
+  assert.equal(nextRoot.syncAsReplicaFamily, true);
+  assert.equal(nextRoot.replicaFamilySpec, 'item@id');
+  assert.equal(nextRoot.replicaFamilyEnumSpec, 'item@id');
+  assert.equal(nextRoot.replicaFamilyBaseName, '处理 item');
+  assert.equal(nextRoot.replicaFamilyScheduleMode, 'manual');
+  assert.equal(nextMember.enabled, true);
+  assert.equal(nextMember.replicaFamilyLaunched, true);
+  assert.equal(nextMember.replicaFamilyAttrValue, '阿斯塔');
+  assert.equal(
+    findReplicaFamilyRootsByAttrSpec({ tagName: 'item', attrName: 'id' }, next).some(t => t.id === root.id),
+    true,
+  );
 });
 
 test('renameReplicaFamilyMemberAttr no-ops when from and to are the same identity', () => {
