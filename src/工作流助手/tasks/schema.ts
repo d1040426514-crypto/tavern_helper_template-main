@@ -147,6 +147,8 @@ export const TaskWorkflowPresetSnapshotSchema = z.object({
   mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
   maxRetries: z.number().int().min(1).default(3),
   minLength: z.number().int().min(0).default(0),
+  /** 单次 API 请求超时（秒） */
+  apiTimeoutSec: z.number().int().min(1).default(300),
   skipIfTagsFound: z.array(z.string()).optional(),
   recommendedModel: z.string().default(''),
   schedule: TaskScheduleSchema.optional(),
@@ -191,6 +193,8 @@ const PostProcessTaskShape = z.object({
   mergeStrategy: z.enum(['concat', 'replace', 'first']).default('concat'),
   maxRetries: z.number().int().min(1).default(3),
   minLength: z.number().int().min(0).default(0),
+  /** 单次 API 请求超时（秒）；副本族成员跟随原本 */
+  apiTimeoutSec: z.number().int().min(1).default(300),
   skipIfTagsFound: z.array(z.string()).optional(),
   apiPresetName: z.string().default(''),
   recommendedModel: z.string().default(''),

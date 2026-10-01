@@ -1669,6 +1669,7 @@ async function addTask() {
     mergeStrategy: 'concat',
     maxRetries: 3,
     minLength: 0,
+    apiTimeoutSec: 300,
     apiPresetName: '',
     apiPresetFallbackNames: [],
     apiPrimaryMaxConcurrency: 5,
@@ -3455,6 +3456,15 @@ function saveRunLogTaskTags(taskId: string): void {
                         <label>最大重试次数</label>
                         <input
                           v-model.number="selectedTask.maxRetries"
+                          class="acu-input"
+                          type="number"
+                          min="1"
+                          step="1"
+                          style="width: 96px"
+                        />
+                        <label>请求超时（秒）</label>
+                        <input
+                          v-model.number="selectedTask.apiTimeoutSec"
                           class="acu-input"
                           type="number"
                           min="1"

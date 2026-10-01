@@ -16,11 +16,119 @@ export interface ApiCallResult {
   reasoningContent?: string;
 }
 
+export const DEFAULT_API_TIMEOUT_SEC = 300;
+
+export class ApiCallTimeoutError extends Error {
+  constructor(timeoutSec: number) {
+    super(`API 请求超时（${timeoutSec}s）`);
+    this.name = 'ApiCallTimeoutError';
+  }
+}
+
+export function resolveApiTimeoutMs(timeoutSec: number | undefined): number {
+  const sec = Math.floor(Number(timeoutSec));
+  if (!Number.isFinite(sec) || sec < 1) return DEFAULT_API_TIMEOUT_SEC * 1000;
+  return sec * 1000;
+}
+
 export interface ApiCallOptions {
   payloadOverrides?: ApiPayloadOverrides;
   /** 结构化 API 参数需 CC 路径；为 true 时禁止 generateRaw 回退 */
   disallowGenerateRawFallback?: boolean;
   signal?: AbortSignal;
+  /** 单次请求超时毫秒；缺省 300 秒 */
+  timeoutMs?: number;
+}
+
+export interface RaceApiCallOptions<T> {
+  timeoutMs: number;
+  parentSignal?: AbortSignal;
+  /** 仅 generateRaw 回退：到点按该 id 停止，避免误触主对话的停止生成 */
+  stopOnTimeout?: boolean;
+  generationId?: string;
+  stopGeneration?: (generationId: string) => void;
+  run: (signal: AbortSignal) => Promise<T>;
+}
+
+function linkAbortSignal(target: AbortController, source: AbortSignal): () => void {
+  if (source.aborted) {
+    target.abort();
+    return () => undefined;
+  }
+  const onAbort = () => target.abort();
+  source.addEventListener('abort', onAbort, { once: true });
+  return () => source.removeEventListener('abort', onAbort);
+}
+
+/** 单次请求硬超时。父信号取消仍是 RunCancelledError；到点是 ApiCallTimeoutError，不弹提示。 */
+export async function raceApiCall<T>(options: RaceApiCallOptions<T>): Promise<T> {
+  const parentSignal = options.parentSignal;
+  if (parentSignal?.aborted) throw new RunCancelledError();
+
+  const timeoutSec = Math.max(1, Math.round(options.timeoutMs / 1000));
+  const timeoutController = new AbortController();
+  const callController = new AbortController();
+  const unlinkParent = parentSignal ? linkAbortSignal(callController, parentSignal) : () => undefined;
+  const unlinkTimeout = linkAbortSignal(callController, timeoutController.signal);
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let detachParent = () => {};
+  let timedOut = false;
+
+  const runPromise = options.run(callController.signal).then(
+    value => ({ status: 'ok' as const, value }),
+    error => ({ status: 'err' as const, error }),
+  );
+
+  try {
+    const winner = await new Promise<Awaited<typeof runPromise> | 'timeout' | 'cancel'>((resolve, reject) => {
+      timer = setTimeout(() => {
+        if (parentSignal?.aborted) {
+          resolve('cancel');
+          return;
+        }
+        timedOut = true;
+        timeoutController.abort();
+        if (options.stopOnTimeout && options.generationId) {
+          try {
+            (options.stopGeneration ?? stopGenerationById)(options.generationId);
+          } catch {
+            // 停止失败不改变超时结果
+          }
+        }
+        console.warn(`[工作流助手] API 请求超时（${timeoutSec}s）`);
+        resolve('timeout');
+      }, options.timeoutMs);
+
+      if (parentSignal) {
+        if (parentSignal.aborted) {
+          resolve('cancel');
+        } else {
+          const onParent = () => resolve('cancel');
+          parentSignal.addEventListener('abort', onParent, { once: true });
+          detachParent = () => parentSignal.removeEventListener('abort', onParent);
+        }
+      }
+
+      runPromise.then(resolve, reject);
+    });
+
+    if (winner === 'cancel' || parentSignal?.aborted) throw new RunCancelledError();
+    if (winner === 'timeout' || timedOut) throw new ApiCallTimeoutError(timeoutSec);
+    if (winner.status === 'err') {
+      const error = winner.error;
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new ApiCallTimeoutError(timeoutSec);
+      }
+      throw error;
+    }
+    return winner.value;
+  } finally {
+    if (timer) clearTimeout(timer);
+    detachParent();
+    unlinkParent();
+    unlinkTimeout();
+  }
 }
 
 function isAbortLikeError(e: unknown): boolean {
@@ -165,12 +273,21 @@ export async function callWithResolvedApi(
   const genId = generationId || `post-process-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const { apiConfig } = resolved;
   const signal = options?.signal;
+  const timeoutMs =
+    options?.timeoutMs != null && Number.isFinite(options.timeoutMs) && options.timeoutMs >= 1
+      ? options.timeoutMs
+      : DEFAULT_API_TIMEOUT_SEC * 1000;
   assertCustomApiConfig(apiConfig);
   registerGenerationId(genId);
   try {
     try {
-      return await callViaChatCompletionService(apiMessages, apiConfig, options);
+      return await raceApiCall({
+        timeoutMs,
+        parentSignal: signal,
+        run: callSignal => callViaChatCompletionService(apiMessages, apiConfig, { ...options, signal: callSignal }),
+      });
     } catch (err) {
+      if (err instanceof ApiCallTimeoutError) throw err;
       if (isAbortLikeError(err) || signal?.aborted) {
         throw new RunCancelledError();
       }
@@ -181,7 +298,13 @@ export async function callWithResolvedApi(
         );
       }
       console.warn('[工作流助手] ChatCompletionService 失败，回退 generateRaw:', err);
-      return await callViaGenerateRaw(apiMessages, genId, apiConfig, signal);
+      return await raceApiCall({
+        timeoutMs,
+        parentSignal: signal,
+        stopOnTimeout: true,
+        generationId: genId,
+        run: () => callViaGenerateRaw(apiMessages, genId, apiConfig, signal),
+      });
     }
   } finally {
     unregisterGenerationId(genId);

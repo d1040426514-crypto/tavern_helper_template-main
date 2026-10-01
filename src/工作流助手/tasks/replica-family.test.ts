@@ -51,6 +51,7 @@ function baseTask(overrides: Partial<PostProcessTask> = {}): PostProcessTask {
     mergeStrategy: 'concat',
     maxRetries: 3,
     minLength: 0,
+    apiTimeoutSec: 300,
     apiPresetName: '',
     plotWorldbookMode: 'inherit',
     contextMode: 'inherit',
@@ -528,6 +529,29 @@ test('syncReplicaFromRoot preserves custom API routing on member', () => {
   assert.deepEqual(synced.apiPresetFallbackNames, ['replica-fb']);
   assert.equal(synced.apiPrimaryMaxConcurrency, 2);
   assert.deepEqual(synced.apiFallbackMaxConcurrencies, [4]);
+});
+
+test('syncReplicaFromRoot copies apiTimeoutSec from root even when member API is custom', () => {
+  const root = baseTask({
+    apiTimeoutSec: 120,
+    promptGroups: [{ name: '', role: 'user', content: 'handle {{item@id}} here', enabled: true }],
+  });
+  const replica = {
+    id: 'rep-timeout',
+    name: '处理 item 1',
+    enabled: true,
+    stage: 2,
+    promptGroups: [{ name: '', role: 'user', content: 'stale', enabled: true }],
+    apiPresetMode: 'custom' as const,
+    apiPresetName: 'member-api',
+    apiTimeoutSec: 45,
+    replicaFamilyRootId: 'root-1',
+    replicaFamilyAttrValue: '1',
+    replicaFamilyLaunched: false,
+  };
+  const synced = syncReplicaFromRoot(replica, root);
+  assert.equal(synced.apiTimeoutSec, 120);
+  assert.equal(synced.apiPresetName, 'member-api');
 });
 
 function relayMap(entries: Record<string, string>): RelayTagMap {

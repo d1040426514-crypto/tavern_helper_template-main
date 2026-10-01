@@ -5,6 +5,7 @@ import {
   hasAnyRouteConcurrencyCap,
 } from '../api/route-concurrency-limits';
 import { callTaskApiWithRouteFallback } from '../api/task-api-route';
+import { resolveApiTimeoutMs } from '../api/call';
 import {
   buildSharedContext,
   renderTaskMessages,
@@ -278,6 +279,7 @@ async function runSingleTask(
           routePool,
           preferPrimaryOnly: retryOnPrimaryOnly,
           signal: options?.signal,
+          timeoutMs: resolveApiTimeoutMs(task.apiTimeoutSec),
         },
       );
       rawResponse = apiResult.content;

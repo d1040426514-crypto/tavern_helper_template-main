@@ -120,6 +120,7 @@ function defaultTaskFields(): PostProcessTask {
     mergeStrategy: 'concat',
     maxRetries: 3,
     minLength: 0,
+    apiTimeoutSec: 300,
     apiPresetName: '',
     apiPresetFallbackNames: [],
     apiPrimaryMaxConcurrency: 5,

@@ -28,7 +28,7 @@ async function callSinglePresetRoute(
   structuredMode: ActiveStructuredOutputMode | null,
   generationId: string,
   callApi: typeof callWithResolvedApi,
-  options?: { disallowGenerateRawFallback?: boolean; signal?: AbortSignal },
+  options?: { disallowGenerateRawFallback?: boolean; signal?: AbortSignal; timeoutMs?: number },
 ): Promise<TaskApiRouteCallResult> {
   const { apiConfig } = resolveApiPresetFull(settings, presetName);
   const enriched = structuredMode ? enrichApiConfigForStructuredTask(apiConfig, structuredMode) : apiConfig;
@@ -42,6 +42,7 @@ async function callSinglePresetRoute(
         (structuredMode != null || apiConfigRequiresChatCompletionPath(enriched)),
       payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
       signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
     },
   );
   return {
@@ -63,6 +64,7 @@ async function callWithPoolAndFailover(
     signal?: AbortSignal;
     preferPrimaryOnly?: boolean;
     disallowGenerateRawFallback?: boolean;
+    timeoutMs?: number;
   },
 ): Promise<TaskApiRouteCallResult> {
   const chain = options?.preferPrimaryOnly ? [presetChain[0]!] : presetChain;
@@ -102,6 +104,7 @@ async function callWithPoolAndFailover(
         {
           disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
           signal: options?.signal,
+          timeoutMs: options?.timeoutMs,
         },
       );
     } catch (e) {
@@ -135,6 +138,7 @@ export async function callTaskApiWithRouteFallback(
     routePool?: TaskApiRouteConcurrencyPool | null;
     preferPrimaryOnly?: boolean;
     signal?: AbortSignal;
+    timeoutMs?: number;
   },
 ): Promise<TaskApiRouteCallResult> {
   if (!presetChain.length) {
@@ -157,6 +161,7 @@ export async function callTaskApiWithRouteFallback(
         signal: options?.signal,
         preferPrimaryOnly: options?.preferPrimaryOnly,
         disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
+        timeoutMs: options?.timeoutMs,
       },
     );
   }
@@ -176,6 +181,7 @@ export async function callTaskApiWithRouteFallback(
         {
           disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
           signal: options?.signal,
+          timeoutMs: options?.timeoutMs,
         },
       );
     } catch (e) {
