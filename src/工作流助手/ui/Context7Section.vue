@@ -68,7 +68,7 @@ function removeContextExcludeRule(index: number) {
         label="提取规则说明"
       >
         <p class="acu-notes acu-notes--sm" style="margin: 0">
-          对每条 AI 楼正文，仅保留匹配以下「开始词～结束词」边界的最后一次出现片段（先提取后排除）。开始词可填残缺开标签（如
+          对每条 AI 楼正文，保留每一对已闭合的「开始词～结束词」片段，按原文出现顺序用空行拼接（先提取后排除）。没有结束词的开始词会忽略，也不会把后面的闭合对从头包进来。多条规则交错时仍按原文位置穿插。开始词可填残缺开标签（如
           <code>&lt;tp</code>），可匹配 <code>&lt;tp&gt;</code>、<code>&lt;tp="…"&gt;</code> 等形式；结束词请写完整边界（如
           <code>&lt;/tp&gt;</code>）。
         </p>
@@ -95,7 +95,7 @@ function removeContextExcludeRule(index: number) {
         label="排除规则说明"
       >
         <p class="acu-notes acu-notes--sm" style="margin: 0">
-          对每条 AI 楼正文，移除匹配以下边界的最后一次出现片段。开始词支持残缺开标签前缀（如 <code>&lt;tp</code>），结束词请写完整边界。
+          对每条 AI 楼正文，移除每一对已闭合的片段。没有结束词的开始词会忽略。开始词支持残缺开标签前缀（如 <code>&lt;tp</code>），结束词请写完整边界。
         </p>
       </AcuHelpPanel>
       <div v-for="(rule, idx) in config.contextExcludeRules" :key="'rm-' + idx" class="acu-row">

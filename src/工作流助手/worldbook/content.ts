@@ -16,13 +16,12 @@ import {
   prepareRawPlaceholderEntryContent,
 } from './entry-placeholder-format';
 import { shouldIncludePlotWorldbookEntryInDollar1 } from './plot-entry-select';
-import { applyExcludeRulesToText } from '../tasks/context-tags';
 import { processTemplateText } from '../tasks/template-process';
 import { sortPlotWorldbookEntries } from './entry-order';
 import { scanTriggeredWorldbookEntries } from './scan';
 import { getWorldbookCached } from './read-cache';
 import { resolveWriteTargetBookName } from './write-from-template';
-import type { ChatWorldbookWriteRule, ContextTagRule, PlotWorldbookConfig } from '../tasks/schema';
+import type { ChatWorldbookWriteRule, PlotWorldbookConfig } from '../tasks/schema';
 
 import type { WorldbookEntry } from '@types/function/worldbook';
 
@@ -32,22 +31,16 @@ type DecoratedEntry = WorldbookEntry & {
   placeholderOriginalIndex: number;
 };
 
-/** 条目宏/EJS 完成后：排除规则 + worldbook_context 包装（对齐 shujuku 剧情 $1 替换） */
-export function finalizePlotWorldbookPlaceholderContent(
-  raw: string,
-  excludeRules: ContextTagRule[],
-): string {
-  const filtered = applyExcludeRulesToText(raw, excludeRules).trim();
+/** 条目宏/EJS 完成后：worldbook_context 包装（对齐 shujuku 剧情 $1 替换） */
+export function finalizePlotWorldbookPlaceholderContent(raw: string): string {
+  const filtered = String(raw ?? '').trim();
   if (!filtered) return '';
   return `\n<worldbook_context>\n${filtered}\n</worldbook_context>\n`;
 }
 
-/** $2：排除规则 + worldbook_extra 包装（与 $1 区分，避免与标签占位符重复时难拆） */
-export function finalizeManagedWorldbookPlaceholderContent(
-  raw: string,
-  excludeRules: ContextTagRule[],
-): string {
-  const filtered = applyExcludeRulesToText(raw, excludeRules).trim();
+/** $2：worldbook_extra 包装（与 $1 区分，避免与标签占位符重复时难拆） */
+export function finalizeManagedWorldbookPlaceholderContent(raw: string): string {
+  const filtered = String(raw ?? '').trim();
   if (!filtered) return '';
   return `\n<worldbook_extra>\n${filtered}\n</worldbook_extra>\n`;
 }

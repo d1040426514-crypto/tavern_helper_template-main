@@ -99,53 +99,56 @@ export function normalizeContextTagRules(
   return normalized;
 }
 
-function removeLastMatchedBoundary(text: string, startBoundary: string, endBoundary: string): string {
+type MatchedSpan = { startIdx: number; endIdx: number };
+
+/** 从右往左收集全部闭合对。每个结束词只配它前面最近的开始词，然后只在该开始词左侧继续。 */
+function collectMatchedSpans(text: string, startBoundary: string, endBoundary: string): MatchedSpan[] {
   const source = String(text ?? '');
   const start = String(startBoundary || '');
   const end = String(endBoundary || '');
-  if (!source || !start || !end) return source;
+  if (!source || !start || !end) return [];
 
-  const endIdx = findLastEndIndex(source, end);
-  if (endIdx === -1) return source;
-  const startIdx = findLastStartIndex(source, start, endIdx);
-  if (startIdx === -1) return source;
-  const removeTo = endIdx + end.length;
-  if (removeTo <= startIdx) return source;
-  return source.slice(0, startIdx) + source.slice(removeTo);
-}
-
-function extractLastMatchedBoundary(text: string, startBoundary: string, endBoundary: string): string | null {
-  const source = String(text ?? '');
-  const start = String(startBoundary || '');
-  const end = String(endBoundary || '');
-  if (!source || !start || !end) return null;
-
-  const endIdx = findLastEndIndex(source, end);
-  if (endIdx === -1) return null;
-  const startIdx = findLastStartIndex(source, start, endIdx);
-  if (startIdx === -1) return null;
-  const rangeEnd = endIdx + end.length;
-  if (rangeEnd <= startIdx) return null;
-  return source.slice(startIdx, rangeEnd);
+  const spans: MatchedSpan[] = [];
+  let searchFrom = source.length;
+  while (searchFrom > 0) {
+    const endIdx = findLastEndIndex(source, end, searchFrom);
+    if (endIdx === -1) break;
+    const startIdx = findLastStartIndex(source, start, endIdx);
+    if (startIdx === -1) break;
+    const rangeEnd = endIdx + end.length;
+    if (rangeEnd <= startIdx) {
+      searchFrom = endIdx;
+      continue;
+    }
+    spans.push({ startIdx, endIdx: rangeEnd });
+    searchFrom = startIdx;
+  }
+  spans.reverse();
+  return spans;
 }
 
 export function applyExtractRulesToText(text: string, rules: ContextTagRule[]): string {
   const source = String(text ?? '');
   if (!source || !rules.length) return source;
-  const parts: string[] = [];
+  const spans: MatchedSpan[] = [];
   for (const rule of rules) {
-    const matched = extractLastMatchedBoundary(source, rule.start, rule.end);
-    if (matched !== null) parts.push(matched);
+    spans.push(...collectMatchedSpans(source, rule.start, rule.end));
   }
-  if (!parts.length) return source;
-  return parts.join('\n\n');
+  if (!spans.length) return source;
+  spans.sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
+  return spans.map(span => source.slice(span.startIdx, span.endIdx)).join('\n\n');
 }
 
 export function applyExcludeRulesToText(text: string, rules: ContextTagRule[]): string {
   let result = String(text ?? '');
   if (!result || !rules.length) return result;
   for (const rule of rules) {
-    result = removeLastMatchedBoundary(result, rule.start, rule.end);
+    const spans = collectMatchedSpans(result, rule.start, rule.end);
+    for (let i = spans.length - 1; i >= 0; i--) {
+      const span = spans[i];
+      if (!span) continue;
+      result = result.slice(0, span.startIdx) + result.slice(span.endIdx);
+    }
   }
   return result.replace(/\n{3,}/g, '\n\n').trim();
 }

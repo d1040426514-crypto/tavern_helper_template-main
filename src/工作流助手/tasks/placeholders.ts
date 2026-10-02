@@ -27,7 +27,6 @@ import {
 import { resolveTaskPlotWorldbookConfig } from './plot-worldbook-config';
 import { sanitizeUserInputForPostProcess } from './sanitize-context';
 import { settingsWithTaskContext } from './context-config';
-import { normalizeContextTagRules } from './context-tags';
 import type { DataSnapshot } from '../bridge/database-api';
 import type { ChatWorldbookWriteRule, PlotWorldbookConfig, PostProcessTask, RunLogMessage, ScriptSettings } from './schema';
 import { normalizePromptRole } from './prompt-role';
@@ -201,7 +200,6 @@ export async function resolveTaskPlaceholders(
     needs$1 || needs$2
       ? buildWorldbookScanText(task, ctx, relayTagMap, taskContextSettings, needs$8InScan)
       : '';
-  const excludeRules = normalizeContextTagRules(taskContextSettings.contextExcludeRules);
 
   if (needs$1) {
     const wbConfig = resolveTaskPlotWorldbookConfig(task, ctx.settings);
@@ -214,7 +212,7 @@ export async function resolveTaskPlaceholders(
         ctx.settings.chatWorldbookWriteRules,
         ctx.snapshot.tablesJson,
       );
-      ctx.taskWorldbookCache.set(cacheKey, finalizePlotWorldbookPlaceholderContent(wb, excludeRules));
+      ctx.taskWorldbookCache.set(cacheKey, finalizePlotWorldbookPlaceholderContent(wb));
     }
     vars.$1 = ctx.taskWorldbookCache.get(cacheKey) ?? '';
   }
@@ -229,7 +227,7 @@ export async function resolveTaskPlaceholders(
       );
       ctx.taskManagedWorldbookCache.set(
         cacheKey,
-        finalizeManagedWorldbookPlaceholderContent(wb, excludeRules),
+        finalizeManagedWorldbookPlaceholderContent(wb),
       );
     }
     vars.$2 = ctx.taskManagedWorldbookCache.get(cacheKey) ?? '';

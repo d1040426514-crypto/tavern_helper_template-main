@@ -85,9 +85,15 @@ test('isSelectedPlotWorldbookEntry still auto-includes non-chronicle DB entries'
 });
 
 test('finalize wrappers differ for $1 and $2', () => {
-  assert.match(finalizePlotWorldbookPlaceholderContent('hello', []), /<worldbook_context>/);
-  assert.match(finalizeManagedWorldbookPlaceholderContent('hello', []), /<worldbook_extra>/);
-  assert.equal(finalizeManagedWorldbookPlaceholderContent('  ', []), '');
+  assert.match(finalizePlotWorldbookPlaceholderContent('hello'), /<worldbook_context>/);
+  assert.match(finalizeManagedWorldbookPlaceholderContent('hello'), /<worldbook_extra>/);
+  assert.equal(finalizeManagedWorldbookPlaceholderContent('  '), '');
+});
+
+test('finalize keeps closed blocks in worldbook entries', () => {
+  const raw = '<示例>甲</示例><示例>乙</示例>';
+  assert.match(finalizePlotWorldbookPlaceholderContent(raw), /<示例>甲<\/示例><示例>乙<\/示例>/);
+  assert.match(finalizeManagedWorldbookPlaceholderContent(raw), /<示例>甲<\/示例><示例>乙<\/示例>/);
 });
 
 test('ReadableDataTable protagonist section can be removed before $1 formatting', () => {
