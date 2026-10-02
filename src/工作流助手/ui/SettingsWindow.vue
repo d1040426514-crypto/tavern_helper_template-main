@@ -1602,11 +1602,26 @@ async function runTaskWorkflowPresetStoreMutation(
   return updated;
 }
 
+function preservedWorkflowPresetName(before: PostProcessTask, updated: PostProcessTask, appliedName: string): string | null {
+  const previous = new Set((before.taskWorkflowPresets ?? []).map(p => p.name));
+  return (
+    (updated.taskWorkflowPresets ?? []).find(p => p.name !== appliedName && !previous.has(p.name))?.name ?? null
+  );
+}
+
 function onTaskWorkflowPresetCreate(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
   void runTaskWorkflowPresetStoreMutation(() => createBlankTaskWorkflowPresetInStore(task.id, name, 'ui'))
-    .then(() => acuToast('success', `已新建并应用工作流预设「${name}」`))
+    .then(updated => {
+      const preserved = preservedWorkflowPresetName(task, updated, name);
+      acuToast(
+        'success',
+        preserved
+          ? `已新建并应用工作流预设「${name}」；先前未保存的配置已存为「${preserved}」`
+          : `已新建并应用工作流预设「${name}」`,
+      );
+    })
     .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
 }
 

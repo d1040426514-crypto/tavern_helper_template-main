@@ -52,7 +52,7 @@ async function onCreateBlank() {
   const existing = (props.task.taskWorkflowPresets ?? []).map(p => p.name);
   const name = await acuPrompt({
     title: '新建工作流预设',
-    message: '创建一个空白工作流预设，并应用到当前任务。API 配置与副本调度保持不变。',
+    message: '创建一个空白工作流预设，并应用到当前任务。若当前设定尚未保存，会先存成「未保存配置」。API 配置与副本调度保持不变。',
     confirmText: '新建',
     danger: false,
     prompt: {
@@ -152,7 +152,7 @@ function exportJson() {
   <div class="acu-subsection task-workflow-preset">
     <h5>工作流预设</h5>
     <p class="acu-notes acu-notes--sm">
-      保存本任务除 API 配置与副本族调度外的设定（提示词、执行阶段、提取标签等）。保存写回当前预设，另存为复制当前设定，新建则生成空白预设并应用到本任务。
+      保存本任务除 API 配置与副本族调度外的设定（提示词、执行阶段、提取标签等）。保存写回当前预设，另存为复制当前设定，新建则生成空白预设并应用到本任务。若当前设定尚未保存，仅新建时会先存成「未保存配置」；切换已有预设不会自动保存。
     </p>
     <div class="acu-row acu-preset-toolbar">
       <select

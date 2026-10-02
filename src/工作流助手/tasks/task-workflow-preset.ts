@@ -34,6 +34,17 @@ export function buildTaskWorkflowSnapshot(task: PostProcessTask): TaskWorkflowPr
   return TaskWorkflowPresetSnapshotSchema.parse(raw);
 }
 
+const WORKFLOW_SNAPSHOT_OPTIONAL_KEYS = [
+  'skipIfTagsFound',
+  'schedule',
+  'plotWorldbookConfig',
+  'contextConfig',
+  'structuredOutputRules',
+  'replicaFamilySpec',
+  'replicaFamilyEnumSpec',
+  'replicaFamilyBaseName',
+] as const;
+
 export function applyTaskWorkflowSnapshot(task: PostProcessTask, snapshot: TaskWorkflowPresetSnapshot): PostProcessTask {
   const parsed = TaskWorkflowPresetSnapshotSchema.parse(snapshot);
   const apiPreserve = {
@@ -46,7 +57,7 @@ export function applyTaskWorkflowSnapshot(task: PostProcessTask, snapshot: TaskW
     replicaFamilyScheduleMode: task.replicaFamilyScheduleMode,
     replicaFamilyLaunched: task.replicaFamilyLaunched,
   };
-  return {
+  const next: PostProcessTask = {
     ...task,
     ...parsed,
     id: task.id,
@@ -57,22 +68,51 @@ export function applyTaskWorkflowSnapshot(task: PostProcessTask, snapshot: TaskW
     ...apiPreserve,
     ...schedulePreserve,
   };
+  for (const key of WORKFLOW_SNAPSHOT_OPTIONAL_KEYS) {
+    if (!(key in parsed)) delete next[key];
+  }
+  return next;
 }
 
 export function listTaskWorkflowPresetNames(task: PostProcessTask): string[] {
   return (task.taskWorkflowPresets ?? []).map(p => p.name);
 }
 
-const BLANK_WORKFLOW_OPTIONAL_KEYS = [
-  'skipIfTagsFound',
-  'schedule',
-  'plotWorldbookConfig',
-  'contextConfig',
-  'structuredOutputRules',
-  'replicaFamilySpec',
-  'replicaFamilyEnumSpec',
-  'replicaFamilyBaseName',
-] as const;
+const UNSAVED_WORKFLOW_PRESET_BASE = '未保存配置';
+
+function workflowSnapshotsEqual(a: TaskWorkflowPresetSnapshot, b: TaskWorkflowPresetSnapshot): boolean {
+  const left = TaskWorkflowPresetSnapshotSchema.parse(a);
+  const right = TaskWorkflowPresetSnapshotSchema.parse(b);
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+function nextWorkflowPresetName(existing: string[], base: string): string {
+  if (!existing.includes(base)) return base;
+  let index = 2;
+  while (existing.includes(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
+
+/** 当前设定还没有对应预设时，先追加一条存档。已保存或已是空白默认则不动。 */
+function preserveUnsavedWorkflowPreset(
+  task: PostProcessTask,
+  reservedNames: string[] = [],
+): PostProcessTask {
+  const current = buildTaskWorkflowSnapshot(task);
+  const presets = task.taskWorkflowPresets ?? [];
+  if (presets.some(p => workflowSnapshotsEqual(p.snapshot, current))) return task;
+  if (workflowSnapshotsEqual(current, buildBlankTaskWorkflowSnapshot(task.name))) return task;
+  const preservedName = nextWorkflowPresetName(
+    [...presets.map(p => p.name), ...reservedNames.map(name => name.trim()).filter(Boolean)],
+    UNSAVED_WORKFLOW_PRESET_BASE,
+  );
+  const entry: TaskWorkflowPresetEntry = {
+    name: preservedName,
+    savedAt: Date.now(),
+    snapshot: current,
+  };
+  return { ...task, taskWorkflowPresets: [...presets, entry] };
+}
 
 /** 空白工作流快照：保留任务名，其余设定回到新建任务的默认值 */
 export function buildBlankTaskWorkflowSnapshot(taskName: string): TaskWorkflowPresetSnapshot {
@@ -99,19 +139,17 @@ export function createBlankTaskWorkflowPresetOnTask(task: PostProcessTask, name:
   if ((task.taskWorkflowPresets ?? []).some(p => p.name === trimmed)) {
     throw new Error(`预设「${trimmed}」已存在，请换一个名称`);
   }
+  const preserved = preserveUnsavedWorkflowPreset(task, [trimmed]);
   const snapshot = buildBlankTaskWorkflowSnapshot(task.name);
   const entry: TaskWorkflowPresetEntry = {
     name: trimmed,
     savedAt: Date.now(),
     snapshot,
   };
-  const applied = applyTaskWorkflowSnapshot(task, snapshot);
-  for (const key of BLANK_WORKFLOW_OPTIONAL_KEYS) {
-    delete applied[key];
-  }
+  const applied = applyTaskWorkflowSnapshot(preserved, snapshot);
   return {
     ...applied,
-    taskWorkflowPresets: [...(task.taskWorkflowPresets ?? []), entry],
+    taskWorkflowPresets: [...(preserved.taskWorkflowPresets ?? []), entry],
   };
 }
 
