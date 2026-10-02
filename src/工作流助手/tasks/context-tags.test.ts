@@ -36,6 +36,19 @@ describe('applyExtractRulesToText', () => {
     const text = '<tpx>no</tpx><tp>yes</tp>';
     assert.equal(applyExtractRulesToText(text, [{ start: '<tp', end: '</tp>' }]), '<tp>yes</tp>');
   });
+
+  it('紧挨英文或空注释的 XML 注释按字面量保留', () => {
+    const text = '前文<!--foo-->中<!---->后文';
+    assert.equal(
+      applyExtractRulesToText(text, [{ start: '<!--', end: '-->' }]),
+      '<!--foo-->\n\n<!---->',
+    );
+  });
+
+  it('残缺的 <! 仍配不上注释', () => {
+    const text = '前文<!--foo-->后文';
+    assert.equal(applyExtractRulesToText(text, [{ start: '<!', end: '-->' }]), text);
+  });
 });
 
 describe('applyExcludeRulesToText', () => {
@@ -52,6 +65,16 @@ describe('applyExcludeRulesToText', () => {
   it('未闭合注释不删，后面的闭合注释会删', () => {
     const text = '<!-- 孤儿 <!-- 闭合 -->尾';
     assert.equal(applyExcludeRulesToText(text, [{ start: '<!--', end: '-->' }]), '<!-- 孤儿 尾');
+  });
+
+  it('紧挨英文或空注释的 XML 注释都会删除', () => {
+    const text = '前文<!--foo-->中<!---->后文';
+    assert.equal(applyExcludeRulesToText(text, [{ start: '<!--', end: '-->' }]), '前文中后文');
+  });
+
+  it('残缺的 <! 仍删不掉注释', () => {
+    const text = '前文<!--foo-->后文';
+    assert.equal(applyExcludeRulesToText(text, [{ start: '<!', end: '-->' }]), text);
   });
 });
 

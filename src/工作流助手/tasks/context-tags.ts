@@ -4,8 +4,9 @@ function trimBoundary(boundary: string): string {
   return String(boundary ?? '').trim();
 }
 
-/** 残缺 XML 开标签前缀（如 `<tp`），非完整字面量边界 */
+/** 残缺 XML 开标签前缀（如 `<tp`），非完整字面量边界。`<!--` 已是完整注释开始词。 */
 function isIncompleteOpenTag(boundary: string): boolean {
+  if (boundary.startsWith('<!--')) return false;
   return boundary.startsWith('<') && !boundary.endsWith('>');
 }
 
