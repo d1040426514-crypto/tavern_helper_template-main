@@ -3292,8 +3292,8 @@ function saveRunLogTaskTags(taskId: string): void {
                     </div>
 
                     <ul class="acu-api-config__hints acu-notes acu-notes--sm">
-                      <li>API 抛错时按顺序 failover 到备用预设。</li>
-                      <li>字数不足或摘取失败时仍在主要预设上重试，不切换到备用分流。</li>
+                      <li>API 抛错时，同一次请求按顺序 failover 到后面的备用预设。</li>
+                      <li>字数不足或摘取失败时，下次重试改打下一个预设；链走完再从主要预设开始。</li>
                     </ul>
                   </div>
                 </div>

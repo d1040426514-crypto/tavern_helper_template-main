@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { TaskApiRouteConcurrencyPool } from './route-concurrency-pool';
-import { callTaskApiWithRouteFallback } from './task-api-route';
+import { callTaskApiWithRouteFallback, nextRouteCursor } from './task-api-route';
 import type { ScriptSettings } from '../tasks/schema';
 
 function poolLimits(entries: Array<[string, number]>) {
@@ -132,7 +132,62 @@ test('callTaskApiWithRouteFallback with pool uses fallback when primary slots ar
   assert.deepEqual(calls, ['f']);
 });
 
-test('callTaskApiWithRouteFallback preferPrimaryOnly stays on primary with pool', async () => {
+test('nextRouteCursor advances after a soft failure and resets after a hard failure', () => {
+  const chain = ['3f', '3.8f', 'ds3'];
+  assert.equal(nextRouteCursor(chain, { soft: true, usedPresetName: '3f' }), 1);
+  assert.equal(nextRouteCursor(chain, { soft: true, usedPresetName: '3.8f' }), 2);
+  assert.equal(nextRouteCursor(chain, { soft: true, usedPresetName: 'ds3' }), 0);
+  assert.equal(nextRouteCursor(chain, { soft: false, usedPresetName: '3.8f' }), 0);
+  assert.equal(nextRouteCursor(['only'], { soft: true, usedPresetName: 'only' }), 0);
+});
+
+test('callTaskApiWithRouteFallback startIndex calls that preset when it returns', async () => {
+  const calls: string[] = [];
+  const result = await callTaskApiWithRouteFallback(
+    [{ role: 'user', content: 'hi', name: '' }],
+    baseSettings(),
+    ['primary', 'fallback'],
+    null,
+    'test-start',
+    {
+      startIndex: 1,
+      callApi: async (_messages, resolved) => {
+        calls.push(resolved.apiConfig.url);
+        return { content: 'ok-fallback' };
+      },
+    },
+  );
+  assert.deepEqual(calls, ['f']);
+  assert.equal(result.usedPresetName, 'fallback');
+});
+
+test('callTaskApiWithRouteFallback startIndex failover does not wrap back to primary', async () => {
+  const settings = baseSettings();
+  settings.apiPresets.push({
+    name: 'fallback-b',
+    apiConfig: { url: 'fb', apiKey: '', model: 'm', source: 'openai' },
+  });
+  const calls: string[] = [];
+  const result = await callTaskApiWithRouteFallback(
+    [{ role: 'user', content: 'hi', name: '' }],
+    settings,
+    ['primary', 'fallback', 'fallback-b'],
+    null,
+    'test-start-throw',
+    {
+      startIndex: 1,
+      callApi: async (_messages, resolved) => {
+        calls.push(resolved.apiConfig.url);
+        if (resolved.apiConfig.url === 'f') throw new Error('fallback failed');
+        return { content: 'ok-from-b' };
+      },
+    },
+  );
+  assert.deepEqual(calls, ['f', 'fb']);
+  assert.equal(result.usedPresetName, 'fallback-b');
+});
+
+test('callTaskApiWithRouteFallback startIndex with pool does not take a free primary slot', async () => {
   const pool = new TaskApiRouteConcurrencyPool(
     ['primary', 'fallback'],
     poolLimits([
@@ -140,22 +195,34 @@ test('callTaskApiWithRouteFallback preferPrimaryOnly stays on primary with pool'
       ['fallback', 1],
     ]),
   );
+  const heldFallback = await pool.acquire({ preferredRoute: 'fallback', allowedRoutes: ['fallback'] });
+  assert.equal(heldFallback, 'fallback');
+
   const calls: string[] = [];
-  const result = await callTaskApiWithRouteFallback(
+  let started = false;
+  const pending = callTaskApiWithRouteFallback(
     [{ role: 'user', content: 'hi', name: '' }],
     baseSettings(),
     ['primary', 'fallback'],
     null,
-    'test-primary-only',
+    'test-start-pool',
     {
       routePool: pool,
-      preferPrimaryOnly: true,
+      startIndex: 1,
       callApi: async (_messages, resolved) => {
+        started = true;
         calls.push(resolved.apiConfig.url);
-        return { content: 'ok-primary' };
+        return { content: 'ok-fallback' };
       },
     },
   );
-  assert.equal(result.usedPresetName, 'primary');
-  assert.deepEqual(calls, ['p']);
+
+  await new Promise(r => setTimeout(r, 20));
+  assert.equal(started, false);
+  assert.equal(pool.getActiveCount('primary'), 0);
+
+  pool.release(heldFallback);
+  const result = await pending;
+  assert.equal(result.usedPresetName, 'fallback');
+  assert.deepEqual(calls, ['f']);
 });

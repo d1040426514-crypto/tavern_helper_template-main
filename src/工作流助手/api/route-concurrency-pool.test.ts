@@ -98,3 +98,38 @@ test('release wakes queued acquirers preferring freed route', async () => {
   pool.release(third);
   pool.release(holdB);
 });
+
+test('allowedRoutes does not give a freed primary slot to a fallback-only waiter', async () => {
+  const pool = new TaskApiRouteConcurrencyPool(
+    ['primary', 'fallback'],
+    limitsOf([
+      ['primary', 1],
+      ['fallback', 1],
+    ]),
+  );
+
+  const holdPrimary = await pool.acquire();
+  const holdFallback = await pool.acquire();
+  assert.equal(holdPrimary, 'primary');
+  assert.equal(holdFallback, 'fallback');
+
+  let fallbackResolved = false;
+  const fallbackWaiter = pool.acquire({ allowedRoutes: ['fallback'], preferredRoute: 'fallback' });
+  void fallbackWaiter.then(route => {
+    fallbackResolved = true;
+    assert.equal(route, 'fallback');
+  });
+  const primaryWaiter = pool.acquire();
+
+  await new Promise(r => setTimeout(r, 10));
+  pool.release(holdPrimary);
+  const gotPrimary = await primaryWaiter;
+  assert.equal(gotPrimary, 'primary');
+  assert.equal(fallbackResolved, false);
+
+  pool.release(holdFallback);
+  const gotFallback = await fallbackWaiter;
+  assert.equal(gotFallback, 'fallback');
+  pool.release(gotPrimary);
+  pool.release(gotFallback);
+});

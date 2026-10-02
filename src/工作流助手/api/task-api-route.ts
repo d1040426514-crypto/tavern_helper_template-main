@@ -21,6 +21,19 @@ export interface TaskApiRouteCallResult {
   usedPresetName: string;
 }
 
+/** 软失败后下一次从刚返回内容的预设的下一个开始；硬失败回到主要预设。 */
+export function nextRouteCursor(chain: readonly string[], failure: { soft: boolean; usedPresetName?: string }): number {
+  if (!failure.soft || !failure.usedPresetName || chain.length === 0) return 0;
+  const index = chain.indexOf(failure.usedPresetName);
+  if (index < 0) return 0;
+  return (index + 1) % chain.length;
+}
+
+function normalizeStartIndex(presetChain: readonly string[], startIndex: number | undefined): number {
+  if (!startIndex || startIndex <= 0 || startIndex >= presetChain.length) return 0;
+  return startIndex;
+}
+
 async function callSinglePresetRoute(
   messages: RunLogMessage[],
   settings: ScriptSettings,
@@ -32,24 +45,48 @@ async function callSinglePresetRoute(
 ): Promise<TaskApiRouteCallResult> {
   const { apiConfig } = resolveApiPresetFull(settings, presetName);
   const enriched = structuredMode ? enrichApiConfigForStructuredTask(apiConfig, structuredMode) : apiConfig;
-  const apiResult = await callApi(
-    messages,
-    { apiConfig: enriched },
-    generationId,
-    {
-      disallowGenerateRawFallback:
-        options?.disallowGenerateRawFallback ??
-        (structuredMode != null || apiConfigRequiresChatCompletionPath(enriched)),
-      payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
-      signal: options?.signal,
-      timeoutMs: options?.timeoutMs,
-    },
-  );
+  const apiResult = await callApi(messages, { apiConfig: enriched }, generationId, {
+    disallowGenerateRawFallback:
+      options?.disallowGenerateRawFallback ?? (structuredMode != null || apiConfigRequiresChatCompletionPath(enriched)),
+    payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
+    signal: options?.signal,
+    timeoutMs: options?.timeoutMs,
+  });
   return {
     content: apiResult.content,
     reasoningContent: apiResult.reasoningContent,
     usedPresetName: presetName,
   };
+}
+
+async function callExactRouteWithPool(
+  messages: RunLogMessage[],
+  settings: ScriptSettings,
+  presetName: string,
+  structuredMode: ActiveStructuredOutputMode | null,
+  generationId: string,
+  callApi: typeof callWithResolvedApi,
+  pool: TaskApiRouteConcurrencyPool,
+  options?: {
+    signal?: AbortSignal;
+    disallowGenerateRawFallback?: boolean;
+    timeoutMs?: number;
+  },
+): Promise<TaskApiRouteCallResult> {
+  const acquiredRoute = await pool.acquire({
+    signal: options?.signal,
+    preferredRoute: presetName,
+    allowedRoutes: [presetName],
+  });
+  try {
+    return await callSinglePresetRoute(messages, settings, presetName, structuredMode, generationId, callApi, {
+      disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
+      signal: options?.signal,
+      timeoutMs: options?.timeoutMs,
+    });
+  } finally {
+    pool.release(acquiredRoute);
+  }
 }
 
 async function callWithPoolAndFailover(
@@ -62,21 +99,46 @@ async function callWithPoolAndFailover(
   pool: TaskApiRouteConcurrencyPool,
   options?: {
     signal?: AbortSignal;
-    preferPrimaryOnly?: boolean;
+    startIndex?: number;
     disallowGenerateRawFallback?: boolean;
     timeoutMs?: number;
   },
 ): Promise<TaskApiRouteCallResult> {
-  const chain = options?.preferPrimaryOnly ? [presetChain[0]!] : presetChain;
+  const startIndex = normalizeStartIndex(presetChain, options?.startIndex);
+  const chain = presetChain.slice(startIndex);
   let lastError = '';
+
+  if (startIndex > 0) {
+    for (let i = 0; i < chain.length; i++) {
+      const presetName = chain[i]!;
+      try {
+        return await callExactRouteWithPool(
+          messages,
+          settings,
+          presetName,
+          structuredMode,
+          `${generationIdBase}-route-${presetName}-${i}`,
+          callApi,
+          pool,
+          options,
+        );
+      } catch (e) {
+        if (isAbortLikeError(e) || options?.signal?.aborted) {
+          throw new RunCancelledError();
+        }
+        lastError = e instanceof Error ? e.message : String(e);
+        if (i < chain.length - 1) continue;
+      }
+    }
+    throw new Error(lastError || 'API 调用失败');
+  }
 
   const startRoute = await pool.acquire({
     signal: options?.signal,
-    preferredRoute: options?.preferPrimaryOnly ? chain[0] : undefined,
   });
 
-  const startIndex = chain.indexOf(startRoute);
-  const tryOrder = startIndex >= 0 ? [...chain.slice(startIndex), ...chain.slice(0, startIndex)] : [...chain];
+  const acquiredIndex = chain.indexOf(startRoute);
+  const tryOrder = acquiredIndex >= 0 ? [...chain.slice(acquiredIndex), ...chain.slice(0, acquiredIndex)] : [...chain];
 
   for (let i = 0; i < tryOrder.length; i++) {
     const presetName = tryOrder[i]!;
@@ -136,7 +198,8 @@ export async function callTaskApiWithRouteFallback(
     disallowGenerateRawFallback?: boolean;
     callApi?: typeof callWithResolvedApi;
     routePool?: TaskApiRouteConcurrencyPool | null;
-    preferPrimaryOnly?: boolean;
+    /** 从该下标开始向后试；0 表示整链，含主预设槽满时分流到备用 */
+    startIndex?: number;
     signal?: AbortSignal;
     timeoutMs?: number;
   },
@@ -149,24 +212,15 @@ export async function callTaskApiWithRouteFallback(
   const pool = options?.routePool;
 
   if (pool) {
-    return callWithPoolAndFailover(
-      messages,
-      settings,
-      presetChain,
-      structuredMode,
-      generationIdBase,
-      callApi,
-      pool,
-      {
-        signal: options?.signal,
-        preferPrimaryOnly: options?.preferPrimaryOnly,
-        disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
-        timeoutMs: options?.timeoutMs,
-      },
-    );
+    return callWithPoolAndFailover(messages, settings, presetChain, structuredMode, generationIdBase, callApi, pool, {
+      signal: options?.signal,
+      startIndex: options?.startIndex,
+      disallowGenerateRawFallback: options?.disallowGenerateRawFallback,
+      timeoutMs: options?.timeoutMs,
+    });
   }
 
-  const chain = options?.preferPrimaryOnly ? [presetChain[0]!] : presetChain;
+  const chain = presetChain.slice(normalizeStartIndex(presetChain, options?.startIndex));
   let lastError = '';
   for (let i = 0; i < chain.length; i++) {
     const presetName = chain[i]!;

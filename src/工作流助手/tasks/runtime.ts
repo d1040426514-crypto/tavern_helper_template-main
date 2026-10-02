@@ -4,7 +4,7 @@ import {
   buildRouteConcurrencyLimits,
   hasAnyRouteConcurrencyCap,
 } from '../api/route-concurrency-limits';
-import { callTaskApiWithRouteFallback } from '../api/task-api-route';
+import { callTaskApiWithRouteFallback, nextRouteCursor } from '../api/task-api-route';
 import { resolveApiTimeoutMs } from '../api/call';
 import {
   buildSharedContext,
@@ -288,7 +288,7 @@ async function runSingleTask(
   let lastError = '';
   let processedResponse = '';
   let apiPresetUsed: string | undefined;
-  let retryOnPrimaryOnly = false;
+  let routeCursor = 0;
   let apiAttemptCount = 0;
   let apiAcceptedAttempt: number | undefined;
   let lastFailureWasSoft = false;
@@ -316,7 +316,7 @@ async function runSingleTask(
         `post-process-${task.id}-${ctx.messageId}-${attempt}`,
         {
           routePool,
-          preferPrimaryOnly: retryOnPrimaryOnly,
+          startIndex: routeCursor,
           signal: options?.signal,
           timeoutMs: resolveApiTimeoutMs(task.apiTimeoutSec),
         },
@@ -324,7 +324,6 @@ async function runSingleTask(
       rawResponse = apiResult.content;
       reasoningContent = apiResult.reasoningContent;
       apiPresetUsed = apiResult.usedPresetName;
-      retryOnPrimaryOnly = false;
     } catch (e) {
       if (
         e instanceof RunCancelledError ||
@@ -334,7 +333,7 @@ async function runSingleTask(
         throw new RunCancelledError();
       }
       noteAttemptFailure(attemptNo, e instanceof Error ? e.message : String(e), false);
-      retryOnPrimaryOnly = false;
+      routeCursor = nextRouteCursor(presetChain, { soft: false });
       continue;
     } finally {
       silentGenerationDepth = Math.max(0, silentGenerationDepth - 1);
@@ -359,7 +358,7 @@ async function runSingleTask(
         break;
       }
       noteAttemptFailure(attemptNo, resolved.error, true);
-      retryOnPrimaryOnly = true;
+      routeCursor = nextRouteCursor(presetChain, { soft: true, usedPresetName: apiPresetUsed });
       if (attempt < maxRetries - 1) {
         await abortableDelay(1000, options?.signal);
       }
@@ -372,7 +371,7 @@ async function runSingleTask(
       break;
     }
     noteAttemptFailure(attemptNo, '响应过短', true);
-    retryOnPrimaryOnly = true;
+    routeCursor = nextRouteCursor(presetChain, { soft: true, usedPresetName: apiPresetUsed });
     if (attempt < maxRetries - 1) {
       await abortableDelay(1000, options?.signal);
     }

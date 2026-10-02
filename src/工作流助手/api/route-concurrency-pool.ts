@@ -2,6 +2,8 @@ type AcquireOptions = {
   signal?: AbortSignal;
   /** 优先尝试该路由（须仍在链内且有空闲槽位） */
   preferredRoute?: string;
+  /** 只能占用这些路由的槽；缺省表示链上全部路由 */
+  allowedRoutes?: readonly string[];
 };
 
 type Waiter = {
@@ -9,6 +11,8 @@ type Waiter = {
   reject: (error: Error) => void;
   signal?: AbortSignal;
   onAbort?: () => void;
+  preferredRoute?: string;
+  allowedRoutes?: readonly string[];
 };
 
 export class TaskApiRouteConcurrencyPool {
@@ -41,12 +45,18 @@ export class TaskApiRouteConcurrencyPool {
     return configured <= 0 ? Number.POSITIVE_INFINITY : configured;
   }
 
-  private findAvailableRoute(preferredRoute?: string): string | null {
-    if (preferredRoute && this.routes.includes(preferredRoute)) {
+  private isRouteAllowed(route: string, allowedRoutes?: readonly string[]): boolean {
+    if (!allowedRoutes) return true;
+    return allowedRoutes.includes(route);
+  }
+
+  private findAvailableRoute(preferredRoute?: string, allowedRoutes?: readonly string[]): string | null {
+    if (preferredRoute && this.routes.includes(preferredRoute) && this.isRouteAllowed(preferredRoute, allowedRoutes)) {
       const preferredActive = this.activeCounts.get(preferredRoute) ?? 0;
       if (preferredActive < this.getCap(preferredRoute)) return preferredRoute;
     }
     for (const route of this.routes) {
+      if (!this.isRouteAllowed(route, allowedRoutes)) continue;
       const active = this.activeCounts.get(route) ?? 0;
       if (active < this.getCap(route)) return route;
     }
@@ -63,14 +73,20 @@ export class TaskApiRouteConcurrencyPool {
       throw new DOMException('工作流已取消', 'AbortError');
     }
 
-    const immediate = this.findAvailableRoute(options?.preferredRoute);
+    const immediate = this.findAvailableRoute(options?.preferredRoute, options?.allowedRoutes);
     if (immediate) {
       this.occupy(immediate);
       return immediate;
     }
 
     return new Promise<string>((resolve, reject) => {
-      const waiter: Waiter = { resolve, reject, signal };
+      const waiter: Waiter = {
+        resolve,
+        reject,
+        signal,
+        preferredRoute: options?.preferredRoute,
+        allowedRoutes: options?.allowedRoutes,
+      };
       if (signal) {
         const onAbort = () => {
           const idx = this.waitQueue.indexOf(waiter);
@@ -90,24 +106,34 @@ export class TaskApiRouteConcurrencyPool {
     this.dispatchWaiters(preferNextOn ?? route);
   }
 
-  private dispatchWaiters(preferredRoute?: string): void {
-    let prefer = preferredRoute;
-    while (this.waitQueue.length > 0) {
-      const route = this.findAvailableRoute(prefer);
-      if (!route) break;
+  private dispatchWaiters(releasedRoute?: string): void {
+    let releasePrefer = releasedRoute;
+    let progressed = true;
+    while (progressed && this.waitQueue.length > 0) {
+      progressed = false;
+      for (let i = 0; i < this.waitQueue.length; i++) {
+        const waiter = this.waitQueue[i]!;
+        if (waiter.signal?.aborted) {
+          this.waitQueue.splice(i, 1);
+          waiter.reject(new DOMException('工作流已取消', 'AbortError'));
+          progressed = true;
+          break;
+        }
 
-      const waiter = this.waitQueue.shift()!;
-      if (waiter.signal?.aborted) {
-        waiter.reject(new DOMException('工作流已取消', 'AbortError'));
-        continue;
-      }
-      if (waiter.onAbort && waiter.signal) {
-        waiter.signal.removeEventListener('abort', waiter.onAbort);
-      }
+        const preferred = waiter.preferredRoute ?? releasePrefer;
+        const route = this.findAvailableRoute(preferred, waiter.allowedRoutes);
+        if (!route) continue;
 
-      this.occupy(route);
-      waiter.resolve(route);
-      prefer = undefined;
+        this.waitQueue.splice(i, 1);
+        if (waiter.onAbort && waiter.signal) {
+          waiter.signal.removeEventListener('abort', waiter.onAbort);
+        }
+        this.occupy(route);
+        waiter.resolve(route);
+        if (!waiter.preferredRoute) releasePrefer = undefined;
+        progressed = true;
+        break;
+      }
     }
   }
 
