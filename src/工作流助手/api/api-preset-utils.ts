@@ -1,4 +1,10 @@
-import type { ApiConfig, ApiPreset } from '../tasks/schema';
+import { isTauriTavernHost } from './host-detect';
+import {
+  normalizeCustomApiFormat,
+  type ApiConfig,
+  type ApiPreset,
+  type CustomApiFormat,
+} from '../tasks/schema';
 
 export interface ApiPresetDraft {
   name: string;
@@ -13,6 +19,7 @@ export interface ApiPresetDraft {
   customPromptPostProcessing: 'none' | 'strict';
   includeReasoning: boolean;
   reasoningEffort: 'low' | 'medium' | 'high';
+  customApiFormat: CustomApiFormat;
 }
 
 export interface ApiPayloadOverrides {
@@ -33,6 +40,7 @@ export function createEmptyApiPresetDraft(): ApiPresetDraft {
     customPromptPostProcessing: 'none',
     includeReasoning: false,
     reasoningEffort: 'medium',
+    customApiFormat: 'openai_compat',
   };
 }
 
@@ -51,6 +59,7 @@ export function apiPresetDraftFromPreset(preset: ApiPreset): ApiPresetDraft {
     customPromptPostProcessing: cfg.customPromptPostProcessing ?? 'none',
     includeReasoning: cfg.includeReasoning ?? false,
     reasoningEffort: cfg.reasoningEffort ?? 'medium',
+    customApiFormat: normalizeCustomApiFormat(cfg.customApiFormat),
   };
 }
 
@@ -70,6 +79,7 @@ export function apiPresetFromDraft(draft: ApiPresetDraft): ApiPreset {
       customPromptPostProcessing: draft.customPromptPostProcessing ?? 'none',
       includeReasoning: draft.includeReasoning ?? false,
       reasoningEffort: draft.reasoningEffort ?? 'medium',
+      customApiFormat: normalizeCustomApiFormat(draft.customApiFormat),
     },
   };
 }
@@ -127,6 +137,59 @@ export function omitPromptLogNames<T extends { name?: string }>(messages: T[]): 
   return messages.map(omitPromptLogName);
 }
 
+/** 原版 SillyTavern 不识别 custom_api_format，Claude / Gemini 映射到原生源。 */
+export function resolveChatCompletionSource(format: CustomApiFormat): 'custom' | 'claude' | 'makersuite' {
+  if (format === 'claude_messages') return 'claude';
+  if (format === 'gemini_interactions') return 'makersuite';
+  return 'custom';
+}
+
+export function usesNativeChatCompletionSource(format: CustomApiFormat | undefined): boolean {
+  const normalized = normalizeCustomApiFormat(format);
+  return normalized === 'claude_messages' || normalized === 'gemini_interactions';
+}
+
+/** TauriTavern 上非兼容协议、原版上 Claude / Gemini，都不能走 generateRaw。 */
+export function apiFormatDisallowsGenerateRawFallback(
+  format: CustomApiFormat | undefined,
+  tauriTavern: boolean,
+): boolean {
+  const normalized = normalizeCustomApiFormat(format);
+  if (tauriTavern) return normalized !== 'openai_compat';
+  return normalized === 'claude_messages' || normalized === 'gemini_interactions';
+}
+
+/** 只改当次 reverse_proxy，不改预设里保存的端点。 */
+export function normalizeStNativeProxyBase(rawUrl: unknown, nativeSource: 'claude' | 'makersuite'): string {
+  let base = String(rawUrl || '').trim().replace(/\/+$/, '');
+  if (!base) return '';
+  for (const suffix of ['/chat/completions', '/messages', '/responses', '/interactions']) {
+    if (base.endsWith(suffix)) {
+      base = base.slice(0, -suffix.length).replace(/\/+$/, '');
+      break;
+    }
+  }
+  if (nativeSource === 'claude') {
+    if (base.endsWith('/v1beta')) base = base.slice(0, -'/v1beta'.length).replace(/\/+$/, '');
+    let path = '';
+    try {
+      path = new URL(base).pathname.replace(/\/+$/, '');
+    } catch {
+      /* 非法 URL 原样交给后端 */
+    }
+    if (path === '' || path === '/') return `${base}/v1`;
+    if (!base.endsWith('/v1')) return `${base}/v1`;
+    return base;
+  }
+  for (const suffix of ['/v1beta', '/v1']) {
+    if (base.endsWith(suffix)) {
+      base = base.slice(0, -suffix.length).replace(/\/+$/, '');
+      break;
+    }
+  }
+  return base;
+}
+
 export function buildChatCompletionPayload(
   messages: { role: string; content: string; name?: string }[],
   apiConfig: ApiConfig,
@@ -135,6 +198,11 @@ export function buildChatCompletionPayload(
   const model = (apiConfig.model || '').replace(/^models\//, '');
   const customPromptPostProcessing =
     overrides?.customPromptPostProcessing ?? apiConfig.customPromptPostProcessing ?? 'none';
+  const format = normalizeCustomApiFormat(apiConfig.customApiFormat);
+  const tauriTavern = isTauriTavernHost();
+  const chatCompletionSource = tauriTavern ? 'custom' : resolveChatCompletionSource(format);
+  const nativeSource = tauriTavern || chatCompletionSource === 'custom' ? null : chatCompletionSource;
+  const reverseProxy = nativeSource ? normalizeStNativeProxyBase(apiConfig.url, nativeSource) : apiConfig.url;
   return {
     messages: omitPromptLogNames(messages),
     model,
@@ -142,14 +210,15 @@ export function buildChatCompletionPayload(
     temperature: apiConfig.temperature ?? 1,
     top_p: 0.95,
     stream: false,
-    chat_completion_source: 'custom',
+    chat_completion_source: chatCompletionSource,
+    ...(tauriTavern ? { custom_api_format: format } : {}),
     include_reasoning: apiConfig.includeReasoning ?? false,
     reasoning_effort: apiConfig.reasoningEffort ?? 'medium',
     enable_web_search: false,
     request_images: false,
     custom_prompt_post_processing: customPromptPostProcessing,
-    reverse_proxy: apiConfig.url,
-    proxy_password: '',
+    reverse_proxy: reverseProxy,
+    proxy_password: nativeSource ? apiConfig.apiKey || '' : '',
     custom_url: apiConfig.url,
     custom_include_headers: buildCustomApiHeaders(apiConfig.apiKey, apiConfig.requestHeaders || ''),
     custom_include_body: apiConfig.bodyParams || '',

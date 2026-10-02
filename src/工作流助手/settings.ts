@@ -19,7 +19,8 @@ import {
   saveApiSecretsPayload,
   stripSecretsForPersistence,
 } from './settings/api-secrets';
-import { isChatOverrideActive, readChatTaskScope } from './tasks/chat-task-scope';
+import { rewriteApiPresetNameInTaskList, rewriteApiPresetReferences } from './api/api-preset-references';
+import { isChatOverrideActive, readChatTaskScope, writeChatTaskScope } from './tasks/chat-task-scope';
 import { applyPresetFieldsToSettings } from './tasks/effective-settings';
 import {
   PostProcessPresetSchema,
@@ -171,6 +172,40 @@ export function applyScriptLevelSettings(from: ScriptSettings, target: ScriptSet
   target.replicaFamilyCleanup = _.cloneDeep(from.replicaFamilyCleanup);
   target.uiThemeId = from.uiThemeId;
   target.progressHudPosition = _.cloneDeep(from.progressHudPosition);
+}
+
+/**
+ * 改名或删除 API 预设后落盘。
+ * 有聊天快照时：改当前快照任务，并在磁盘全局 tasks/presets 上改引用，再叠脚本级字段。
+ * 不把内存里的快照任务写进全局 tasks。没有快照时整份保存。
+ * from 为空表示这次没有引用需要改，只按现有 persist 规则保存。
+ */
+export async function saveApiPresetReferenceChange(
+  display: ScriptSettings,
+  from = '',
+  to = '',
+): Promise<void> {
+  const oldName = from.trim();
+  const newName = to.trim();
+  const scope = readChatTaskScope();
+  if (oldName && oldName !== newName && isChatOverrideActive(scope) && scope?.snapshot) {
+    rewriteApiPresetNameInTaskList(scope.snapshot.tasks, oldName, newName);
+    try {
+      await writeChatTaskScope(scope);
+    } catch (error) {
+      console.warn('[工作流助手] 保存聊天快照中的 API 预设引用失败:', error);
+    }
+    const disk = loadSettings();
+    rewriteApiPresetReferences(disk, oldName, newName);
+    applyScriptLevelSettings(display, disk);
+    saveSettings(disk);
+    return;
+  }
+  if (isChatOverrideActive(scope)) {
+    saveScriptLevelSettingsFrom(display);
+    return;
+  }
+  saveSettings(display);
 }
 
 /** 有快照时：以磁盘全局为底，只合并脚本级字段后保存 */

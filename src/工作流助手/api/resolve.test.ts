@@ -15,6 +15,7 @@ function baseSettings(partial?: Partial<ScriptSettings>): ScriptSettings {
       { name: 'primary-preset', apiConfig: { url: 'p', apiKey: '', model: 'm', source: 'openai' } },
       { name: 'fallback-a', apiConfig: { url: 'a', apiKey: '', model: 'm', source: 'openai' } },
       { name: 'fallback-b', apiConfig: { url: 'b', apiKey: '', model: 'm', source: 'openai' } },
+      { name: 'global-default', apiConfig: { url: 'g', apiKey: '', model: 'm', source: 'openai' } },
     ],
     defaultApiPresetName: 'global-default',
     activeApiPresetName: '',
@@ -88,6 +89,38 @@ test('resolveTaskApiPreset override wins over task primary', () => {
     apiPresetFallbackNames: ['fallback-a'],
   });
   assert.deepEqual(chain, ['fallback-b', 'fallback-a']);
+});
+
+test('resolveTaskApiPresetChain skips a missing primary and keeps a real fallback', () => {
+  const chain = resolveTaskApiPresetChain(baseSettings(), 't1', {
+    apiPresetName: 'missing',
+    apiPresetFallbackNames: ['fallback-a'],
+  });
+  assert.deepEqual(chain, ['fallback-a']);
+});
+
+test('resolveTaskApiPresetChain is empty when every named preset is missing', () => {
+  const chain = resolveTaskApiPresetChain(baseSettings(), 't1', {
+    apiPresetName: 'missing',
+    apiPresetFallbackNames: ['also-missing'],
+  });
+  assert.deepEqual(chain, []);
+});
+
+test('resolveTaskApiPresetChain is empty when the default preset name does not exist', () => {
+  const settings = baseSettings({
+    defaultApiPresetName: 'gone',
+    defaultTaskApiPreset: 'gone',
+  });
+  assert.deepEqual(resolveTaskApiPresetChain(settings, 't1', taskBase), []);
+});
+
+test('resolveTaskApiPresetChain uses global apiConfig sentinel when nothing is named', () => {
+  const settings = baseSettings({
+    defaultApiPresetName: '',
+    defaultTaskApiPreset: '',
+  });
+  assert.deepEqual(resolveTaskApiPresetChain(settings, 't1', taskBase), ['']);
 });
 
 test('normalizeApiPresetFallbackNames trims and dedupes', () => {

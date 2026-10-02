@@ -74,6 +74,20 @@ export const PlotWorldbookModeSchema = z.enum(['inherit', 'custom', 'inheritRoot
 /** 副本族成员 API 路由：沿用原本 / 本副本自定义 */
 export const ApiPresetModeSchema = z.enum(['inheritRoot', 'custom']);
 
+export const CUSTOM_API_FORMATS = [
+  'openai_compat',
+  'openai_responses',
+  'claude_messages',
+  'gemini_interactions',
+] as const;
+
+export type CustomApiFormat = (typeof CUSTOM_API_FORMATS)[number];
+
+export function normalizeCustomApiFormat(value: unknown): CustomApiFormat {
+  const raw = String(value ?? '').trim();
+  return (CUSTOM_API_FORMATS as readonly string[]).includes(raw) ? (raw as CustomApiFormat) : 'openai_compat';
+}
+
 export const ApiConfigSchema = z.object({
   url: z.string().default(''),
   apiKey: z.string().default(''),
@@ -89,6 +103,8 @@ export const ApiConfigSchema = z.object({
   customPromptPostProcessing: z.enum(['none', 'strict']).default('none'),
   includeReasoning: z.boolean().default(false),
   reasoningEffort: z.enum(['low', 'medium', 'high']).default('medium'),
+  /** 缺省与旧预设均为 OpenAI 兼容，不改变现有请求 */
+  customApiFormat: z.preprocess(normalizeCustomApiFormat, z.enum(CUSTOM_API_FORMATS)).default('openai_compat'),
 });
 
 export const ApiPresetSchema = z.object({

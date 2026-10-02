@@ -8,9 +8,10 @@ import {
   type ApiPresetDraft,
 } from '../../api/api-preset-utils';
 import { getCurrentChatKey } from '../../api/chat-key';
+import { rewriteApiPresetReferences } from '../../api/api-preset-references';
 import { findApiPreset } from '../../api/resolve';
 import type { ApiPreset } from '../../tasks/schema';
-import { useSettingsStore } from '../../settings';
+import { saveApiPresetReferenceChange, useSettingsStore } from '../../settings';
 import { acuToast } from '../toast';
 
 export function useApiPresetPanel() {
@@ -91,7 +92,7 @@ export function useApiPresetPanel() {
     activeDraftError.value = '';
   }
 
-  function selectPreset(name: string) {
+  function selectPreset(name: string, options?: { persist?: boolean }) {
     const preset = findApiPreset(settings.value, name);
     if (!preset) return;
     const chatKey = getCurrentChatKey();
@@ -102,7 +103,7 @@ export function useApiPresetPanel() {
     };
     applyPresetToGlobals(preset);
     syncActiveDraft();
-    store.persist();
+    if (options?.persist !== false) store.persist();
   }
 
   function setDefaultPreset(name: string) {
@@ -115,22 +116,23 @@ export function useApiPresetPanel() {
   }
 
   function deletePreset(name: string) {
+    const wasDefault = settings.value.defaultApiPresetName === name;
+    const wasDefaultTask = settings.value.defaultTaskApiPreset === name;
+    const wasActive = settings.value.activeApiPresetName === name;
     settings.value.apiPresets = settings.value.apiPresets.filter(p => p.name !== name);
-    if (settings.value.defaultApiPresetName === name) {
+    rewriteApiPresetReferences(settings.value, name, '');
+    if (wasDefault) {
       settings.value.defaultApiPresetName = settings.value.apiPresets[0]?.name ?? '';
       settings.value.defaultTaskApiPreset = settings.value.defaultApiPresetName;
     }
-    if (settings.value.activeApiPresetName === name) {
-      settings.value.activeApiPresetName = settings.value.defaultApiPresetName;
-    }
-    if (settings.value.defaultTaskApiPreset === name) {
+    if (wasDefaultTask) {
       settings.value.defaultTaskApiPreset = settings.value.defaultApiPresetName;
     }
-    for (const [chatKey, binding] of Object.entries(settings.value.apiPresetBindingsByChat)) {
-      if (binding.presetName === name) delete settings.value.apiPresetBindingsByChat[chatKey];
+    if (wasActive) {
+      settings.value.activeApiPresetName = settings.value.defaultApiPresetName;
     }
     syncActiveDraft();
-    store.persist();
+    void saveApiPresetReferenceChange(settings.value, name, '');
     acuToast('success', `已删除 API 预设「${name}」`);
   }
 
@@ -166,23 +168,24 @@ export function useApiPresetPanel() {
       settings.value.apiPresets.push(preset);
     }
 
+    const shouldSelect =
+      formMode.value === 'create' ||
+      settings.value.activeApiPresetName === oldName ||
+      !settings.value.activeApiPresetName;
+    const renamedFrom = oldName && oldName !== preset.name ? oldName : '';
+    if (renamedFrom) rewriteApiPresetReferences(settings.value, renamedFrom, preset.name);
+
     if (!settings.value.defaultApiPresetName) {
       settings.value.defaultApiPresetName = preset.name;
       settings.value.defaultTaskApiPreset = preset.name;
     }
-    if (oldName && settings.value.defaultApiPresetName === oldName) {
-      settings.value.defaultApiPresetName = preset.name;
-      settings.value.defaultTaskApiPreset = preset.name;
-    }
 
-    if (formMode.value === 'create' || settings.value.activeApiPresetName === oldName || !settings.value.activeApiPresetName) {
-      selectPreset(preset.name);
-    } else if (oldName && settings.value.activeApiPresetName === oldName) {
-      settings.value.activeApiPresetName = preset.name;
+    if (shouldSelect) {
+      selectPreset(preset.name, { persist: false });
     }
 
     syncActiveDraft();
-    store.persist();
+    void saveApiPresetReferenceChange(settings.value, renamedFrom, renamedFrom ? preset.name : '');
     acuToast('success', '已保存当前 API 预设。');
   }
 

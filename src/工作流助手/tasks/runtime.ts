@@ -1,4 +1,4 @@
-import { resolveTaskApiPresetChain } from '../api/resolve';
+import { listConfiguredApiPresetNames, resolveTaskApiPresetChain } from '../api/resolve';
 import { buildRoutePoolKey, RouteConcurrencyPoolRegistry } from '../api/route-concurrency-pool';
 import {
   buildRouteConcurrencyLimits,
@@ -253,6 +253,27 @@ async function runSingleTask(
   }
 
   const presetChain = resolveTaskApiPresetChain(ctx.settings, task.id, task);
+  if (presetChain.length === 0) {
+    const names = listConfiguredApiPresetNames(ctx.settings, task.id, task);
+    const reason = `API 预设不存在：${names.join('、')}`;
+    return {
+      taskId: task.id,
+      taskName: task.name,
+      success: false,
+      skipReason: reason,
+      schedulePassed: true,
+      extractedBlock: '',
+      extractedTags: {},
+      injectOnlyTagNames: [],
+      rawResponse: '',
+      variableUpdateSource: '',
+      promptMessages: messages,
+      durationMs: Date.now() - start,
+      stage: task.stage,
+      apiAttemptCount: 1,
+      apiAttemptFailures: [{ attempt: 1, reason }],
+    };
+  }
   const routeLimits = buildRouteConcurrencyLimits(ctx.settings, task.id, task);
   const poolScopeId = task.replicaFamilyRootId ?? task.id;
   const poolKey = buildRoutePoolKey(poolScopeId, presetChain, routeLimits);

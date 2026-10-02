@@ -65,9 +65,11 @@ async function main() {
     saveSettings,
     applyScriptLevelSettings,
     saveScriptLevelSettingsFrom,
+    saveApiPresetReferenceChange,
     savePresetsCatalogToDisk,
     saveProgressHudPosition,
   } = await import('./settings');
+  const { rewriteApiPresetReferences } = await import('./api/api-preset-references');
   const { writeChatTaskScope, clearChatTaskScope, buildChatSnapshotFromSettings } = await import(
     './tasks/chat-task-scope'
   );
@@ -168,6 +170,85 @@ async function main() {
     assert.equal(after.tasks.map(t => t.id).join(','), 'disk-task');
     assert.notEqual(after.finalInjectTemplate, 'SHOULD_NOT_PERSIST');
     console.log('ok saveScriptLevelSettingsFrom persists enabled/apiPresets without polluting tasks');
+  }
+
+  {
+    resetState();
+    await clearChatTaskScope();
+    const base = loadSettings();
+    const diskTask = {
+      id: 'disk-task',
+      name: '磁盘任务',
+      enabled: true,
+      stage: 1,
+      extractInjectTags: [],
+      promptGroups: [],
+      apiPresetName: '旧',
+      apiPresetFallbackNames: ['旧'],
+    } as PostProcessTask;
+    base.tasks = [diskTask];
+    base.apiPresets = [
+      {
+        name: '旧',
+        apiConfig: { url: 'https://old.example', apiKey: 'secret-key', model: 'old', source: 'openai' },
+      },
+    ];
+    base.defaultApiPresetName = '旧';
+    if (base.presets[0]) base.presets[0] = { ...base.presets[0], tasks: [diskTask] };
+    saveSettings(base);
+
+    const snapTask = {
+      id: 'snap-task',
+      name: '快照任务',
+      enabled: true,
+      stage: 1,
+      extractInjectTags: [],
+      promptGroups: [],
+      apiPresetName: '旧',
+    } as PostProcessTask;
+    const snapSettings = _.cloneDeep(loadSettings()) as ScriptSettings;
+    snapSettings.tasks = [snapTask];
+    await writeChatTaskScope(
+      ChatTaskScopeStateSchema.parse({
+        mode: 'chat_override',
+        snapshot: buildChatSnapshotFromSettings(snapSettings),
+        originPresetName: base.activePresetName,
+        updatedAt: Date.now(),
+        source: 'ui',
+        activeView: 'snapshot',
+        boundGlobalPresetName: '',
+      }),
+    );
+
+    const display = _.cloneDeep(loadSettings()) as ScriptSettings;
+    display.tasks = [_.cloneDeep(snapTask)];
+    display.apiPresets = [
+      {
+        name: '新',
+        apiConfig: {
+          url: 'https://new.example',
+          apiKey: 'secret-key',
+          model: 'new',
+          source: 'openai',
+          customApiFormat: 'openai_compat',
+        },
+      },
+    ];
+    rewriteApiPresetReferences(display, '旧', '新');
+    await saveApiPresetReferenceChange(display, '旧', '新');
+
+    const after = loadSettings();
+    assert.equal(after.tasks.map(t => t.id).join(','), 'disk-task');
+    assert.equal(after.tasks[0]?.apiPresetName, '新');
+    assert.deepEqual(after.tasks[0]?.apiPresetFallbackNames, ['新']);
+    assert.equal(after.presets[0]?.tasks[0]?.apiPresetName, '新');
+    assert.equal(after.apiPresets[0]?.name, '新');
+    assert.equal(after.apiPresets[0]?.apiConfig.apiKey, 'secret-key');
+    assert.equal(after.defaultApiPresetName, '新');
+    const scopeRaw = chatMetadata._post_process_chat_scope as { snapshot?: { tasks?: PostProcessTask[] } };
+    assert.equal(scopeRaw.snapshot?.tasks?.[0]?.id, 'snap-task');
+    assert.equal(scopeRaw.snapshot?.tasks?.[0]?.apiPresetName, '新');
+    console.log('ok saveApiPresetReferenceChange renames disk and snapshot without copying snapshot tasks');
   }
 
   {

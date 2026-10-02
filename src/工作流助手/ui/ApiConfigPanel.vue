@@ -109,6 +109,7 @@ const showBodyExtrasWarning = computed(() =>
     customPromptPostProcessing: activeDraft.customPromptPostProcessing,
     includeReasoning: activeDraft.includeReasoning,
     reasoningEffort: activeDraft.reasoningEffort,
+    customApiFormat: activeDraft.customApiFormat,
   }),
 );
 </script>
@@ -237,6 +238,16 @@ const showBodyExtrasWarning = computed(() =>
         </AcuHelpPanel>
         <div v-if="showBodyExtrasWarning" class="acu-message acu-message--warn">
           已填写 body/headers 扩展时会合并到自定义 API 请求体；工作流助手已禁用 ST 预设压扁。
+        </div>
+        <div class="acu-form-row">
+          <label class="acu-field-label">接口协议</label>
+          <select v-model="activeDraft.customApiFormat" class="acu-select">
+            <option value="openai_compat">OpenAI 兼容</option>
+            <option value="openai_responses">OpenAI Responses</option>
+            <option value="claude_messages">Claude Messages</option>
+            <option value="gemini_interactions">Gemini Interactions</option>
+          </select>
+          <p class="acu-notes">Claude / Gemini 走酒馆原生协议。OpenAI Responses 在酒馆没有对应后端，仍走兼容接口。</p>
         </div>
         <div class="acu-form-row">
           <label class="acu-field-label">Prompt 后处理</label>

@@ -1,10 +1,12 @@
 import {
+  apiFormatDisallowsGenerateRawFallback,
   buildChatCompletionPayload,
   buildCustomApiFromConfig,
   hasApiBodyExtras,
   omitPromptLogNames,
   type ApiPayloadOverrides,
 } from './api-preset-utils';
+import { isTauriTavernHost } from './host-detect';
 import type { ResolvedApi } from './resolve';
 import type { ApiConfig } from '../tasks/schema';
 import { checkRunCancelled, registerGenerationId, RunCancelledError, unregisterGenerationId } from '../tasks/run-control';
@@ -260,7 +262,11 @@ async function callViaGenerateRaw(
 }
 
 function shouldDisallowGenerateRawFallback(apiConfig: ApiConfig, options?: ApiCallOptions): boolean {
-  return Boolean(options?.disallowGenerateRawFallback || hasApiBodyExtras(apiConfig));
+  return Boolean(
+    options?.disallowGenerateRawFallback ||
+      hasApiBodyExtras(apiConfig) ||
+      apiFormatDisallowsGenerateRawFallback(apiConfig.customApiFormat, isTauriTavernHost()),
+  );
 }
 
 export async function callWithResolvedApi(
@@ -293,9 +299,16 @@ export async function callWithResolvedApi(
       }
       if (shouldDisallowGenerateRawFallback(apiConfig, options)) {
         const detail = err instanceof Error ? err.message : String(err);
-        throw new Error(
-          `ChatCompletionService 失败且无法回退 generateRaw（结构化 API 参数需 CC 路径）: ${detail}`,
+        const formatBlocksRaw = apiFormatDisallowsGenerateRawFallback(
+          apiConfig.customApiFormat,
+          isTauriTavernHost(),
         );
+        const why = !formatBlocksRaw
+          ? '结构化 API 参数需 CC 路径'
+          : isTauriTavernHost()
+            ? 'TauriTavern 接口协议需 CC 路径'
+            : 'Claude / Gemini 接口协议需 CC 路径';
+        throw new Error(`ChatCompletionService 失败且无法回退 generateRaw（${why}）: ${detail}`);
       }
       console.warn('[工作流助手] ChatCompletionService 失败，回退 generateRaw:', err);
       return await raceApiCall({

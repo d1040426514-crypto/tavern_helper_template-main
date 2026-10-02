@@ -43,6 +43,21 @@ export function resolveTaskApiPreset(settings: ScriptSettings, taskId: string, t
   return String(settings.defaultTaskApiPreset || settings.defaultApiPresetName || '').trim();
 }
 
+export function listConfiguredApiPresetNames(
+  settings: ScriptSettings,
+  taskId: string,
+  task: Pick<PostProcessTask, 'apiPresetName' | 'apiPresetFallbackNames'>,
+): string[] {
+  const primary = resolveTaskApiPreset(settings, taskId, task.apiPresetName);
+  const fallbacks = normalizeApiPresetFallbackNames(task.apiPresetFallbackNames, primary);
+  const names: string[] = [];
+  if (primary) names.push(primary);
+  for (const name of fallbacks) {
+    if (!names.includes(name)) names.push(name);
+  }
+  return names;
+}
+
 export function resolveTaskApiPresetChain(
   settings: ScriptSettings,
   taskId: string,
@@ -50,7 +65,10 @@ export function resolveTaskApiPresetChain(
 ): string[] {
   const primary = resolveTaskApiPreset(settings, taskId, task.apiPresetName);
   const chain: string[] = [];
-  if (primary) chain.push(primary);
+  if (primary) {
+    if (findApiPreset(settings, primary)) chain.push(primary);
+    else console.warn(`[工作流助手] API 预设「${primary}」不存在，已跳过`);
+  }
 
   const fallbacks = normalizeApiPresetFallbackNames(task.apiPresetFallbackNames, primary);
   for (const name of fallbacks) {
@@ -62,7 +80,8 @@ export function resolveTaskApiPresetChain(
   }
 
   if (chain.length) return chain;
-  return primary ? [primary] : [''];
+  const named = Boolean(primary) || fallbacks.length > 0;
+  return named ? [] : [''];
 }
 
 export function getEffectiveApi(settings: ScriptSettings, taskId: string, taskPresetName?: string): ResolvedApi {

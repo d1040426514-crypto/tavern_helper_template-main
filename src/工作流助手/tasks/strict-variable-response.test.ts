@@ -152,6 +152,7 @@ test('enrichApiConfig injects json_object only when missing', () => {
     customPromptPostProcessing: 'none',
     includeReasoning: false,
     reasoningEffort: 'medium',
+    customApiFormat: 'openai_compat',
   };
   const enriched = enrichApiConfigForStructuredTask(base, 'mvu_json_patch');
   assert.ok(bodyParamsHasResponseFormat(enriched.bodyParams));
@@ -177,6 +178,7 @@ test('buildChatCompletionPayload uses preset strict processing', () => {
     customPromptPostProcessing: 'strict',
     includeReasoning: false,
     reasoningEffort: 'high',
+    customApiFormat: 'openai_compat',
   };
   const body = buildChatCompletionPayload([{ role: 'user', content: 'hi' }], apiConfig);
   assert.equal(body.custom_prompt_post_processing, 'strict');
