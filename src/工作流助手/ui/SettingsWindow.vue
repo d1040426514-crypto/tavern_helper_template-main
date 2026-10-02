@@ -71,6 +71,7 @@ import {
   applyReplicaFamilyCleanupInStore,
   applyTaskWorkflowPreset as applyTaskWorkflowPresetInStore,
   clearChatScope,
+  createBlankTaskWorkflowPreset as createBlankTaskWorkflowPresetInStore,
   createTask as createTaskInStore,
   deleteTask as deleteTaskInStore,
   deleteTaskWorkflowPreset as deleteTaskWorkflowPresetInStore,
@@ -1601,6 +1602,14 @@ async function runTaskWorkflowPresetStoreMutation(
   return updated;
 }
 
+function onTaskWorkflowPresetCreate(name: string): void {
+  const task = selectedTask.value;
+  if (!task) return;
+  void runTaskWorkflowPresetStoreMutation(() => createBlankTaskWorkflowPresetInStore(task.id, name, 'ui'))
+    .then(() => acuToast('success', `已新建并应用工作流预设「${name}」`))
+    .catch(e => acuToast('warning', e instanceof Error ? e.message : String(e)));
+}
+
 function onTaskWorkflowPresetSave(name: string): void {
   const task = selectedTask.value;
   if (!task) return;
@@ -2026,6 +2035,65 @@ async function confirmRenameSelectedTask(): Promise<void> {
   }
 }
 
+function nextAvailablePresetName(existing: string[], base: string): string {
+  if (!existing.includes(base)) return base;
+  let index = 2;
+  while (existing.includes(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
+
+async function confirmCreateBlankTaskPreset(): Promise<void> {
+  const name = await acuPrompt({
+    title: '新建任务预设',
+    message: hasChatSnapshot.value
+      ? '创建一个空白全局预设并切换浏览。本聊天快照保持不变。'
+      : '创建一个空白任务预设（含一个默认任务）并切换到它。',
+    confirmText: '新建',
+    danger: false,
+    prompt: {
+      placeholder: '新预设名称',
+      defaultValue: nextAvailablePresetName(
+        settings.value.presets.map(p => p.name),
+        '新预设',
+      ),
+    },
+  });
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (trimmed === CHAT_SNAPSHOT_PRESET_NAME) {
+    acuToast('warning', '不能使用保留名称');
+    return;
+  }
+  if (settings.value.presets.some(p => p.name === trimmed)) {
+    acuToast('warning', `预设「${trimmed}」已存在，请换一个名称`);
+    return;
+  }
+  if (hasChatSnapshot.value) {
+    const saved = store.createBlankTaskPreset(trimmed, { apply: false });
+    if (!saved) {
+      acuToast('warning', '新建失败：名称无效或已存在');
+      return;
+    }
+    const ok = await setChatScopeActiveView({ view: 'global', presetName: saved });
+    if (!ok) {
+      acuToast('warning', `已写入全局预设「${saved}」，但无法切换浏览`);
+      return;
+    }
+    await refreshTaskView();
+    selectedTaskId.value = displayTasks.value[0]?.id ?? '';
+    acuToast('success', `已新建空白预设「${saved}」并切换浏览`);
+    return;
+  }
+  const saved = store.createBlankTaskPreset(trimmed);
+  if (!saved) {
+    acuToast('warning', '新建失败：名称无效或已存在');
+    return;
+  }
+  presetDropdownValue.value = saved;
+  selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+  acuToast('success', `已新建空白预设「${saved}」`);
+}
+
 async function confirmSaveTaskPresetAsNew(): Promise<void> {
   const origin = chatScopeInfo.value?.originPresetName?.trim();
   const defaultName = hasChatSnapshot.value
@@ -2067,6 +2135,7 @@ async function confirmSaveTaskPresetAsNew(): Promise<void> {
   }
   const saved = store.saveAsNewPreset(trimmed);
   if (saved) {
+    presetDropdownValue.value = saved;
     acuToast('success', `已保存为新预设「${saved}」`);
   }
 }
@@ -2112,6 +2181,7 @@ async function confirmDeleteTaskPreset(): Promise<void> {
     selectedTaskId.value = displayTasks.value[0]?.id ?? '';
   } else {
     selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+    presetDropdownValue.value = settings.value.activePresetName.trim();
   }
   acuToast('success', `已删除任务预设「${name}」`);
 }
@@ -2208,6 +2278,7 @@ async function onImportPresetFile(event: Event) {
     }
     const result = store.importPresetFromJson(data, file.name);
     selectedTaskId.value = settings.value.tasks[0]?.id ?? '';
+    presetDropdownValue.value = result.name;
     if (result.strippedApiSecrets) {
       acuToast('info', `已导入并应用预设「${result.name}」；已忽略文件中的 API 配置，请在本机 API 页填写密钥`);
     } else {
@@ -2689,6 +2760,19 @@ function saveRunLogTaskTags(taskId: string): void {
                 <button
                   class="acu-btn acu-btn--sm acu-icon-btn"
                   type="button"
+                  :title="
+                    hasChatSnapshot
+                      ? '新建空白全局预设并切换浏览（不改聊天快照）'
+                      : '新建空白预设'
+                  "
+                  aria-label="新建预设"
+                  @click="confirmCreateBlankTaskPreset"
+                >
+                  <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
+                </button>
+                <button
+                  class="acu-btn acu-btn--sm acu-icon-btn"
+                  type="button"
                   :title="hasChatSnapshot ? '将聊天快照另存为新的全局预设（保留快照）' : '另存为新预设'"
                   aria-label="另存为新预设"
                   @click="confirmSaveTaskPresetAsNew"
@@ -3059,6 +3143,7 @@ function saveRunLogTaskTags(taskId: string): void {
                 <TaskWorkflowPresetPanel
                   v-if="selectedTask && !selectedReplicaViewId"
                   :task="selectedTask"
+                  @create="onTaskWorkflowPresetCreate"
                   @save="onTaskWorkflowPresetSave"
                   @apply="onTaskWorkflowPresetApply"
                   @delete="onTaskWorkflowPresetDelete"

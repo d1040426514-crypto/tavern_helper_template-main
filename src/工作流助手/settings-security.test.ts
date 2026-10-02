@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import lodash from 'lodash';
 import { PostProcessPresetSchema, ScriptSettingsSchema } from './tasks/schema';
 import {
+  buildBlankTaskPreset,
   buildPresetFromSettings,
   buildShareablePresetExport,
   detectSecretsInImportRaw,
@@ -267,4 +268,15 @@ test('redactScriptSettingsForShare strips machine-local worldbook bindings', () 
   // 本机设置未被原地修改
   assert.equal(settings.plotWorldbookConfig.source, 'manual');
   assert.equal(settings.chatWorldbookWriteRules[0]?.manualBookName, '写卡');
+});
+
+test('blank task preset starts from one default task', () => {
+  const preset = buildBlankTaskPreset('新预设');
+  assert.equal(preset.name, '新预设');
+  assert.equal(preset.tasks.length, 1);
+  assert.equal(preset.tasks[0]?.name, '新任务');
+  assert.equal(preset.tasks[0]?.promptGroups[0]?.content, '当前 AI 回复：$7');
+  assert.equal(preset.finalInjectTemplate, '');
+  assert.equal(preset.contextTurnCount, 3);
+  assert.deepEqual(preset.contextExtractRules, []);
 });

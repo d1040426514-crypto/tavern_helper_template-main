@@ -13,6 +13,7 @@ const props = defineProps<{
 }>();
 
 const emit = defineEmits<{
+  create: [name: string];
   save: [name: string];
   apply: [name: string];
   delete: [name: string];
@@ -38,6 +39,35 @@ async function onSave() {
   if (!name?.trim()) return;
   selectedPresetName.value = name.trim();
   emit('save', name.trim());
+}
+
+function nextAvailablePresetName(existing: string[], base: string): string {
+  if (!existing.includes(base)) return base;
+  let index = 2;
+  while (existing.includes(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
+
+async function onCreateBlank() {
+  const existing = (props.task.taskWorkflowPresets ?? []).map(p => p.name);
+  const name = await acuPrompt({
+    title: '新建工作流预设',
+    message: '创建一个空白工作流预设，并应用到当前任务。API 配置与副本调度保持不变。',
+    confirmText: '新建',
+    danger: false,
+    prompt: {
+      placeholder: '新预设名称',
+      defaultValue: nextAvailablePresetName(existing, '新预设'),
+    },
+  });
+  if (!name?.trim()) return;
+  const trimmed = name.trim();
+  if (existing.includes(trimmed)) {
+    acuToast('warning', `预设「${trimmed}」已存在，请换一个名称`);
+    return;
+  }
+  selectedPresetName.value = trimmed;
+  emit('create', trimmed);
 }
 
 async function onSaveAsNew() {
@@ -122,7 +152,7 @@ function exportJson() {
   <div class="acu-subsection task-workflow-preset">
     <h5>工作流预设</h5>
     <p class="acu-notes acu-notes--sm">
-      保存本任务除 API 配置与副本族调度外的设定（提示词、执行阶段、提取标签等）。修改后请点击保存图标写回当前预设，或点击另存为图标输入新名称保存。
+      保存本任务除 API 配置与副本族调度外的设定（提示词、执行阶段、提取标签等）。保存写回当前预设，另存为复制当前设定，新建则生成空白预设并应用到本任务。
     </p>
     <div class="acu-row acu-preset-toolbar">
       <select
@@ -160,6 +190,15 @@ function exportJson() {
           @click="onSave"
         >
           <i class="fa-fw fa-solid fa-floppy-disk" aria-hidden="true"></i>
+        </button>
+        <button
+          class="acu-btn acu-btn--sm acu-icon-btn"
+          type="button"
+          title="新建空白预设并应用到当前任务"
+          aria-label="新建预设"
+          @click="onCreateBlank"
+        >
+          <i class="fa-fw fa-solid fa-plus" aria-hidden="true"></i>
         </button>
         <button
           class="acu-btn acu-btn--sm acu-icon-btn"

@@ -1,13 +1,16 @@
-import type {
-  ApiConfig,
-  ChatWorldbookWriteRule,
-  PlotWorldbookConfig,
-  PostProcessPreset,
-  PostProcessTask,
-  ScriptSettings,
-  TaskWorkflowPresetSnapshot,
+import {
+  PostProcessPresetSchema,
+  PostProcessTaskSchema,
+  type ApiConfig,
+  type ChatWorldbookWriteRule,
+  type PlotWorldbookConfig,
+  type PostProcessPreset,
+  type PostProcessTask,
+  type ScriptSettings,
+  type TaskWorkflowPresetSnapshot,
 } from './tasks/schema';
 import { stripReplicaFamilyMembers } from './tasks/replica-family';
+import { newTaskId } from './tasks/task-clone';
 
 export function redactRequestHeaders(headers: string): string {
   return String(headers || '')
@@ -90,6 +93,29 @@ export function sanitizePresetWorldbookRefsForShare(preset: PostProcessPreset): 
     chatWorldbookWriteRules: sanitizeChatWorldbookWriteRulesForShare(preset.chatWorldbookWriteRules ?? []),
     tasks: (preset.tasks ?? []).map(sanitizeTaskForShare),
   };
+}
+
+/** 空白任务预设：一份默认任务，其余预设级字段走 schema 默认值 */
+export function buildBlankTaskPreset(name: string): PostProcessPreset {
+  const trimmed = name.trim();
+  if (!trimmed) throw new Error('预设名称不能为空');
+  return PostProcessPresetSchema.parse({
+    name: trimmed,
+    tasks: [
+      PostProcessTaskSchema.parse({
+        id: newTaskId(),
+        name: '新任务',
+        enabled: true,
+        stage: 1,
+        extractInjectTags: ['result'],
+        mergeStrategy: 'concat',
+        maxRetries: 3,
+        minLength: 0,
+        apiTimeoutSec: 300,
+        promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
+      }),
+    ],
+  });
 }
 
 /** 从当前设置抽出 PostProcessPreset（不含 API / 运行时字段；不含副本族成员） */

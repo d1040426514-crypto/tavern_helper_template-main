@@ -4,6 +4,7 @@ import {
   applyTaskWorkflowPresetOnTask,
   applyTaskWorkflowSnapshot,
   buildTaskWorkflowSnapshot,
+  createBlankTaskWorkflowPresetOnTask,
   exportTaskWorkflowPresetsJson,
   importTaskWorkflowPresetsFromJson,
   mergeTaskWorkflowPresetsOnTask,
@@ -104,6 +105,27 @@ test('merge presets overwrites same name', () => {
   const merged = mergeTaskWorkflowPresetsOnTask(task, [updated]);
   assert.equal(merged.taskWorkflowPresets?.length, 1);
   assert.equal(merged.taskWorkflowPresets?.[0]?.snapshot.stage, 5);
+});
+
+test('blank workflow preset resets task fields and keeps API plus schedule', () => {
+  const task = {
+    ...baseTask(),
+    stage: 9,
+    replicaFamilySpec: 'item@id',
+    promptGroups: [{ name: 'g1', role: 'user' as const, content: '旧内容', enabled: true }],
+  };
+  const next = createBlankTaskWorkflowPresetOnTask(task, '空白');
+  assert.equal(next.id, 'task-1');
+  assert.equal(next.name, '测试任务');
+  assert.equal(next.stage, 1);
+  assert.equal(next.apiPresetName, 'my-api');
+  assert.equal(next.replicaFamilyScheduleMode, 'manual');
+  assert.equal(next.replicaFamilySpec, undefined);
+  assert.equal(next.promptGroups[0]?.content, '当前 AI 回复：$7');
+  assert.equal(next.taskWorkflowPresets?.length, 1);
+  assert.equal(next.taskWorkflowPresets?.[0]?.name, '空白');
+  assert.equal(next.taskWorkflowPresets?.[0]?.snapshot.promptGroups[0]?.content, '当前 AI 回复：$7');
+  assert.throws(() => createBlankTaskWorkflowPresetOnTask(next, '空白'), /已存在/);
 });
 
 if (process.exitCode) process.exit(process.exitCode);

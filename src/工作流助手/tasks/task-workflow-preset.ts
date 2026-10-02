@@ -63,6 +63,58 @@ export function listTaskWorkflowPresetNames(task: PostProcessTask): string[] {
   return (task.taskWorkflowPresets ?? []).map(p => p.name);
 }
 
+const BLANK_WORKFLOW_OPTIONAL_KEYS = [
+  'skipIfTagsFound',
+  'schedule',
+  'plotWorldbookConfig',
+  'contextConfig',
+  'structuredOutputRules',
+  'replicaFamilySpec',
+  'replicaFamilyEnumSpec',
+  'replicaFamilyBaseName',
+] as const;
+
+/** 空白工作流快照：保留任务名，其余设定回到新建任务的默认值 */
+export function buildBlankTaskWorkflowSnapshot(taskName: string): TaskWorkflowPresetSnapshot {
+  return TaskWorkflowPresetSnapshotSchema.parse({
+    name: taskName.trim() || '新任务',
+    enabled: true,
+    stage: 1,
+    promptGroups: [{ name: '', role: 'user', content: '当前 AI 回复：$7', enabled: true }],
+    extractInjectTags: ['result'],
+    mergeStrategy: 'concat',
+    maxRetries: 3,
+    minLength: 0,
+    apiTimeoutSec: 300,
+    plotWorldbookMode: 'inherit',
+    contextMode: 'inherit',
+    structuredOutputMode: 'off',
+  });
+}
+
+/** 写入空白预设并应用到任务；API 配置、身份和副本调度保持不变 */
+export function createBlankTaskWorkflowPresetOnTask(task: PostProcessTask, name: string): PostProcessTask {
+  const trimmed = String(name ?? '').trim();
+  if (!trimmed) throw new Error('工作流预设名称不能为空');
+  if ((task.taskWorkflowPresets ?? []).some(p => p.name === trimmed)) {
+    throw new Error(`预设「${trimmed}」已存在，请换一个名称`);
+  }
+  const snapshot = buildBlankTaskWorkflowSnapshot(task.name);
+  const entry: TaskWorkflowPresetEntry = {
+    name: trimmed,
+    savedAt: Date.now(),
+    snapshot,
+  };
+  const applied = applyTaskWorkflowSnapshot(task, snapshot);
+  for (const key of BLANK_WORKFLOW_OPTIONAL_KEYS) {
+    delete applied[key];
+  }
+  return {
+    ...applied,
+    taskWorkflowPresets: [...(task.taskWorkflowPresets ?? []), entry],
+  };
+}
+
 export function saveTaskWorkflowPresetOnTask(task: PostProcessTask, name: string): PostProcessTask {
   const trimmed = String(name ?? '').trim();
   if (!trimmed) throw new Error('工作流预设名称不能为空');

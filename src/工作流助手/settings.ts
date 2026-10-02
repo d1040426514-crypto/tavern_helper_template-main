@@ -5,6 +5,7 @@ import { migrateImportedPreset } from './tasks/import-preset-migrate';
 import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
 import { stripReplicaFamilyMembers } from './tasks/replica-family';
 import {
+  buildBlankTaskPreset,
   buildPresetFromSettings,
   detectSecretsInImportRaw,
   importedSettingsHadApiConfig,
@@ -286,6 +287,16 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     return addOrUpdatePreset(buildPresetFromCurrent(name));
   }
 
+  /** 空白任务预设。apply 为 false 时只写入列表，不切换当前活动预设（有聊天快照时用） */
+  function createBlankTaskPreset(newName: string, options?: { apply?: boolean }): string | null {
+    const name = newName.trim();
+    if (!name) return null;
+    if (settings.value.presets.some(p => p.name === name)) return null;
+    const preset = buildBlankTaskPreset(name);
+    const apply = options?.apply !== false;
+    return apply ? addOrUpdatePreset(preset) : upsertPresetWithoutApply(preset);
+  }
+
   function applyPreset(presetName: string) {
     const preset = settings.value.presets.find(p => p.name === presetName);
     if (!preset) return;
@@ -436,6 +447,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     upsertPresetWithoutApply,
     saveActivePreset,
     saveAsNewPreset,
+    createBlankTaskPreset,
     deleteTaskPreset,
   };
 });

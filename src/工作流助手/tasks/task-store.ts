@@ -62,6 +62,7 @@ import {
   applyTaskWorkflowPresetOnTask,
   deleteTaskWorkflowPresetOnTask,
   listTaskWorkflowPresetNames,
+  createBlankTaskWorkflowPresetOnTask,
   saveTaskWorkflowPresetOnTask,
 } from './task-workflow-preset';
 import {
@@ -1170,6 +1171,23 @@ export async function saveTaskWorkflowPreset(
   if (!task) throw new Error(`任务不存在: ${taskId}`);
   const next = saveTaskWorkflowPresetOnTask(task, name);
   return updateTask(taskId, { taskWorkflowPresets: next.taskWorkflowPresets }, source);
+}
+
+export async function createBlankTaskWorkflowPreset(
+  taskId: string,
+  name: string,
+  source: TaskWriteSource = 'api',
+): Promise<PostProcessTask> {
+  const settings = loadSettings();
+  const tasks = listTasks();
+  const index = tasks.findIndex(t => t.id === taskId);
+  if (index < 0) throw new Error(`任务不存在: ${taskId}`);
+  const next = createBlankTaskWorkflowPresetOnTask(tasks[index]!, name);
+  tasks[index] = next;
+  const mirrored = mirrorAllReplicaFamilies(tasks);
+  await writeTasks(settings, mirrored, source);
+  await emitTasksChanged('update', source, taskId);
+  return mirrored.find(t => t.id === taskId) ?? next;
 }
 
 export async function applyTaskWorkflowPreset(
