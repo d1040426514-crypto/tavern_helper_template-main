@@ -2,7 +2,10 @@ import assert from 'node:assert/strict';
 import {
   extractPreviewFromRunStatus,
   flattenNpcActTags,
+  floorHasOwnReplicaSnapshot,
+  namesFromFloorSnapshot,
   parseLaunchedNameList,
+  pickRosterNames,
   PREVIEW_TAG,
 } from './data';
 import { buildChronicle, parseInteractions } from './parse';
@@ -90,4 +93,47 @@ test('end-to-end front/back lists + interactions + npc map', () => {
   assert.equal(data.sections[1]?.npcs[1]?.empty, true);
   assert.equal(data.interactions.length, 1);
   assert.equal(data.interactions[0]?.summary, '街头偶遇');
+});
+
+test('this-floor snapshot roster wins over preview names', () => {
+  const snapshot = {
+    'root-front': {
+      lastEnumAttrValues: ['泽尼娅', '朱蒂卡'],
+      launchedAttrValues: ['旧名'],
+    },
+  };
+  assert.equal(floorHasOwnReplicaSnapshot(snapshot), true);
+  const floor = namesFromFloorSnapshot(
+    { id: 'root-front', replicaFamilyScheduleMode: 'auto' },
+    snapshot,
+  );
+  assert.deepEqual(pickRosterNames(floor, ['宏里的别人']), ['泽尼娅', '朱蒂卡']);
+});
+
+test('manual schedule prefers launchedAttrValues on this floor', () => {
+  const floor = namesFromFloorSnapshot(
+    { id: 'root-back', replicaFamilyScheduleMode: 'manual' },
+    { 'root-back': { lastEnumAttrValues: ['枚举'], launchedAttrValues: ['手动'] } },
+  );
+  assert.deepEqual(pickRosterNames(floor, ['预览']), ['手动']);
+});
+
+test('missing floor snapshot allows preview names', () => {
+  assert.equal(floorHasOwnReplicaSnapshot({}), false);
+  assert.equal(floorHasOwnReplicaSnapshot(null), false);
+  const floor = namesFromFloorSnapshot(
+    { id: 'root-front', replicaFamilyScheduleMode: 'auto' },
+    {},
+  );
+  assert.equal(floor, null);
+  assert.deepEqual(pickRosterNames(floor, ['朱蒂卡']), ['朱蒂卡']);
+});
+
+test('empty roster already on this floor does not fall back to preview', () => {
+  const floor = namesFromFloorSnapshot(
+    { id: 'root-front', replicaFamilyScheduleMode: 'auto' },
+    { 'root-front': { lastEnumAttrValues: [], launchedAttrValues: [] } },
+  );
+  assert.deepEqual(floor, []);
+  assert.deepEqual(pickRosterNames(floor, ['继承来的旧名']), []);
 });

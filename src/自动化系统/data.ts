@@ -9,6 +9,8 @@ import {
 export const PREVIEW_TAG = '后台角色交互预演';
 export const NPC_ACT_GROUP = 'npc_act';
 export const REPLICA_STATE_KEY = '_post_process_replica_state';
+/** 与工作流助手 emitChronicleFloorReady 使用同一事件名 */
+export const CHRONICLE_FLOOR_READY_EVENT = 'acu_chronicle_floor_ready';
 
 type ReplicaRootState = {
   attrValues?: string[];
@@ -85,9 +87,37 @@ function findRootByTaskName(api: ReplicaApi | null, taskName: string): ReplicaTa
   );
 }
 
+export type FloorReplicaSnapshot = Record<string, ReplicaRootState>;
+
+/** 本楼消息上是否已经写下自己的副本快照（空对象视为尚未落盘） */
+export function floorHasOwnReplicaSnapshot(
+  snapshot: FloorReplicaSnapshot | null | undefined,
+): boolean {
+  if (!snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)) return false;
+  return Object.keys(snapshot).length > 0;
+}
+
+/**
+ * 本楼快照里已有该根任务时返回名单（允许为空数组）。
+ * 根任务尚未写入时返回 null，调用方再改用实时宏或更早楼层做预览。
+ */
+export function namesFromFloorSnapshot(
+  root: Pick<ReplicaTask, 'id' | 'replicaFamilyScheduleMode'>,
+  snapshot: FloorReplicaSnapshot,
+): string[] | null {
+  if (!Object.prototype.hasOwnProperty.call(snapshot, root.id)) return null;
+  return listLastLaunched(root, snapshot);
+}
+
+/** 本楼名单已落盘则用它；否则用预览名单 */
+export function pickRosterNames(floorNames: string[] | null, previewNames: string[]): string[] {
+  if (floorNames != null) return floorNames;
+  return previewNames;
+}
+
 function listLastLaunched(
-  root: ReplicaTask,
-  snapshot: Record<string, ReplicaRootState>,
+  root: Pick<ReplicaTask, 'id' | 'replicaFamilyScheduleMode'>,
+  snapshot: FloorReplicaSnapshot,
 ): string[] {
   const state = snapshot[root.id];
   if (!state) return [];
@@ -124,17 +154,15 @@ function trySubstituteMacro(macro: string): string | null {
 function resolveLaunchedNamesByTask(
   taskName: string,
   api: ReplicaApi | null,
-  snapshot: Record<string, ReplicaRootState>,
+  snapshot: FloorReplicaSnapshot,
 ): string[] {
-  const macro = `{{replica:launched:${taskName}}}`;
-  const fromMacro = trySubstituteMacro(macro);
-  if (fromMacro != null && fromMacro.length) {
-    return parseLaunchedNameList(fromMacro);
-  }
-
   const root = findRootByTaskName(api, taskName);
-  if (!root) return [];
-  return listLastLaunched(root, snapshot);
+  const floorNames = root ? namesFromFloorSnapshot(root, snapshot) : null;
+  if (floorNames != null) return floorNames;
+
+  const fromMacro = trySubstituteMacro(`{{replica:launched:${taskName}}}`);
+  const preview = fromMacro != null && fromMacro.length ? parseLaunchedNameList(fromMacro) : [];
+  return pickRosterNames(null, preview);
 }
 
 function readPreviewRawFromFloor(messageId: number, api: ReplicaApi | null): string {
@@ -166,29 +194,37 @@ export function flattenNpcActTags(tags: Record<string, unknown>): Record<string,
   return out;
 }
 
-function readReplicaSnapshot(messageId: number): Record<string, ReplicaRootState> {
+function resolveMessageId(messageId?: number): number {
+  if (messageId != null && Number.isFinite(messageId)) return messageId;
+  try {
+    return getCurrentMessageId();
+  } catch {
+    return -1;
+  }
+}
+
+function readReplicaSnapshot(messageId: number): FloorReplicaSnapshot {
   try {
     const msgs = getChatMessages(messageId);
     const data = (msgs?.[0] as { data?: Record<string, unknown> } | undefined)?.data;
     const raw = data?.[REPLICA_STATE_KEY];
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
-    return raw as Record<string, ReplicaRootState>;
+    return raw as FloorReplicaSnapshot;
   } catch {
     return {};
   }
 }
 
+/** 本楼是否已有自己的副本快照。轮询用它判断名单是否落盘，不把继承来的旧名单当成结束。 */
+export function readFloorSnapshotReady(messageId?: number): boolean {
+  const mid = resolveMessageId(messageId);
+  if (mid < 0) return false;
+  return floorHasOwnReplicaSnapshot(readReplicaSnapshot(mid));
+}
+
 /** 读取本楼 chronicle 原始素材（前台/后台名单 + npc 正文 + 预演原文） */
 export function readChronicleSources(messageId?: number): ChronicleSources {
-  const mid =
-    messageId ??
-    (() => {
-      try {
-        return getCurrentMessageId();
-      } catch {
-        return -1;
-      }
-    })();
+  const mid = resolveMessageId(messageId);
 
   let previewRaw = '';
   let npcByName: Record<string, string> = {};

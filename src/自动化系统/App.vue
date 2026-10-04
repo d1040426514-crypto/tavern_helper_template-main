@@ -20,7 +20,7 @@
 <script setup lang="ts">
 import './theme.scss';
 import ChronicleView from './components/ChronicleView.vue';
-import { hasChronicleSource, loadChronicle } from './data';
+import { CHRONICLE_FLOOR_READY_EVENT, hasChronicleSource, loadChronicle, readFloorSnapshotReady } from './data';
 import { isChronicleEmpty } from './parse';
 import type { ChronicleData } from './types';
 import { normalizeThemeId, type ChronicleThemeId } from './themes';
@@ -30,6 +30,8 @@ const FONT_KEY = 'chronicleFontScale';
 const FONT_MIN = 0.85;
 const FONT_MAX = 1.25;
 const FONT_STEP = 0.05;
+const POLL_MS = 2000;
+const POLL_CAP_MS = 15 * 60 * 1000;
 
 const loading = ref(true);
 const empty = ref(false);
@@ -64,23 +66,48 @@ function setTheme(id: ChronicleThemeId) {
   }
 }
 
-function load() {
+function load(initial: boolean) {
   try {
     if (!hasChronicleSource()) {
       empty.value = true;
       chronicle.value = null;
-      loading.value = false;
       return;
     }
     const data = loadChronicle();
     empty.value = isChronicleEmpty(data);
     chronicle.value = data;
   } catch {
-    empty.value = true;
-    chronicle.value = null;
+    if (initial || chronicle.value == null) {
+      empty.value = true;
+      chronicle.value = null;
+    }
+  } finally {
+    loading.value = false;
   }
-  loading.value = false;
 }
+
+function currentFloorId(): number {
+  try {
+    return getCurrentMessageId();
+  } catch {
+    return -1;
+  }
+}
+
+let pollTimer = 0;
+let offReady: { stop: () => void } | null = null;
+
+function stopPoll() {
+  if (!pollTimer) return;
+  window.clearInterval(pollTimer);
+  pollTimer = 0;
+}
+
+onUnmounted(() => {
+  stopPoll();
+  offReady?.stop();
+  offReady = null;
+});
 
 onMounted(() => {
   try {
@@ -98,17 +125,28 @@ onMounted(() => {
     fontScale.value = 1;
   }
 
-  load();
-  let tries = 0;
-  const timer = window.setInterval(() => {
-    tries += 1;
-    if (hasChronicleSource()) {
-      load();
-      window.clearInterval(timer);
+  const floorId = currentFloorId();
+  load(true);
+
+  offReady = eventOn(CHRONICLE_FLOOR_READY_EVENT, (messageId?: number) => {
+    if (typeof messageId === 'number' && floorId >= 0 && messageId !== floorId) return;
+    load(false);
+    stopPoll();
+  });
+
+  const snapshotId = floorId >= 0 ? floorId : undefined;
+  if (readFloorSnapshotReady(snapshotId)) return;
+
+  const started = Date.now();
+  pollTimer = window.setInterval(() => {
+    if (Date.now() - started >= POLL_CAP_MS) {
+      stopPoll();
       return;
     }
-    if (tries >= 12) window.clearInterval(timer);
-  }, 400);
+    if (!readFloorSnapshotReady(snapshotId)) return;
+    load(false);
+    stopPoll();
+  }, POLL_MS);
 });
 </script>
 

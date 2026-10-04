@@ -1,6 +1,7 @@
 import { captureDataSnapshot } from '../bridge/database-api';
 import { loadSettings, saveSettings } from '../settings';
 import { resolveEffectiveSettings } from './effective-settings';
+import { emitChronicleFloorReady } from './events';
 import { injectToAiFloor } from './inject';
 import {
   beginRun,
@@ -292,6 +293,13 @@ export async function handleMessageReceived(
 
     if (!options?.force && hadDoneFlag && !isRerun) return;
 
+    let chronicleNotified = false;
+    const notifyChronicleReady = async () => {
+      if (chronicleNotified) return;
+      chronicleNotified = true;
+      await emitChronicleFloorReady(targetId);
+    };
+
     const { signal, epoch } = beginRun();
     runEpoch = epoch;
     showTaskProgressToast('正在准备工作流任务...', () => {
@@ -356,6 +364,7 @@ export async function handleMessageReceived(
       if (cancelled) {
         clearPendingReplicaRenames(targetId);
         acuToast('warning', '工作流已由用户取消');
+        await notifyChronicleReady();
         return;
       }
 
@@ -381,6 +390,7 @@ export async function handleMessageReceived(
       hideTaskProgressToast();
       await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
       await writeReplicaStateSnapshot(targetId, settings.tasks);
+      await notifyChronicleReady();
     } catch (e) {
       const superseded =
         e instanceof RunCancelledError && runEpoch !== undefined && getRunEpoch() !== runEpoch;
@@ -390,6 +400,7 @@ export async function handleMessageReceived(
       if (e instanceof RunCancelledError) {
         clearPendingReplicaRenames(targetId);
         acuToast('warning', '工作流已由用户取消');
+        await notifyChronicleReady();
         return;
       }
       try {
@@ -406,6 +417,7 @@ export async function handleMessageReceived(
       clearPendingReplicaRenames(targetId);
       console.error(SCRIPT_LOG_PREFIX, e);
       acuToast('error', `工作流执行失败: ${e instanceof Error ? e.message : String(e)}`);
+      await notifyChronicleReady();
     } finally {
       hideTaskProgressToast();
       endRun(runEpoch);
