@@ -26,6 +26,7 @@ export type NpcBackground = {
 export type NpcLifeArchive = {
   birthday: string;
   race: string;
+  gender: string;
   age: string;
   remainingLife: string;
 };

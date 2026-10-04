@@ -40,6 +40,7 @@
           v-for="chip in lifeChips"
           :key="chip.key"
           class="npc-life-chip"
+          :class="`npc-life-chip--${chip.key}`"
         >
           <span class="npc-life-k">{{ chip.label }}</span>
           <span class="npc-life-v">{{ chip.value }}</span>
@@ -340,6 +341,7 @@ const lifeChips = computed(() => {
   const rows: Array<{ key: string; label: string; value: string }> = [];
   if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
   if (life.race) rows.push({ key: 'race', label: '种族', value: life.race });
+  if (life.gender) rows.push({ key: 'gender', label: '性别', value: life.gender });
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
   return rows;
@@ -834,25 +836,61 @@ const backgroundRows = computed(() => {
   color: var(--accent-lavender);
 }
 
-/* 生命档案：紧凑标签行 */
+/* 生命档案：生日独占视觉权重，种族/性别紧凑并排，年龄与剩余寿命随后 */
 .npc-life-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.3em;
+  align-items: center;
+  gap: 0.28em;
   width: 100%;
+  padding: 0.32em;
+  border-radius: 10px;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--accent-mint) 10%, var(--bg-step)) 0%,
+    color-mix(in srgb, var(--accent-lavender) 7%, var(--bg-step)) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--accent-mint) 24%, var(--border-subtle));
 }
 
 .npc-life-chip {
   display: inline-flex;
   align-items: baseline;
-  gap: 0.25em;
+  gap: 0.28em;
   max-width: 100%;
-  padding: 0.2em 0.45em;
+  padding: 0.22em 0.48em;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--accent-mint) 14%, var(--bg-step));
-  border: 1px solid color-mix(in srgb, var(--accent-mint) 35%, var(--border-subtle));
+  background: color-mix(in srgb, var(--bg-panel, var(--bg-card)) 86%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent-mint) 32%, var(--border-subtle));
   font-size: 0.68em;
   line-height: 1.35;
+
+  &--birthday {
+    flex: 1 1 12.5em;
+  }
+
+  &--race,
+  &--gender {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+
+  &--age {
+    flex: 1 1 7.6em;
+  }
+
+  &--life {
+    flex: 1 1 6.4em;
+  }
+
+  &--gender {
+    background: color-mix(in srgb, var(--accent-lavender) 16%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-lavender) 40%, var(--border-subtle));
+
+    .npc-life-k {
+      color: var(--accent-lavender);
+    }
+  }
 }
 
 .npc-life-k {
@@ -1131,11 +1169,24 @@ const backgroundRows = computed(() => {
   }
 
   .npc-life-row {
-    gap: 0.28em;
+    gap: 0.26em;
+    padding: 0.28em;
   }
 
   .npc-life-chip {
     font-size: 0.64em;
+
+    &--birthday {
+      flex: 1 1 100%;
+    }
+
+    &--race,
+    &--gender,
+    &--age,
+    &--life {
+      flex: 1 1 calc(50% - 0.26em);
+      white-space: normal;
+    }
   }
 
   /* 当前状态：两列 + 通栏 */

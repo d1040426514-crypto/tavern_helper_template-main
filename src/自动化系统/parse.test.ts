@@ -52,7 +52,7 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   const block = `<npc act="李明">
 <file>
 最后更新时间: 大明-1520年-3月-1日-周一-08:00
-生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[年龄]30岁(青年)|[剩余寿命]50年
+生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[性别]男|[年龄]30岁(青年)|[剩余寿命]50年
 资金状况: 手头宽裕
 声誉: [官方]小有名气|[民间]受人尊敬
 社会身份: 巡城司百户;城西商会理事
@@ -78,6 +78,7 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.deepEqual(npc.statusParts, ['行走', '青衫', '盘问路人', '大明京城', '城西巷', '细雨巷口']);
   assert.equal(npc.lifeArchive.birthday, '大明-1490年-1月-1日');
   assert.equal(npc.lifeArchive.race, '人族');
+  assert.equal(npc.lifeArchive.gender, '男');
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
   assert.equal(npc.wealth, '手头宽裕');
@@ -100,6 +101,22 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.deepEqual(npc.questLogs, []);
   assert.deepEqual(npc.questArchive, []);
   assert.equal(npc.empty, false);
+});
+
+test('parseNpcBlock life archive gender is optional', () => {
+  const legacy = parseNpcBlock(`<npc act="旧档">
+生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[年龄]30岁(青年)|[剩余寿命]50年
+</npc>`);
+  assert.equal(legacy.lifeArchive.gender, '');
+  assert.equal(legacy.lifeArchive.age, '30岁(青年)');
+  assert.equal(legacy.empty, false);
+
+  const genderOnly = parseNpcBlock(`<npc act="甲">
+生命档案: [性别]女
+</npc>`);
+  assert.equal(genderOnly.lifeArchive.gender, '女');
+  assert.equal(genderOnly.lifeArchive.birthday, '');
+  assert.equal(genderOnly.empty, false);
 });
 
 test('parseNpcBlock reputation social background companions', () => {
