@@ -251,6 +251,137 @@ function parseMonthToken(tok: string): number | null {
   return chineseNumeralToInt(tok);
 }
 
+/** 时辰起点。子时四刻起越过午夜，折回当日 00:00，不另加日偏移 */
+const SHICHEN_START_HOUR: Record<string, number> = {
+  子: 23,
+  丑: 1,
+  寅: 3,
+  卯: 5,
+  辰: 7,
+  巳: 9,
+  午: 11,
+  未: 13,
+  申: 15,
+  酉: 17,
+  戌: 19,
+  亥: 21,
+};
+
+/** 地支纪月：寅月为正月。与时辰起点不是同一张表 */
+const DIZHI_MONTH: Record<string, number> = {
+  寅: 1,
+  卯: 2,
+  辰: 3,
+  巳: 4,
+  午: 5,
+  未: 6,
+  申: 7,
+  酉: 8,
+  戌: 9,
+  亥: 10,
+  子: 11,
+  丑: 12,
+};
+
+const SEASON_MONTH: Record<string, number> = {
+  孟春: 1,
+  仲春: 2,
+  季春: 3,
+  孟夏: 4,
+  仲夏: 5,
+  季夏: 6,
+  孟秋: 7,
+  仲秋: 8,
+  季秋: 9,
+  孟冬: 10,
+  仲冬: 11,
+  季冬: 12,
+};
+
+const SHICHEN_BRANCHES = '子丑寅卯辰巳午未申酉戌亥';
+const SHICHEN_KE_SRC = `(初刻|正刻|(?:${CN_NUM_CLASS}+|\\d{1,2})\\s*刻|初|正)`;
+const SHICHEN_TOKEN_SRC =
+  `([${SHICHEN_BRANCHES}])\\s*时(?:\\s*${SHICHEN_KE_SRC})?|([${SHICHEN_BRANCHES}])\\s*(初|正)`;
+
+/** 一刻 15 分钟；初/初刻为 0，正/正刻为时辰正中（4 刻） */
+function parseShichenKe(modifier: string | undefined): number | null {
+  const raw = String(modifier ?? '').replace(/\s+/g, '');
+  if (!raw) return 0;
+  if (raw === '初' || raw === '初刻') return 0;
+  if (raw === '正' || raw === '正刻') return 4;
+  const matched = raw.match(new RegExp(`^(${CN_NUM_CLASS}+|\\d{1,2})刻$`));
+  if (!matched) return null;
+  const n = chineseNumeralToInt(matched[1]!);
+  if (n == null || n < 0) return null;
+  return n;
+}
+
+function shichenPointToClock(
+  branch: string,
+  modifier: string | undefined,
+): { hour: number; minute: number } | null {
+  const startHour = SHICHEN_START_HOUR[branch];
+  if (startHour == null) return null;
+  const ke = parseShichenKe(modifier);
+  if (ke == null) return null;
+  const total = startHour * 60 + ke * 15;
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  return { hour: Math.floor(wrapped / 60), minute: wrapped % 60 };
+}
+
+type ShichenToken = { hour: number; minute: number; start: number; end: number };
+
+function findShichenTokens(text: string): ShichenToken[] {
+  const re = new RegExp(SHICHEN_TOKEN_SRC, 'g');
+  const tokens: ShichenToken[] = [];
+  let matched: RegExpExecArray | null;
+  while ((matched = re.exec(text)) !== null) {
+    const branch = matched[1] ?? matched[3];
+    if (!branch) continue;
+    const modifier = matched[1] != null ? matched[2] : matched[4];
+    const clock = shichenPointToClock(branch, modifier);
+    if (!clock) continue;
+    tokens.push({ ...clock, start: matched.index, end: matched.index + matched[0].length });
+    if (matched[0].length === 0) re.lastIndex += 1;
+  }
+  return tokens;
+}
+
+function collectShichenHits(text: string, hits: ClockHit[]): void {
+  const tokens = findShichenTokens(text);
+  const consumed = new Set<number>();
+  for (let i = 0; i < tokens.length - 1; i++) {
+    const left = tokens[i]!;
+    const right = tokens[i + 1]!;
+    const between = text.slice(left.end, right.start);
+    if (!/^\s*[-~～—]\s*$/.test(between)) continue;
+    hits.push({
+      hour: right.hour,
+      minute: right.minute,
+      rangeStartHour: left.hour,
+      rangeStartMinute: left.minute,
+      start: left.start,
+      end: right.end,
+      fromRange: true,
+    });
+    consumed.add(i);
+    consumed.add(i + 1);
+  }
+  for (let i = 0; i < tokens.length; i++) {
+    if (consumed.has(i)) continue;
+    const token = tokens[i]!;
+    const insideRange = hits.some(h => h.fromRange && token.start >= h.start && token.end <= h.end);
+    if (insideRange) continue;
+    hits.push({
+      hour: token.hour,
+      minute: token.minute,
+      start: token.start,
+      end: token.end,
+      fromRange: false,
+    });
+  }
+}
+
 function parseDayToken(tok: string): number | null {
   if (tok.startsWith('初')) {
     const rest = tok.slice(1);
@@ -270,7 +401,7 @@ function parseYearFromText(text: string): number | null {
   return chineseNumeralToInt(m[3]!);
 }
 
-/** 先抽时间段（取右端），否则取最后一个单时刻 */
+/** 先抽时间段（取右端），否则取最后一个单时刻。时辰与刻先折成时分 */
 function extractClockOrRange(text: string): ClockHit | null {
   const hits: ClockHit[] = [];
 
@@ -292,6 +423,8 @@ function extractClockOrRange(text: string): ClockHit | null {
       });
     }
   }
+
+  collectShichenHits(text, hits);
 
   const singlePatterns = [
     /(\d{1,2})\s*[:：]\s*(\d{2})(?:\s*[:：]\s*\d{2})?/g,
@@ -395,6 +528,27 @@ function matchChineseSlash(text: string, clock: ClockHit | null): MatcherHit | n
 }
 
 /**
+ * 数字月、正月、腊月优先。都没有时才用地支月（寅月为正月）或孟仲季月。
+ */
+function resolveChineseMonth(text: string): number | null {
+  const explicit = text.match(new RegExp(`(正|腊|\\d+|${CN_NUM_CLASS}+)\\s*月`));
+  if (explicit) {
+    const month = parseMonthToken(explicit[1]!);
+    if (month != null && !Number.isNaN(month)) return month;
+  }
+
+  const dizhi = text.match(/([寅卯辰巳午未申酉戌亥子丑])\s*月/);
+  if (dizhi) {
+    const month = DIZHI_MONTH[dizhi[1]!];
+    if (month != null) return month;
+  }
+
+  const season = text.match(/(孟春|仲春|季春|孟夏|仲夏|季夏|孟秋|仲秋|季秋|孟冬|仲冬|季冬)\s*月?/);
+  if (season) return SEASON_MONTH[season[1]!] ?? null;
+  return null;
+}
+
+/**
  * 中文/架空历法：年/月/日各自可选，至少一项命中。
  * 复兴纪元488年-5月-14日-星期三-15:48、十月十四日、五月初一 / 正月初一、元年-01月-01日
  */
@@ -404,11 +558,8 @@ function matchChineseYmd(text: string, clock: ClockHit | null): MatcherHit | nul
   const year = parseYearFromText(text);
   if (year != null && !Number.isNaN(year)) fields.year = year;
 
-  const monthM = text.match(new RegExp(`(正|腊|\\d+|${CN_NUM_CLASS}+)\\s*月`));
-  if (monthM) {
-    const month = parseMonthToken(monthM[1]!);
-    if (month != null && !Number.isNaN(month)) fields.month = month;
-  }
+  const month = resolveChineseMonth(text);
+  if (month != null) fields.month = month;
 
   const chuM = text.match(/初([一二三四五六七八九]|十)/);
   if (chuM) {
@@ -667,12 +818,14 @@ export function formatRemainingDuration(remainingMs: number): string {
 
 export const GAME_TIME_FORMAT_HELP = {
   preprocess:
-    '解析前：全角数字转半角；多行块若含「时间/当前时间/游戏时间：」行则只取该行；折叠空白；去掉开头同名标签；@ 之后视为地点并截断。不截断 |。先识别时间段（取结束时刻）再识别日期；整段日期区间（A ~ B / A — B）取右端；空格短横线 A - B 仅当两端都像时间时才取右端（避免列表 - 项）。',
+    '解析前：全角数字转半角；多行块若含「时间/当前时间/游戏时间：」行则只取该行；折叠空白；去掉开头同名标签；@ 之后视为地点并截断。不截断 |。十二时辰与刻先折成时分（一刻 15 分钟，初为起点，正为时辰正中）再识别时段。先识别时间段（取结束时刻）再识别日期；整段日期区间（A ~ B / A — B）取右端；空格短横线 A - B 仅当两端都像时间时才取右端（避免列表 - 项）。',
   examples: [
     '混排：时间：2024-05-07 | 周二 15:30-18:00（取 2024-05-07 18:00）',
     '多行标签块：地点…\\n时间：2026年04月10日 周五 下午 17:05\\n在场角色：\\n- 角色|服装（只取时间行）',
     '中文/架空历法：复兴纪元488年5月14日15:48、自由纪元-427年-07月-12日、无名纪元元年-01月-01日-星期一-14:00',
     '中文月日：复兴纪元十年十月十四日、五月初一（年/月/日可缺；有月+日即可支撑天/周及更粗间隔）',
+    '月份别名：已有数字月、正月或腊月时以它们为准；否则寅月为正月、丑月为腊月，孟春至季冬依次为 1–12 月',
+    '时辰刻：申时三刻为 15:45，酉时初、酉初为 17:00，申正为 16:00；申时三刻-酉时初取右端 17:00。子时四刻起记为当日 00:00–00:45，跨夜时段仍按结束早于开始加一日',
     '中文年份 + 斜杠月日：新王国历十年-01/01/10:15、新王国历十年-01/01 10:15、…元年-01/01/10:15',
     '横杠月日时：复兴纪元488年-5-14-15:48',
     '横杠简写：488-5-14 15:48',

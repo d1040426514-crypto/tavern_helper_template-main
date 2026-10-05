@@ -474,4 +474,96 @@ test('kindsCompatibleForSchedule requires same kind', () => {
   assert.equal(kindsCompatibleForSchedule('day_count', 'calendar'), false);
 });
 
+test('shichen ke maps to clock minute', () => {
+  const shen = parseGameTime('申时三刻');
+  assert.ok(shen);
+  assert.equal(shen.kind, 'time_only');
+  assert.equal(shen.fields.month, undefined);
+  assert.equal(shen.fields.hour, 15);
+  assert.equal(shen.fields.minute, 45);
+  assert.equal(parseGameTime('申时3刻')?.fields.minute, 45);
+  assert.equal(parseGameTime('酉时初')?.fields.hour, 17);
+  assert.equal(parseGameTime('酉时初')?.fields.minute, 0);
+  assert.equal(parseGameTime('酉初')?.fields.hour, 17);
+  assert.equal(parseGameTime('申正')?.fields.hour, 16);
+  assert.equal(parseGameTime('申正')?.fields.minute, 0);
+  assert.equal(parseGameTime('子时三刻')?.fields.hour, 23);
+  assert.equal(parseGameTime('子时三刻')?.fields.minute, 45);
+  const ziFourth = parseGameTime('子时四刻');
+  assert.equal(ziFourth?.fields.hour, 0);
+  assert.equal(ziFourth?.fields.minute, 0);
+  assert.equal(parseGameTime('子时七刻')?.fields.hour, 0);
+  assert.equal(parseGameTime('子时七刻')?.fields.minute, 45);
+});
+
+test('shichen range keeps the end clock', () => {
+  const sample = `<time_format>
+time: 元会历3726年·12月23日(云霭沉郁/金石清鸣)☆申时三刻-酉时初(机关轮转/法阵交辉)
+scene: 万法天仪仙城·外城东南·接引登记殿前广场
+</time_format>`;
+  const r = parseGameTime(sample);
+  assert.ok(r);
+  assert.equal(r.rule, 'chinese_ymd+range');
+  assert.equal(r.fields.year, 3726);
+  assert.equal(r.fields.month, 12);
+  assert.equal(r.fields.day, 23);
+  assert.equal(r.fields.hour, 17);
+  assert.equal(r.fields.minute, 0);
+});
+
+test('zi fourth ke stays on the same nominal midnight', () => {
+  const zi = parseGameTime('12月23日子时四刻');
+  const midnight = parseGameTime('12月23日 00:00');
+  assert.ok(zi);
+  assert.ok(midnight);
+  assert.equal(zi.rule, 'chinese_ymd');
+  assert.equal(zi.fields.hour, 0);
+  assert.equal(zi.fields.minute, 0);
+  assert.equal(zi.ms, midnight.ms);
+});
+
+test('hai to zi fourth ke range uses existing overnight day', () => {
+  const endOnly = parseGameTime('12月23日 00:00');
+  const overnight = parseGameTime('12月23日亥时-子时四刻');
+  assert.ok(endOnly);
+  assert.ok(overnight);
+  assert.equal(overnight.rule, 'chinese_ymd+range');
+  assert.equal(overnight.fields.hour, 0);
+  assert.equal(overnight.fields.minute, 0);
+  assert.equal(overnight.ms, endOnly.ms + intervalToMs(1, 'day'));
+});
+
+test('same-day shichen past midnight relies on schedule compare', () => {
+  const last = parseGameTime('12月23日亥时')!;
+  const now = parseGameTime('12月23日子时四刻')!;
+  assert.ok(now.ms < last.ms);
+  const adj = adjustNowMsForScheduleCompare(now, last);
+  assert.equal(adj.adjusted, true);
+  assert.equal(adj.nowMs - last.ms, intervalToMs(3, 'hour'));
+});
+
+test('numeric month wins over dizhi and season aliases', () => {
+  const r = parseGameTime('元会历3726年·12月23日·寅月·孟春');
+  assert.ok(r);
+  assert.equal(r.fields.year, 3726);
+  assert.equal(r.fields.month, 12);
+  assert.equal(r.fields.day, 23);
+});
+
+test('dizhi month maps yin as first month through chou', () => {
+  const branches = ['寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥', '子', '丑'];
+  branches.forEach((branch, index) => {
+    const r = parseGameTime(`${branch}月`);
+    assert.equal(r?.fields.month, index + 1, branch);
+  });
+});
+
+test('season month maps mengchun through jidong', () => {
+  const seasons = ['孟春', '仲春', '季春', '孟夏', '仲夏', '季夏', '孟秋', '仲秋', '季秋', '孟冬', '仲冬', '季冬'];
+  seasons.forEach((season, index) => {
+    assert.equal(parseGameTime(season)?.fields.month, index + 1, season);
+    assert.equal(parseGameTime(`${season}月`)?.fields.month, index + 1, `${season}月`);
+  });
+});
+
 if (process.exitCode) process.exit(process.exitCode);
