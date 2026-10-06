@@ -83,6 +83,23 @@ export const CUSTOM_API_FORMATS = [
 
 export type CustomApiFormat = (typeof CUSTOM_API_FORMATS)[number];
 
+/** 与酒馆无工具组一致；不含 merge_tools / semi_tools / strict_tools */
+export const PROMPT_POST_PROCESSING_MODES = ['none', 'merge', 'semi', 'strict', 'single'] as const;
+
+export type PromptPostProcessing = (typeof PROMPT_POST_PROCESSING_MODES)[number];
+
+export const PROMPT_POST_PROCESSING_LABELS: Record<PromptPostProcessing, string> = {
+  none: '未选择',
+  merge: '合并相同角色连续的发言',
+  semi: '半严格（强制对话角色交替）',
+  strict: '严格（强制对话角色交替、用户最先）',
+  single: '单一用户消息（无工具）',
+};
+
+export function promptPostProcessingRequiresChatCompletion(mode: PromptPostProcessing | undefined): boolean {
+  return (mode ?? 'none') !== 'none';
+}
+
 export function normalizeCustomApiFormat(value: unknown): CustomApiFormat {
   const raw = String(value ?? '').trim();
   return (CUSTOM_API_FORMATS as readonly string[]).includes(raw) ? (raw as CustomApiFormat) : 'openai_compat';
@@ -100,7 +117,7 @@ export const ApiConfigSchema = z.object({
   excludeBodyParams: z.string().default(''),
   requestHeaders: z.string().default(''),
   /** SillyTavern custom_prompt_post_processing；DeepSeek 结构化输出推荐 strict */
-  customPromptPostProcessing: z.enum(['none', 'strict']).default('none'),
+  customPromptPostProcessing: z.enum(PROMPT_POST_PROCESSING_MODES).default('none'),
   includeReasoning: z.boolean().default(false),
   reasoningEffort: z.enum(['low', 'medium', 'high']).default('medium'),
   /** 缺省与旧预设均为 OpenAI 兼容，不改变现有请求 */

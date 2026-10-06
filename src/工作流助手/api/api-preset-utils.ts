@@ -1,9 +1,11 @@
 import { isTauriTavernHost } from './host-detect';
 import {
   normalizeCustomApiFormat,
+  promptPostProcessingRequiresChatCompletion,
   type ApiConfig,
   type ApiPreset,
   type CustomApiFormat,
+  type PromptPostProcessing,
 } from '../tasks/schema';
 
 export interface ApiPresetDraft {
@@ -16,14 +18,14 @@ export interface ApiPresetDraft {
   bodyParams: string;
   excludeBodyParams: string;
   requestHeaders: string;
-  customPromptPostProcessing: 'none' | 'strict';
+  customPromptPostProcessing: PromptPostProcessing;
   includeReasoning: boolean;
   reasoningEffort: 'low' | 'medium' | 'high';
   customApiFormat: CustomApiFormat;
 }
 
 export interface ApiPayloadOverrides {
-  customPromptPostProcessing?: 'none' | 'strict';
+  customPromptPostProcessing?: PromptPostProcessing;
 }
 
 export function createEmptyApiPresetDraft(): ApiPresetDraft {
@@ -107,12 +109,17 @@ export function buildCustomApiHeaders(apiKey: string, requestHeaders: string): s
   return headers;
 }
 
+/** 附加主体、排除参数或请求头。不含提示词后处理，供设置页警告使用。 */
+export function hasCustomRequestFields(
+  apiConfig: Pick<ApiConfig, 'bodyParams' | 'excludeBodyParams' | 'requestHeaders'>,
+): boolean {
+  return Boolean(apiConfig.bodyParams?.trim() || apiConfig.excludeBodyParams?.trim() || apiConfig.requestHeaders?.trim());
+}
+
 export function hasApiBodyExtras(apiConfig: ApiConfig): boolean {
-  return Boolean(
-    apiConfig.bodyParams?.trim() ||
-      apiConfig.excludeBodyParams?.trim() ||
-      apiConfig.requestHeaders?.trim() ||
-      apiConfig.customPromptPostProcessing === 'strict',
+  return (
+    hasCustomRequestFields(apiConfig) ||
+    promptPostProcessingRequiresChatCompletion(apiConfig.customPromptPostProcessing)
   );
 }
 

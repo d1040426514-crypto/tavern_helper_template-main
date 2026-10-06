@@ -1,7 +1,7 @@
 import { extractBalancedJsonSlice, parseJsonPatchArrayLenient } from '@util/common';
 import { hasXmlTagBlock } from '@util/xml-tag-blocks';
 
-import type { ApiConfig } from './schema';
+import { promptPostProcessingRequiresChatCompletion, type ApiConfig } from './schema';
 
 export type StructuredOutputMode = 'off' | 'mvu_json_patch' | 'addon_json_patch';
 export type ActiveStructuredOutputMode = Exclude<StructuredOutputMode, 'off'>;
@@ -227,7 +227,7 @@ export function hasCompleteVariableXml(text: string, mode: ActiveStructuredOutpu
 
 export function apiConfigRequiresChatCompletionPath(apiConfig: ApiConfig): boolean {
   return (
-    apiConfig.customPromptPostProcessing === 'strict' ||
+    promptPostProcessingRequiresChatCompletion(apiConfig.customPromptPostProcessing) ||
     Boolean(apiConfig.bodyParams?.trim()) ||
     Boolean(apiConfig.excludeBodyParams?.trim())
   );

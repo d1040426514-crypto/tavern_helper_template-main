@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import type { ApiConfig } from '../tasks/schema';
-import { apiFormatDisallowsGenerateRawFallback, buildChatCompletionPayload, normalizeStNativeProxyBase } from './api-preset-utils';
+import { ApiConfigSchema, type ApiConfig } from '../tasks/schema';
+import {
+  apiFormatDisallowsGenerateRawFallback,
+  buildChatCompletionPayload,
+  createEmptyApiPresetDraft,
+  hasApiBodyExtras,
+  hasCustomRequestFields,
+  normalizeStNativeProxyBase,
+} from './api-preset-utils';
 
 function config(partial: Partial<ApiConfig>): ApiConfig {
   return {
@@ -66,6 +73,34 @@ test('gemini interactions strips version suffix', () => {
   assert.equal(body.reverse_proxy, 'https://generativelanguage.googleapis.com');
   assert.equal(body.proxy_password, 'secret');
   assert.equal(body.custom_url, raw);
+});
+
+test('blank preset defaults prompt post-processing to none', () => {
+  assert.equal(createEmptyApiPresetDraft().customPromptPostProcessing, 'none');
+  assert.equal(ApiConfigSchema.parse({}).customPromptPostProcessing, 'none');
+});
+
+test('prompt post-processing modes pass through and block generateRaw fallback', () => {
+  for (const mode of ['merge', 'semi', 'single', 'strict'] as const) {
+    const apiConfig = config({
+      customPromptPostProcessing: mode,
+      bodyParams: '',
+      excludeBodyParams: '',
+      requestHeaders: '',
+    });
+    const body = buildChatCompletionPayload([{ role: 'user', content: 'hi' }], apiConfig);
+    assert.equal(body.custom_prompt_post_processing, mode);
+    assert.equal(hasApiBodyExtras(apiConfig), true);
+    assert.equal(hasCustomRequestFields(apiConfig), false);
+  }
+  const untouched = config({
+    customPromptPostProcessing: 'none',
+    bodyParams: '',
+    excludeBodyParams: '',
+    requestHeaders: '',
+  });
+  assert.equal(hasApiBodyExtras(untouched), false);
+  assert.equal(buildChatCompletionPayload([{ role: 'user', content: 'hi' }], untouched).custom_prompt_post_processing, 'none');
 });
 
 test('api format blocks generateRaw only for native sources on SillyTavern', () => {

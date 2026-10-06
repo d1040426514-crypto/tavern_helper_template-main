@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { buildChatCompletionPayload } from '../api/api-preset-utils';
 import {
+  apiConfigRequiresChatCompletionPath,
   bodyParamsHasResponseFormat,
   enrichApiConfigForStructuredTask,
   extractStrictVariableResponse,
@@ -184,6 +185,26 @@ test('buildChatCompletionPayload uses preset strict processing', () => {
   assert.equal(body.custom_prompt_post_processing, 'strict');
   assert.equal(body.reasoning_effort, 'high');
   assert.equal(body.include_reasoning, false);
+});
+
+test('non-none prompt post-processing requires chat completion path', () => {
+  const base: ApiConfig = {
+    url: 'https://api.example.com',
+    apiKey: '',
+    model: 'm',
+    source: 'openai',
+    bodyParams: '',
+    excludeBodyParams: '',
+    requestHeaders: '',
+    customPromptPostProcessing: 'none',
+    includeReasoning: false,
+    reasoningEffort: 'medium',
+    customApiFormat: 'openai_compat',
+  };
+  assert.equal(apiConfigRequiresChatCompletionPath(base), false);
+  for (const mode of ['merge', 'semi', 'strict', 'single'] as const) {
+    assert.equal(apiConfigRequiresChatCompletionPath({ ...base, customPromptPostProcessing: mode }), true);
+  }
 });
 
 if (process.exitCode) {

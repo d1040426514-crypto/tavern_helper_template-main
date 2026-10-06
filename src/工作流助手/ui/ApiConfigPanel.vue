@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import { hasApiBodyExtras } from '../api/api-preset-utils';
+import { hasCustomRequestFields } from '../api/api-preset-utils';
 import {
   applyDeepSeekStructuredTemplate,
   applyStrictJsonToDraft,
@@ -13,6 +13,7 @@ import {
   snapshotDeepSeekDraftFields,
   type DeepSeekDraftSnapshot,
 } from '../api/deepseek-presets';
+import { PROMPT_POST_PROCESSING_LABELS, PROMPT_POST_PROCESSING_MODES } from '../tasks/schema';
 import AcuPresetDropdown from './AcuPresetDropdown.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
@@ -98,18 +99,10 @@ watch(activePresetName, () => {
 });
 
 const showBodyExtrasWarning = computed(() =>
-  hasApiBodyExtras({
-    url: activeDraft.url,
-    apiKey: activeDraft.apiKey,
-    model: activeDraft.model,
-    source: 'openai',
+  hasCustomRequestFields({
     bodyParams: activeDraft.bodyParams,
     excludeBodyParams: activeDraft.excludeBodyParams,
     requestHeaders: activeDraft.requestHeaders,
-    customPromptPostProcessing: activeDraft.customPromptPostProcessing,
-    includeReasoning: activeDraft.includeReasoning,
-    reasoningEffort: activeDraft.reasoningEffort,
-    customApiFormat: activeDraft.customApiFormat,
   }),
 );
 </script>
@@ -198,6 +191,27 @@ const showBodyExtrasWarning = computed(() =>
       </div>
 
       <div class="acu-api-config-panel__editor-section">
+        <div v-if="showBodyExtrasWarning" class="acu-message acu-message--warn">
+          已填写 body/headers 扩展时会合并到自定义 API 请求体；工作流助手已禁用 ST 预设压扁。
+        </div>
+        <div class="acu-form-row">
+          <label class="acu-field-label">接口协议</label>
+          <select v-model="activeDraft.customApiFormat" class="acu-select">
+            <option value="openai_compat">OpenAI 兼容</option>
+            <option value="openai_responses">OpenAI Responses</option>
+            <option value="claude_messages">Claude Messages</option>
+            <option value="gemini_interactions">Gemini Interactions</option>
+          </select>
+          <p class="acu-notes">Claude / Gemini 走酒馆原生协议。OpenAI Responses 在酒馆没有对应后端，仍走兼容接口。</p>
+        </div>
+        <div class="acu-form-row">
+          <label class="acu-field-label">Prompt 后处理</label>
+          <select v-model="activeDraft.customPromptPostProcessing" class="acu-select">
+            <option v-for="mode in PROMPT_POST_PROCESSING_MODES" :key="mode" :value="mode">
+              {{ PROMPT_POST_PROCESSING_LABELS[mode] }}
+            </option>
+          </select>
+        </div>
         <div class="acu-deepseek-actions">
           <button
             class="acu-btn acu-btn--sm acu-deepseek-btn"
@@ -236,26 +250,6 @@ const showBodyExtrasWarning = computed(() =>
             </li>
           </ul>
         </AcuHelpPanel>
-        <div v-if="showBodyExtrasWarning" class="acu-message acu-message--warn">
-          已填写 body/headers 扩展时会合并到自定义 API 请求体；工作流助手已禁用 ST 预设压扁。
-        </div>
-        <div class="acu-form-row">
-          <label class="acu-field-label">接口协议</label>
-          <select v-model="activeDraft.customApiFormat" class="acu-select">
-            <option value="openai_compat">OpenAI 兼容</option>
-            <option value="openai_responses">OpenAI Responses</option>
-            <option value="claude_messages">Claude Messages</option>
-            <option value="gemini_interactions">Gemini Interactions</option>
-          </select>
-          <p class="acu-notes">Claude / Gemini 走酒馆原生协议。OpenAI Responses 在酒馆没有对应后端，仍走兼容接口。</p>
-        </div>
-        <div class="acu-form-row">
-          <label class="acu-field-label">Prompt 后处理</label>
-          <select v-model="activeDraft.customPromptPostProcessing" class="acu-select">
-            <option value="none">none</option>
-            <option value="strict">strict（DeepSeek 推荐）</option>
-          </select>
-        </div>
         <div class="acu-form-row acu-form-row--stack">
           <label class="acu-field-label">附加主体参数</label>
           <p class="acu-notes">SillyTavern custom_include_body，填写 YAML object，会合并到最终模型请求体。</p>
