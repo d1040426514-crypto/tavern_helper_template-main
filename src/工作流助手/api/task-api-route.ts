@@ -48,7 +48,6 @@ async function callSinglePresetRoute(
   const apiResult = await callApi(messages, { apiConfig: enriched }, generationId, {
     disallowGenerateRawFallback:
       options?.disallowGenerateRawFallback ?? (structuredMode != null || apiConfigRequiresChatCompletionPath(enriched)),
-    payloadOverrides: structuredMode ? { customPromptPostProcessing: 'strict' } : undefined,
     signal: options?.signal,
     timeoutMs: options?.timeoutMs,
   });

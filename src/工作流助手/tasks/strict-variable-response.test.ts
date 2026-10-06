@@ -8,7 +8,7 @@ import {
   stripCodeFence,
   tryParseJsonObject,
 } from './strict-variable-response';
-import type { ApiConfig } from './schema';
+import { PROMPT_POST_PROCESSING_MODES, type ApiConfig } from './schema';
 
 const JSON_PATCH_RE = /<JSONPatch>\s*[\s\S]*?\s*<\/JSONPatch>/i;
 const ADDON_JSON_PATCH_RE = /<AddonJSONPatch>\s*[\s\S]*?\s*<\/AddonJSONPatch>/i;
@@ -155,16 +155,23 @@ test('enrichApiConfig injects json_object only when missing', () => {
     reasoningEffort: 'medium',
     customApiFormat: 'openai_compat',
   };
-  const enriched = enrichApiConfigForStructuredTask(base, 'mvu_json_patch');
-  assert.ok(bodyParamsHasResponseFormat(enriched.bodyParams));
-  assert.equal(enriched.customPromptPostProcessing, 'strict');
+  for (const mode of PROMPT_POST_PROCESSING_MODES) {
+    const enriched = enrichApiConfigForStructuredTask(
+      { ...base, customPromptPostProcessing: mode },
+      'mvu_json_patch',
+    );
+    assert.ok(bodyParamsHasResponseFormat(enriched.bodyParams));
+    assert.equal(enriched.customPromptPostProcessing, mode);
+  }
 
   const presetWithFormat: ApiConfig = {
     ...base,
     bodyParams: 'response_format:\n  type: json_schema',
+    customPromptPostProcessing: 'merge',
   };
   const kept = enrichApiConfigForStructuredTask(presetWithFormat, 'mvu_json_patch');
   assert.equal(kept.bodyParams, presetWithFormat.bodyParams);
+  assert.equal(kept.customPromptPostProcessing, 'merge');
 });
 
 test('buildChatCompletionPayload uses preset strict processing', () => {

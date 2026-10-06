@@ -94,4 +94,4 @@ export function applyDeepSeekStructuredTemplate(
 }
 
 export const DEEPSEEK_STRUCTURED_TEMPLATE_HINT =
-  'DeepSeek 预设：已应用 thinking disabled；严格 JSON 与 COT 可在下方开关调整。';
+  'API 预设：已应用 thinking disabled；严格 JSON 与 COT 可在下方开关调整。';

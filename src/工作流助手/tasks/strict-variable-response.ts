@@ -114,9 +114,6 @@ export function enrichApiConfigForStructuredTask(
     const trimmed = next.bodyParams.trim();
     next.bodyParams = trimmed ? `${trimmed}\n${JSON_OBJECT_BODY_SNIPPET}` : JSON_OBJECT_BODY_SNIPPET;
   }
-  if (next.customPromptPostProcessing !== 'strict') {
-    next.customPromptPostProcessing = 'strict';
-  }
   if (!next.excludeBodyParams.trim()) {
     next.excludeBodyParams = 'top_p, reasoning_effort';
   }
