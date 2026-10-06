@@ -143,6 +143,8 @@ export const ContextTagRuleSchema = z.object({
   mode: z.enum(['boundary', 'regex']).optional(),
   /** `/表达式/标志`；没写斜杠时整段当作表达式 */
   pattern: z.string().optional(),
+  /** 正则规则的显示名称，不参与匹配 */
+  name: z.string().optional(),
 });
 
 export const TaskContextConfigSchema = z.object({

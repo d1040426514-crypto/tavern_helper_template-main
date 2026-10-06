@@ -68,13 +68,14 @@ export function normalizeContextTagRules(
     normalized.push({ start, end, mode: 'boundary', pattern: '' });
   };
 
-  const pushRegex = (patternRaw: unknown) => {
+  const pushRegex = (patternRaw: unknown, nameRaw: unknown) => {
     const pattern = String(patternRaw ?? '').trim();
     if (!pattern) return;
+    const name = String(nameRaw ?? '').trim();
     const key = `regex\u0000${pattern}`;
     if (dedup.has(key)) return;
     dedup.add(key);
-    normalized.push({ start: '', end: '', mode: 'regex', pattern });
+    normalized.push({ start: '', end: '', mode: 'regex', pattern, name });
   };
 
   if (Array.isArray(rulesInput)) {
@@ -91,7 +92,7 @@ export function normalizeContextTagRules(
       if (typeof rule === 'object') {
         const r = rule as Record<string, unknown>;
         if (r.mode === 'regex') {
-          pushRegex(r.pattern);
+          pushRegex(r.pattern, r.name);
           continue;
         }
         if ('tag' in r && !('start' in r)) {

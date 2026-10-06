@@ -137,6 +137,11 @@ describe('正则匹配', () => {
 
   it('规范化保留只有 pattern 的正则规则', () => {
     const rules = normalizeContextTagRules([{ mode: 'regex', pattern: '  /a/i  ' }]);
-    assert.deepEqual(rules, [{ start: '', end: '', mode: 'regex', pattern: '/a/i' }]);
+    assert.deepEqual(rules, [{ start: '', end: '', mode: 'regex', pattern: '/a/i', name: '' }]);
+  });
+
+  it('规范化保留正则名称', () => {
+    const rules = normalizeContextTagRules([{ mode: 'regex', pattern: '/a/i', name: ' 剥标签 ' }]);
+    assert.equal(rules[0]?.name, '剥标签');
   });
 });
