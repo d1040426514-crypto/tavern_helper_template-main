@@ -15,6 +15,7 @@ import {
   type GameTimeParseResult,
 } from './parse-game-time';
 import type { PostProcessTask, ScheduleStateEntry, ScriptSettings, TaskSchedule } from './schema';
+import { firstRegexFullMatch, isUserRegexInvalid } from './regex-literal';
 import { extractLastTagContent } from './utils';
 
 export function resolveScheduleMode(schedule: TaskSchedule): 'round' | 'time' {
@@ -57,17 +58,51 @@ export function countAssistantRounds(): number {
   }
 }
 
-export function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): { raw: string | null; fail: boolean } {
+export type TimeRawFailKind = 'missing' | 'regex_invalid' | 'regex_miss';
+
+export type TimeRawResult = {
+  raw: string | null;
+  fail: boolean;
+  failKind?: TimeRawFailKind;
+};
+
+type TimeSource = NonNullable<TaskSchedule['timeInterval']>['timeSource'];
+
+function failTimeRaw(failKind: TimeRawFailKind): TimeRawResult {
+  return { raw: null, fail: true, failKind };
+}
+
+function applyTimeMatchPattern(source: string, pattern: string): TimeRawResult {
+  const pat = String(pattern ?? '').trim();
+  if (!pat) return { raw: source, fail: false };
+  if (isUserRegexInvalid(pat)) return failTimeRaw('regex_invalid');
+  const matched = firstRegexFullMatch(source, pat);
+  if (matched == null) return failTimeRaw('regex_miss');
+  return { raw: matched, fail: false };
+}
+
+export function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): TimeRawResult {
   const ti = task.schedule?.timeInterval;
   if (!ti) return { raw: null, fail: false };
+  const pattern = ti.matchPattern ?? '';
   const src = ti.timeSource;
   if (src.type === 'message_tag') {
     const text = src.scope === 'current_pair' ? ctx.currentPairText : ctx.currentAiText;
-    for (const tag of src.tagNames) {
-      const v = extractLastTagContent(text, tag);
-      if (v) return { raw: v, fail: false };
+    const tags = (src.tagNames ?? []).map(tag => String(tag ?? '').trim()).filter(Boolean);
+    if (tags.length > 0) {
+      let inner: string | null = null;
+      for (const tag of tags) {
+        const v = extractLastTagContent(text, tag);
+        if (v) {
+          inner = v;
+          break;
+        }
+      }
+      if (inner == null) return failTimeRaw('missing');
+      return applyTimeMatchPattern(inner, pattern);
     }
-    return { raw: null, fail: true };
+    if (!String(pattern).trim()) return failTimeRaw('missing');
+    return applyTimeMatchPattern(text, pattern);
   }
   try {
     const opt =
@@ -76,11 +111,37 @@ export function resolveTimeRaw(task: PostProcessTask, ctx: ScheduleContext): { r
         : { type: src.variableType };
     const vars = getVariables(opt);
     const val = _.get(vars, src.path);
-    if (val == null || val === '') return { raw: null, fail: true };
-    return { raw: String(val).trim(), fail: false };
+    if (val == null || val === '') return failTimeRaw('missing');
+    const raw = String(val).trim();
+    if (!raw) return failTimeRaw('missing');
+    return applyTimeMatchPattern(raw, pattern);
   } catch {
-    return { raw: null, fail: true };
+    return failTimeRaw('missing');
   }
+}
+
+/** 调度跳过原因与「测试时间解析」提示共用，避免两处文案分叉。 */
+export function describeTimeRawFailure(failKind: TimeRawFailKind, src: TimeSource, surface: 'run' | 'probe'): string {
+  if (surface === 'run') {
+    if (failKind === 'regex_invalid') return '时间正则无效，已跳过';
+    if (failKind === 'regex_miss') return '时间正则未命中，已跳过';
+    return '读不到游戏时间，已跳过';
+  }
+  if (failKind === 'regex_invalid') return '时间正则无效';
+  if (failKind === 'regex_miss') {
+    if (src.type === 'message_tag') {
+      const tags = (src.tagNames ?? []).map(tag => String(tag ?? '').trim()).filter(Boolean);
+      if (!tags.length) return '正则未在当前扫描全文中命中';
+      return '已读到标签内容，但正则未命中';
+    }
+    return '已读到变量内容，但正则未命中';
+  }
+  if (src.type === 'message_tag') {
+    const tags = src.tagNames.filter(Boolean).join('、') || '（未填写）';
+    return `未在正文中读到时间标签：${tags}`;
+  }
+  const path = src.path?.trim() || '（未填写路径）';
+  return `未读到楼层变量时间：${src.variableType} / ${path}`;
 }
 
 export type GameTimeProbeResult = {
@@ -127,23 +188,15 @@ export function probeTaskGameTime(task: PostProcessTask): GameTimeProbeResult {
     bypassSchedule: false,
   };
 
-  const { raw, fail } = resolveTimeRaw(task, ctx);
-  if (fail || raw == null) {
-    if (src.type === 'message_tag') {
-      const tags = src.tagNames.filter(Boolean).join('、') || '（未填写）';
-      return {
-        ok: false,
-        stage: 'source',
-        message: `未在正文中读到时间标签：${tags}`,
-      };
-    }
-    const path = src.path?.trim() || '（未填写路径）';
+  const resolved = resolveTimeRaw(task, ctx);
+  if (resolved.fail || resolved.raw == null) {
     return {
       ok: false,
       stage: 'source',
-      message: `未读到楼层变量时间：${src.variableType} / ${path}`,
+      message: describeTimeRawFailure(resolved.failKind ?? 'missing', src, 'probe'),
     };
   }
+  const raw = resolved.raw;
 
   const parsed = parseGameTime(raw);
   if (!parsed) {
@@ -239,10 +292,14 @@ export function shouldRunTask(
     state.lastRunRound = 0;
   }
 
-  const { raw, fail } = resolveTimeRaw(task, ctx);
-  if (fail || !raw) {
-    return { run: false, reason: '读不到游戏时间，已跳过' };
+  const resolved = resolveTimeRaw(task, ctx);
+  if (resolved.fail || !resolved.raw) {
+    return {
+      run: false,
+      reason: describeTimeRawFailure(resolved.failKind ?? 'missing', ti.timeSource, 'run'),
+    };
   }
+  const raw = resolved.raw;
   const parsed = parseGameTime(raw);
   if (!parsed) {
     return { run: false, reason: '游戏时间格式无法解析，已跳过' };

@@ -1,3 +1,4 @@
+import { collectRegexMatchSpans } from './regex-literal';
 import type { ContextTagRule } from './schema';
 
 function trimBoundary(boundary: string): string {
@@ -64,7 +65,16 @@ export function normalizeContextTagRules(
     const key = `${start}\u0000${end}`;
     if (dedup.has(key)) return;
     dedup.add(key);
-    normalized.push({ start, end });
+    normalized.push({ start, end, mode: 'boundary', pattern: '' });
+  };
+
+  const pushRegex = (patternRaw: unknown) => {
+    const pattern = String(patternRaw ?? '').trim();
+    if (!pattern) return;
+    const key = `regex\u0000${pattern}`;
+    if (dedup.has(key)) return;
+    dedup.add(key);
+    normalized.push({ start: '', end: '', mode: 'regex', pattern });
   };
 
   if (Array.isArray(rulesInput)) {
@@ -80,6 +90,10 @@ export function normalizeContextTagRules(
       }
       if (typeof rule === 'object') {
         const r = rule as Record<string, unknown>;
+        if (r.mode === 'regex') {
+          pushRegex(r.pattern);
+          continue;
+        }
         if ('tag' in r && !('start' in r)) {
           const tag = String(r.tag ?? '').replace(/[<>]/g, '');
           if (tag) pushRule(`<${tag}>`, `</${tag}>`);
@@ -128,12 +142,17 @@ function collectMatchedSpans(text: string, startBoundary: string, endBoundary: s
   return spans;
 }
 
+function collectRuleSpans(text: string, rule: ContextTagRule): MatchedSpan[] {
+  if (rule.mode === 'regex') return collectRegexMatchSpans(text, rule.pattern ?? '');
+  return collectMatchedSpans(text, rule.start, rule.end);
+}
+
 export function applyExtractRulesToText(text: string, rules: ContextTagRule[]): string {
   const source = String(text ?? '');
   if (!source || !rules.length) return source;
   const spans: MatchedSpan[] = [];
   for (const rule of rules) {
-    spans.push(...collectMatchedSpans(source, rule.start, rule.end));
+    spans.push(...collectRuleSpans(source, rule));
   }
   if (!spans.length) return source;
   spans.sort((a, b) => a.startIdx - b.startIdx || a.endIdx - b.endIdx);
@@ -144,7 +163,7 @@ export function applyExcludeRulesToText(text: string, rules: ContextTagRule[]): 
   let result = String(text ?? '');
   if (!result || !rules.length) return result;
   for (const rule of rules) {
-    const spans = collectMatchedSpans(result, rule.start, rule.end);
+    const spans = collectRuleSpans(result, rule);
     for (let i = spans.length - 1; i >= 0; i--) {
       const span = spans[i];
       if (!span) continue;

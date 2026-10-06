@@ -57,6 +57,8 @@ export const TaskScheduleSchema = z.object({
       value: z.number().positive().default(1),
       unit: z.enum(['minute', 'hour', 'day', 'week', 'month', 'year']).default('hour'),
       timeSource: TimeSourceSchema,
+      /** 可选。`/表达式/标志`，只取整段匹配后再解析游戏时间；留空则用原文 */
+      matchPattern: z.string().optional(),
       /** @deprecated 读不到/解析失败一律跳过；保留字段仅兼容旧配置 */
       onParseFail: z.enum(['skip', 'run', 'wall_clock']).optional(),
     })
@@ -137,6 +139,10 @@ export const ApiPresetBindingSchema = z.object({
 export const ContextTagRuleSchema = z.object({
   start: z.string().default(''),
   end: z.string().default(''),
+  /** 缺省 boundary。regex 时只用 pattern，按整段匹配 */
+  mode: z.enum(['boundary', 'regex']).optional(),
+  /** `/表达式/标志`；没写斜杠时整段当作表达式 */
+  pattern: z.string().optional(),
 });
 
 export const TaskContextConfigSchema = z.object({

@@ -1191,6 +1191,16 @@ const timeIntervalUnit = computed({
   },
 });
 
+const timeMatchPattern = computed({
+  get: () => selectedTask.value?.schedule?.timeInterval?.matchPattern ?? '',
+  set: (v: string) => {
+    const task = selectedTask.value;
+    if (!task) return;
+    ensureTaskSchedule(task);
+    task.schedule!.timeInterval!.matchPattern = v;
+  },
+});
+
 const timeSourceType = computed({
   get: () => selectedTask.value?.schedule?.timeInterval?.timeSource?.type ?? 'message_tag',
   set: (v: 'message_tag' | 'variable') => {
@@ -3398,6 +3408,18 @@ function saveRunLogTaskTags(taskId: string): void {
                           />
                         </div>
                       </template>
+                      <div class="acu-row">
+                        <label>正则匹配</label>
+                        <input
+                          v-model="timeMatchPattern"
+                          class="acu-input"
+                          style="flex: 1"
+                          placeholder="/表达式/标志，留空则用原文"
+                        />
+                      </div>
+                      <p class="acu-notes acu-notes--sm">
+                        留空则沿用标签或变量原文。写法为 /表达式/标志，只取整段匹配后再解析。正文标签已填写时只在标签内文上匹配；标签名留空才扫描当前范围的全文。
+                      </p>
                       <div class="acu-row acu-row--inline acu-game-time-probe">
                         <button
                           class="acu-btn acu-btn--sm primary acu-game-time-probe__btn"

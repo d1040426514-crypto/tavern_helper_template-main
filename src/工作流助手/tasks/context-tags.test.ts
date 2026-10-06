@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { applyContextTagFilters, applyExcludeRulesToText, applyExtractRulesToText } from './context-tags';
+import { applyContextTagFilters, applyExcludeRulesToText, applyExtractRulesToText, normalizeContextTagRules } from './context-tags';
 
 describe('applyExtractRulesToText', () => {
   it('两段都闭合则都保留', () => {
@@ -90,5 +90,53 @@ describe('applyContextTagFilters', () => {
       [{ start: '<!--', end: '-->' }],
     );
     assert.equal(out, '<时间>早</时间>\n\n<正文>上</正文>');
+  });
+});
+
+describe('正则匹配', () => {
+  it('提取保留整段匹配，并和边界命中按原文顺序拼接', () => {
+    const text = '前<示例>甲</示例>后EXAMPLE';
+    const out = applyExtractRulesToText(text, [
+      { start: '', end: '', mode: 'regex', pattern: '/example/i' },
+      { start: '<示例>', end: '</示例>' },
+    ]);
+    assert.equal(out, '<示例>甲</示例>\n\nEXAMPLE');
+  });
+
+  it('排除只删开闭标签时正文还在', () => {
+    const text = '<div class="x">正文</div>';
+    const out = applyExcludeRulesToText(text, [
+      { start: '', end: '', mode: 'regex', pattern: '/<div\\b[^>]*>|<\\/div>/gi' },
+    ]);
+    assert.equal(out, '正文');
+  });
+
+  it('非法正则被跳过，其它规则仍生效', () => {
+    const text = '<示例>甲</示例>';
+    const out = applyExtractRulesToText(text, [
+      { start: '', end: '', mode: 'regex', pattern: '/[/' },
+      { start: '<示例>', end: '</示例>' },
+    ]);
+    assert.equal(out, '<示例>甲</示例>');
+  });
+
+  it('/表达式/i 忽略大小写', () => {
+    const text = '前example中EXAMPLE后';
+    const out = applyExtractRulesToText(text, [{ start: '', end: '', mode: 'regex', pattern: '/example/i' }]);
+    assert.equal(out, 'example\n\nEXAMPLE');
+  });
+
+  it('排除按当前文本逐条处理', () => {
+    const text = 'aXb';
+    const out = applyExcludeRulesToText(text, [
+      { start: '', end: '', mode: 'regex', pattern: '/X/' },
+      { start: '', end: '', mode: 'regex', pattern: '/ab/' },
+    ]);
+    assert.equal(out, '');
+  });
+
+  it('规范化保留只有 pattern 的正则规则', () => {
+    const rules = normalizeContextTagRules([{ mode: 'regex', pattern: '  /a/i  ' }]);
+    assert.deepEqual(rules, [{ start: '', end: '', mode: 'regex', pattern: '/a/i' }]);
   });
 });
