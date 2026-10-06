@@ -163,6 +163,7 @@ function resolveSelectedSegmentId(slotId: string) {
 function onChipClick(slotId: string, segId: string) {
   if (props.readonly) return;
   selectedSegmentBySlot.value = { ...selectedSegmentBySlot.value, [slotId]: segId };
+  if (editingSegmentId.value != null) editingSegmentId.value = segId;
   toggleInserted(segId);
 }
 
