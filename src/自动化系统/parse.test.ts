@@ -52,12 +52,14 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   const block = `<npc act="李明">
 <file>
 最后更新时间: 大明-1520年-3月-1日-周一-08:00
-生日: 大明-1490年-1月-1日
-种族: 人族
-性别: 男
-年龄: 30岁(青年)
-剩余寿命: 50年
-生命层级: 金丹初期(37%，心魔未消)
+生命档案:
+  种族: 人族
+  性别: 男
+  生日: 大明-1490年-1月-1日
+  年龄: 30岁(青年)
+  剩余寿命: 50年
+  生命层级: 金丹初期(37%，心魔未消)
+  特质: 先天灵根
 资金状况: 手头宽裕
 声誉:
   官方: 小有名气
@@ -95,11 +97,13 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   正在做的事: 盘问路人
   动作: 行走
   穿着: 青衫
+  状态: 精神清醒
 现场人物:
   [同行]
-    王芳(探路/警惕)
+    王芳(探路/警惕/准备回府)
   [随从]
-    小厮二人(提灯/待命)
+    小厮二人(提灯/待命/守在巷口)
+  互动: 王芳向小厮低声吩咐
 长期目标: 光复家业
 近期打算:
   事件: 调查走私
@@ -121,13 +125,14 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.deepEqual(npc.actionChain, ['巡街', '查账']);
   assert.equal(npc.predict, '明日回府');
   assert.equal(npc.debutReady, true);
-  assert.deepEqual(npc.statusParts, ['行走', '青衫', '盘问路人', '大明京城', '城西巷', '细雨巷口']);
+  assert.deepEqual(npc.statusParts, ['行走', '青衫', '盘问路人', '大明京城', '城西巷', '细雨巷口', '精神清醒']);
   assert.equal(npc.lifeArchive.birthday, '大明-1490年-1月-1日');
   assert.equal(npc.lifeArchive.race, '人族');
   assert.equal(npc.lifeArchive.gender, '男');
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
   assert.equal(npc.lifeArchive.lifeTier, '金丹初期(37%，心魔未消)');
+  assert.equal(npc.lifeArchive.trait, '先天灵根');
   assert.equal(npc.wealth, '手头宽裕');
   assert.deepEqual(npc.reputation[0], { label: '官方', value: '小有名气' });
   assert.deepEqual(npc.reputation[2], { label: '暗域', value: '默默无闻' });
@@ -152,7 +157,9 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.companions.length, 2);
   assert.equal(npc.companions[0]!.category, '同行');
   assert.equal(npc.companions[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.companions[0]!.people[0]!.note, '探路/警惕/准备回府');
   assert.equal(npc.companions[1]!.category, '随从');
+  assert.equal(npc.sceneInteraction, '王芳向小厮低声吩咐');
   assert.deepEqual(npc.recentMemories, ['昨夜见黑影', '收到密信']);
   assert.deepEqual(npc.settledMemories, ['三年前出走']);
   assert.deepEqual(npc.coreMemories, ['父亲托付玉佩']);
@@ -285,7 +292,7 @@ test('parseNpcBlock keeps status and plan slots when a labeled field is missing'
 </npc>`);
   assert.deepEqual(npc.socialNetwork, []);
   assert.deepEqual(npc.companions, []);
-  assert.deepEqual(npc.statusParts, ['行走', '', '盘问路人', '大明京城', '', '细雨']);
+  assert.deepEqual(npc.statusParts, ['行走', '', '盘问路人', '大明京城', '', '细雨', '']);
   assert.deepEqual(npc.nearPlan, ['调查走私', '', '三日之内']);
   assert.equal(npc.background.group, '无');
   assert.equal(npc.background.event, '走私案');

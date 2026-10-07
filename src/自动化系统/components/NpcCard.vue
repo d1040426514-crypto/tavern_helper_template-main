@@ -126,7 +126,7 @@
 
       <!-- 此刻：行为链、身处环境、当前状态、现场人物收成一块 -->
       <section
-        v-if="npc.actionChain.length || npc.predict || placeCells.length || stateCells.length || npc.companions.length"
+        v-if="npc.actionChain.length || npc.predict || placeCells.length || stateCells.length || npc.companions.length || npc.sceneInteraction"
         class="npc-now"
       >
         <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
@@ -185,13 +185,13 @@
           </section>
         </div>
 
-        <div v-if="npc.companions.length" class="npc-scene-people">
+        <div v-if="npc.companions.length || npc.sceneInteraction" class="npc-scene-people">
           <header class="npc-presence-head">
             <span class="npc-presence-ico" aria-hidden="true">👥</span>
             <span>现场人物</span>
-            <span class="npc-relations-count">{{ companionCount }}</span>
+            <span v-if="companionCount" class="npc-relations-count">{{ companionCount }}</span>
           </header>
-          <div class="npc-chip-flow npc-chip-flow--fill">
+          <div v-if="npc.companions.length" class="npc-chip-flow npc-chip-flow--fill">
             <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
               <span
                 v-for="(p, pi) in g.people"
@@ -200,10 +200,14 @@
               >
                 <span class="npc-person-chip-cat">{{ g.category }}</span>
                 <span class="npc-person-chip-name">{{ p.name }}</span>
-                <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+                <span v-if="p.note" class="npc-person-chip-note">{{ companionNoteText(p.note) }}</span>
               </span>
             </template>
           </div>
+          <p v-if="npc.sceneInteraction" class="npc-scene-interaction">
+            <span class="npc-scene-interaction-k">互动</span>
+            <span>{{ npc.sceneInteraction }}</span>
+          </p>
         </div>
       </section>
 
@@ -392,6 +396,7 @@ const lifeChips = computed(() => {
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
   if (life.lifeTier) rows.push({ key: 'tier', label: '生命层级', value: life.lifeTier });
+  if (life.trait) rows.push({ key: 'trait', label: '特质', value: life.trait });
   return rows;
 });
 
@@ -416,6 +421,7 @@ const hasBody = computed(() => {
     n.predict ||
     n.statusParts.length ||
     n.companions.length ||
+    n.sceneInteraction ||
     n.socialNetwork.length ||
     showBackgroundCard.value ||
     n.longGoal ||
@@ -434,7 +440,7 @@ function toggleExpanded(): void {
 }
 
 const PLACE_LABELS = ['所处世界', '位置', '环境'] as const;
-const STATE_LABELS = ['正在做的事', '动作', '穿着'] as const;
+const STATE_LABELS = ['正在做的事', '动作', '穿着', '状态'] as const;
 
 const statusCells = computed(() =>
   props.npc.statusParts
@@ -468,6 +474,17 @@ function presenceFactClass(label: string): string {
   if (label === '所处世界') return 'npc-presence-fact--world';
   if (label === '位置') return 'npc-presence-fact--place';
   return '';
+}
+
+/** 现场人物括号：为何在场/此刻/接下来。旧的两段只显示前两段。 */
+function companionNoteText(note: string): string {
+  const parts = String(note ?? '')
+    .split(/\s*[/／]\s*/)
+    .map(part => part.trim())
+    .filter(Boolean);
+  if (parts.length >= 3) return `${parts[0]} · ${parts[1]} · 接下来${parts.slice(2).join('/')}`;
+  if (parts.length === 2) return `${parts[0]} · ${parts[1]}`;
+  return String(note ?? '').trim();
 }
 
 const NEAR_PLAN_LABELS = ['事件', '行为', '时间'] as const;
@@ -1011,6 +1028,10 @@ const memoryColumns = computed(() => {
       color: var(--accent-gold);
     }
   }
+
+  &--trait {
+    white-space: normal;
+  }
 }
 
 .npc-life-k {
@@ -1067,6 +1088,22 @@ const memoryColumns = computed(() => {
     flex-wrap: wrap;
     gap: 0.28em;
   }
+}
+
+.npc-scene-interaction {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+  margin: 0.08em 0 0;
+  font-size: 0.72em;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.npc-scene-interaction-k {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--accent-sky);
 }
 
 .npc-relations-head {

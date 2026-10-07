@@ -291,6 +291,7 @@ function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
       continue;
     }
     if (!current || indent <= current.indent) continue;
+    if (/^互动\s*[:：]/.test(trimmed)) continue;
     const field = personFieldKey(trimmed);
     const person = current.people[current.people.length - 1];
     if (field && person) {
@@ -302,6 +303,13 @@ function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
   }
 
   return groups.filter(g => g.people.length);
+}
+
+function readSceneInteraction(section: FieldSection | null): string {
+  const value = nestedInline(section, '互动');
+  if (value === null) return '';
+  const text = softTrim(value);
+  return !text || text === '无' ? '' : text;
 }
 
 function readPeopleSection(section: FieldSection | null): NpcCard['socialNetwork'] {
@@ -345,18 +353,22 @@ function readMemories(section: FieldSection | null): string[] {
 function readLifeArchive(body: string): NpcLifeArchive {
   const packed = readSection(body, '生命档案');
   const life = packed?.inline ? parseLifeArchive(packed.inline) : emptyLifeArchive();
+  const source = packed?.body.trim() ? packed.body : body;
   const fields: Array<[string, keyof NpcLifeArchive]> = [
     ['生日', 'birthday'],
     ['种族', 'race'],
     ['性别', 'gender'],
     ['年龄', 'age'],
     ['剩余寿命', 'remainingLife'],
+    ['特质', 'trait'],
   ];
   for (const [label, key] of fields) {
-    const section = readSection(body, label);
-    if (section) life[key] = section.inline;
+    const section = readSection(source, label);
+    if (!section) continue;
+    const value = softTrim(section.inline);
+    life[key] = key === 'trait' && (!value || value === '无') ? '' : value;
   }
-  const tier = readSection(body, '生命层级');
+  const tier = readSection(source, '生命层级');
   if (tier) life.lifeTier = normalizeLifeTier(tier.inline);
   return life;
 }
@@ -376,7 +388,7 @@ function readBackground(section: FieldSection | null): NpcCard['background'] {
   return section.inline ? parseBackground(section.inline) : bg;
 }
 
-/** 动作、穿着、正在做的事、所处世界、位置、环境。缺项留空，避免标签错位。 */
+/** 动作、穿着、正在做的事、所处世界、位置、环境、状态。缺项留空，避免标签错位。 */
 function readStatusParts(body: string): string[] {
   const place = readSection(body, '身处环境');
   const state = readSection(body, '当前状态');
@@ -387,6 +399,7 @@ function readStatusParts(body: string): string[] {
     nestedInline(place, '世界'),
     nestedInline(place, '位置'),
     nestedInline(place, '环境'),
+    nestedInline(state, '状态'),
   ];
   if (slots.some(value => value !== null)) {
     const filled = slots.map(value => value ?? '');
@@ -424,7 +437,7 @@ function parseBackground(raw: string): NpcCard['background'] {
 }
 
 function emptyLifeArchive(): NpcLifeArchive {
-  return { birthday: '', race: '', gender: '', age: '', remainingLife: '', lifeTier: '' };
+  return { birthday: '', race: '', gender: '', age: '', remainingLife: '', lifeTier: '', trait: '' };
 }
 
 /** 「无」、空白或空括号视为未写；层级名后的空括号去掉。 */
@@ -562,6 +575,7 @@ function emptyNpc(name: string): NpcCard {
     socialIdentity: [],
     socialNetwork: [],
     companions: [],
+    sceneInteraction: '',
     background: emptyBackground(),
     lifeArchive: emptyLifeArchive(),
     longGoal: '',
@@ -582,7 +596,8 @@ function hasLifeArchive(life: NpcLifeArchive): boolean {
     life.gender ||
     life.age ||
     life.remainingLife ||
-    life.lifeTier
+    life.lifeTier ||
+    life.trait
   );
 }
 
@@ -636,9 +651,9 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     .map(s => softTrim(s))
     .filter(Boolean);
   npc.socialNetwork = readPeopleSection(readSection(body, '社交网络'));
-  npc.companions = readPeopleSection(
-    readSection(body, '现场人物') ?? readSection(body, '身边人物'),
-  );
+  const peopleSection = readSection(body, '现场人物') ?? readSection(body, '身边人物');
+  npc.companions = readPeopleSection(peopleSection);
+  npc.sceneInteraction = readSceneInteraction(peopleSection);
   npc.background = readBackground(readSection(body, '背景关联'));
   npc.longGoal = fieldLine(body, '长期目标');
 
@@ -673,6 +688,7 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     !npc.reputation.length &&
     !npc.socialNetwork.length &&
     !npc.companions.length &&
+    !npc.sceneInteraction &&
     !hasLifeArchive(npc.lifeArchive) &&
     !hasBg &&
     !hasQuest

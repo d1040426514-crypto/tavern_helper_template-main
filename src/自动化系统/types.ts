@@ -36,6 +36,8 @@ export type NpcLifeArchive = {
   remainingLife: string;
   /** 可选。世界观无层级时为空 */
   lifeTier: string;
+  /** 特殊体质或生命特质。无则空 */
+  trait: string;
 };
 
 export type QuestItemStatus = 'done' | 'active' | 'todo';
@@ -74,6 +76,8 @@ export type NpcCard = {
   socialIdentity: string[];
   socialNetwork: NpcSocialGroup[];
   companions: NpcSocialGroup[];
+  /** 现场人物之间的小互动。无则空 */
+  sceneInteraction: string;
   background: NpcBackground;
   lifeArchive: NpcLifeArchive;
   longGoal: string;
@@ -139,6 +143,7 @@ export const STATUS_LABELS = [
   '所处世界',
   '位置',
   '环境',
+  '状态',
 ] as const;
 
 export const FRONT_TASK_NAME = '前台角色';
