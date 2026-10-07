@@ -34,122 +34,62 @@
     </button>
 
     <div v-show="expanded && hasBody" class="npc-card-body">
-      <!-- 生命档案：紧凑标签行 -->
-      <div v-if="lifeChips.length" class="npc-life-row" aria-label="生命档案">
-        <span
-          v-for="chip in lifeChips"
-          :key="chip.key"
-          class="npc-life-chip"
-          :class="`npc-life-chip--${chip.key}`"
-        >
-          <span class="npc-life-k">{{ chip.label }}</span>
-          <span class="npc-life-v">{{ chip.value }}</span>
-        </span>
-      </div>
-
-      <!-- 社会档案：资金 + 声誉 -->
-      <div v-if="npc.wealth || npc.reputation.length" class="npc-social-profile">
-        <span v-if="npc.wealth" class="npc-wealth-tag" :class="wealthCls">
-          {{ wealthEmoji }} {{ npc.wealth }}
-        </span>
-        <div v-if="npc.reputation.length" class="npc-rep-inline" title="声誉">
+      <div
+        v-if="lifeChips.length || npc.wealth || npc.reputation.length || showBackgroundCard || npc.socialNetwork.length"
+        class="npc-dossier"
+      >
+        <div v-if="lifeChips.length" class="npc-life-row" aria-label="生命档案">
           <span
-            v-for="(r, i) in npc.reputation"
-            :key="'rep' + i"
-            class="npc-chip npc-chip--rep"
-            :class="getReputationClass(r.value)"
+            v-for="chip in lifeChips"
+            :key="chip.key"
+            class="npc-life-chip"
+            :class="[chip.tone ? `npc-life-chip--${chip.tone}` : '', `npc-life-chip--${chip.key}`]"
           >
-            <template v-if="r.label">[{{ r.label }}]</template>{{ r.value }}
+            <span class="npc-life-k">{{ chip.label }}</span>
+            <span class="npc-life-v">{{ chip.value }}</span>
           </span>
         </div>
-      </div>
 
-      <!-- 行为链紧贴名字下方 -->
-      <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
-        <div class="chain-label">⚡ 行为链</div>
-        <div class="chain-flow">
-          <template v-for="(step, i) in npc.actionChain" :key="'a' + i">
-            <span v-if="i > 0" class="chain-arrow">→</span>
-            <span class="chain-step">{{ step }}</span>
-          </template>
-          <template v-if="npc.predict">
-            <span class="chain-arrow">→</span>
-            <span class="chain-predict">后续: {{ npc.predict }}</span>
-          </template>
-          <span v-if="npc.debutReady" class="chain-debut-tag">⚡准备登场</span>
-        </div>
-      </div>
-
-      <!-- 当前状态：动作/穿着 → 世界/位置/环境 → 正在做的事通栏 -->
-      <section v-if="statusCells.length" class="npc-section">
-        <header class="npc-section-head">📍 当前状态</header>
-        <div
-          class="npc-status-grid"
-          :class="{
-            'npc-status-grid--mapped': statusLayoutMapped,
-            'npc-status-grid--has-doing': !!doingCell,
-          }"
-        >
-          <div
-            v-for="cell in statusMainCells"
-            :key="cell.label"
-            class="npc-status-cell"
-            :class="statusCellClass(cell.label)"
-          >
-            <div class="npc-status-k">{{ cell.label }}</div>
-            <div class="npc-status-v">{{ cell.value }}</div>
-          </div>
-          <div v-if="doingCell" class="npc-status-cell npc-status-cell--doing">
-            <div class="npc-status-k">{{ doingCell.label }}</div>
-            <div class="npc-status-v">{{ doingCell.value }}</div>
+        <div v-if="npc.wealth || npc.reputation.length" class="npc-social-profile">
+          <span v-if="npc.wealth" class="npc-wealth-tag" :class="wealthCls">
+            {{ wealthEmoji }} {{ npc.wealth }}
+          </span>
+          <div v-if="npc.reputation.length" class="npc-rep-inline" title="声誉">
+            <span
+              v-for="(r, i) in npc.reputation"
+              :key="'rep' + i"
+              class="npc-chip npc-chip--rep"
+              :class="getReputationClass(r.value)"
+            >
+              <span v-if="r.label" class="npc-rep-k">{{ r.label }}</span>
+              <span class="npc-rep-v">{{ r.value }}</span>
+            </span>
           </div>
         </div>
-      </section>
 
-      <!-- 人际与背景：统一容器 -->
-      <section
-        v-if="npc.companions.length || npc.socialNetwork.length || showBackgroundCard"
-        class="npc-relations"
-      >
-        <div class="npc-relations-grid">
-          <div v-if="npc.companions.length" class="npc-relations-block npc-relations-block--near">
-            <header class="npc-relations-head">
-              <span class="npc-relations-ico" aria-hidden="true">👥</span>
-              <span>现场人物</span>
-              <span class="npc-relations-count">{{ companionCount }}</span>
-            </header>
-            <div class="npc-chip-flow npc-chip-flow--fill">
-              <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
-                <span
-                  v-for="(p, pi) in g.people"
-                  :key="'cp' + gi + '-' + pi"
-                  class="npc-person-chip"
-                >
-                  <span class="npc-person-chip-cat">{{ g.category }}</span>
-                  <span class="npc-person-chip-name">{{ p.name }}</span>
-                  <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
-                </span>
-              </template>
-            </div>
-          </div>
-
-          <div v-if="showBackgroundCard" class="npc-relations-block npc-relations-block--bg">
+        <div v-if="showBackgroundCard || npc.socialNetwork.length" class="npc-ties">
+          <div v-if="showBackgroundCard" class="npc-ties-col">
             <header class="npc-relations-head">
               <span class="npc-relations-ico" aria-hidden="true">🔗</span>
               <span>背景关联</span>
             </header>
-            <div class="npc-meta-strip npc-meta-strip--fill">
-              <div v-for="row in backgroundRows" :key="row.key" class="npc-meta-chip">
-                <span class="npc-meta-k">{{ row.label }}</span>
-                <span class="npc-meta-v" :class="{ muted: row.empty }">{{ row.value }}</span>
+            <div class="npc-bg-list">
+              <div
+                v-for="row in backgroundRows"
+                :key="row.key"
+                class="npc-bg-row"
+                :class="`npc-bg-row--${row.key}`"
+              >
+                <span class="npc-bg-k">{{ row.label }}</span>
+                <div class="npc-bg-names">
+                  <span v-if="row.empty" class="npc-bg-empty">无</span>
+                  <span v-for="(name, i) in row.names" :key="row.key + i" class="npc-bg-name">{{ name }}</span>
+                </div>
               </div>
             </div>
           </div>
 
-          <div
-            v-if="npc.socialNetwork.length"
-            class="npc-relations-block npc-relations-block--social"
-          >
+          <div v-if="npc.socialNetwork.length" class="npc-ties-col">
             <header class="npc-relations-head">
               <span class="npc-relations-ico" aria-hidden="true">🤝</span>
               <span>社交网络</span>
@@ -160,14 +100,109 @@
                 <span
                   v-for="(p, pi) in g.people"
                   :key="'p' + gi + '-' + pi"
-                  class="npc-person-chip"
+                  class="npc-person-chip npc-person-chip--social"
                 >
-                  <span class="npc-person-chip-cat">{{ g.category }}</span>
-                  <span class="npc-person-chip-name">{{ p.name }}</span>
-                  <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+                  <span class="npc-person-chip-top">
+                    <span class="npc-person-chip-cat">{{ g.category }}</span>
+                    <span class="npc-person-chip-name">{{ p.name }}</span>
+                    <span v-if="p.warmth" class="npc-person-warmth">
+                      <span class="npc-person-meta-k">好感</span>{{ p.warmth }}
+                    </span>
+                  </span>
+                  <span v-if="p.note" class="npc-person-meta">
+                    <span class="npc-person-meta-k">关系</span>
+                    <span class="npc-person-meta-v">{{ p.note }}</span>
+                  </span>
+                  <span v-if="p.attitude" class="npc-person-meta">
+                    <span class="npc-person-meta-k">态度</span>
+                    <span class="npc-person-meta-v">{{ p.attitude }}</span>
+                  </span>
                 </span>
               </template>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 此刻：行为链、身处环境、当前状态、现场人物收成一块 -->
+      <section
+        v-if="npc.actionChain.length || npc.predict || placeCells.length || stateCells.length || npc.companions.length"
+        class="npc-now"
+      >
+        <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
+          <div class="chain-label">⚡ 行为链</div>
+          <div class="chain-flow">
+            <template v-for="(step, i) in npc.actionChain" :key="'a' + i">
+              <span v-if="i > 0" class="chain-arrow">→</span>
+              <span class="chain-step">{{ step }}</span>
+            </template>
+            <template v-if="npc.predict">
+              <span class="chain-arrow">→</span>
+              <span class="chain-predict">后续: {{ npc.predict }}</span>
+            </template>
+            <span v-if="npc.debutReady" class="chain-debut-tag">⚡准备登场</span>
+          </div>
+        </div>
+
+        <div v-if="placeCells.length || stateCells.length" class="npc-presence">
+          <section v-if="placeCells.length" class="npc-presence-card npc-presence-card--place">
+            <header class="npc-presence-head">
+              <span class="npc-presence-ico" aria-hidden="true">📍</span>
+              <span>身处环境</span>
+            </header>
+            <div v-if="placeFactCells.length" class="npc-presence-facts">
+              <div
+                v-for="cell in placeFactCells"
+                :key="cell.label"
+                class="npc-presence-fact"
+                :class="presenceFactClass(cell.label)"
+              >
+                <div class="npc-presence-k">{{ cell.label }}</div>
+                <div class="npc-presence-v">{{ cell.value }}</div>
+              </div>
+            </div>
+            <div v-if="envCell" class="npc-presence-prose">
+              <div class="npc-presence-k">{{ envCell.label }}</div>
+              <div class="npc-presence-v">{{ envCell.value }}</div>
+            </div>
+          </section>
+
+          <section v-if="stateCells.length" class="npc-presence-card npc-presence-card--state">
+            <header class="npc-presence-head">
+              <span class="npc-presence-ico" aria-hidden="true">✦</span>
+              <span>当前状态</span>
+            </header>
+            <div v-if="doingCell" class="npc-presence-lead">
+              <div class="npc-presence-k">{{ doingCell.label }}</div>
+              <div class="npc-presence-v">{{ doingCell.value }}</div>
+            </div>
+            <div v-if="poseCells.length" class="npc-presence-stack">
+              <div v-for="cell in poseCells" :key="cell.label" class="npc-presence-block">
+                <div class="npc-presence-k">{{ cell.label }}</div>
+                <div class="npc-presence-v">{{ cell.value }}</div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <div v-if="npc.companions.length" class="npc-scene-people">
+          <header class="npc-presence-head">
+            <span class="npc-presence-ico" aria-hidden="true">👥</span>
+            <span>现场人物</span>
+            <span class="npc-relations-count">{{ companionCount }}</span>
+          </header>
+          <div class="npc-chip-flow npc-chip-flow--fill">
+            <template v-for="(g, gi) in npc.companions" :key="'cmp' + gi">
+              <span
+                v-for="(p, pi) in g.people"
+                :key="'cp' + gi + '-' + pi"
+                class="npc-person-chip npc-person-chip--compact"
+              >
+                <span class="npc-person-chip-cat">{{ g.category }}</span>
+                <span class="npc-person-chip-name">{{ p.name }}</span>
+                <span v-if="p.note" class="npc-person-chip-note">{{ p.note }}</span>
+              </span>
+            </template>
           </div>
         </div>
       </section>
@@ -317,11 +352,21 @@ function questKindClass(kind: string): string {
   return 'quest-kind--default';
 }
 
-function bgDisplay(v: string): { value: string; empty: boolean } {
-  const t = String(v ?? '').trim();
-  if (!t || t === '无') return { value: '无', empty: true };
-  return { value: t, empty: false };
+function splitBgNames(raw: string): string[] {
+  return String(raw ?? '')
+    .split(/[;；]+/)
+    .map(s => s.trim())
+    .filter(name => name && name !== '无');
 }
+
+const backgroundRows = computed(() => {
+  const b = props.npc.background;
+  return [
+    { key: 'group', label: '团体', names: splitBgNames(b.group) },
+    { key: 'circle', label: '社交圈', names: splitBgNames(b.circle) },
+    { key: 'event', label: '事件', names: splitBgNames(b.event) },
+  ].map(row => ({ ...row, empty: row.names.length === 0 }));
+});
 
 const showBackgroundCard = computed(() => {
   const b = props.npc.background;
@@ -338,15 +383,28 @@ const socialCount = computed(() =>
 
 const lifeChips = computed(() => {
   const life = props.npc.lifeArchive;
-  const rows: Array<{ key: string; label: string; value: string }> = [];
-  if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
+  const rows: Array<{ key: string; label: string; value: string; tone?: string }> = [];
   if (life.race) rows.push({ key: 'race', label: '种族', value: life.race });
-  if (life.gender) rows.push({ key: 'gender', label: '性别', value: life.gender });
+  if (life.gender) {
+    rows.push({ key: 'gender', label: '性别', value: life.gender, tone: genderTone(life.gender) });
+  }
+  if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
   if (life.lifeTier) rows.push({ key: 'tier', label: '生命层级', value: life.lifeTier });
   return rows;
 });
+
+/** 只区分男/雄与女/雌。其余写法不单独配色。 */
+function genderTone(value: string): 'male' | 'female' | '' {
+  const core = String(value ?? '')
+    .trim()
+    .replace(/[（(].*$/, '')
+    .replace(/\s+/g, '');
+  if (/^(男|雄)(性|性体)?$/.test(core)) return 'male';
+  if (/^(女|雌)(性|性体)?$/.test(core)) return 'female';
+  return '';
+}
 
 const hasBody = computed(() => {
   const n = props.npc;
@@ -375,16 +433,8 @@ function toggleExpanded(): void {
   expanded.value = !expanded.value;
 }
 
-const DOING_LABEL = '正在做的事';
-
-const STATUS_AREA_KEYS: Record<string, string> = {
-  动作: 'action',
-  穿着: 'wear',
-  正在做的事: 'doing',
-  所处世界: 'world',
-  位置: 'place',
-  环境: 'env',
-};
+const PLACE_LABELS = ['所处世界', '位置', '环境'] as const;
+const STATE_LABELS = ['正在做的事', '动作', '穿着'] as const;
 
 const statusCells = computed(() =>
   props.npc.statusParts
@@ -395,23 +445,29 @@ const statusCells = computed(() =>
     .filter(cell => cell.value),
 );
 
-const statusMainCells = computed(() =>
-  statusCells.value.filter(c => c.label !== DOING_LABEL),
-);
+function cellsByLabels(labels: readonly string[]) {
+  const byLabel = new Map(statusCells.value.map(cell => [cell.label, cell]));
+  return labels.flatMap(label => {
+    const cell = byLabel.get(label);
+    return cell ? [cell] : [];
+  });
+}
 
-const doingCell = computed(
-  () => statusCells.value.find(c => c.label === DOING_LABEL) ?? null,
-);
-
-/** 六段标准字段齐全时启用语义网格，否则回退自适应 */
-const statusLayoutMapped = computed(() => {
-  const labels = new Set(statusCells.value.map(c => c.label));
-  return ['动作', '穿着', '所处世界', '位置', '环境'].every(l => labels.has(l));
+const placeCells = computed(() => cellsByLabels(PLACE_LABELS));
+const stateCells = computed(() => {
+  const known = new Set<string>([...PLACE_LABELS, ...STATE_LABELS]);
+  const extra = statusCells.value.filter(cell => !known.has(cell.label));
+  return [...cellsByLabels(STATE_LABELS), ...extra];
 });
+const placeFactCells = computed(() => placeCells.value.filter(cell => cell.label !== '环境'));
+const envCell = computed(() => placeCells.value.find(cell => cell.label === '环境') ?? null);
+const doingCell = computed(() => stateCells.value.find(cell => cell.label === '正在做的事') ?? null);
+const poseCells = computed(() => stateCells.value.filter(cell => cell.label !== '正在做的事'));
 
-function statusCellClass(label: string): string {
-  const key = STATUS_AREA_KEYS[label];
-  return key ? `npc-status-cell--${key}` : '';
+function presenceFactClass(label: string): string {
+  if (label === '所处世界') return 'npc-presence-fact--world';
+  if (label === '位置') return 'npc-presence-fact--place';
+  return '';
 }
 
 const NEAR_PLAN_LABELS = ['事件', '行为', '时间'] as const;
@@ -444,18 +500,6 @@ const memoryColumns = computed(() => {
     cols.push({ key: 'core', title: '核心记忆', icon: '💎', items: props.npc.coreMemories });
   }
   return cols;
-});
-
-const backgroundRows = computed(() => {
-  const b = props.npc.background;
-  const g = bgDisplay(b.group);
-  const c = bgDisplay(b.circle);
-  const e = bgDisplay(b.event);
-  return [
-    { key: 'group', label: '团体', ...g },
-    { key: 'circle', label: '社交圈', ...c },
-    { key: 'event', label: '事件', ...e },
-  ];
 });
 </script>
 
@@ -632,28 +676,36 @@ const backgroundRows = computed(() => {
 
 .npc-wealth-tag {
   font-family: var(--font-mono);
-  font-size: 0.6em;
-  font-weight: 600;
-  padding: 0.12em 0.4em;
-  border-radius: 5px;
+  font-size: 0.62em;
+  font-weight: 650;
+  padding: 0.28em 0.55em;
+  border-radius: 999px;
   letter-spacing: 0.15px;
   white-space: nowrap;
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
+  line-height: 1.3;
 }
 
 .npc-social-profile {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.3em 0.4em;
+  gap: 0.32em;
   width: 100%;
 
   .npc-rep-inline {
     flex: 1 1 auto;
     min-width: 0;
   }
+}
+
+.npc-life-row + .npc-social-profile,
+.npc-life-row + .npc-ties,
+.npc-social-profile + .npc-ties {
+  padding-top: 0.38em;
+  border-top: 1px dashed color-mix(in srgb, var(--accent-mint) 35%, var(--border-subtle));
 }
 
 .wealth-destitute {
@@ -710,9 +762,27 @@ const backgroundRows = computed(() => {
   white-space: nowrap;
 
   &--rep {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28em;
     font-weight: 600;
     letter-spacing: 0.1px;
+    padding: 0.14em 0.42em 0.14em 0.16em;
+    border-radius: 999px;
   }
+}
+
+.npc-rep-k {
+  padding: 0.06em 0.38em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 62%, transparent);
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.npc-rep-v {
+  font-weight: 650;
+  line-height: 1.3;
 }
 
 .rep-hated {
@@ -751,11 +821,36 @@ const backgroundRows = computed(() => {
   border-color: var(--border-subtle);
 }
 
+.npc-now {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55em;
+  width: 100%;
+  padding: 0.5em 0.55em 0.55em;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--bg-panel, var(--bg-step)) 86%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 24%, var(--border-subtle));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
+
+  > :not(:last-child) {
+    padding-bottom: 0.45em;
+    border-bottom: 1px dashed color-mix(in srgb, var(--accent-lavender) 32%, var(--border-subtle));
+  }
+}
+
+.npc-now .npc-chain-section {
+  background: transparent;
+  padding: 0.06em 0.1em 0;
+}
+
+.npc-now > .npc-chain-section:not(:last-child) {
+  padding-bottom: 0.45em;
+}
+
 .npc-chain-section {
   background: var(--bg-chain);
-  border-radius: var(--radius-sm);
-  padding: 0.4em 0.55em;
-  border-left: 2px solid var(--border-chain);
+  border-radius: 8px;
+  padding: 0.38em 0.5em 0.42em;
   width: 100%;
 }
 
@@ -849,15 +944,14 @@ const backgroundRows = computed(() => {
   color: var(--accent-lavender);
 }
 
-/* 生命档案：生日独占视觉权重，种族/性别紧凑并排，年龄与剩余寿命随后 */
-.npc-life-row {
+/* 生命档案与声誉：同一块底，标签按文字收缩，不拉成通栏 */
+.npc-dossier {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.28em;
+  flex-direction: column;
+  gap: 0.38em;
   width: 100%;
-  padding: 0.32em;
-  border-radius: 10px;
+  padding: 0.48em 0.5em 0.52em;
+  border-radius: 12px;
   background: linear-gradient(
     105deg,
     color-mix(in srgb, var(--accent-mint) 10%, var(--bg-step)) 0%,
@@ -866,55 +960,55 @@ const backgroundRows = computed(() => {
   border: 1px solid color-mix(in srgb, var(--accent-mint) 24%, var(--border-subtle));
 }
 
+.npc-life-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.32em;
+  width: 100%;
+}
+
 .npc-life-chip {
   display: inline-flex;
   align-items: baseline;
   gap: 0.28em;
+  flex: 0 1 auto;
+  width: fit-content;
   max-width: 100%;
-  padding: 0.22em 0.48em;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--bg-panel, var(--bg-card)) 86%, transparent);
+  padding: 0.22em 0.5em;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-panel, var(--bg-card)) 88%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent-mint) 32%, var(--border-subtle));
   font-size: 0.68em;
   line-height: 1.35;
 
-  &--birthday {
-    flex: 1 1 12.5em;
+  &--male {
+    background: var(--gender-male-bg);
+    border-color: var(--gender-male-bd);
+
+    .npc-life-k,
+    .npc-life-v {
+      color: var(--gender-male-fg);
+    }
   }
 
-  &--race,
-  &--gender {
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
+  &--female {
+    background: var(--gender-female-bg);
+    border-color: var(--gender-female-bd);
 
-  &--age {
-    flex: 1 1 7.6em;
-  }
-
-  &--life {
-    flex: 1 1 6.4em;
+    .npc-life-k,
+    .npc-life-v {
+      color: var(--gender-female-fg);
+    }
   }
 
   &--tier {
-    flex: 0 1 auto;
-    width: fit-content;
-    max-width: 100%;
     white-space: normal;
     background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-panel, var(--bg-step)));
     border-color: color-mix(in srgb, var(--accent-gold) 42%, var(--border-subtle));
 
     .npc-life-k {
       color: var(--accent-gold);
-    }
-  }
-
-  &--gender {
-    background: color-mix(in srgb, var(--accent-lavender) 16%, var(--bg-panel, var(--bg-step)));
-    border-color: color-mix(in srgb, var(--accent-lavender) 40%, var(--border-subtle));
-
-    .npc-life-k {
-      color: var(--accent-lavender);
     }
   }
 }
@@ -936,64 +1030,43 @@ const backgroundRows = computed(() => {
   width: 100%;
 }
 
-/* 人际与背景：统一容器 */
-.npc-relations {
-  width: 100%;
-  padding: 0.55em 0.6em 0.6em;
-  border-radius: var(--radius-md);
-  background:
-    linear-gradient(
-      145deg,
-      color-mix(in srgb, var(--accent-sky) 8%, var(--bg-panel, var(--bg-step))) 0%,
-      color-mix(in srgb, var(--accent-lavender) 6%, var(--bg-card)) 55%,
-      var(--bg-panel, var(--bg-step)) 100%
-    );
-  border: 1px solid color-mix(in srgb, var(--accent-lavender) 28%, var(--border-subtle));
-  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 18%, transparent);
-}
-
-.npc-relations-grid {
+/* 背景关联与社交网络：贴在生命档案下方，宽屏左右分栏 */
+.npc-ties {
   display: grid;
-  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-  gap: 0.55em 0.65em;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  gap: 0.55em 0.75em;
   width: 100%;
   align-items: start;
+
+  &:has(> :only-child) {
+    grid-template-columns: 1fr;
+  }
 }
 
-.npc-relations-block {
+.npc-ties-col {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 0.35em;
-
-  &--near {
-    grid-column: 1;
-    grid-row: 1;
-  }
-
-  &--bg {
-    grid-column: 2;
-    grid-row: 1;
-  }
-
-  &--social {
-    grid-column: 1 / -1;
-    grid-row: 2;
-    padding-top: 0.45em;
-    border-top: 1px dashed color-mix(in srgb, var(--accent-lavender) 35%, var(--border-subtle));
-  }
 }
 
-/* 仅身边或仅背景时通栏 */
-.npc-relations-grid:not(:has(.npc-relations-block--near)) .npc-relations-block--bg,
-.npc-relations-grid:not(:has(.npc-relations-block--bg)) .npc-relations-block--near {
-  grid-column: 1 / -1;
-}
+/* 现场人物：独自占满一行，卡片按内容收缩 */
+.npc-scene-people {
+  display: flex;
+  flex-direction: column;
+  gap: 0.32em;
+  width: 100%;
+  min-width: 0;
 
-.npc-relations-grid:not(:has(.npc-relations-block--near)):not(:has(.npc-relations-block--bg))
-  .npc-relations-block--social {
-  padding-top: 0;
-  border-top: none;
+  .npc-presence-head {
+    color: var(--accent-sky);
+  }
+
+  .npc-chip-flow--fill {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.28em;
+  }
 }
 
 .npc-relations-head {
@@ -1039,6 +1112,72 @@ const backgroundRows = computed(() => {
   }
 }
 
+.npc-ties .npc-chip-flow--fill {
+  grid-template-columns: 1fr;
+  gap: 0.28em;
+}
+
+.npc-person-chip--social {
+  gap: 0.04em;
+  padding: 0.26em 0.42em 0.3em;
+  line-height: 1.3;
+
+  .npc-person-chip-top {
+    display: flex;
+    align-items: baseline;
+    gap: 0.35em;
+    min-width: 0;
+  }
+
+  .npc-person-chip-cat {
+    font-size: 0.58em;
+  }
+
+  .npc-person-chip-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.72em;
+  }
+
+  .npc-person-warmth {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.22em;
+    font-size: 0.6em;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .npc-person-meta {
+    font-size: 0.6em;
+    line-height: 1.35;
+    gap: 0.28em;
+  }
+}
+
+.npc-person-chip--compact {
+  flex: 0 1 auto;
+  width: fit-content;
+  max-width: min(100%, 16em);
+  padding: 0.2em 0.42em;
+  gap: 0.02em;
+  border-radius: 6px;
+
+  .npc-person-chip-cat {
+    font-size: 0.55em;
+  }
+
+  .npc-person-chip-name {
+    font-size: 0.68em;
+  }
+
+  .npc-person-chip-note {
+    font-size: 0.58em;
+  }
+}
+
 .npc-person-chip {
   display: flex;
   flex-direction: column;
@@ -1072,47 +1211,123 @@ const backgroundRows = computed(() => {
   word-break: break-word;
 }
 
-/* 背景关联：格内铺满 */
-.npc-meta-strip {
+.npc-person-meta {
   display: flex;
-  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.35em;
+  min-width: 0;
+  font-size: 0.64em;
+  line-height: 1.4;
+}
+
+.npc-person-meta-k {
+  flex: 0 0 auto;
+  font-weight: 700;
+  color: var(--accent-lavender);
+}
+
+.npc-person-meta-v {
+  min-width: 0;
+  color: var(--text-secondary);
+  word-break: break-word;
+}
+
+/* 背景关联：每类一张底卡，小标题在左上角 */
+.npc-bg-list {
+  display: flex;
+  flex-direction: column;
   gap: 0.35em;
   width: 100%;
+}
 
-  &--fill {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 0.3em;
+.npc-bg-row {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.28em;
+  width: 100%;
+  min-width: 0;
+  padding: 0.38em 0.5em;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+  box-shadow: 0 1px 0 color-mix(in srgb, #000 4%, transparent);
+}
+
+.npc-bg-k {
+  font-size: 0.65em;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.3px;
+}
+
+.npc-bg-names {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.28em;
+  width: 100%;
+}
+
+.npc-bg-name {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 0.16em 0.48em;
+  border-radius: 999px;
+  font-size: 0.72em;
+  line-height: 1.4;
+  color: var(--text-primary);
+  word-break: break-word;
+  background: color-mix(in srgb, var(--bg-panel, var(--bg-step)) 88%, var(--text-secondary));
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 90%, transparent);
+}
+
+.npc-bg-empty {
+  font-size: 0.72em;
+  line-height: 1.4;
+  color: var(--text-muted, var(--text-secondary));
+  opacity: 0.75;
+}
+
+.npc-bg-row--group {
+  background: color-mix(in srgb, var(--accent-sky) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent-sky) 30%, var(--border-subtle));
+
+  .npc-bg-k {
+    color: var(--accent-sky);
+  }
+
+  .npc-bg-name {
+    background: color-mix(in srgb, var(--accent-sky) 24%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-sky) 36%, var(--border-subtle));
   }
 }
 
-.npc-meta-chip {
-  display: flex;
-  flex-direction: column;
-  gap: 0.1em;
-  min-width: 0;
-  padding: 0.32em 0.48em;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--accent-sky) 8%, var(--bg-card));
-  border: 1px solid color-mix(in srgb, var(--accent-sky) 22%, var(--border-subtle));
+.npc-bg-row--circle {
+  background: color-mix(in srgb, var(--accent-lavender) 12%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent-lavender) 30%, var(--border-subtle));
+
+  .npc-bg-k {
+    color: var(--accent-lavender);
+  }
+
+  .npc-bg-name {
+    background: color-mix(in srgb, var(--accent-lavender) 24%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-lavender) 34%, var(--border-subtle));
+  }
 }
 
-.npc-meta-k {
-  font-size: 0.58em;
-  font-weight: 700;
-  color: var(--accent-sky);
-  letter-spacing: 0.2px;
-}
+.npc-bg-row--event {
+  background: color-mix(in srgb, var(--accent-gold) 14%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent-gold) 32%, var(--border-subtle));
 
-.npc-meta-v {
-  font-size: 0.74em;
-  color: var(--text-primary);
-  word-break: break-word;
-  line-height: 1.35;
+  .npc-bg-k {
+    color: var(--accent-gold);
+  }
 
-  &.muted {
-    color: var(--text-muted, var(--text-secondary));
-    opacity: 0.75;
+  .npc-bg-name {
+    background: color-mix(in srgb, var(--accent-gold) 26%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-gold) 38%, var(--border-subtle));
   }
 }
 
@@ -1195,99 +1410,44 @@ const backgroundRows = computed(() => {
   }
 
   .npc-life-row {
-    gap: 0.26em;
-    padding: 0.28em;
+    gap: 0.28em;
   }
 
   .npc-life-chip {
     font-size: 0.64em;
-
-    &--birthday {
-      flex: 1 1 100%;
-    }
-
-    &--race,
-    &--gender,
-    &--age,
-    &--life {
-      flex: 1 1 calc(50% - 0.26em);
-      white-space: normal;
-    }
-
-    &--tier {
-      flex: 0 1 auto;
-      width: fit-content;
-      max-width: 100%;
-    }
+    white-space: normal;
   }
 
-  /* 当前状态：两列 + 通栏 */
-  .npc-status-grid {
-    &--mapped {
-      grid-template-columns: 1fr 1fr;
-      grid-template-areas:
-        'action wear'
-        'world place'
-        'env env'
-        'doing doing';
-    }
-
-    &--mapped:not(.npc-status-grid--has-doing) {
-      grid-template-areas:
-        'action wear'
-        'world place'
-        'env env';
-    }
-
-    &:not(.npc-status-grid--mapped) {
-      grid-template-columns: 1fr 1fr;
-
-      .npc-status-cell--doing {
-        grid-column: 1 / -1;
-      }
-    }
+  .npc-dossier {
+    padding: 0.34em;
   }
 
-  .npc-status-cell {
-    padding: 0.35em 0.42em;
-  }
-
-  .npc-status-k {
-    font-size: 0.62em;
-  }
-
-  .npc-status-v {
-    font-size: 0.74em;
-    line-height: 1.4;
-  }
-
-  /* 人际容器：单列 */
-  .npc-relations {
-    padding: 0.45em 0.5em 0.5em;
-  }
-
-  .npc-relations-grid {
+  /* 身处环境 / 当前状态：各自成卡，窄屏改为上下排列 */
+  .npc-presence {
     grid-template-columns: 1fr;
     gap: 0.45em;
   }
 
-  .npc-relations-block--near,
-  .npc-relations-block--bg,
-  .npc-relations-block--social {
-    grid-column: 1;
-    grid-row: auto;
+  .npc-presence-card {
+    padding: 0.48em 0.5em 0.55em;
   }
 
-  .npc-relations-block--social {
-    padding-top: 0.4em;
+  .npc-presence-v {
+    font-size: 0.76em;
+  }
+
+  /* 档案内的背景与社交：窄屏改为上下排列 */
+  .npc-ties {
+    grid-template-columns: 1fr;
+    gap: 0.5em;
   }
 
   .npc-chip-flow--fill {
     grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr));
   }
 
-  .npc-meta-strip--fill {
-    grid-template-columns: repeat(auto-fill, minmax(7.5em, 1fr));
+  .npc-bg-name {
+    font-size: 0.7em;
   }
 
   /* 目标/打算：单列 */
@@ -1370,82 +1530,115 @@ const backgroundRows = computed(() => {
   min-width: 0;
 }
 
-/* 当前状态：语义分区网格（动作/穿着 → 世界/位置/环境 → 正在做） */
-.npc-status-grid {
+/* 身处环境与当前状态：两张独立卡片。宽屏并排，窄屏上下排。长描述独占一行。 */
+.npc-presence {
   display: grid;
-  gap: 0.4em;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
+  gap: 0.55em;
   width: 100%;
-  align-items: stretch;
-  grid-template-columns: repeat(auto-fit, minmax(7.5em, 1fr));
+  align-items: start;
 
-  &--mapped {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1.35fr) minmax(0, 1.35fr);
-    grid-template-areas:
-      'action wear wear'
-      'world place place'
-      'env env env'
-      'doing doing doing';
-  }
-
-  &--mapped:not(.npc-status-grid--has-doing) {
-    grid-template-areas:
-      'action wear wear'
-      'world place place'
-      'env env env';
+  &:has(> :only-child) {
+    grid-template-columns: 1fr;
   }
 }
 
-.npc-status-cell {
+.npc-presence-card {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.2em;
-  padding: 0.4em 0.5em;
-  border-radius: 6px;
-  background: var(--bg-step);
+  gap: 0.4em;
+  padding: 0.55em 0.65em 0.65em;
+  border-radius: var(--radius-md);
   border: 1px solid var(--border-subtle);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #fff 16%, transparent);
 
-  &--doing {
-    grid-column: 1 / -1;
-    background: color-mix(in srgb, var(--accent-sky) 10%, var(--bg-step));
-    border-color: color-mix(in srgb, var(--accent-sky) 28%, var(--border-subtle));
+  &--place {
+    background: linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent-sky) 14%, var(--bg-panel, var(--bg-step))) 0%,
+      var(--bg-panel, var(--bg-step)) 58%
+    );
+    border-color: color-mix(in srgb, var(--accent-sky) 34%, var(--border-subtle));
+
+    .npc-presence-head,
+    .npc-presence-k {
+      color: var(--accent-sky);
+    }
+  }
+
+  &--state {
+    background: linear-gradient(
+      165deg,
+      color-mix(in srgb, var(--accent-gold) 13%, var(--bg-panel, var(--bg-step))) 0%,
+      var(--bg-panel, var(--bg-step)) 58%
+    );
+    border-color: color-mix(in srgb, var(--accent-gold) 36%, var(--border-subtle));
+
+    .npc-presence-head,
+    .npc-presence-k {
+      color: var(--accent-gold);
+    }
   }
 }
 
-.npc-status-grid--mapped {
-  .npc-status-cell--action {
-    grid-area: action;
-  }
-  .npc-status-cell--wear {
-    grid-area: wear;
-  }
-  .npc-status-cell--world {
-    grid-area: world;
-  }
-  .npc-status-cell--place {
-    grid-area: place;
-  }
-  .npc-status-cell--env {
-    grid-area: env;
-  }
-  .npc-status-cell--doing {
-    grid-area: doing;
-    grid-column: auto;
-  }
+.npc-presence-head {
+  display: flex;
+  align-items: center;
+  gap: 0.35em;
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+  font-weight: 700;
+  letter-spacing: 0.4px;
 }
 
-.npc-status-k {
+.npc-presence-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35em;
+}
+
+.npc-presence-fact,
+.npc-presence-prose,
+.npc-presence-lead,
+.npc-presence-block {
+  min-width: 0;
+  padding: 0.38em 0.5em;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg-card) 74%, transparent);
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 80%, transparent);
+}
+
+.npc-presence-fact--world {
+  flex: 0 1 auto;
+}
+
+.npc-presence-fact--place {
+  flex: 1 1 10em;
+}
+
+.npc-presence-lead {
+  background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-card));
+  border-color: color-mix(in srgb, var(--accent-gold) 32%, var(--border-subtle));
+}
+
+.npc-presence-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+}
+
+.npc-presence-k {
   font-size: 0.65em;
   font-weight: 700;
-  color: var(--accent-sky);
   letter-spacing: 0.3px;
-  margin-bottom: 0.15em;
+  margin-bottom: 0.12em;
 }
 
-.npc-status-v {
+.npc-presence-v {
   font-size: 0.78em;
+  line-height: 1.55;
   color: var(--text-primary);
-  line-height: 1.4;
   word-break: break-word;
 }
 
@@ -1545,22 +1738,6 @@ const backgroundRows = computed(() => {
   font-size: 0.7em;
   color: var(--text-secondary);
   word-break: break-word;
-}
-
-/* 背景 / 近期打算：键值行 */
-.npc-bg-rows {
-  gap: 0.3em;
-}
-
-.npc-bg-row {
-  display: grid;
-  grid-template-columns: 3.5em minmax(0, 1fr);
-  gap: 0.35em 0.5em;
-  align-items: baseline;
-  padding: 0.25em 0.35em;
-  border-radius: 6px;
-  background: rgba(120, 150, 200, 0.08);
-  border: 1px solid rgba(120, 150, 200, 0.2);
 }
 
 .npc-bg-key {

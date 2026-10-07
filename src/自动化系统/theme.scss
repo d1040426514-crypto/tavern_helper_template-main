@@ -33,6 +33,14 @@
   --accent-mint: #90c4a8;
   --accent-coral: #e0a090;
 
+  /* 性别：男/雄、女/雌。其余性别沿用档案标签的默认色 */
+  --gender-male-bg: rgba(110, 165, 205, 0.24);
+  --gender-male-fg: #a8d2ee;
+  --gender-male-bd: rgba(130, 180, 220, 0.5);
+  --gender-female-bg: rgba(205, 120, 155, 0.24);
+  --gender-female-fg: #f0b8cc;
+  --gender-female-bd: rgba(215, 135, 165, 0.5);
+
   /* text */
   --text-primary: #e8e4f2;
   --text-secondary: #c4bfd8;
@@ -148,6 +156,12 @@
   --accent-gold: #c4b078;
   --accent-mint: #90c4a0;
   --accent-coral: #d4a090;
+  --gender-male-bg: rgba(90, 160, 190, 0.22);
+  --gender-male-fg: #9ed4ea;
+  --gender-male-bd: rgba(110, 180, 205, 0.48);
+  --gender-female-bg: rgba(200, 115, 140, 0.22);
+  --gender-female-fg: #f0b4c4;
+  --gender-female-bd: rgba(210, 130, 155, 0.48);
 
   --text-primary: #e2ebe6;
   --text-secondary: #b8c8c0;
@@ -243,7 +257,12 @@
   --accent-gold: #9a7428;
   --accent-mint: #3a7a58;
   --accent-coral: #b05440;
-
+  --gender-male-bg: rgba(40, 90, 140, 0.12);
+  --gender-male-fg: #245a86;
+  --gender-male-bd: rgba(40, 90, 140, 0.34);
+  --gender-female-bg: rgba(150, 55, 80, 0.1);
+  --gender-female-fg: #8a3048;
+  --gender-female-bd: rgba(150, 55, 80, 0.32);
   --text-primary: #2a241c;
   --text-secondary: #5a5348;
   --text-muted: #7a7268;
@@ -338,7 +357,12 @@
   --accent-gold: #8f6b20;
   --accent-mint: #3a7a58;
   --accent-coral: #b05440;
-
+  --gender-male-bg: rgba(30, 80, 140, 0.12);
+  --gender-male-fg: #1c4e84;
+  --gender-male-bd: rgba(30, 80, 140, 0.32);
+  --gender-female-bg: rgba(150, 45, 75, 0.1);
+  --gender-female-fg: #8a2848;
+  --gender-female-bd: rgba(150, 45, 75, 0.3);
   --text-primary: #1a2332;
   --text-secondary: #445264;
   --text-muted: #5c6a7a;
@@ -433,6 +457,12 @@
   --accent-gold: #8a7040;
   --accent-mint: #3a7a58;
   --accent-coral: #a85040;
+  --gender-male-bg: rgba(25, 90, 120, 0.12);
+  --gender-male-fg: #1a5874;
+  --gender-male-bd: rgba(25, 90, 120, 0.32);
+  --gender-female-bg: rgba(145, 50, 65, 0.1);
+  --gender-female-fg: #863444;
+  --gender-female-bd: rgba(145, 50, 65, 0.3);
 
   --text-primary: #1c2a26;
   --text-secondary: #3e524c;
@@ -528,6 +558,12 @@
   --accent-gold: #9a6a30;
   --accent-mint: #3a7a58;
   --accent-coral: #b04040;
+  --gender-male-bg: rgba(40, 75, 120, 0.12);
+  --gender-male-fg: #27486e;
+  --gender-male-bd: rgba(40, 75, 120, 0.32);
+  --gender-female-bg: rgba(150, 45, 65, 0.1);
+  --gender-female-fg: #8a3040;
+  --gender-female-bd: rgba(150, 45, 65, 0.3);
 
   --text-primary: #2c2426;
   --text-secondary: #5a4e52;

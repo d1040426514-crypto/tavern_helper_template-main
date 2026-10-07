@@ -9,7 +9,12 @@ export type NpcReputationItem = {
 
 export type NpcSocialPerson = {
   name: string;
+  /** 关系简述。旧格式写在括号里，新格式写在「关系:」 */
   note: string;
+  /** 好感温度。旧格式为空 */
+  warmth: string;
+  /** 当前回应态度。旧格式为空 */
+  attitude: string;
 };
 
 export type NpcSocialGroup = {

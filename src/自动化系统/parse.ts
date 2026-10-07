@@ -8,6 +8,7 @@ import {
   type NpcCard,
   type NpcCategoryKey,
   type NpcLifeArchive,
+  type NpcSocialPerson,
   type QuestArchiveEntry,
   type QuestItem,
   type QuestItemStatus,
@@ -192,6 +193,10 @@ function parseReputation(raw: string): NpcCard['reputation'] {
   return out.filter(r => r.value);
 }
 
+function blankPerson(name: string, note = ''): NpcSocialPerson {
+  return { name, note, warmth: '', attitude: '' };
+}
+
 /**
  * 分类用 `|` 分隔，分类内关系人用 `;` 分隔。
  * 亦兼容 `;[分类]人名`（漏写 `|` 时仍切换分类）。
@@ -202,13 +207,8 @@ function parseGroupedPeople(raw: string): NpcCard['socialNetwork'] {
   let currentCategory = '关系';
 
   function pushPerson(category: string, personRaw: string) {
-    const text = softTrim(personRaw);
-    if (!text) return;
-    const pm = text.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
-    const person = pm
-      ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
-      : { name: text, note: '' };
-    if (!person.name) return;
+    const person = parsePersonChunk(personRaw);
+    if (!person) return;
     const list = byCat.get(category) ?? [];
     list.push(person);
     byCat.set(category, list);
@@ -244,22 +244,35 @@ function parseGroupedPeople(raw: string): NpcCard['socialNetwork'] {
   return groups;
 }
 
-function parsePersonChunk(personRaw: string): { name: string; note: string } | null {
+function parsePersonChunk(personRaw: string): NpcSocialPerson | null {
   const text = softTrim(personRaw);
   if (!text || text === '无') return null;
   const pm = text.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
-  const person = pm
-    ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
-    : { name: text, note: '' };
+  const person = pm ? blankPerson(softTrim(pm[1] ?? ''), softTrim(pm[2] ?? '')) : blankPerson(text);
   if (!person.name) return null;
   return person;
 }
 
-/** `[类别]` 单独成行，更深缩进的每人一行。类别行末尾若已写了人，也算进去。 */
+const PERSON_FIELD_KEYS = ['关系', '好感', '态度'] as const;
+
+function personFieldKey(line: string): { key: (typeof PERSON_FIELD_KEYS)[number]; value: string } | null {
+  const matched = line.match(/^(关系|好感|态度)\s*[:：]\s*(.*)$/);
+  if (!matched) return null;
+  const key = matched[1] as (typeof PERSON_FIELD_KEYS)[number];
+  const value = softTrim(matched[2] ?? '');
+  return { key, value: value === '无' ? '' : value };
+}
+
+function applyPersonField(person: NpcSocialPerson, key: (typeof PERSON_FIELD_KEYS)[number], value: string) {
+  if (key === '关系') person.note = value;
+  else if (key === '好感') person.warmth = value;
+  else person.attitude = value;
+}
+
+/** `[类别]` 单独成行。人可以是「人名(简述)」，也可以是人名下再写关系、好感、态度。 */
 function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
   const groups: NpcCard['socialNetwork'] = [];
-  let current: { category: string; people: NpcCard['socialNetwork'][number]['people']; indent: number } | null =
-    null;
+  let current: { category: string; people: NpcSocialPerson[]; indent: number } | null = null;
 
   for (const line of String(body ?? '').split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -278,8 +291,14 @@ function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
       continue;
     }
     if (!current || indent <= current.indent) continue;
-    const person = parsePersonChunk(trimmed);
-    if (person) current.people.push(person);
+    const field = personFieldKey(trimmed);
+    const person = current.people[current.people.length - 1];
+    if (field && person) {
+      applyPersonField(person, field.key, field.value);
+      continue;
+    }
+    const next = parsePersonChunk(trimmed);
+    if (next) current.people.push(next);
   }
 
   return groups.filter(g => g.people.length);

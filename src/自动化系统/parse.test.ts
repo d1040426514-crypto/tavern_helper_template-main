@@ -67,10 +67,19 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
 社会身份: 巡城司百户;城西商会理事
 社交网络:
   [职场]
-    王芳(同僚/互助)
-    赵铁(上司/敬畏)
+    王芳
+      关系: 同僚，互相照应
+      好感: 亲近
+      态度: 愿意相助
+    赵铁
+      关系: 上司
+      好感: 敬畏
+      态度: 恭敬服从
   [恩怨]
-    周监(宿怨/对峙)
+    周监
+      关系: 宿怨
+      好感: 敌意
+      态度: 冷淡对峙
 背景关联:
   团体: 巡城司;城西商会
   社交圈: 城西巷邻里
@@ -133,8 +142,13 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.socialNetwork[0]!.category, '职场');
   assert.equal(npc.socialNetwork[0]!.people.length, 2);
   assert.equal(npc.socialNetwork[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.socialNetwork[0]!.people[0]!.note, '同僚，互相照应');
+  assert.equal(npc.socialNetwork[0]!.people[0]!.warmth, '亲近');
+  assert.equal(npc.socialNetwork[0]!.people[0]!.attitude, '愿意相助');
   assert.equal(npc.socialNetwork[0]!.people[1]!.name, '赵铁');
+  assert.equal(npc.socialNetwork[0]!.people[1]!.warmth, '敬畏');
   assert.equal(npc.socialNetwork[1]!.category, '恩怨');
+  assert.equal(npc.socialNetwork[1]!.people[0]!.attitude, '冷淡对峙');
   assert.equal(npc.companions.length, 2);
   assert.equal(npc.companions[0]!.category, '同行');
   assert.equal(npc.companions[0]!.people[0]!.name, '王芳');
