@@ -344,6 +344,7 @@ const lifeChips = computed(() => {
   if (life.gender) rows.push({ key: 'gender', label: '性别', value: life.gender });
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
+  if (life.lifeTier) rows.push({ key: 'tier', label: '生命层级', value: life.lifeTier });
   return rows;
 });
 
@@ -764,41 +765,46 @@ const backgroundRows = computed(() => {
 }
 
 .chain-flow {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.2em;
   font-size: 0.78em;
   color: var(--text-secondary);
-  line-height: 1.45;
+  line-height: 1.85;
+  text-wrap: pretty;
+}
+
+.chain-step,
+.chain-predict {
+  display: inline;
+  padding: 0.08em 0.28em;
+  border-radius: 4px;
+  line-height: 1.85;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  overflow-wrap: break-word;
 }
 
 .chain-step {
   background: var(--bg-step);
   color: var(--text-primary);
-  padding: 0.1em 0.35em;
-  border-radius: 4px;
   font-weight: 500;
-  white-space: normal;
-  word-break: break-word;
-  min-width: 0;
 }
 
 .chain-arrow {
+  display: inline;
+  margin: 0 0.22em;
   color: var(--accent-gold);
   font-weight: 700;
-  flex-shrink: 0;
 }
 
 .chain-predict {
+  background: color-mix(in srgb, var(--accent-rose) 12%, transparent);
   color: var(--accent-rose);
   font-weight: 600;
   font-style: italic;
-  word-break: break-word;
-  min-width: 0;
 }
 
 .chain-debut-tag {
+  display: inline-block;
+  margin-left: 0.28em;
   background: var(--debut-bg);
   color: var(--debut-fg);
   padding: 0.1em 0.35em;
@@ -806,6 +812,8 @@ const backgroundRows = computed(() => {
   font-weight: 700;
   font-size: 0.85em;
   letter-spacing: 0.2px;
+  line-height: 1.4;
+  vertical-align: baseline;
   animation: pulseTag 2s ease-in-out infinite;
   white-space: nowrap;
 }
@@ -881,6 +889,19 @@ const backgroundRows = computed(() => {
 
   &--life {
     flex: 1 1 6.4em;
+  }
+
+  &--tier {
+    flex: 0 1 auto;
+    width: fit-content;
+    max-width: 100%;
+    white-space: normal;
+    background: color-mix(in srgb, var(--accent-gold) 16%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-gold) 42%, var(--border-subtle));
+
+    .npc-life-k {
+      color: var(--accent-gold);
+    }
   }
 
   &--gender {
@@ -1187,6 +1208,12 @@ const backgroundRows = computed(() => {
       flex: 1 1 calc(50% - 0.26em);
       white-space: normal;
     }
+
+    &--tier {
+      flex: 0 1 auto;
+      width: fit-content;
+      max-width: 100%;
+    }
   }
 
   /* 当前状态：两列 + 通栏 */
@@ -1286,16 +1313,13 @@ const backgroundRows = computed(() => {
     padding: 0.5em 0.65em;
   }
 
-  .chain-arrow {
-    display: none;
+  .chain-flow {
+    line-height: 1.9;
   }
 
   .chain-step,
   .chain-predict {
-    flex: 1 1 100%;
-    font-size: 0.78em;
-    line-height: 1.45;
-    padding: 0.35em 0.5em;
+    line-height: 1.9;
   }
 
   .npc-subcard {

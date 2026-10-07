@@ -215,22 +215,33 @@ function parseBackground(raw: string): NpcCard['background'] {
 }
 
 function emptyLifeArchive(): NpcLifeArchive {
-  return { birthday: '', race: '', gender: '', age: '', remainingLife: '' };
+  return { birthday: '', race: '', gender: '', age: '', remainingLife: '', lifeTier: '' };
+}
+
+/** 「无」、空白或空括号视为未写；层级名后的空括号去掉。 */
+function normalizeLifeTier(raw: string): string {
+  let text = softTrim(raw);
+  if (!text || text === '无') return '';
+  text = softTrim(text.replace(/[（(]\s*[)）]\s*$/u, ''));
+  if (!text || text === '无') return '';
+  return text;
 }
 
 function parseLifeArchive(raw: string): NpcLifeArchive {
   const life = emptyLifeArchive();
   if (!raw) return life;
-  const birthday = raw.match(/\[生日\]\s*([^|\[\]]*)/);
-  const race = raw.match(/\[种族\]\s*([^|\[\]]*)/);
-  const gender = raw.match(/\[性别\]\s*([^|\[\]]*)/);
-  const age = raw.match(/\[年龄\]\s*([^|\[\]]*)/);
-  const remaining = raw.match(/\[剩余寿命\]\s*([^|\[\]]*)/);
+  const birthday = raw.match(/\[生日\]\s*([^|[\]]*)/);
+  const race = raw.match(/\[种族\]\s*([^|[\]]*)/);
+  const gender = raw.match(/\[性别\]\s*([^|[\]]*)/);
+  const age = raw.match(/\[年龄\]\s*([^|[\]]*)/);
+  const remaining = raw.match(/\[剩余寿命\]\s*([^|[\]]*)/);
+  const tier = raw.match(/\[生命层级\]\s*([^|[\]]*)/);
   if (birthday) life.birthday = softTrim(birthday[1] ?? '');
   if (race) life.race = softTrim(race[1] ?? '');
   if (gender) life.gender = softTrim(gender[1] ?? '');
   if (age) life.age = softTrim(age[1] ?? '');
   if (remaining) life.remainingLife = softTrim(remaining[1] ?? '');
+  if (tier) life.lifeTier = normalizeLifeTier(tier[1] ?? '');
   return life;
 }
 
@@ -356,7 +367,14 @@ function emptyNpc(name: string): NpcCard {
 }
 
 function hasLifeArchive(life: NpcLifeArchive): boolean {
-  return !!(life.birthday || life.race || life.gender || life.age || life.remainingLife);
+  return !!(
+    life.birthday ||
+    life.race ||
+    life.gender ||
+    life.age ||
+    life.remainingLife ||
+    life.lifeTier
+  );
 }
 
 /** 解析单个 npc 内文（可含或不含外层 <npc> 标签） */

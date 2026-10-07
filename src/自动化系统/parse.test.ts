@@ -81,6 +81,7 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.lifeArchive.gender, '男');
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
+  assert.equal(npc.lifeArchive.lifeTier, '');
   assert.equal(npc.wealth, '手头宽裕');
   assert.deepEqual(npc.socialIdentity, ['巡城司百户', '城西商会理事']);
   assert.equal(npc.longGoal, '光复家业');
@@ -108,6 +109,7 @@ test('parseNpcBlock life archive gender is optional', () => {
 生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[年龄]30岁(青年)|[剩余寿命]50年
 </npc>`);
   assert.equal(legacy.lifeArchive.gender, '');
+  assert.equal(legacy.lifeArchive.lifeTier, '');
   assert.equal(legacy.lifeArchive.age, '30岁(青年)');
   assert.equal(legacy.empty, false);
 
@@ -117,6 +119,37 @@ test('parseNpcBlock life archive gender is optional', () => {
   assert.equal(genderOnly.lifeArchive.gender, '女');
   assert.equal(genderOnly.lifeArchive.birthday, '');
   assert.equal(genderOnly.empty, false);
+});
+
+test('parseNpcBlock life tier is optional and keeps progress text', () => {
+  const withProgress = parseNpcBlock(`<npc act="甲">
+生命档案: [生日]复兴纪元450年-1月-1日|[种族]人族|[性别]女|[年龄]17岁(少年)|[剩余寿命]约60年|[生命层级]第三层级 Lv.12(本级将满，缺少突破材料)
+</npc>`);
+  assert.equal(withProgress.lifeArchive.lifeTier, '第三层级 Lv.12(本级将满，缺少突破材料)');
+  assert.equal(withProgress.lifeArchive.remainingLife, '约60年');
+  assert.equal(withProgress.empty, false);
+
+  const nameOnly = parseNpcBlock(`<npc act="乙">
+生命档案: [生命层级]第一层级
+</npc>`);
+  assert.equal(nameOnly.lifeArchive.lifeTier, '第一层级');
+  assert.equal(nameOnly.lifeArchive.birthday, '');
+  assert.equal(nameOnly.empty, false);
+
+  const emptyParens = parseNpcBlock(`<npc act="丙">
+生命档案: [生命层级]金丹初期()
+</npc>`);
+  assert.equal(emptyParens.lifeArchive.lifeTier, '金丹初期');
+
+  const absent = parseNpcBlock(`<npc act="丁">
+生命档案: [生命层级]无|[年龄]20岁(青年)
+</npc>`);
+  assert.equal(absent.lifeArchive.lifeTier, '');
+  assert.equal(absent.lifeArchive.age, '20岁(青年)');
+
+  const blankParens = parseNpcBlock(`生命档案: [生命层级]()`);
+  assert.equal(blankParens.lifeArchive.lifeTier, '');
+  assert.equal(blankParens.empty, true);
 });
 
 test('parseNpcBlock reputation social background companions', () => {

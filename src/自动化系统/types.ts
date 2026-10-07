@@ -29,6 +29,8 @@ export type NpcLifeArchive = {
   gender: string;
   age: string;
   remainingLife: string;
+  /** 可选。世界观无层级时为空 */
+  lifeTier: string;
 };
 
 export type QuestItemStatus = 'done' | 'active' | 'todo';
