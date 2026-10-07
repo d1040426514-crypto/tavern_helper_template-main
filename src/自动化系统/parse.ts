@@ -96,6 +96,48 @@ function fieldLine(text: string, label: string): string {
   return m ? softTrim(m[1]) : '';
 }
 
+function lineIndent(line: string): number {
+  const m = line.match(/^[ \t]*/);
+  return m ? m[0].length : 0;
+}
+
+type FieldSection = {
+  /** 标题行冒号后的同行文字 */
+  inline: string;
+  /** 标题之下、缩进更深的正文 */
+  body: string;
+};
+
+/** 按缩进切出一个字段。只取第一次出现，正文到缩进不再更深为止。 */
+function readSection(text: string, label: string): FieldSection | null {
+  const lines = String(text ?? '').split(/\r?\n/);
+  const re = new RegExp(`^([ \\t]*)${escapeRegExp(label)}\\s*[:：]\\s*(.*)$`);
+  for (let i = 0; i < lines.length; i++) {
+    const matched = lines[i]?.match(re);
+    if (!matched) continue;
+    const headerIndent = (matched[1] ?? '').length;
+    const child: string[] = [];
+    for (let j = i + 1; j < lines.length; j++) {
+      const line = lines[j] ?? '';
+      if (!line.trim()) {
+        child.push(line);
+        continue;
+      }
+      if (lineIndent(line) <= headerIndent) break;
+      child.push(line);
+    }
+    return { inline: softTrim(matched[2] ?? ''), body: child.join('\n') };
+  }
+  return null;
+}
+
+function nestedInline(parent: FieldSection | null, label: string): string | null {
+  if (!parent) return null;
+  const child = readSection(parent.body, label);
+  if (!child) return null;
+  return child.inline;
+}
+
 function splitPipe(raw: string): string[] {
   return raw
     .split(/\s*[|¦]\s*/)
@@ -202,12 +244,160 @@ function parseGroupedPeople(raw: string): NpcCard['socialNetwork'] {
   return groups;
 }
 
+function parsePersonChunk(personRaw: string): { name: string; note: string } | null {
+  const text = softTrim(personRaw);
+  if (!text || text === '无') return null;
+  const pm = text.match(/^(.+?)\s*[（(]\s*(.*?)\s*[）)]\s*$/);
+  const person = pm
+    ? { name: softTrim(pm[1] ?? ''), note: softTrim(pm[2] ?? '') }
+    : { name: text, note: '' };
+  if (!person.name) return null;
+  return person;
+}
+
+/** `[类别]` 单独成行，更深缩进的每人一行。类别行末尾若已写了人，也算进去。 */
+function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
+  const groups: NpcCard['socialNetwork'] = [];
+  let current: { category: string; people: NpcCard['socialNetwork'][number]['people']; indent: number } | null =
+    null;
+
+  for (const line of String(body ?? '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const indent = lineIndent(line);
+    const trimmed = line.trim();
+    const catMatch = trimmed.match(/^\[([^\]]+)\]\s*(.*)$/);
+    if (catMatch && (!current || indent <= current.indent)) {
+      current = {
+        category: softTrim(catMatch[1] ?? '') || '关系',
+        people: [],
+        indent,
+      };
+      groups.push(current);
+      const inlinePerson = parsePersonChunk(catMatch[2] ?? '');
+      if (inlinePerson) current.people.push(inlinePerson);
+      continue;
+    }
+    if (!current || indent <= current.indent) continue;
+    const person = parsePersonChunk(trimmed);
+    if (person) current.people.push(person);
+  }
+
+  return groups.filter(g => g.people.length);
+}
+
+function readPeopleSection(section: FieldSection | null): NpcCard['socialNetwork'] {
+  if (!section) return [];
+  if (section.inline === '无') return [];
+  const fromBody = parseIndentedPeople(section.body);
+  if (fromBody.length) return fromBody;
+  if (!section.inline) return [];
+  return parseGroupedPeople(section.inline);
+}
+
+const REPUTATION_LABELS = ['官方', '民间', '暗域', '业界'] as const;
+
+function readReputation(section: FieldSection | null): NpcCard['reputation'] {
+  if (!section) return [];
+  const labeled = REPUTATION_LABELS.map(label => ({
+    label,
+    section: readSection(section.body, label),
+  }));
+  if (labeled.some(item => item.section)) {
+    return labeled.flatMap(item => {
+      const value = softTrim(item.section?.inline ?? '');
+      if (!value || value === '无') return [];
+      return [{ label: item.label, value }];
+    });
+  }
+  return parseReputation(section.inline);
+}
+
+function readMemories(section: FieldSection | null): string[] {
+  if (!section) return [];
+  const lines = section.body
+    .split(/\r?\n/)
+    .map(line => softTrim(line))
+    .filter(Boolean);
+  if (lines.length) return lines.flatMap(line => splitMemories(line));
+  if (!section.inline || section.inline === '无') return [];
+  return splitMemories(section.inline);
+}
+
+function readLifeArchive(body: string): NpcLifeArchive {
+  const packed = readSection(body, '生命档案');
+  const life = packed?.inline ? parseLifeArchive(packed.inline) : emptyLifeArchive();
+  const fields: Array<[string, keyof NpcLifeArchive]> = [
+    ['生日', 'birthday'],
+    ['种族', 'race'],
+    ['性别', 'gender'],
+    ['年龄', 'age'],
+    ['剩余寿命', 'remainingLife'],
+  ];
+  for (const [label, key] of fields) {
+    const section = readSection(body, label);
+    if (section) life[key] = section.inline;
+  }
+  const tier = readSection(body, '生命层级');
+  if (tier) life.lifeTier = normalizeLifeTier(tier.inline);
+  return life;
+}
+
+function readBackground(section: FieldSection | null): NpcCard['background'] {
+  const bg = emptyBackground();
+  if (!section) return bg;
+  const group = nestedInline(section, '团体');
+  const circle = nestedInline(section, '社交圈');
+  const event = nestedInline(section, '事件');
+  if (group !== null || circle !== null || event !== null) {
+    bg.group = group ?? '';
+    bg.circle = circle ?? '';
+    bg.event = event ?? '';
+    return bg;
+  }
+  return section.inline ? parseBackground(section.inline) : bg;
+}
+
+/** 动作、穿着、正在做的事、所处世界、位置、环境。缺项留空，避免标签错位。 */
+function readStatusParts(body: string): string[] {
+  const place = readSection(body, '身处环境');
+  const state = readSection(body, '当前状态');
+  const slots = [
+    nestedInline(state, '动作'),
+    nestedInline(state, '穿着'),
+    nestedInline(state, '正在做的事'),
+    nestedInline(place, '世界'),
+    nestedInline(place, '位置'),
+    nestedInline(place, '环境'),
+  ];
+  if (slots.some(value => value !== null)) {
+    const filled = slots.map(value => value ?? '');
+    return filled.some(value => value.trim()) ? filled : [];
+  }
+  if (state?.inline) return splitPipe(state.inline);
+  return [];
+}
+
+/** 事件、行为、时间。缺项留空。 */
+function readNearPlan(section: FieldSection | null): string[] {
+  if (!section) return [];
+  const slots = [
+    nestedInline(section, '事件'),
+    nestedInline(section, '行为'),
+    nestedInline(section, '时间'),
+  ];
+  if (slots.some(value => value !== null)) {
+    const filled = slots.map(value => value ?? '');
+    return filled.some(value => value.trim()) ? filled : [];
+  }
+  return section.inline ? splitPipe(section.inline) : [];
+}
+
 function parseBackground(raw: string): NpcCard['background'] {
   const bg: NpcCard['background'] = { group: '', circle: '', event: '' };
   if (!raw) return bg;
-  const group = raw.match(/\[团体\]\s*([^|\[\]]*)/);
-  const circle = raw.match(/\[社交圈\]\s*([^|\[\]]*)/);
-  const event = raw.match(/\[事件\]\s*([^|\[\]]*)/);
+  const group = raw.match(/\[团体\]\s*([^|[\]]*)/);
+  const circle = raw.match(/\[社交圈\]\s*([^|[\]]*)/);
+  const event = raw.match(/\[事件\]\s*([^|[\]]*)/);
   if (group) bg.group = softTrim(group[1] ?? '');
   if (circle) bg.circle = softTrim(circle[1] ?? '');
   if (event) bg.event = softTrim(event[1] ?? '');
@@ -416,30 +606,29 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     }
   }
 
-  const statusRaw = fieldLine(body, '当前状态');
-  if (statusRaw) npc.statusParts = splitPipe(statusRaw);
+  const statusRaw = readStatusParts(body);
+  if (statusRaw.length) npc.statusParts = statusRaw;
 
-  npc.lifeArchive = parseLifeArchive(fieldLine(body, '生命档案'));
+  npc.lifeArchive = readLifeArchive(body);
   npc.wealth = fieldLine(body, '资金状况');
-  npc.reputation = parseReputation(fieldLine(body, '声誉'));
+  npc.reputation = readReputation(readSection(body, '声誉'));
   npc.socialIdentity = fieldLine(body, '社会身份')
     .split(/[;；]+/)
     .map(s => softTrim(s))
     .filter(Boolean);
-  npc.socialNetwork = parseGroupedPeople(fieldLine(body, '社交网络'));
-  npc.companions = parseGroupedPeople(fieldLine(body, '身边人物'));
-  npc.background = parseBackground(fieldLine(body, '背景关联'));
+  npc.socialNetwork = readPeopleSection(readSection(body, '社交网络'));
+  npc.companions = readPeopleSection(
+    readSection(body, '现场人物') ?? readSection(body, '身边人物'),
+  );
+  npc.background = readBackground(readSection(body, '背景关联'));
   npc.longGoal = fieldLine(body, '长期目标');
 
-  const planRaw = fieldLine(body, '近期打算');
-  if (planRaw) npc.nearPlan = splitPipe(planRaw);
+  const planRaw = readNearPlan(readSection(body, '近期打算'));
+  if (planRaw.length) npc.nearPlan = planRaw;
 
-  const recent = fieldLine(body, '近期记忆');
-  if (recent) npc.recentMemories = splitMemories(recent);
-  const settled = fieldLine(body, '沉淀记忆');
-  if (settled) npc.settledMemories = splitMemories(settled);
-  const core = fieldLine(body, '核心记忆');
-  if (core) npc.coreMemories = splitMemories(core);
+  npc.recentMemories = readMemories(readSection(body, '近期记忆'));
+  npc.settledMemories = readMemories(readSection(body, '沉淀记忆'));
+  npc.coreMemories = readMemories(readSection(body, '核心记忆'));
 
   const questLogs: QuestLog[] = [];
   for (const hit of findAllPairs(body, 'quest_log')) {

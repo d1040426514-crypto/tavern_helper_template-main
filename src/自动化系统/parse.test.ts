@@ -52,23 +52,60 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   const block = `<npc act="李明">
 <file>
 最后更新时间: 大明-1520年-3月-1日-周一-08:00
-生命档案: [生日]大明-1490年-1月-1日|[种族]人族|[性别]男|[年龄]30岁(青年)|[剩余寿命]50年
+生日: 大明-1490年-1月-1日
+种族: 人族
+性别: 男
+年龄: 30岁(青年)
+剩余寿命: 50年
+生命层级: 金丹初期(37%，心魔未消)
 资金状况: 手头宽裕
-声誉: [官方]小有名气|[民间]受人尊敬
+声誉:
+  官方: 小有名气
+  民间: 受人尊敬
+  暗域: 默默无闻
+  业界: 小有名气
 社会身份: 巡城司百户;城西商会理事
-社交网络: [职场]王芳(同僚/互助);赵铁(上司/敬畏)|[恩怨]周监(宿怨/对峙)
-背景关联: [团体]巡城司|[社交圈]城西巷邻里|[事件]走私案
+社交网络:
+  [职场]
+    王芳(同僚/互助)
+    赵铁(上司/敬畏)
+  [恩怨]
+    周监(宿怨/对峙)
+背景关联:
+  团体: 巡城司;城西商会
+  社交圈: 城西巷邻里
+  事件: 走私案
 </file>
 <dynamic>
 行为链: 巡街→查账→后续预测: 明日回府 **[准备登场]**
-当前状态: 行走|青衫|盘问路人|大明京城|城西巷|细雨巷口
-身边人物: [同行]王芳(探路/警惕)|[随从]小厮二人(提灯/待命)
+身处环境:
+  世界: 大明京城
+  位置: 城西巷
+  环境: 细雨巷口
+当前状态:
+  正在做的事: 盘问路人
+  动作: 行走
+  穿着: 青衫
+现场人物:
+  [同行]
+    王芳(探路/警惕)
+  [随从]
+    小厮二人(提灯/待命)
 长期目标: 光复家业
-近期打算: 调查走私|暗访|2026年7月1日8时—2026年7月3日18时
-近期记忆: 1.昨夜见黑影;2.收到密信
-沉淀记忆: 1.三年前出走
-核心记忆: 1.父亲托付玉佩
+近期打算:
+  事件: 调查走私
+  行为: 暗访
+  时间: 2026年7月1日8时—2026年7月3日18时
 </dynamic>
+<memory>
+近期记忆:
+  1. 昨夜见黑影
+  2. 收到密信
+沉淀记忆:
+  1. 三年前出走
+核心记忆:
+  1. 父亲托付玉佩
+</memory>
 </npc>`;
   const npc = parseNpcBlock(block);
   assert.equal(npc.name, '李明');
@@ -81,16 +118,22 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.lifeArchive.gender, '男');
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
-  assert.equal(npc.lifeArchive.lifeTier, '');
+  assert.equal(npc.lifeArchive.lifeTier, '金丹初期(37%，心魔未消)');
   assert.equal(npc.wealth, '手头宽裕');
+  assert.deepEqual(npc.reputation[0], { label: '官方', value: '小有名气' });
+  assert.deepEqual(npc.reputation[2], { label: '暗域', value: '默默无闻' });
+  assert.equal(npc.reputation.length, 4);
   assert.deepEqual(npc.socialIdentity, ['巡城司百户', '城西商会理事']);
   assert.equal(npc.longGoal, '光复家业');
-  assert.equal(npc.nearPlan.length, 3);
+  assert.deepEqual(npc.nearPlan, ['调查走私', '暗访', '2026年7月1日8时—2026年7月3日18时']);
+  assert.equal(npc.background.group, '巡城司;城西商会');
+  assert.equal(npc.background.circle, '城西巷邻里');
   assert.equal(npc.background.event, '走私案');
   assert.equal(npc.socialNetwork.length, 2);
   assert.equal(npc.socialNetwork[0]!.category, '职场');
   assert.equal(npc.socialNetwork[0]!.people.length, 2);
   assert.equal(npc.socialNetwork[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.socialNetwork[0]!.people[1]!.name, '赵铁');
   assert.equal(npc.socialNetwork[1]!.category, '恩怨');
   assert.equal(npc.companions.length, 2);
   assert.equal(npc.companions[0]!.category, '同行');
@@ -150,6 +193,20 @@ test('parseNpcBlock life tier is optional and keeps progress text', () => {
   const blankParens = parseNpcBlock(`生命档案: [生命层级]()`);
   assert.equal(blankParens.lifeArchive.lifeTier, '');
   assert.equal(blankParens.empty, true);
+
+  const lineTier = parseNpcBlock(`<npc act="己">
+生命层级: 金丹初期()
+年龄: 20岁(青年)
+</npc>`);
+  assert.equal(lineTier.lifeArchive.lifeTier, '金丹初期');
+  assert.equal(lineTier.lifeArchive.age, '20岁(青年)');
+
+  const lineNone = parseNpcBlock(`<npc act="庚">
+生命层级: 无
+生日: 大明-1490年-1月-1日
+</npc>`);
+  assert.equal(lineNone.lifeArchive.lifeTier, '');
+  assert.equal(lineNone.lifeArchive.birthday, '大明-1490年-1月-1日');
 });
 
 test('parseNpcBlock reputation social background companions', () => {
@@ -185,8 +242,52 @@ test('parseNpcBlock reputation social background companions', () => {
   assert.equal(npc.background.group, '无');
   assert.equal(npc.background.circle, '索伦蒂斯深夜游荡者');
   assert.equal(npc.background.event, '无');
+  assert.deepEqual(npc.statusParts, ['甩干水迹', '黑大衣', '清洗手帕', '索伦蒂斯', '黑水巷', '雨雾']);
+  assert.deepEqual(npc.nearPlan, [
+    '清理不洁根源',
+    '猎杀行动',
+    '复兴纪元488年4月15日23:30—4月16日03:00',
+  ]);
   assert.equal(npc.coreMemories.length, 3);
   assert.equal(npc.wealth, '略有盈余');
+});
+
+test('parseNpcBlock keeps status and plan slots when a labeled field is missing', () => {
+  const npc = parseNpcBlock(`<npc act="甲">
+社交网络: 无
+现场人物: 无
+身处环境:
+  世界: 大明京城
+  环境: 细雨
+当前状态:
+  正在做的事: 盘问路人
+  动作: 行走
+近期打算:
+  事件: 调查走私
+  时间: 三日之内
+背景关联:
+  团体: 无
+  事件: 走私案
+</npc>`);
+  assert.deepEqual(npc.socialNetwork, []);
+  assert.deepEqual(npc.companions, []);
+  assert.deepEqual(npc.statusParts, ['行走', '', '盘问路人', '大明京城', '', '细雨']);
+  assert.deepEqual(npc.nearPlan, ['调查走私', '', '三日之内']);
+  assert.equal(npc.background.group, '无');
+  assert.equal(npc.background.event, '走私案');
+  assert.equal(npc.background.circle, '');
+});
+
+test('parseNpcBlock category line may already include the first person', () => {
+  const npc = parseNpcBlock(`<npc act="甲">
+社交网络:
+  [职场]王芳(同僚/互助)
+    赵铁(上司/敬畏)
+</npc>`);
+  assert.equal(npc.socialNetwork.length, 1);
+  assert.equal(npc.socialNetwork[0]!.people.length, 2);
+  assert.equal(npc.socialNetwork[0]!.people[0]!.name, '王芳');
+  assert.equal(npc.socialNetwork[0]!.people[1]!.name, '赵铁');
 });
 
 test('parseNpcBlock accepts inner-only text with fallback name', () => {

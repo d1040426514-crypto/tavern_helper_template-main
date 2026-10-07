@@ -115,7 +115,7 @@
           <div v-if="npc.companions.length" class="npc-relations-block npc-relations-block--near">
             <header class="npc-relations-head">
               <span class="npc-relations-ico" aria-hidden="true">👥</span>
-              <span>身边人物</span>
+              <span>现场人物</span>
               <span class="npc-relations-count">{{ companionCount }}</span>
             </header>
             <div class="npc-chip-flow npc-chip-flow--fill">
@@ -387,10 +387,12 @@ const STATUS_AREA_KEYS: Record<string, string> = {
 };
 
 const statusCells = computed(() =>
-  props.npc.statusParts.map((value, i) => ({
-    label: statusLabels[i] || `详情${i + 1}`,
-    value,
-  })),
+  props.npc.statusParts
+    .map((value, i) => ({
+      label: statusLabels[i] || `详情${i + 1}`,
+      value: String(value ?? '').trim(),
+    }))
+    .filter(cell => cell.value),
 );
 
 const statusMainCells = computed(() =>
@@ -412,19 +414,22 @@ function statusCellClass(label: string): string {
   return key ? `npc-status-cell--${key}` : '';
 }
 
-const NEAR_PLAN_LABELS = ['事件', '行为', '时段'] as const;
+const NEAR_PLAN_LABELS = ['事件', '行为', '时间'] as const;
 
 const nearPlanRows = computed(() => {
   const parts = props.npc.nearPlan;
   if (!parts.length) return [];
   if (parts.length === 1) {
-    return [{ key: 'plan', label: '内容', value: parts[0]! }];
+    const value = String(parts[0] ?? '').trim();
+    return value ? [{ key: 'plan', label: '内容', value }] : [];
   }
-  return parts.map((value, i) => ({
-    key: `p${i}`,
-    label: NEAR_PLAN_LABELS[i] ?? `项${i + 1}`,
-    value,
-  }));
+  return parts
+    .map((value, i) => ({
+      key: `p${i}`,
+      label: NEAR_PLAN_LABELS[i] ?? `项${i + 1}`,
+      value: String(value ?? '').trim(),
+    }))
+    .filter(row => row.value);
 });
 
 const memoryColumns = computed(() => {
