@@ -27,22 +27,44 @@ function templateMemoKey(
   return `${messageId}\0${options?.source ?? ''}\0${options?.role ?? ''}\0${text}`;
 }
 
-async function applyEjsTemplate(text: string, messageId: number): Promise<string> {
-  if (!text || typeof EjsTemplate === 'undefined') return text;
+type EjsEvalFn = (code: string, context?: Record<string, unknown>) => Promise<string>;
 
-  const evalFn =
-    typeof EjsTemplate.evaltemplate === 'function'
-      ? EjsTemplate.evaltemplate.bind(EjsTemplate)
-      : typeof (EjsTemplate as { evalTemplate?: typeof EjsTemplate.evaltemplate }).evalTemplate === 'function'
-        ? (EjsTemplate as { evalTemplate: typeof EjsTemplate.evaltemplate }).evalTemplate.bind(EjsTemplate)
-        : null;
-  if (!evalFn) return text;
+type EjsTemplateHost = {
+  evaltemplate?: EjsEvalFn;
+  evalTemplate?: EjsEvalFn;
+  prepareContext?: (additional: Record<string, unknown>, messageId: number) => Promise<Record<string, unknown>>;
+};
+
+function asEjsHost(value: unknown): EjsTemplateHost | null {
+  if (!value || typeof value !== 'object') return null;
+  return value as EjsTemplateHost;
+}
+
+function evalFnOf(host: EjsTemplateHost | null): EjsEvalFn | null {
+  if (!host) return null;
+  if (typeof host.evaltemplate === 'function') return host.evaltemplate.bind(host);
+  if (typeof host.evalTemplate === 'function') return host.evalTemplate.bind(host);
+  return null;
+}
+
+/** 脚本窗口创建时只抄一次父页面接口；调用时再读父页面上的活对象。 */
+function resolveEjsTemplateHost(): EjsTemplateHost | null {
+  const local = typeof EjsTemplate === 'undefined' ? null : asEjsHost(EjsTemplate);
+  if (evalFnOf(local)) return local;
+  if (typeof window === 'undefined' || !window.parent || window.parent === window) return null;
+  const parentHost = asEjsHost((window.parent as Window & { EjsTemplate?: unknown }).EjsTemplate);
+  if (evalFnOf(parentHost)) return parentHost;
+  return null;
+}
+
+async function applyEjsTemplate(text: string, messageId: number): Promise<string> {
+  if (!text) return text;
+  const host = resolveEjsTemplateHost();
+  const evalFn = evalFnOf(host);
+  if (!host || !evalFn) return text;
 
   try {
-    const prepareFn =
-      typeof EjsTemplate.prepareContext === 'function'
-        ? EjsTemplate.prepareContext.bind(EjsTemplate)
-        : null;
+    const prepareFn = typeof host.prepareContext === 'function' ? host.prepareContext.bind(host) : null;
     const context = prepareFn ? await prepareFn({}, messageId) : {};
     return await evalFn(text, context);
   } catch (error) {

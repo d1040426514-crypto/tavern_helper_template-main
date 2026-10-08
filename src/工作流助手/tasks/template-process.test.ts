@@ -71,6 +71,97 @@ test('processTemplateText runs EJS and a second macro pass when tags exist', asy
   assert.equal(stats.macroCalls, 2);
 });
 
+test('processTemplateText uses parent evalTemplate when the script has no EjsTemplate', async () => {
+  const g = globalThis as typeof globalThis & {
+    EjsTemplate?: unknown;
+    window?: { parent?: { EjsTemplate?: unknown } };
+    formatAsTavernRegexedString: (text: string) => string;
+    substitudeMacros: (text: string) => string;
+    getLastMessageId: () => number;
+  };
+  const prev = {
+    EjsTemplate: g.EjsTemplate,
+    window: g.window,
+    formatAsTavernRegexedString: g.formatAsTavernRegexedString,
+    substitudeMacros: g.substitudeMacros,
+    getLastMessageId: g.getLastMessageId,
+  };
+  let evalCalls = 0;
+  let preparedMessageId = -1;
+  g.formatAsTavernRegexedString = text => text;
+  g.substitudeMacros = text => text;
+  g.getLastMessageId = () => 1;
+  delete g.EjsTemplate;
+  g.window = {
+    parent: {
+      EjsTemplate: {
+        prepareContext: async (_env: Record<string, unknown>, messageId: number) => {
+          preparedMessageId = messageId;
+          return {};
+        },
+        evalTemplate: async (text: string) => {
+          evalCalls += 1;
+          return `${text}|parent`;
+        },
+      },
+    },
+  };
+  try {
+    const out = await processTemplateText('<% x %>', 4, { source: 'slash_command' });
+    assert.equal(out, '<% x %>|parent');
+    assert.equal(evalCalls, 1);
+    assert.equal(preparedMessageId, 4);
+  } finally {
+    g.EjsTemplate = prev.EjsTemplate;
+    g.window = prev.window;
+    g.formatAsTavernRegexedString = prev.formatAsTavernRegexedString;
+    g.substitudeMacros = prev.substitudeMacros;
+    g.getLastMessageId = prev.getLastMessageId;
+  }
+});
+
+test('processTemplateText keeps original text when no EjsTemplate is available', async () => {
+  const g = globalThis as typeof globalThis & {
+    EjsTemplate?: unknown;
+    window?: { parent?: Record<string, unknown> };
+    formatAsTavernRegexedString: (text: string) => string;
+    substitudeMacros: (text: string) => string;
+    getLastMessageId: () => number;
+  };
+  const prev = {
+    EjsTemplate: g.EjsTemplate,
+    window: g.window,
+    formatAsTavernRegexedString: g.formatAsTavernRegexedString,
+    substitudeMacros: g.substitudeMacros,
+    getLastMessageId: g.getLastMessageId,
+  };
+  g.formatAsTavernRegexedString = text => text;
+  g.substitudeMacros = text => text;
+  g.getLastMessageId = () => 1;
+  delete g.EjsTemplate;
+  g.window = { parent: {} };
+  try {
+    const out = await processTemplateText('<% x %>', 0, { source: 'slash_command' });
+    assert.equal(out, '<% x %>');
+  } finally {
+    g.EjsTemplate = prev.EjsTemplate;
+    g.window = prev.window;
+    g.formatAsTavernRegexedString = prev.formatAsTavernRegexedString;
+    g.substitudeMacros = prev.substitudeMacros;
+    g.getLastMessageId = prev.getLastMessageId;
+  }
+});
+
+test('processTemplateText keeps original text when EJS evaluation throws', async () => {
+  installTemplateGlobals({
+    evaltemplate: async () => {
+      throw new Error('模板语法错误');
+    },
+  });
+  const out = await processTemplateText('<% x %>', 0, { source: 'slash_command' });
+  assert.equal(out, '<% x %>');
+});
+
 test('processTemplateText memoizes identical inputs within a run', async () => {
   const stats = installTemplateGlobals({
     macro: text => `${text}|m`,
