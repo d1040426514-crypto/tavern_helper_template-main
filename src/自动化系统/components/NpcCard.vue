@@ -17,7 +17,11 @@
         <span class="npc-name-icon">💠</span>
         {{ npc.name }}
       </div>
-      <div v-if="npc.socialIdentity.length" class="npc-identity-inline" title="社会身份">
+      <div
+        v-if="npc.socialIdentity.length || npc.lifeArchive.lifeTier"
+        class="npc-identity-inline"
+      >
+        <span v-if="npc.lifeArchive.lifeTier" class="npc-identity-tag npc-identity-tag--tier" title="生命层级">{{ npc.lifeArchive.lifeTier }}</span>
         <span
           v-for="(id, i) in npc.socialIdentity"
           :key="'id' + i"
@@ -41,11 +45,11 @@
         <div v-if="lifeChips.length" class="npc-life-row" aria-label="生命档案">
           <span
             v-for="chip in lifeChips"
-            :key="chip.key"
+            :key="chip.id || chip.key"
             class="npc-life-chip"
             :class="[chip.tone ? `npc-life-chip--${chip.tone}` : '', `npc-life-chip--${chip.key}`]"
           >
-            <span class="npc-life-k">{{ chip.label }}</span>
+            <span v-if="chip.label" class="npc-life-k">{{ chip.label }}</span>
             <span class="npc-life-v">{{ chip.value }}</span>
           </span>
         </div>
@@ -297,13 +301,10 @@
         </div>
       </section>
 
-      <!-- 记忆：三类等宽栏，统一列表样式 -->
+      <!-- 记忆：分类成块，每条独占一行 -->
       <section v-if="memoryColumns.length" class="npc-section npc-memory-section">
         <header class="npc-section-head">🧠 记忆</header>
-        <div
-          class="npc-memory-grid"
-          :style="{ '--mem-cols': String(memoryColumns.length) }"
-        >
+        <div class="npc-memory-grid">
           <article
             v-for="col in memoryColumns"
             :key="col.key"
@@ -316,7 +317,10 @@
               <span class="npc-memory-count">{{ col.items.length }}</span>
             </header>
             <ol class="npc-memory-list">
-              <li v-for="(m, i) in col.items" :key="col.key + i">{{ m }}</li>
+              <li v-for="(m, i) in col.items" :key="col.key + i">
+                <span class="npc-memory-idx">{{ i + 1 }}</span>
+                <span class="npc-memory-text">{{ m }}</span>
+              </li>
             </ol>
           </article>
         </div>
@@ -387,7 +391,7 @@ const socialCount = computed(() =>
 
 const lifeChips = computed(() => {
   const life = props.npc.lifeArchive;
-  const rows: Array<{ key: string; label: string; value: string; tone?: string }> = [];
+  const rows: Array<{ id?: string; key: string; label: string; value: string; tone?: string }> = [];
   if (life.race) rows.push({ key: 'race', label: '种族', value: life.race });
   if (life.gender) {
     rows.push({ key: 'gender', label: '性别', value: life.gender, tone: genderTone(life.gender) });
@@ -395,10 +399,18 @@ const lifeChips = computed(() => {
   if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
-  if (life.lifeTier) rows.push({ key: 'tier', label: '生命层级', value: life.lifeTier });
-  if (life.trait) rows.push({ key: 'trait', label: '特质', value: life.trait });
+  splitTraits(life.trait).forEach((trait, i) => {
+    rows.push({ id: `trait${i}`, key: 'trait', label: '', value: trait });
+  });
   return rows;
 });
+
+function splitTraits(raw: string): string[] {
+  return String(raw ?? '')
+    .split(/[，,；;、|]+/)
+    .map(part => part.trim())
+    .filter(part => part && part !== '无');
+}
 
 /** 只区分男/雄与女/雌。其余写法不单独配色。 */
 function genderTone(value: string): 'male' | 'female' | '' {
@@ -415,6 +427,7 @@ const hasBody = computed(() => {
   const n = props.npc;
   return !!(
     lifeChips.value.length ||
+    n.lifeArchive.lifeTier ||
     n.wealth ||
     n.reputation.length ||
     n.actionChain.length ||
@@ -666,6 +679,15 @@ const memoryColumns = computed(() => {
   color: var(--accent-gold);
   border: 1px solid color-mix(in srgb, var(--accent-gold) 35%, var(--border-subtle));
   letter-spacing: 0.1px;
+}
+
+.npc-identity-tag--tier {
+  border-radius: 999px;
+  padding: 0.12em 0.55em;
+  background: color-mix(in srgb, var(--accent-sky) 18%, var(--bg-step));
+  color: var(--accent-sky);
+  border-color: color-mix(in srgb, var(--accent-sky) 48%, var(--border-subtle));
+  font-weight: 700;
 }
 
 .npc-identity-empty {
@@ -1031,6 +1053,13 @@ const memoryColumns = computed(() => {
 
   &--trait {
     white-space: normal;
+    font-weight: 650;
+    background: color-mix(in srgb, var(--accent-coral) 14%, var(--bg-panel, var(--bg-step)));
+    border-color: color-mix(in srgb, var(--accent-coral) 36%, var(--border-subtle));
+
+    .npc-life-v {
+      color: var(--text-primary);
+    }
   }
 }
 
@@ -1150,7 +1179,7 @@ const memoryColumns = computed(() => {
 }
 
 .npc-ties .npc-chip-flow--fill {
-  grid-template-columns: 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.28em;
 }
 
@@ -1459,10 +1488,13 @@ const memoryColumns = computed(() => {
     padding: 0.34em;
   }
 
-  /* 身处环境 / 当前状态：各自成卡，窄屏改为上下排列 */
+  /* 身处环境 / 当前状态：本就各占一行；窄屏里动作和穿着也改回单列 */
   .npc-presence {
-    grid-template-columns: 1fr;
     gap: 0.45em;
+  }
+
+  .npc-presence-stack {
+    grid-template-columns: 1fr;
   }
 
   .npc-presence-card {
@@ -1479,8 +1511,9 @@ const memoryColumns = computed(() => {
     gap: 0.5em;
   }
 
+  .npc-ties .npc-chip-flow--fill,
   .npc-chip-flow--fill {
-    grid-template-columns: repeat(auto-fill, minmax(8.5em, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .npc-bg-name {
@@ -1497,18 +1530,14 @@ const memoryColumns = computed(() => {
     grid-template-columns: 1fr;
   }
 
-  /* 记忆：窄屏由 container / auto-fit 自行单列；此处只调可读性 */
+  /* 记忆：每条独占一行 */
   .npc-memory-col {
-    padding: 0.55em 0.65em;
-  }
-
-  .npc-memory-list {
-    gap: 0.45em;
+    padding: 0.45em 0.5em 0.5em;
   }
 
   .npc-memory-list li {
-    font-size: 0.8em;
-    line-height: 1.55;
+    font-size: 0.78em;
+    line-height: 1.5;
   }
 
   .npc-chain-section {
@@ -1567,17 +1596,12 @@ const memoryColumns = computed(() => {
   min-width: 0;
 }
 
-/* 身处环境与当前状态：两张独立卡片。宽屏并排，窄屏上下排。长描述独占一行。 */
+/* 身处环境、当前状态各自独占一行，卡片只跟自己的内容长 */
 .npc-presence {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18em), 1fr));
+  display: flex;
+  flex-direction: column;
   gap: 0.55em;
   width: 100%;
-  align-items: start;
-
-  &:has(> :only-child) {
-    grid-template-columns: 1fr;
-  }
 }
 
 .npc-presence-card {
@@ -1632,6 +1656,7 @@ const memoryColumns = computed(() => {
 .npc-presence-facts {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 0.35em;
 }
 
@@ -1660,9 +1685,14 @@ const memoryColumns = computed(() => {
 }
 
 .npc-presence-stack {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.35em;
+  align-items: start;
+
+  > :last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
 }
 
 .npc-presence-k {
@@ -1794,26 +1824,16 @@ const memoryColumns = computed(() => {
   }
 }
 
-/* 记忆：按卡片实际宽度自适应；窄屏单列，宽屏再分栏（iframe 内 media 常不准） */
+/* 记忆：分类上下分块，条目横向并排，窄了再换行 */
 .npc-memory-section {
   gap: 0.45em;
-  container-type: inline-size;
-  container-name: npc-memory;
 }
 
 .npc-memory-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: 0.55em;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45em;
   width: 100%;
-  align-items: stretch;
-}
-
-@container npc-memory (min-width: 36rem) {
-  .npc-memory-grid {
-    grid-template-columns: repeat(var(--mem-cols, 3), minmax(0, 1fr));
-    gap: 0.5em;
-  }
 }
 
 .npc-memory-col {
@@ -1864,24 +1884,53 @@ const memoryColumns = computed(() => {
 
 .npc-memory-list {
   margin: 0;
-  padding: 0 0 0 1.2em;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4em;
-  list-style: decimal;
+  gap: 0;
+  list-style: none;
 }
 
 .npc-memory-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4em;
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0.38em 0;
   font-size: 0.78em;
   line-height: 1.55;
   color: var(--text-secondary);
   word-break: break-word;
   overflow-wrap: anywhere;
-  padding-left: 0.15em;
+  background: none;
+  border: none;
+  border-radius: 0;
+
+  & + li {
+    border-top: 1px dashed color-mix(in srgb, var(--border-subtle) 85%, transparent);
+  }
+}
+
+.npc-memory-idx {
+  flex: 0 0 auto;
+  font-weight: 700;
+  font-size: 0.85em;
+  line-height: 1.5;
+  color: var(--accent-lavender);
+}
+
+.npc-memory-text {
+  min-width: 0;
 }
 
 .npc-memory-col--core .npc-memory-list li {
   color: var(--text-primary);
+}
+
+.npc-memory-col--core .npc-memory-idx {
+  color: var(--accent-gold);
 }
 
 /* —— 可选任务模块 —— */
