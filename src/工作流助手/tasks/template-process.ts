@@ -1,7 +1,4 @@
-import {
-  applyTavernPromptMacros,
-  type ApplyTavernPromptMacrosOptions,
-} from './helper-macros';
+import { applyTavernPromptMacros, type ApplyTavernPromptMacrosOptions } from './helper-macros';
 
 /** 对后处理文本应用酒馆宏、助手宏与提示词模板 EJS（在脚本占位符替换之后调用） */
 
@@ -19,11 +16,25 @@ export function hasEjsTemplateTags(text: string): boolean {
   return text.includes('<%');
 }
 
-function templateMemoKey(
-  text: string,
-  messageId: number,
-  options?: ApplyTavernPromptMacrosOptions,
-): string {
+/**
+ * 变量宏、`.name` / `$name` 简写和酒馆助手变量宏会读写当前变量。
+ * 时钟与随机宏每次结果都可能不同。
+ * EJS 可任意读变量、取时间或随机，不按函数名逐个识别。
+ * 这些文本命中缓存会跳过宏副作用，因此每次都重新处理。
+ */
+const STATEFUL_TEMPLATE_MACROS = [
+  /\{\{\s*(?:(?:set|get|add|inc|dec|delete|flush|has)(?:global)?var|roll|random|pick)\b/i,
+  /\{\{\s*[.$][A-Za-z]/,
+  /\{\{\s*(?:get|format)_(?:global|preset|character|chat|message|script|extension)_variable(?:_quoted)?\b/i,
+  /\{\{\s*(?:weekday|isotime|isodate|datetimeformat|datetime|idleDuration|idle_duration|timeDiff|time_UTC|time|date)\b/i,
+  /\{\{\s*(?:total:|replica:launched:)/i,
+];
+
+function isMemoizableTemplate(text: string): boolean {
+  return !hasEjsTemplateTags(text) && !STATEFUL_TEMPLATE_MACROS.some(pattern => pattern.test(text));
+}
+
+function templateMemoKey(text: string, messageId: number, options?: ApplyTavernPromptMacrosOptions): string {
   return `${messageId}\0${options?.source ?? ''}\0${options?.role ?? ''}\0${text}`;
 }
 
@@ -99,7 +110,7 @@ export async function processTemplateText(
   if (!text?.trim()) return text ?? '';
 
   const memo = templateMemo;
-  if (!memo) {
+  if (!memo || !isMemoizableTemplate(text)) {
     return processTemplateTextUncached(text, messageId, options);
   }
 
