@@ -130,7 +130,7 @@
 
       <!-- 此刻：行为链、身处环境、当前状态、现场人物收成一块 -->
       <section
-        v-if="npc.actionChain.length || npc.predict || placeCells.length || stateCells.length || npc.companions.length || npc.sceneInteraction"
+        v-if="npc.actionChain.length || npc.predict || placeCells.length || stateCells.length || npc.companions.length"
         class="npc-now"
       >
         <div v-if="npc.actionChain.length || npc.predict" class="npc-chain-section">
@@ -189,7 +189,7 @@
           </section>
         </div>
 
-        <div v-if="npc.companions.length || npc.sceneInteraction" class="npc-scene-people">
+        <div v-if="npc.companions.length" class="npc-scene-people">
           <header class="npc-presence-head">
             <span class="npc-presence-ico" aria-hidden="true">👥</span>
             <span>现场人物</span>
@@ -208,10 +208,6 @@
               </span>
             </template>
           </div>
-          <p v-if="npc.sceneInteraction" class="npc-scene-interaction">
-            <span class="npc-scene-interaction-k">互动</span>
-            <span>{{ npc.sceneInteraction }}</span>
-          </p>
         </div>
       </section>
 
@@ -247,12 +243,31 @@
             v-for="(log, li) in npc.questLogs"
             :key="'qlog' + li"
             class="npc-subcard npc-quest-card"
+            :class="log.status ? `npc-quest-card--${log.status}` : ''"
           >
             <div class="npc-quest-card-top">
               <span class="npc-quest-kind" :class="questKindClass(log.kind)">{{ log.kind || '任务' }}</span>
+              <span
+                v-if="log.status"
+                class="npc-quest-state"
+                :class="`npc-quest-state--${log.status}`"
+              >{{ questTaskStatusLabel(log.status) }}</span>
               <span class="npc-quest-title">{{ log.title }}</span>
             </div>
             <p v-if="log.summary" class="npc-quest-summary">{{ log.summary }}</p>
+            <div
+              v-if="log.pauseReason || log.resumeCondition"
+              class="npc-quest-pause"
+            >
+              <div v-if="log.pauseReason" class="npc-quest-pause-row">
+                <span class="npc-quest-pause-k">搁置原因</span>
+                <span>{{ log.pauseReason }}</span>
+              </div>
+              <div v-if="log.resumeCondition" class="npc-quest-pause-row">
+                <span class="npc-quest-pause-k">恢复条件</span>
+                <span>{{ log.resumeCondition }}</span>
+              </div>
+            </div>
             <ul v-if="log.items.length" class="npc-quest-items">
               <li
                 v-for="(item, ii) in log.items"
@@ -331,7 +346,7 @@
 
 <script setup lang="ts">
 import { getReputationClass, getWealthClass, getWealthEmoji } from '../parse';
-import { STATUS_LABELS, type NpcCard, type QuestItemStatus } from '../types';
+import { STATUS_LABELS, type NpcCard, type QuestItemStatus, type QuestTaskStatus } from '../types';
 
 const props = defineProps<{ npc: NpcCard }>();
 
@@ -349,6 +364,12 @@ function questStatusMark(status: QuestItemStatus): string {
   if (status === 'done') return '☑';
   if (status === 'active') return '▶';
   return '☐';
+}
+
+function questTaskStatusLabel(status: QuestTaskStatus): string {
+  if (status === 'active') return '活跃';
+  if (status === 'shelved') return '搁置';
+  return '';
 }
 
 function questKindClass(kind: string): string {
@@ -434,7 +455,6 @@ const hasBody = computed(() => {
     n.predict ||
     n.statusParts.length ||
     n.companions.length ||
-    n.sceneInteraction ||
     n.socialNetwork.length ||
     showBackgroundCard.value ||
     n.longGoal ||
@@ -489,14 +509,13 @@ function presenceFactClass(label: string): string {
   return '';
 }
 
-/** 现场人物括号：为何在场/此刻/接下来。旧的两段只显示前两段。 */
+/** 现场人物括号：为何在场/状态短签。 */
 function companionNoteText(note: string): string {
   const parts = String(note ?? '')
     .split(/\s*[/／]\s*/)
     .map(part => part.trim())
     .filter(Boolean);
-  if (parts.length >= 3) return `${parts[0]} · ${parts[1]} · 接下来${parts.slice(2).join('/')}`;
-  if (parts.length === 2) return `${parts[0]} · ${parts[1]}`;
+  if (parts.length >= 2) return `${parts[0]} · ${parts[1]}`;
   return String(note ?? '').trim();
 }
 
@@ -1117,22 +1136,6 @@ const memoryColumns = computed(() => {
     flex-wrap: wrap;
     gap: 0.28em;
   }
-}
-
-.npc-scene-interaction {
-  display: flex;
-  align-items: baseline;
-  gap: 0.35em;
-  margin: 0.08em 0 0;
-  font-size: 0.72em;
-  line-height: 1.45;
-  color: var(--text-secondary);
-}
-
-.npc-scene-interaction-k {
-  flex: 0 0 auto;
-  font-weight: 700;
-  color: var(--accent-sky);
 }
 
 .npc-relations-head {
@@ -1967,6 +1970,15 @@ const memoryColumns = computed(() => {
   min-width: 0;
   min-height: 100%;
   height: 100%;
+
+  &--active {
+    border-color: color-mix(in srgb, var(--accent-mint) 42%, var(--border-subtle));
+  }
+
+  &--shelved {
+    border-color: color-mix(in srgb, var(--accent-lavender) 38%, var(--border-subtle));
+    background: color-mix(in srgb, var(--accent-lavender) 6%, var(--bg-panel, var(--bg-step)));
+  }
 }
 
 .npc-quest-card-top {
@@ -1986,6 +1998,29 @@ const memoryColumns = computed(() => {
   border-radius: 4px;
   border: 1px solid var(--border-subtle);
   line-height: 1.3;
+}
+
+.npc-quest-state {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 0.62em;
+  font-weight: 700;
+  line-height: 1.3;
+  padding: 0.12em 0.45em;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+
+  &--active {
+    color: var(--accent-mint);
+    background: color-mix(in srgb, var(--accent-mint) 16%, transparent);
+    border-color: color-mix(in srgb, var(--accent-mint) 40%, var(--border-subtle));
+  }
+
+  &--shelved {
+    color: var(--accent-lavender);
+    background: color-mix(in srgb, var(--accent-lavender) 14%, transparent);
+    border-color: color-mix(in srgb, var(--accent-lavender) 38%, var(--border-subtle));
+  }
 }
 
 .quest-kind--main {
@@ -2032,6 +2067,30 @@ const memoryColumns = computed(() => {
   line-height: 1.45;
   color: var(--text-muted);
   word-break: break-word;
+}
+
+.npc-quest-pause {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+  padding: 0.32em 0.42em;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--accent-lavender) 10%, var(--bg-card));
+  border: 1px solid color-mix(in srgb, var(--accent-lavender) 26%, var(--border-subtle));
+}
+
+.npc-quest-pause-row {
+  display: grid;
+  grid-template-columns: 4.4em minmax(0, 1fr);
+  gap: 0.4em;
+  font-size: 0.68em;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.npc-quest-pause-k {
+  font-weight: 700;
+  color: var(--accent-lavender);
 }
 
 .npc-quest-items,

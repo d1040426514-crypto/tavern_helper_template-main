@@ -13,6 +13,7 @@ import {
   type QuestItem,
   type QuestItemStatus,
   type QuestLog,
+  type QuestTaskStatus,
   type ReputationClass,
   type WealthClass,
 } from './types';
@@ -305,13 +306,6 @@ function parseIndentedPeople(body: string): NpcCard['socialNetwork'] {
   return groups.filter(g => g.people.length);
 }
 
-function readSceneInteraction(section: FieldSection | null): string {
-  const value = nestedInline(section, '互动');
-  if (value === null) return '';
-  const text = softTrim(value);
-  return !text || text === '无' ? '' : text;
-}
-
 function readPeopleSection(section: FieldSection | null): NpcCard['socialNetwork'] {
   if (!section) return [];
   if (section.inline === '无') return [];
@@ -493,7 +487,10 @@ export function parseQuestLog(inner: string): QuestLog | null {
   const lines = text.split(/\r?\n/);
   let kind = '';
   let title = '';
+  let taskStatus: QuestTaskStatus = '';
   let summary = '';
+  let pauseReason = '';
+  let resumeCondition = '';
   let climax = '';
   const items: QuestItem[] = [];
   let lastTop: QuestItem | null = null;
@@ -511,9 +508,20 @@ export function parseQuestLog(inner: string): QuestLog | null {
       }
     }
 
-    const summaryMatch = rawLine.match(/^\s*任务简述\s*[:：]\s*(.*)$/i);
-    if (summaryMatch) {
-      summary = softTrim(summaryMatch[1] ?? '');
+    const fieldMatch = rawLine.match(/^\s*(任务状态|任务简述|搁置原因|恢复条件)\s*[:：]\s*(.*)$/i);
+    if (fieldMatch) {
+      const label = softTrim(fieldMatch[1] ?? '');
+      const value = softTrim(fieldMatch[2] ?? '');
+      if (label === '任务状态') {
+        if (value === '活跃') taskStatus = 'active';
+        else if (value === '搁置') taskStatus = 'shelved';
+      } else if (label === '任务简述') {
+        summary = value;
+      } else if (label === '搁置原因') {
+        pauseReason = value;
+      } else if (label === '恢复条件') {
+        resumeCondition = value;
+      }
       continue;
     }
 
@@ -538,7 +546,16 @@ export function parseQuestLog(inner: string): QuestLog | null {
   }
 
   if (!kind && !title) return null;
-  return { kind, title, summary, items, climax };
+  return {
+    kind,
+    title,
+    status: taskStatus,
+    summary,
+    pauseReason,
+    resumeCondition,
+    items,
+    climax,
+  };
 }
 
 /** 解析 <quest_archive> 内文；最多 5 条 */
@@ -575,7 +592,6 @@ function emptyNpc(name: string): NpcCard {
     socialIdentity: [],
     socialNetwork: [],
     companions: [],
-    sceneInteraction: '',
     background: emptyBackground(),
     lifeArchive: emptyLifeArchive(),
     longGoal: '',
@@ -653,7 +669,6 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
   npc.socialNetwork = readPeopleSection(readSection(body, '社交网络'));
   const peopleSection = readSection(body, '现场人物') ?? readSection(body, '身边人物');
   npc.companions = readPeopleSection(peopleSection);
-  npc.sceneInteraction = readSceneInteraction(peopleSection);
   npc.background = readBackground(readSection(body, '背景关联'));
   npc.longGoal = fieldLine(body, '长期目标');
 
@@ -688,7 +703,6 @@ export function parseNpcBlock(text: string, fallbackName = ''): NpcCard {
     !npc.reputation.length &&
     !npc.socialNetwork.length &&
     !npc.companions.length &&
-    !npc.sceneInteraction &&
     !hasLifeArchive(npc.lifeArchive) &&
     !hasBg &&
     !hasQuest

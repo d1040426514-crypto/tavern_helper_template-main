@@ -41,6 +41,7 @@ export type NpcLifeArchive = {
 };
 
 export type QuestItemStatus = 'done' | 'active' | 'todo';
+export type QuestTaskStatus = 'active' | 'shelved' | '';
 
 export type QuestItem = {
   status: QuestItemStatus;
@@ -51,7 +52,13 @@ export type QuestItem = {
 export type QuestLog = {
   kind: string;
   title: string;
+  /** 任务级状态；旧格式没有该字段时为空 */
+  status: QuestTaskStatus;
   summary: string;
+  /** 仅搁置任务使用 */
+  pauseReason: string;
+  /** 仅搁置任务使用 */
+  resumeCondition: string;
   items: QuestItem[];
   /** 收束场景，可空 */
   climax: string;
@@ -76,8 +83,6 @@ export type NpcCard = {
   socialIdentity: string[];
   socialNetwork: NpcSocialGroup[];
   companions: NpcSocialGroup[];
-  /** 现场人物之间的小互动。无则空 */
-  sceneInteraction: string;
   background: NpcBackground;
   lifeArchive: NpcLifeArchive;
   longGoal: string;

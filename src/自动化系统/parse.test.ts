@@ -100,10 +100,9 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   状态: 精神清醒
 现场人物:
   [同行]
-    王芳(探路/警惕/准备回府)
+    王芳(探路/警惕)
   [随从]
-    小厮二人(提灯/待命/守在巷口)
-  互动: 王芳向小厮低声吩咐
+    小厮二人(提灯/待命)
 长期目标: 光复家业
 近期打算:
   事件: 调查走私
@@ -157,9 +156,8 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.companions.length, 2);
   assert.equal(npc.companions[0]!.category, '同行');
   assert.equal(npc.companions[0]!.people[0]!.name, '王芳');
-  assert.equal(npc.companions[0]!.people[0]!.note, '探路/警惕/准备回府');
+  assert.equal(npc.companions[0]!.people[0]!.note, '探路/警惕');
   assert.equal(npc.companions[1]!.category, '随从');
-  assert.equal(npc.sceneInteraction, '王芳向小厮低声吩咐');
   assert.deepEqual(npc.recentMemories, ['昨夜见黑影', '收到密信']);
   assert.deepEqual(npc.settledMemories, ['三年前出走']);
   assert.deepEqual(npc.coreMemories, ['父亲托付玉佩']);
@@ -394,6 +392,7 @@ test('buildChronicle empty names still yield empty card when listed', () => {
 
 test('parseQuestLog parses items children and climax', () => {
   const log = parseQuestLog(`【支线】药材调拨
+  任务状态: 活跃
   任务简述:协调炼金公会补缺口
   ☑ 提交隔离方案
   ▶ 催促药剂出库
@@ -404,7 +403,10 @@ test('parseQuestLog parses items children and climax', () => {
   assert.ok(log);
   assert.equal(log!.kind, '支线');
   assert.equal(log!.title, '药材调拨');
+  assert.equal(log!.status, 'active');
   assert.equal(log!.summary, '协调炼金公会补缺口');
+  assert.equal(log!.pauseReason, '');
+  assert.equal(log!.resumeCondition, '');
   assert.equal(log!.items.length, 3);
   assert.equal(log!.items[0]!.status, 'done');
   assert.equal(log!.items[1]!.status, 'active');
@@ -436,14 +438,18 @@ test('parseNpcBlock optional quest_log and quest_archive', () => {
 <quest>
 <quest_log>
 【委托】夜巡补给
+  任务状态: 活跃
   任务简述:为哨所送灯油
   ☑ 领取灯油
   ▶ 送往北哨
 </quest_log>
 <quest_log>
 【角色线】给多米娜回信
+  任务状态: 搁置
   任务简述:写完近三千字长信
-  ▶ 润色收尾
+  搁置原因: 驿路因暴雪封闭
+  恢复条件: 驿路重新开放
+  ☐ 润色收尾
   ☐ 交驿使
     ☐ 附润肺膏
   📅 驿站发信
@@ -458,7 +464,11 @@ test('parseNpcBlock optional quest_log and quest_archive', () => {
   assert.equal(npc.questLogs.length, 2);
   assert.equal(npc.questLogs[0]!.kind, '委托');
   assert.equal(npc.questLogs[0]!.title, '夜巡补给');
+  assert.equal(npc.questLogs[0]!.status, 'active');
   assert.equal(npc.questLogs[1]!.kind, '角色线');
+  assert.equal(npc.questLogs[1]!.status, 'shelved');
+  assert.equal(npc.questLogs[1]!.pauseReason, '驿路因暴雪封闭');
+  assert.equal(npc.questLogs[1]!.resumeCondition, '驿路重新开放');
   assert.equal(npc.questLogs[1]!.items[1]!.children[0]!.text, '附润肺膏');
   assert.equal(npc.questLogs[1]!.climax, '驿站发信');
   assert.equal(npc.questArchive.length, 2);
