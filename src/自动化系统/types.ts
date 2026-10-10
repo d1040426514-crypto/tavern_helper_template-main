@@ -36,8 +36,6 @@ export type NpcLifeArchive = {
   remainingLife: string;
   /** 可选。世界观无层级时为空 */
   lifeTier: string;
-  /** 特殊体质或生命特质。无则空 */
-  trait: string;
 };
 
 export type QuestItemStatus = 'done' | 'active' | 'todo';

@@ -354,13 +354,11 @@ function readLifeArchive(body: string): NpcLifeArchive {
     ['性别', 'gender'],
     ['年龄', 'age'],
     ['剩余寿命', 'remainingLife'],
-    ['特质', 'trait'],
   ];
   for (const [label, key] of fields) {
     const section = readSection(source, label);
     if (!section) continue;
-    const value = softTrim(section.inline);
-    life[key] = key === 'trait' && (!value || value === '无') ? '' : value;
+    life[key] = softTrim(section.inline);
   }
   const tier = readSection(source, '生命层级');
   if (tier) life.lifeTier = normalizeLifeTier(tier.inline);
@@ -431,7 +429,7 @@ function parseBackground(raw: string): NpcCard['background'] {
 }
 
 function emptyLifeArchive(): NpcLifeArchive {
-  return { birthday: '', race: '', gender: '', age: '', remainingLife: '', lifeTier: '', trait: '' };
+  return { birthday: '', race: '', gender: '', age: '', remainingLife: '', lifeTier: '' };
 }
 
 /** 「无」、空白或空括号视为未写；层级名后的空括号去掉。 */
@@ -612,8 +610,7 @@ function hasLifeArchive(life: NpcLifeArchive): boolean {
     life.gender ||
     life.age ||
     life.remainingLife ||
-    life.lifeTier ||
-    life.trait
+    life.lifeTier
   );
 }
 

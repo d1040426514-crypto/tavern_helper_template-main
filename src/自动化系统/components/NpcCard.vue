@@ -45,7 +45,7 @@
         <div v-if="lifeChips.length" class="npc-life-row" aria-label="生命档案">
           <span
             v-for="chip in lifeChips"
-            :key="chip.id || chip.key"
+            :key="chip.key"
             class="npc-life-chip"
             :class="[chip.tone ? `npc-life-chip--${chip.tone}` : '', `npc-life-chip--${chip.key}`]"
           >
@@ -412,7 +412,7 @@ const socialCount = computed(() =>
 
 const lifeChips = computed(() => {
   const life = props.npc.lifeArchive;
-  const rows: Array<{ id?: string; key: string; label: string; value: string; tone?: string }> = [];
+  const rows: Array<{ key: string; label: string; value: string; tone?: string }> = [];
   if (life.race) rows.push({ key: 'race', label: '种族', value: life.race });
   if (life.gender) {
     rows.push({ key: 'gender', label: '性别', value: life.gender, tone: genderTone(life.gender) });
@@ -420,18 +420,8 @@ const lifeChips = computed(() => {
   if (life.birthday) rows.push({ key: 'birthday', label: '生日', value: life.birthday });
   if (life.age) rows.push({ key: 'age', label: '年龄', value: life.age });
   if (life.remainingLife) rows.push({ key: 'life', label: '剩余寿命', value: life.remainingLife });
-  splitTraits(life.trait).forEach((trait, i) => {
-    rows.push({ id: `trait${i}`, key: 'trait', label: '', value: trait });
-  });
   return rows;
 });
-
-function splitTraits(raw: string): string[] {
-  return String(raw ?? '')
-    .split(/[，,；;、|]+/)
-    .map(part => part.trim())
-    .filter(part => part && part !== '无');
-}
 
 /** 只区分男/雄与女/雌。其余写法不单独配色。 */
 function genderTone(value: string): 'male' | 'female' | '' {
@@ -1067,17 +1057,6 @@ const memoryColumns = computed(() => {
 
     .npc-life-k {
       color: var(--accent-gold);
-    }
-  }
-
-  &--trait {
-    white-space: normal;
-    font-weight: 650;
-    background: color-mix(in srgb, var(--accent-coral) 14%, var(--bg-panel, var(--bg-step)));
-    border-color: color-mix(in srgb, var(--accent-coral) 36%, var(--border-subtle));
-
-    .npc-life-v {
-      color: var(--text-primary);
     }
   }
 }

@@ -59,7 +59,6 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   年龄: 30岁(青年)
   剩余寿命: 50年
   生命层级: 金丹初期(37%，心魔未消)
-  特质: 先天灵根
 资金状况: 手头宽裕
 声誉:
   官方: 小有名气
@@ -131,7 +130,6 @@ test('parseNpcBlock new format with file/dynamic fields', () => {
   assert.equal(npc.lifeArchive.age, '30岁(青年)');
   assert.equal(npc.lifeArchive.remainingLife, '50年');
   assert.equal(npc.lifeArchive.lifeTier, '金丹初期(37%，心魔未消)');
-  assert.equal(npc.lifeArchive.trait, '先天灵根');
   assert.equal(npc.wealth, '手头宽裕');
   assert.deepEqual(npc.reputation[0], { label: '官方', value: '小有名气' });
   assert.deepEqual(npc.reputation[2], { label: '暗域', value: '默默无闻' });
