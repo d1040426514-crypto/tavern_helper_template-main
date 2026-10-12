@@ -224,6 +224,32 @@ export async function saveApiPresetReferenceChange(
   saveSettings(display);
 }
 
+/**
+ * 没有聊天快照时，顶层工作副本以当前活动预设为准。
+ * 聊天里产生的副本和摘取标签只应留在聊天快照里。
+ */
+export function rehydrateWorkingCopyFromActivePreset(): boolean {
+  if (isChatOverrideActive(readChatTaskScope())) return false;
+  const settings = loadSettings();
+  const name = settings.activePresetName?.trim() ?? '';
+  if (!name) return false;
+  const preset = settings.presets.find(p => p.name === name);
+  if (!preset) return false;
+  const cleanedTasks = stripReplicaFamilyMembers(_.cloneDeep(preset.tasks));
+  const cleaned = { ...preset, name, tasks: cleanedTasks };
+  const members = settings.tasks.some(task => !!task.replicaFamilyRootId);
+  if (!members && _.isEqual(buildPresetFromSettings(settings, name), cleaned)) return false;
+  applyPresetFieldsToSettings(settings, cleaned);
+  ensureReplicaFamilyCleanupDefaults(settings);
+  saveSettings(settings);
+  try {
+    if (getActivePinia()) useSettingsStore().reload();
+  } catch {
+    /* 设置窗未挂载 */
+  }
+  return true;
+}
+
 /** 有快照时：以磁盘全局为底，只合并脚本级字段后保存 */
 export function saveScriptLevelSettingsFrom(display: ScriptSettings): void {
   const base = loadSettings();

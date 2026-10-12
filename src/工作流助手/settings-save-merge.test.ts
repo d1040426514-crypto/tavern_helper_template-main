@@ -34,3 +34,26 @@ test('mergePersistedScriptSettings replaces cleanup counts instead of keeping ol
   assert.equal(next.replicaFamilyCleanup.roundsSinceCleanup, 0);
   assert.equal(next.enabled, true);
 });
+
+test('mergePersistedScriptSettings replaces task lists and extract tags wholesale', () => {
+  const current = {
+    tasks: [{ name: '前台角色' }, { name: '前台角色 阿露卡' }, { name: '资产账本' }, { name: '资产账本' }],
+    chatExtractTags: { user: ['StoryEngine'], assistant: ['gametxt'] },
+    presets: [{ name: '甲', tasks: [{ name: '旧任务' }, { name: '残留' }] }],
+  };
+  const persisted = {
+    tasks: [{ name: '前台角色' }, { name: '后台角色' }, { name: '资产账本' }],
+    chatExtractTags: { user: ['StoryEngine'], assistant: [] },
+    presets: [{ name: '甲', tasks: [{ name: '前台角色' }, { name: '后台角色' }] }],
+  };
+  const next = mergePersistedScriptSettings(current, persisted);
+  assert.deepEqual(
+    next.tasks.map(task => task.name),
+    ['前台角色', '后台角色', '资产账本'],
+  );
+  assert.deepEqual(next.chatExtractTags.assistant, []);
+  assert.deepEqual(
+    next.presets[0]?.tasks.map(task => task.name),
+    ['前台角色', '后台角色'],
+  );
+});

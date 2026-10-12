@@ -17,7 +17,7 @@ import {
   consumeExtensionsMenuSoftUnload,
 } from './ui/extensions-menu';
 import { initApiSecretsStorage } from './settings/api-secrets-storage';
-import { loadSettings, useSettingsStore } from './settings';
+import { loadSettings, rehydrateWorkingCopyFromActivePreset, useSettingsStore } from './settings';
 import { updateGlobalTheme } from './ui/theme';
 import { ensureAcuToastStyles } from './ui/toast-styles';
 import { acuToast } from './ui/toast';
@@ -49,6 +49,7 @@ function handleOpenSettings(): void {
 }
 
 $(() => {
+  rehydrateWorkingCopyFromActivePreset();
   const menuEntry = registerExtensionsMenuEntry(handleOpenSettings);
   scriptReady = true;
 
@@ -82,6 +83,7 @@ $(() => {
 
   const offChatScopeNotify = eventOn(tavern_events.CHAT_CHANGED, () => {
     sanitizeGlobalTasksAfterChatChange();
+    rehydrateWorkingCopyFromActivePreset();
     const scope = readChatTaskScope();
     void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
   });
