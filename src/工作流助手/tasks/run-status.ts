@@ -200,23 +200,71 @@ export async function cleanupOldRunStatusSnapshots(keepFloors: number): Promise<
 
 /**
  * 删楼/换聊后：若缓存指向的楼已不存在，回退到仍存在的最近快照。
- * 同楼 mes 仍在时不覆盖 settings（settings 可能是完整日志，mes 仅为轻量）。
+ * 楼还在时保留完整日志里的提示词和输出，但任务名单和跳过标记以该楼快照为准，
+ * 避免按索引合并把上一轮多出来的任务留在后面。
  */
 export function retargetRunStatusCache(): void {
   const { loadSettings, saveSettings } = require('../settings') as typeof import('../settings');
   const settings = loadSettings();
-  const cachedId = settings.lastRunStatus?.messageId;
-  if (cachedId != null) {
-    const onFloor = readRunStatusFromMessage(cachedId);
-    if (onFloor) {
-      return;
-    }
+  const cached = settings.lastRunStatus;
+  const cachedId = cached?.messageId;
+  const onFloor = cachedId != null ? readRunStatusFromMessage(cachedId) : null;
+  const host = getChatHost();
+  if (!host || host.chat.length === 0) return;
+  if (onFloor) {
+    const aligned = alignRunStatusToFloor(cached, onFloor);
+    if (_.isEqual(aligned, cached)) return;
+    settings.lastRunStatus = aligned;
+    saveSettings(settings);
+    reloadRunLogView();
+    return;
   }
   const effective = resolveEffectiveRunStatus();
-  settings.lastRunStatus = effective
-    ? _.cloneDeep(effective)
-    : { taskResults: [] };
+  if (effective && runStatusIsHeavy(cached)) {
+    const aligned = alignRunStatusToFloor(cached, effective);
+    if (_.isEqual(aligned, cached)) return;
+    settings.lastRunStatus = aligned;
+  } else {
+    settings.lastRunStatus = effective ? _.cloneDeep(effective) : { taskResults: [] };
+  }
   saveSettings(settings);
+  reloadRunLogView();
+}
+
+function alignRunStatusToFloor(cached: LastRunStatus, floor: LastRunStatus): LastRunStatus {
+  const byId = new Map((cached?.taskResults ?? []).map(result => [result.taskId, result]));
+  return {
+    messageId: floor.messageId,
+    at: floor.at ?? cached?.at,
+    taskResults: (floor.taskResults ?? []).map(light => {
+      const heavy = light.taskId ? byId.get(light.taskId) : undefined;
+      if (!heavy) return _.cloneDeep(light);
+      const next = {
+        ..._.cloneDeep(heavy),
+        taskName: light.taskName,
+        stage: light.stage,
+        success: light.success,
+        preview: light.preview ?? heavy.preview,
+        durationMs: light.durationMs ?? heavy.durationMs,
+      };
+      if (light.skipped) next.skipped = true;
+      else delete next.skipped;
+      if (light.skipReason) next.skipReason = light.skipReason;
+      else delete next.skipReason;
+      return next;
+    }),
+  };
+}
+
+function reloadRunLogView(): void {
+  try {
+    const { getActivePinia } = require('pinia') as typeof import('pinia');
+    if (!getActivePinia()) return;
+    const { useSettingsStore } = require('../settings') as typeof import('../settings');
+    useSettingsStore().reload();
+  } catch {
+    /* 设置窗未挂载 */
+  }
 }
 
 /**

@@ -9,7 +9,7 @@ import { registerUserInputEndInjectTrigger } from './tasks/user-input-end-inject
 import { registerTagVariableInheritance } from './tasks/tag-variables';
 import { registerWorldbookWriteReconcile } from './worldbook/write-reconcile';
 import { registerReplicaReconcile } from './tasks/replica-reconcile';
-import { registerRunStatusRetarget } from './tasks/run-status';
+import { registerRunStatusRetarget, retargetRunStatusCache } from './tasks/run-status';
 import { openSettingsWindow, closeSettingsWindow } from './ui/mount-ui';
 import {
   registerExtensionsMenuEntry,
@@ -84,6 +84,7 @@ $(() => {
   const offChatScopeNotify = eventOn(tavern_events.CHAT_CHANGED, () => {
     sanitizeGlobalTasksAfterChatChange();
     rehydrateWorkingCopyFromActivePreset();
+    retargetRunStatusCache();
     const scope = readChatTaskScope();
     void emitChatScopeChanged(scope ? 'chat_override' : 'inherit_global', scope?.originPresetName);
   });

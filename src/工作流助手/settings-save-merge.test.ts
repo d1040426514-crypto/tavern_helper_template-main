@@ -57,3 +57,35 @@ test('mergePersistedScriptSettings replaces task lists and extract tags wholesal
     ['前台角色', '后台角色'],
   );
 });
+
+test('mergePersistedScriptSettings replaces lastRunStatus wholesale', () => {
+  const current = {
+    lastRunStatus: {
+      messageId: 6,
+      at: 1,
+      taskResults: [
+        { taskId: 'a', taskName: '角色筛选与交互', skipped: true, success: true },
+        { taskId: 'b', taskName: '前台角色 弗洛洛', skipped: true, success: true },
+        { taskId: 'c', taskName: '后台角色 莫尔', skipped: true, success: true },
+        { taskId: 'd', taskName: '前台角色 莫尔', success: true },
+      ],
+    },
+  };
+  const persisted = {
+    lastRunStatus: {
+      messageId: 6,
+      at: 1,
+      taskResults: [
+        { taskId: 'a', taskName: '角色筛选与交互', success: true },
+        { taskId: 'b', taskName: '前台角色 弗洛洛', success: true },
+        { taskId: 'c', taskName: '后台角色 莫尔', success: true },
+      ],
+    },
+  };
+  const next = mergePersistedScriptSettings(current, persisted);
+  assert.deepEqual(
+    next.lastRunStatus.taskResults.map(task => task.taskName),
+    ['角色筛选与交互', '前台角色 弗洛洛', '后台角色 莫尔'],
+  );
+  assert.equal(next.lastRunStatus.taskResults[0]?.skipped, undefined);
+});

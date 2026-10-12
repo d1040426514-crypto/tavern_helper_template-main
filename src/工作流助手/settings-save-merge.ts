@@ -17,5 +17,9 @@ export function mergePersistedScriptSettings<T extends Record<string, unknown>>(
   if (Array.isArray(persisted.presets)) {
     (next as { presets?: unknown }).presets = _.cloneDeep(persisted.presets);
   }
+  const runStatus = persisted.lastRunStatus;
+  if (runStatus && typeof runStatus === 'object') {
+    (next as { lastRunStatus?: unknown }).lastRunStatus = _.cloneDeep(runStatus);
+  }
   return next;
 }
