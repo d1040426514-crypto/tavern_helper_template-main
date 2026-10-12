@@ -13,7 +13,11 @@ import { commaSeparatedListsEqual, formatCommaSeparatedList, parseCommaSeparated
 import { applyPresetFieldsToSettings, resolveEffectiveSettings } from '../tasks/effective-settings';
 import { buildChatSnapshotFromSettings } from '../tasks/chat-task-scope';
 import { ACU_PP_CHAT_SCOPE_CHANGED, ACU_PP_TASKS_CHANGED, type ChatScopeChangedPayload, type TasksChangedPayload } from '../tasks/events';
-import { findLatestAccessibleFloorId, isAccessibleMessageFloor, normalizeMessageFloorId } from '../tasks/message-floor';
+import {
+  findLatestAccessibleFloorId,
+  findLatestAssistantFloorId,
+  isAccessibleMessageFloor,
+} from '../tasks/message-floor';
 import { GAME_TIME_FORMAT_HELP } from '../tasks/parse-game-time';
 import { REGISTERED_MACRO_LEGEND } from '../tasks/placeholder-macros';
 import { buildPromptPreviewRows } from '../tasks/prompt-auto-segments';
@@ -26,6 +30,7 @@ import {
   reorderPromptGroupsAt,
 } from '../tasks/prompt-group-ops';
 import { pruneWorldbookForRemovedReplicas } from '../tasks/prune-applied-for-replica';
+import { writeReplicaStateSnapshot } from '../tasks/replica-reconcile';
 import { isEnumRegistryMarker } from '../tasks/replica-enum-parse';
 import {
   disableReplicaFamilyOnTasks,
@@ -1503,13 +1508,19 @@ async function onCreateReplicaMember(): Promise<void> {
 }
 
 function resolveReplicaCleanupMessageFloorId(): number {
-  const fromRun = settings.value.lastRunStatus?.messageId;
-  if (fromRun != null) {
-    const normalized = normalizeMessageFloorId(fromRun);
-    if (normalized != null) return normalized;
+  return findLatestAccessibleFloorId() ?? 0;
+}
+
+function replicaCleanupFloorHint(variableFloor: number): string {
+  if (variableFloor <= 0 || !isAccessibleMessageFloor(variableFloor)) {
+    return '（当前无法定位可写楼层，将仅删除副本任务）';
   }
-  const latest = findLatestAccessibleFloorId();
-  return latest ?? 0;
+  const assistantFloor = findLatestAssistantFloorId();
+  const variableText = `并清除最新楼层 #${variableFloor} 中对应的 post_process_tags`;
+  if (assistantFloor == null || assistantFloor === variableFloor) {
+    return `${variableText}、世界书条目和副本快照`;
+  }
+  return `${variableText}，并更新最新 AI 楼 #${assistantFloor} 的世界书条目和副本快照`;
 }
 
 async function deleteSelectedReplicaMember(): Promise<void> {
@@ -1523,10 +1534,7 @@ async function deleteSelectedReplicaMember(): Promise<void> {
   const rootLabel = (root.replicaFamilyBaseName ?? root.name).trim() || '副本族';
   const enumSpec = getReplicaFamilyEnumSpecKey(root).trim();
   const floorId = resolveReplicaCleanupMessageFloorId();
-  const floorHint =
-    floorId > 0 && isAccessibleMessageFloor(floorId)
-      ? `并清除楼层 #${floorId} 中对应的 post_process_tags 变量 key`
-      : '（当前无法定位可写楼层，将仅删除副本任务）';
+  const floorHint = replicaCleanupFloorHint(floorId);
 
   if (
     !(await acuConfirm({
@@ -1554,14 +1562,24 @@ async function deleteSelectedReplicaMember(): Promise<void> {
       await runChatScopeStoreMutation(() => applyReplicaFamilyCleanupInStore(keepBySpec, floorId, 'ui'));
     } else {
       const removedOut: RemovedReplicaCleanupInfo[] = [];
+      const snapshotEffect = {
+        authoritativeRootIds: [] as string[],
+        removedAttrByRoot: {} as Record<string, string[]>,
+        clearedSpecs: [] as string[],
+      };
       const next = applyReplicaFamilyCleanup(settings.value, keepBySpec, floorId, {
         persistManualKeepBySpec: keepBySpec,
         removedOut,
+        snapshotEffect,
       });
       settings.value.tasks = next.tasks;
       settings.value.replicaFamilyCleanup = next.replicaFamilyCleanup!;
       store.persist();
-      await pruneWorldbookForRemovedReplicas(removedOut, settings.value.chatWorldbookWriteRules ?? []);
+      await pruneWorldbookForRemovedReplicas(removedOut, settings.value.chatWorldbookWriteRules ?? [], {
+        clearedSpecs: snapshotEffect.clearedSpecs,
+      });
+      const snapshotFloor = findLatestAssistantFloorId() ?? floorId;
+      await writeReplicaStateSnapshot(snapshotFloor, settings.value.tasks, snapshotEffect);
     }
     selectedReplicaViewId.value = null;
     acuToast('success', `已删除副本「${attrLabel}」`);

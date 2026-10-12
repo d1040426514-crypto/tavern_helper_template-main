@@ -10,7 +10,7 @@ import {
   mergeAppliedLedgerEntries,
   shouldDeleteManagedEntryAsOrphan,
 } from './write-ledger-utils';
-import type { WorldbookWriteAppliedEntry } from './write-sync';
+import { retainRemovedLedgerEntries, type WorldbookWriteAppliedEntry } from './write-sync';
 
 function baseRule(overrides: Partial<ChatWorldbookWriteRule> = {}): ChatWorldbookWriteRule {
   return {
@@ -46,6 +46,39 @@ test('mergeAppliedLedgerEntries last-write-wins for same stableName', () => {
   ]);
   assert.equal(merged.size, 1);
   assert.equal(merged.get(ledgerEntryKey('BookA', 'WorkflowHelper-content'))?.partial.content, 'second');
+});
+
+test('mergeAppliedLedgerEntries later tombstone removes earlier entry', () => {
+  const merged = mergeAppliedLedgerEntries([
+    [applied('WorkflowHelper-content', 'first')],
+    [
+      {
+        ruleId: '',
+        bookName: 'BookA',
+        stableName: 'WorkflowHelper-content',
+        removed: true,
+        partial: {},
+      },
+    ],
+  ]);
+  assert.equal(merged.size, 0);
+});
+
+test('mergeAppliedLedgerEntries later write restores after tombstone', () => {
+  const merged = mergeAppliedLedgerEntries([
+    [applied('WorkflowHelper-content', 'first')],
+    [
+      {
+        ruleId: '',
+        bookName: 'BookA',
+        stableName: 'WorkflowHelper-content',
+        removed: true,
+        partial: {},
+      },
+    ],
+    [applied('WorkflowHelper-content', 'again')],
+  ]);
+  assert.equal(merged.get(ledgerEntryKey('BookA', 'WorkflowHelper-content'))?.partial.content, 'again');
 });
 
 test('mergeAppliedLedgerEntries keeps distinct stable names', () => {
@@ -120,6 +153,21 @@ test('isManagedWorldbookEntryNameForRule legacy custom wrapper base is not manag
   assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-上', rule), false);
   assert.equal(isManagedWorldbookEntryNameForRule('MyEntry-包裹-下', rule), false);
   assert.equal(isManagedWorldbookEntryNameForRule('WorkflowHelper-item-包裹-上', rule), true);
+});
+
+test('retainRemovedLedgerEntries keeps only tombstones', () => {
+  const kept = retainRemovedLedgerEntries([
+    applied('WorkflowHelper-content', 'live'),
+    {
+      ruleId: '',
+      bookName: 'BookA',
+      stableName: 'WorkflowHelper-content-gone',
+      removed: true,
+      partial: {},
+    },
+  ]);
+  assert.equal(kept.length, 1);
+  assert.equal(kept[0]?.stableName, 'WorkflowHelper-content-gone');
 });
 
 console.log('write-reconcile.test.ts: all passed');

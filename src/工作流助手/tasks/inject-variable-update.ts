@@ -87,6 +87,40 @@ function ensureAddonReady(): ResolvedAddonApi | null {
   return resolveAddonApi();
 }
 
+function floorHasObjectVar(messageId: number, key: string): boolean {
+  try {
+    const vars = getVariables({ type: 'message', message_id: messageId }) ?? {};
+    const value = (vars as Record<string, unknown>)[key];
+    return !!value && typeof value === 'object';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 工作流改写之前拍 MVU / addon。没有 stat_data 或 addon_data 的侧不写入，
+ * 也不要写成空对象。已拍过的楼（含两侧都缺席的空基线）不再在补丁应用时补拍。
+ */
+export async function captureInjectVarBaselineNow(messageId: number): Promise<void> {
+  const next: InjectVarBaseline = {};
+  if (typeof Mvu !== 'undefined' && floorHasObjectVar(messageId, 'stat_data')) {
+    try {
+      next.mvu = _.cloneDeep(Mvu.getMvuData({ type: 'message', message_id: messageId }));
+    } catch (e) {
+      console.warn('[工作流助手] 拍摄 MVU 基线失败:', e);
+    }
+  }
+  const addonApi = ensureAddonReady();
+  if (addonApi && floorHasObjectVar(messageId, 'addon_data')) {
+    try {
+      next.addon = _.cloneDeep(addonApi.getAddonData({ type: 'message', message_id: messageId }).addon_data);
+    } catch (e) {
+      console.warn('[工作流助手] 拍摄 Addon 基线失败:', e);
+    }
+  }
+  await persistBaseline(messageId, next);
+}
+
 async function ensureBaselineSides(
   messageId: number,
   needMvu: boolean,
@@ -94,7 +128,8 @@ async function ensureBaselineSides(
   addonApi: ResolvedAddonApi | null,
 ): Promise<void> {
   let baseline = readBaseline(messageId);
-  const next: InjectVarBaseline = baseline ? { ...baseline } : {};
+  if (baseline) return;
+  const next: InjectVarBaseline = {};
   let dirty = !baseline;
 
   if (needMvu && !next.mvu) {

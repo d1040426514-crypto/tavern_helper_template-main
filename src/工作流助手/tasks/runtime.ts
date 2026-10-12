@@ -523,6 +523,8 @@ function createStageProgressReporter(
 export interface RunPostProcessOptions {
   bypassSchedule?: boolean;
   isRerun?: boolean;
+  /** 用户手动重跑才还原 inject 变量基线；刷新生文保持本楼已落盘的变量更新 */
+  manualRerun?: boolean;
   signal?: AbortSignal;
   onProgress?: (update: TaskProgressUpdate) => void;
   /** 设置时仅运行该 id 的已启用任务，不展开副本族 */
@@ -545,7 +547,7 @@ export async function runPostProcessTasks(
   messageId: number,
   options?: RunPostProcessOptions,
 ): Promise<RunPostProcessResult> {
-  if (options?.isRerun) {
+  if (options?.manualRerun) {
     await restoreInjectVarBaselineForRerun(messageId);
   }
   // 每轮工作流从空变更日志开始；同轮多阶段 apply 再按 messageId 合并

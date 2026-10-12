@@ -6,6 +6,7 @@ import {
   applyLastEnumToReplicaSnapshot,
   applyReplicaStateToTasks,
   buildReplicaStateFromTasks,
+  carryForwardExplicitReplicaRoots,
   mergeReplicaStateForRerun,
   mergeReplicaStateSnapshots,
   normalizeReplicaStateSnapshot,
@@ -49,10 +50,25 @@ export function resolveReplicaStateForMessage(messageId: number): ReplicaStateSn
   return collectReplicaStateFromChat({ maxMessageId: messageId });
 }
 
+export type ReplicaSnapshotWriteOptions = {
+  /** 这些根的成员名单以本次 tasks 为准，空名单也要盖住更早楼 */
+  authoritativeRootIds?: string[];
+  /** 从 lastEnum 中去掉的属性，避免占位符把已删名字送回提示词 */
+  removedAttrByRoot?: Record<string, string[]>;
+};
+
+function stripRemovedAttrs(list: string[] | undefined, removed: string[] | undefined): string[] | undefined {
+  if (!list?.length || !removed?.length) return list;
+  const drop = new Set(removed);
+  const next = list.filter(value => !drop.has(value));
+  return next.length ? next : undefined;
+}
+
 /** 写入当前楼的副本状态快照（仅 assistant 楼） */
 export async function writeReplicaStateSnapshot(
   messageId: number,
   tasks: PostProcessTask[],
+  options?: ReplicaSnapshotWriteOptions,
 ): Promise<void> {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return;
@@ -65,12 +81,26 @@ export async function writeReplicaStateSnapshot(
     existing,
     fallback,
   );
+  const authoritative = new Set(options?.authoritativeRootIds ?? []);
+  for (const rootId of authoritative) {
+    const removed = options?.removedAttrByRoot?.[rootId];
+    const current = snapshot[rootId];
+    const lastEnumAttrValues = stripRemovedAttrs(current?.lastEnumAttrValues, removed);
+    const launchedAttrValues = stripRemovedAttrs(current?.launchedAttrValues, removed);
+    snapshot[rootId] = {
+      attrValues: current?.attrValues ?? [],
+      ...(launchedAttrValues ? { launchedAttrValues } : {}),
+      ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
+      explicit: true,
+    };
+  }
+  const withCleanup = carryForwardExplicitReplicaRoots(snapshot, existing);
   const data = (msg.data ?? {}) as Record<string, unknown>;
   await setChatMessages(
     [
       {
         message_id: messageId,
-        data: { ...data, [POST_PROCESS_REPLICA_STATE_KEY]: snapshot },
+        data: { ...data, [POST_PROCESS_REPLICA_STATE_KEY]: withCleanup },
       },
     ],
     { refresh: 'none' },

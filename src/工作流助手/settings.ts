@@ -2,7 +2,10 @@ import { getActivePinia } from 'pinia';
 import { getDefaultSettingsPartial } from './tasks/example-presets';
 import { normalizeContextTagRules } from './tasks/context-tags';
 import { migrateImportedPreset } from './tasks/import-preset-migrate';
-import { ensureReplicaFamilyCleanupDefaults } from './tasks/replica-family-cleanup';
+import {
+  ensureReplicaFamilyCleanupDefaults,
+  stripReplicaFamilyCleanupRuntime,
+} from './tasks/replica-family-cleanup';
 import { stripReplicaFamilyMembers } from './tasks/replica-family';
 import {
   buildBlankTaskPreset,
@@ -150,7 +153,11 @@ export function loadSettings(): ScriptSettings {
 export function saveSettings(settings: ScriptSettings): void {
   const secrets = extractSecretsFromSettings(settings);
   saveApiSecretsPayload(secrets);
-  insertOrAssignVariables(stripSecretsForPersistence(settings), {
+  const persisted = stripSecretsForPersistence(settings);
+  if (persisted.replicaFamilyCleanup) {
+    persisted.replicaFamilyCleanup = stripReplicaFamilyCleanupRuntime(persisted.replicaFamilyCleanup);
+  }
+  insertOrAssignVariables(persisted, {
     type: 'script',
     script_id: getScriptId(),
   });
@@ -170,7 +177,9 @@ export function applyScriptLevelSettings(from: ScriptSettings, target: ScriptSet
   target.defaultTaskApiPreset = from.defaultTaskApiPreset;
   target.taskApiPresetOverridesById = _.cloneDeep(from.taskApiPresetOverridesById);
   target.messageVarRetention = _.cloneDeep(from.messageVarRetention);
-  target.replicaFamilyCleanup = _.cloneDeep(from.replicaFamilyCleanup);
+  target.replicaFamilyCleanup = from.replicaFamilyCleanup
+    ? stripReplicaFamilyCleanupRuntime(_.cloneDeep(from.replicaFamilyCleanup))
+    : from.replicaFamilyCleanup;
   target.uiThemeId = from.uiThemeId;
   target.progressHudPosition = _.cloneDeep(from.progressHudPosition);
 }

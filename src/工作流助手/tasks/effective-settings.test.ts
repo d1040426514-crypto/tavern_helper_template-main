@@ -151,6 +151,64 @@ test('resolveEffectiveSettings falls back to snapshot when bound preset missing'
   assert.equal(resolved.tasks[0]?.id, 's1');
 });
 
+function cleanupSettings(roundsSinceCleanup: number): ScriptSettings {
+  return {
+    ...baseSettings,
+    replicaFamilyCleanup: {
+      enabled: true,
+      cycleRounds: 10,
+      minActivityTries: 1,
+      mode: 'auto',
+      roundsSinceCleanup,
+      cycleRunCounts: { old: 1 },
+      cycleOpportunityCounts: {},
+      cycleScheduleWaitCounts: {},
+      lastManualKeepBySpec: {},
+      lastCleanupRound: 3,
+    },
+  };
+}
+
+test('chat cleanup runtime overlays on global view', () => {
+  mockScope({
+    activeView: 'global',
+    boundGlobalPresetName: '预设B',
+    replicaFamilyCleanupRuntime: {
+      roundsSinceCleanup: 4,
+      cycleRunCounts: { a: 2 },
+      cycleOpportunityCounts: {},
+      cycleScheduleWaitCounts: {},
+      lastManualKeepBySpec: { 'npc@act': ['甲'] },
+      lastCleanupRound: 1,
+    },
+  });
+  const settings = cleanupSettings(99);
+  const resolved = resolveEffectiveSettings(settings);
+  assert.equal(resolved.replicaFamilyCleanup.roundsSinceCleanup, 4);
+  assert.deepEqual(resolved.replicaFamilyCleanup.cycleRunCounts, { a: 2 });
+  assert.deepEqual(resolved.replicaFamilyCleanup.lastManualKeepBySpec, { 'npc@act': ['甲'] });
+  assert.equal(resolved.replicaFamilyCleanup.enabled, true);
+  assert.equal(settings.replicaFamilyCleanup.roundsSinceCleanup, 99);
+});
+
+test('missing chat runtime starts at 0 instead of script counters', () => {
+  mockScope({});
+  const resolved = resolveEffectiveSettings(cleanupSettings(99));
+  assert.equal(resolved.replicaFamilyCleanup.roundsSinceCleanup, 0);
+  assert.deepEqual(resolved.replicaFamilyCleanup.cycleRunCounts, {});
+  assert.equal(resolved.replicaFamilyCleanup.lastCleanupRound, 0);
+  assert.equal(resolved.replicaFamilyCleanup.enabled, true);
+});
+
+test('no snapshot zeros script cleanup counters', () => {
+  mockStContext({});
+  const settings = cleanupSettings(99);
+  const resolved = resolveEffectiveSettings(settings);
+  assert.equal(resolved, settings);
+  assert.equal(resolved.replicaFamilyCleanup.roundsSinceCleanup, 0);
+  assert.deepEqual(resolved.replicaFamilyCleanup.cycleRunCounts, {});
+});
+
 test('legacy scope without activeView defaults to snapshot overlay', () => {
   mockStContext({
     [CHAT_SCOPE_METADATA_KEY]: {

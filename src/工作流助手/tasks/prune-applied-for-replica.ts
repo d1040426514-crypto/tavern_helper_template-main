@@ -1,9 +1,12 @@
 import { resolveStableEntryName, resolveWriteTargetBookName } from '../worldbook/write-from-template';
+import { resolveWrapperStableNames } from '../worldbook/write-ledger-utils';
 import {
   POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY,
   reloadWorldInfoEditorIfSelected,
+  upsertAppliedInList,
   type WorldbookWriteAppliedEntry,
 } from '../worldbook/write-sync';
+import { findLatestAssistantFloorId } from './message-floor';
 import type { ChatWorldbookWriteRule } from './schema';
 import { parseExtractTagSpec } from './tag-extract';
 
@@ -110,15 +113,80 @@ export async function pruneAppliedLedgerFromChat(stableNames: Set<string>): Prom
   }
 }
 
-/** 被删副本 → 删除对应世界书条目 + 清理 applied 账本 */
+function canonicalRuleSpec(rule: ChatWorldbookWriteRule): string {
+  const spec = parseExtractTagSpec(rule.targetTag.trim());
+  if (!spec?.attrName) return '';
+  return `${spec.tagName}@${spec.attrName}`.trim().toLowerCase();
+}
+
+function appendClearedWrapperTargets(
+  targets: PrunableWorldbookTarget[],
+  rules: ChatWorldbookWriteRule[],
+  clearedSpecs: string[],
+): void {
+  if (!clearedSpecs.length) return;
+  const cleared = new Set(clearedSpecs.map(spec => spec.trim().toLowerCase()).filter(Boolean));
+  const seen = new Set(targets.map(target => `${target.bookName}\0${target.stableName}`));
+  for (const rule of rules) {
+    if (!rule.splitByAttr) continue;
+    const spec = canonicalRuleSpec(rule);
+    if (!spec || !cleared.has(spec)) continue;
+    const bookName = resolveWriteTargetBookName(rule);
+    if (!bookName) continue;
+    const wrappers = resolveWrapperStableNames(rule);
+    for (const stableName of [wrappers.before, wrappers.after]) {
+      const key = `${bookName}\0${stableName}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push({ bookName, stableName });
+    }
+  }
+}
+
+/** 墓碑先落在最新 assistant 楼，再删书。删除失败也保留墓碑，避免旧楼账本把条目写回来。 */
+export async function writeLatestFloorLedgerTombstones(
+  targets: PrunableWorldbookTarget[],
+): Promise<void> {
+  if (!targets.length) return;
+  const floorId = findLatestAssistantFloorId();
+  if (floorId == null) return;
+  const msg = getChatMessages(floorId)[0];
+  if (!msg) return;
+  const data = { ...(msg.data ?? {}) } as Record<string, unknown>;
+  const raw = data[POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY];
+  let list = Array.isArray(raw) ? [...(raw as WorldbookWriteAppliedEntry[])] : [];
+  for (const target of targets) {
+    const tombstone: WorldbookWriteAppliedEntry = {
+      ruleId: '',
+      bookName: target.bookName,
+      stableName: target.stableName,
+      removed: true,
+      partial: {},
+    };
+    list = upsertAppliedInList(list, tombstone).list;
+  }
+  await setChatMessages(
+    [
+      {
+        message_id: floorId,
+        data: { ...data, [POST_PROCESS_WORLDBOOK_WRITE_APPLIED_KEY]: list },
+      },
+    ],
+    { refresh: 'none' },
+  );
+}
+
+/** 被删副本 → 最新一楼墓碑 + 删除对应世界书条目。不改更早楼的账本。 */
 export async function pruneWorldbookForRemovedReplicas(
   removed: RemovedReplicaInfo[],
   rules: ChatWorldbookWriteRule[],
+  options?: { clearedSpecs?: string[] },
 ): Promise<void> {
   if (!removed.length || !rules.length) return;
   const targets = computePrunableWorldbookTargets(removed, rules);
+  appendClearedWrapperTargets(targets, rules, options?.clearedSpecs ?? []);
   if (!targets.length) return;
 
+  await writeLatestFloorLedgerTombstones(targets);
   await deleteWorldbookEntriesByStableName(targets);
-  await pruneAppliedLedgerFromChat(new Set(targets.map(t => t.stableName.trim())));
 }

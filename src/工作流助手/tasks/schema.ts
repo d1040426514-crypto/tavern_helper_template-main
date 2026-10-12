@@ -382,6 +382,16 @@ export const CHAT_SCOPE_METADATA_KEY = '_post_process_chat_scope';
 /** 聊天快照预设内部名称（不出现在全局 presets 列表） */
 export const CHAT_SNAPSHOT_PRESET_NAME = '__chat_snapshot__';
 
+/** 副本族清理的聊天级运行时（周期计数）。开关与 N 仍在脚本设置。 */
+export const ReplicaFamilyCleanupRuntimeSchema = z.object({
+  roundsSinceCleanup: z.number().int().min(0).default(0),
+  cycleRunCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+  cycleOpportunityCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+  cycleScheduleWaitCounts: z.record(z.string(), z.number().int().min(0)).default({}),
+  lastManualKeepBySpec: z.record(z.string(), z.array(z.string())).default({}),
+  lastCleanupRound: z.number().int().min(0).default(0),
+});
+
 export const ChatTaskScopeStateSchema = z.object({
   mode: z.enum(['chat_override', 'inherit_global']).default('inherit_global'),
   snapshot: PostProcessPresetSchema.optional(),
@@ -392,6 +402,8 @@ export const ChatTaskScopeStateSchema = z.object({
   activeView: z.enum(['snapshot', 'global']).default('snapshot'),
   /** activeView === 'global' 时绑定的全局预设名 */
   boundGlobalPresetName: z.string().default(''),
+  /** 本聊天的清理周期计数；缺省表示从 0 开始，不沿用脚本里的旧计数 */
+  replicaFamilyCleanupRuntime: ReplicaFamilyCleanupRuntimeSchema.optional(),
 });
 
 export const ScriptSettingsSchema = z
@@ -507,6 +519,7 @@ export type TaskSchedule = z.infer<typeof TaskScheduleSchema>;
 export type ChatWorldbookWriteRule = z.infer<typeof ChatWorldbookWriteRuleSchema>;
 export type ChatWorldbookWritePlacement = z.infer<typeof ChatWorldbookWritePlacementSchema>;
 export type ChatTaskScopeState = z.infer<typeof ChatTaskScopeStateSchema>;
+export type ReplicaFamilyCleanupRuntime = z.infer<typeof ReplicaFamilyCleanupRuntimeSchema>;
 export type TaskWorkflowPresetEntry = z.infer<typeof TaskWorkflowPresetEntrySchema>;
 export type TaskWorkflowPresetSnapshot = z.infer<typeof TaskWorkflowPresetSnapshotSchema>;
 export type ReplicaFamilyScheduleMode = 'auto' | 'manual';

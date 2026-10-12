@@ -62,7 +62,12 @@ export function mergeAppliedLedgerEntries(
   for (const batch of batches) {
     for (const entry of batch) {
       if (!entry?.bookName?.trim() || !entry?.stableName?.trim()) continue;
-      merged.set(ledgerEntryKey(entry.bookName, entry.stableName), entry);
+      const key = ledgerEntryKey(entry.bookName, entry.stableName);
+      if (entry.removed) {
+        merged.delete(key);
+        continue;
+      }
+      merged.set(key, entry);
     }
   }
   return merged;

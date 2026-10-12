@@ -8,9 +8,9 @@ import {
   isReplicaFamilyRootTemplate,
 } from './replica-family';
 import { countAssistantRounds } from './schedule';
-import type { PostProcessTask, ScriptSettings } from './schema';
+import type { PostProcessTask, ReplicaFamilyCleanupRuntime, ScriptSettings } from './schema';
 import type { TagContainerRaw } from './tag-variables-nested';
-import { isAccessibleMessageFloor } from './message-floor';
+import { findLatestAccessibleFloorId, isAccessibleMessageFloor } from './message-floor';
 
 const TAG_DATA_ROOT_KEY = 'post_process_tags';
 
@@ -109,6 +109,63 @@ function findKeepKeyForSpec(keepBySpec: Record<string, string[]>, spec: string):
     if (canonicalSpecKey(key) === canonical) return key;
   }
   return undefined;
+}
+
+function cloneKeepMap(map: Record<string, string[]> | undefined): Record<string, string[]> {
+  const out: Record<string, string[]> = {};
+  for (const [key, values] of Object.entries(map ?? {})) {
+    out[key] = [...values];
+  }
+  return out;
+}
+
+export function emptyReplicaFamilyCleanupRuntime(): ReplicaFamilyCleanupRuntime {
+  return {
+    roundsSinceCleanup: 0,
+    cycleRunCounts: {},
+    cycleOpportunityCounts: {},
+    cycleScheduleWaitCounts: {},
+    lastManualKeepBySpec: {},
+    lastCleanupRound: 0,
+  };
+}
+
+export function pickReplicaFamilyCleanupRuntime(
+  cleanup: ReplicaFamilyCleanupConfig | undefined,
+): ReplicaFamilyCleanupRuntime {
+  if (!cleanup) return emptyReplicaFamilyCleanupRuntime();
+  return {
+    roundsSinceCleanup: cleanup.roundsSinceCleanup ?? 0,
+    cycleRunCounts: { ...(cleanup.cycleRunCounts ?? {}) },
+    cycleOpportunityCounts: { ...(cleanup.cycleOpportunityCounts ?? {}) },
+    cycleScheduleWaitCounts: { ...(cleanup.cycleScheduleWaitCounts ?? {}) },
+    lastManualKeepBySpec: cloneKeepMap(cleanup.lastManualKeepBySpec),
+    lastCleanupRound: cleanup.lastCleanupRound ?? 0,
+  };
+}
+
+/** 有聊天快照运行时时叠上；没有则计数归零，避免沿用脚本级旧计数。 */
+export function applyReplicaFamilyCleanupRuntime(
+  cleanup: ReplicaFamilyCleanupConfig,
+  runtime: ReplicaFamilyCleanupRuntime | undefined,
+): void {
+  const rt = runtime ?? emptyReplicaFamilyCleanupRuntime();
+  cleanup.roundsSinceCleanup = rt.roundsSinceCleanup ?? 0;
+  cleanup.cycleRunCounts = { ...(rt.cycleRunCounts ?? {}) };
+  cleanup.cycleOpportunityCounts = { ...(rt.cycleOpportunityCounts ?? {}) };
+  cleanup.cycleScheduleWaitCounts = { ...(rt.cycleScheduleWaitCounts ?? {}) };
+  cleanup.lastManualKeepBySpec = cloneKeepMap(rt.lastManualKeepBySpec);
+  cleanup.lastCleanupRound = rt.lastCleanupRound ?? 0;
+}
+
+/** 脚本落盘只保留开关与周期，不把本聊天计数写进脚本变量。 */
+export function stripReplicaFamilyCleanupRuntime(
+  cleanup: ReplicaFamilyCleanupConfig,
+): ReplicaFamilyCleanupConfig {
+  return {
+    ...cleanup,
+    ...emptyReplicaFamilyCleanupRuntime(),
+  };
 }
 
 export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): ReplicaFamilyCleanupConfig {
@@ -663,11 +720,24 @@ export type RemovedReplicaCleanupInfo = {
   attrValues: string[];
 };
 
+export type ReplicaCleanupSnapshotEffect = {
+  authoritativeRootIds: string[];
+  removedAttrByRoot: Record<string, string[]>;
+  /** keep 被清空的 spec，世界书包裹条目一并墓碑 */
+  clearedSpecs: string[];
+};
+
 export type ApplyReplicaFamilyCleanupOptions = {
   persistManualKeepBySpec?: Record<string, string[]>;
   /** 输出：本次清理实际移除的副本（供世界书条目/账本联动清理） */
   removedOut?: RemovedReplicaCleanupInfo[];
+  /** 输出：最新一楼副本快照要盖住旧楼的根与被删属性 */
+  snapshotEffect?: ReplicaCleanupSnapshotEffect;
 };
+
+function resolveTagPruneFloor(fallback: number): number {
+  return findLatestAccessibleFloorId() ?? fallback;
+}
 
 export function applyReplicaFamilyCleanup(
   settings: ScriptSettings,
@@ -678,6 +748,13 @@ export function applyReplicaFamilyCleanup(
   const state = ensureCleanupState(settings);
   let tasks = [...settings.tasks];
   const buckets = buildSpecBuckets(settings);
+  const tagFloor = resolveTagPruneFloor(messageId);
+  const snapshotEffect = options?.snapshotEffect;
+  if (snapshotEffect) {
+    snapshotEffect.authoritativeRootIds = [];
+    snapshotEffect.removedAttrByRoot = {};
+    snapshotEffect.clearedSpecs = [];
+  }
 
   for (const bucket of buckets) {
     const keepKey = findKeepKeyForSpec(keepAttrValuesBySpec, bucket.spec);
@@ -701,13 +778,24 @@ export function applyReplicaFamilyCleanup(
     if (!removeMemberIds.length) continue;
 
     const removedAttrList = sortAttrValues([...removedAttrs]);
-    pruneFloorTagKeysForReplica(bucket.spec, removedAttrList, messageId);
+    pruneFloorTagKeysForReplica(bucket.spec, removedAttrList, tagFloor);
 
     const extractSpecs = collectExtractSpecsFromMembers(removedMembers).filter(
       s => !specKeysEqual(s, bucket.spec),
     );
     for (const extractSpec of extractSpecs) {
-      pruneFloorTagKeysForReplica(extractSpec, removedAttrList, messageId);
+      pruneFloorTagKeysForReplica(extractSpec, removedAttrList, tagFloor);
+    }
+
+    if (snapshotEffect) {
+      if (keepSet.size === 0) snapshotEffect.clearedSpecs.push(bucket.spec);
+      for (const root of bucket.roots) {
+        if (!snapshotEffect.authoritativeRootIds.includes(root.id)) {
+          snapshotEffect.authoritativeRootIds.push(root.id);
+        }
+        const prev = snapshotEffect.removedAttrByRoot[root.id] ?? [];
+        snapshotEffect.removedAttrByRoot[root.id] = sortAttrValues([...prev, ...removedAttrList]);
+      }
     }
 
     tasks = tasks.filter(t => !removeMemberIds.includes(t.id));

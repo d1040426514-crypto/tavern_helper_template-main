@@ -11,7 +11,18 @@ export type WorldbookWriteAppliedEntry = {
   partial: Partial<WorldbookEntry>;
   /** 绿灯条目在默认 keys 之上的额外关键词；缺省视为 [] */
   extraKeys?: string[];
+  /** 最新一楼墓碑：合并时盖过更早楼的同名条目，删楼后随本楼消失 */
+  removed?: boolean;
 };
+
+/** 刷新生文只保留清理墓碑，去掉上一轮工作流新增的普通条目。 */
+export function retainRemovedLedgerEntries(
+  list: WorldbookWriteAppliedEntry[],
+): WorldbookWriteAppliedEntry[] {
+  return list.filter(
+    entry => !!entry?.removed && !!entry.bookName?.trim() && !!entry.stableName?.trim(),
+  );
+}
 
 export function appliedLedgerKey(bookName: string, stableName: string): string {
   return `${bookName.trim()}\0${stableName.trim()}`;

@@ -14,9 +14,51 @@ export type ReplicaRootState = {
   launchedAttrValues?: string[];
   /** 最近一轮从 relay <ReplicaEnum> 同步到该原本的属性值（供宏侧重建 auto 过滤） */
   lastEnumAttrValues?: string[];
+  /**
+   * 这一楼明确写过成员名单。空名单也盖住更早楼；
+   * 没有该标记的空名单仍忽略，避免把没记过快照的楼当成全部删光。
+   */
+  explicit?: boolean;
 };
 
 export type ReplicaStateSnapshot = Record<string, ReplicaRootState>;
+
+/**
+ * 本楼快照被整包重写时，任务列表里已经没有成员的 explicit 根仍要留下。
+ * 否则空名单会被当成没写过，更早楼的成员会在下一次重算回来。
+ */
+export function carryForwardExplicitReplicaRoots(
+  snapshot: ReplicaStateSnapshot,
+  existing: ReplicaStateSnapshot | null | undefined,
+): ReplicaStateSnapshot {
+  if (!existing) return snapshot;
+  const next: ReplicaStateSnapshot = { ...snapshot };
+  for (const [rootId, state] of Object.entries(existing)) {
+    if (!state?.explicit || next[rootId]) continue;
+    next[rootId] = {
+      attrValues: [...(state.attrValues ?? [])],
+      ...(state.launchedAttrValues?.length ? { launchedAttrValues: [...state.launchedAttrValues] } : {}),
+      ...(state.lastEnumAttrValues?.length ? { lastEnumAttrValues: [...state.lastEnumAttrValues] } : {}),
+      explicit: true,
+    };
+  }
+  return next;
+}
+
+/** 刷新生文只保留清理写过的根，含空名单；没有 explicit 的名单按上一轮新增丢掉。 */
+export function retainExplicitReplicaSnapshot(snapshot: ReplicaStateSnapshot): ReplicaStateSnapshot {
+  const next: ReplicaStateSnapshot = {};
+  for (const [rootId, state] of Object.entries(snapshot)) {
+    if (!state?.explicit) continue;
+    next[rootId] = {
+      attrValues: [...(state.attrValues ?? [])],
+      ...(state.launchedAttrValues?.length ? { launchedAttrValues: [...state.launchedAttrValues] } : {}),
+      ...(state.lastEnumAttrValues?.length ? { lastEnumAttrValues: [...state.lastEnumAttrValues] } : {}),
+      explicit: true,
+    };
+  }
+  return next;
+}
 
 function isValidReplicaRootState(value: unknown): value is ReplicaRootState {
   if (!value || typeof value !== 'object') return false;
@@ -41,6 +83,7 @@ export function normalizeReplicaStateSnapshot(raw: unknown): ReplicaStateSnapsho
         attrValues: [...state.attrValues],
         ...(launchedAttrValues ? { launchedAttrValues } : {}),
         ...(lastEnumAttrValues ? { lastEnumAttrValues } : {}),
+        ...(state.explicit ? { explicit: true } : {}),
       };
     }
   }
@@ -76,6 +119,10 @@ export function mergeReplicaStateSnapshots(snapshots: ReplicaStateSnapshot[]): R
   const merged: ReplicaStateSnapshot = {};
   for (const snapshot of snapshots) {
     for (const [rootId, state] of Object.entries(snapshot)) {
+      if (state.explicit) {
+        merged[rootId] = cloneRootState(state);
+        continue;
+      }
       if (!state.attrValues?.length) {
         // 仅补 lastEnum，不写入空成员名单
         const prev = merged[rootId];
@@ -108,9 +155,10 @@ export function mergeReplicaStateSnapshots(snapshots: ReplicaStateSnapshot[]): R
 
 function cloneRootState(state: ReplicaRootState): ReplicaRootState {
   return {
-    attrValues: [...state.attrValues],
+    attrValues: [...(state.attrValues ?? [])],
     ...(state.launchedAttrValues?.length ? { launchedAttrValues: [...state.launchedAttrValues] } : {}),
     ...(state.lastEnumAttrValues?.length ? { lastEnumAttrValues: [...state.lastEnumAttrValues] } : {}),
+    ...(state.explicit ? { explicit: true } : {}),
   };
 }
 
@@ -126,7 +174,11 @@ export function mergeReplicaStateForRerun(
 ): ReplicaStateSnapshot {
   const merged: ReplicaStateSnapshot = {};
   for (const [rootId, state] of Object.entries(history)) {
-    // 历史空名单视为无效，不写入（否则会在 current 也空时清掉 UI/MVU 成员）
+    if (state.explicit) {
+      merged[rootId] = cloneRootState(state);
+      continue;
+    }
+    // 无标记的历史空名单视为无效，不写入（否则会在 current 也空时清掉 UI/MVU 成员）
     if (!state.attrValues?.length) continue;
     merged[rootId] = cloneRootState(state);
   }
@@ -136,6 +188,7 @@ export function mergeReplicaStateForRerun(
     if (!current.attrValues?.length && !current.lastEnumAttrValues?.length) continue;
     const hist = merged[rootId];
     if (!hist?.attrValues?.length) {
+      if (hist?.explicit) continue;
       if (current.attrValues?.length) merged[rootId] = cloneRootState(current);
       continue;
     }
@@ -223,9 +276,9 @@ export function applyReplicaStateToTasks(
   for (const root of tasks) {
     if (!isReplicaFamilyRootTemplate(root)) continue;
     const state = snapshot[root.id];
-    // 快照未收录或空名单：保留现有成员（UI/MVU 手动创建的世界副本等）
-    if (!state?.attrValues?.length) continue;
-    const desired = state.attrValues;
+    // 快照未收录或无标记的空名单：保留现有成员（UI/MVU 手动创建的世界副本等）
+    if (!state?.attrValues?.length && !state?.explicit) continue;
+    const desired = state?.attrValues ?? [];
     const launchedSet = new Set(state.launchedAttrValues ?? []);
 
     const currentRoot = next.find(t => t.id === root.id) ?? root;

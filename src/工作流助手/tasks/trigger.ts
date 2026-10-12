@@ -25,15 +25,18 @@ import {
   hasConfiguredChatBodyTagReplaceRules,
   restoreBodyReplaceOrigin,
 } from './chat-body-tag-replace';
-import {
-  clearWorldbookWriteMessageKeys,
-  reconcileWorldbookWritesFromChat,
-} from '../worldbook/write-reconcile';
+import { reconcileWorldbookWritesFromChat } from '../worldbook/write-reconcile';
 import {
   applyTagVariableInjectTemplate,
+  inheritTagVariables,
   mergeAiFloorInjectBlock,
-  restorePostProcessTagsFromPreviousFloor,
 } from './tag-variables';
+import { captureInjectVarBaselineNow, restoreInjectVarBaselineForRerun } from './inject-variable-update';
+import {
+  capturePreWorkflowBaseline,
+  restorePreWorkflowBaseline,
+  retainFloorCleanupMarkers,
+} from './pre-workflow-baseline';
 import {
   hideTaskProgressToast,
   isTaskProgressStopping,
@@ -54,19 +57,17 @@ import { resetNewlyCreatedReplicaLaunched } from './replica-family';
 import {
   applyReplicaFamilyCleanup,
   computeAutoKeepSet,
+  hasReplicaFamilyTasks,
   incrementReplicaRunCounts,
   incrementReplicaOpportunityCounts,
   incrementReplicaScheduleWaitCounts,
   shouldTriggerCleanup,
   tickCleanupRound,
   type RemovedReplicaCleanupInfo,
+  type ReplicaCleanupSnapshotEffect,
 } from './replica-family-cleanup';
 import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
-import {
-  clearReplicaStateMessageKeys,
-  reconcileReplicaTasksForRerun,
-  writeReplicaStateSnapshot,
-} from './replica-reconcile';
+import { reconcileReplicaTasksFromChat, writeReplicaStateSnapshot } from './replica-reconcile';
 import { showReplicaFamilyCleanupDialog } from '../ui/mount-cleanup-dialog';
 import type { ScriptSettings } from './schema';
 import {
@@ -121,28 +122,40 @@ async function finalizeReplicaRuntimeState(
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
 }
 
+function emptyCleanupSnapshotEffect(): ReplicaCleanupSnapshotEffect {
+  return { authoritativeRootIds: [], removedAttrByRoot: {}, clearedSpecs: [] };
+}
+
 async function runReplicaFamilyCleanupIfDue(
   baseSettings: ScriptSettings,
   effectiveSettings: ScriptSettings,
   messageId: number,
   newlyCreatedReplicaIds: string[] = [],
-): Promise<void> {
-  tickCleanupRound(effectiveSettings);
-  if (!shouldTriggerCleanup(effectiveSettings)) {
+  options?: { advanceCycle?: boolean },
+): Promise<ReplicaCleanupSnapshotEffect | undefined> {
+  const advanceCycle = options?.advanceCycle !== false && hasReplicaFamilyTasks(effectiveSettings.tasks);
+  if (advanceCycle) tickCleanupRound(effectiveSettings);
+  if (!advanceCycle || !shouldTriggerCleanup(effectiveSettings)) {
     // 未到周期也要落盘，否则下一轮 loadSettings 会丢弃 tick（N>1 永远到不了阈值）
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
-    return;
+    return undefined;
   }
 
   const cleanup = effectiveSettings.replicaFamilyCleanup;
   if (cleanup.mode === 'auto') {
     const keepSet = computeAutoKeepSet(effectiveSettings, newlyCreatedReplicaIds);
     const removedOut: RemovedReplicaCleanupInfo[] = [];
-    const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId, { removedOut });
+    const snapshotEffect = emptyCleanupSnapshotEffect();
+    const next = applyReplicaFamilyCleanup(effectiveSettings, keepSet, messageId, {
+      removedOut,
+      snapshotEffect,
+    });
     Object.assign(effectiveSettings, next);
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
-    await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
-    return;
+    await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? [], {
+      clearedSpecs: snapshotEffect.clearedSpecs,
+    });
+    return snapshotEffect;
   }
 
   await new Promise<void>(resolve => {
@@ -157,16 +170,21 @@ async function runReplicaFamilyCleanupIfDue(
   if (!result) {
     // 跳过/无候选：仍落盘当前计数，避免下一轮回退；阈值已达则会在下轮再次触发
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
-    return;
+    return undefined;
   }
   const removedOut: RemovedReplicaCleanupInfo[] = [];
+  const snapshotEffect = emptyCleanupSnapshotEffect();
   const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepBySpec, messageId, {
     ...(result.persistManualKeep ? { persistManualKeepBySpec: result.keepBySpec } : {}),
     removedOut,
+    snapshotEffect,
   });
   Object.assign(effectiveSettings, next);
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
-  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
+  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? [], {
+    clearedSpecs: snapshotEffect.clearedSpecs,
+  });
+  return snapshotEffect;
 }
 
 /** 自动触发时接受的消息类型（手动 force 不受限） */
@@ -290,6 +308,7 @@ export async function handleMessageReceived(
     // clearedStale 只表示「继承了上一楼的 done/inject」，清理后应视为本楼首次跑，
     // 不得当成 isRerun（否则会 restore 继承来的空 baseline，清空已继承的 addon_data）。
     const isRerun = explicitIsRerun || (hadDoneFlag && isContentRefreshMessageType(type));
+    const manualRerun = explicitIsRerun && !isContentRefreshMessageType(type);
 
     if (!options?.force && hadDoneFlag && !isRerun) return;
 
@@ -314,22 +333,34 @@ export async function handleMessageReceived(
     let newlyCreatedReplicaIds: string[] = [];
 
     try {
-      if (isRerun) {
-        restorePostProcessTagsFromPreviousFloor(targetId);
-        // 仅手动重跑且启用正文替换时才 restore；自动路径若 restore 会把新楼/刷新生文打回上一轮 origin
-        if (bodyReplaceEnabled && explicitIsRerun) {
+      if (manualRerun) {
+        await restorePreWorkflowBaseline(targetId);
+        await restoreInjectVarBaselineForRerun(targetId);
+        if (bodyReplaceEnabled) {
           await restoreBodyReplaceOrigin(targetId);
         }
-        await reconcileWorldbookWritesFromChat({ excludeMessageId: targetId, reason: 'rerun' });
-        await clearWorldbookWriteMessageKeys(targetId);
-        await reconcileReplicaTasksForRerun(targetId);
-        await clearReplicaStateMessageKeys(targetId);
+        await reconcileWorldbookWritesFromChat({ reason: 'rerun' });
+        await reconcileReplicaTasksFromChat({ reason: 'rerun' });
+        const reconciled = resolveEffectiveSettings(loadSettings());
+        settings.tasks = reconciled.tasks;
+        settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
+      } else if (isRerun) {
+        await retainFloorCleanupMarkers(targetId);
+        await reconcileWorldbookWritesFromChat({ reason: 'rerun' });
+        await reconcileReplicaTasksFromChat({ reason: 'rerun' });
         const reconciled = resolveEffectiveSettings(loadSettings());
         settings.tasks = reconciled.tasks;
         settings.replicaFamilyCleanup = reconciled.replicaFamilyCleanup;
       }
       if (bodyReplaceEnabled) {
         await ensureBodyReplaceOriginCaptured(targetId);
+      }
+      if (!isRerun) {
+        inheritTagVariables(targetId);
+      }
+      if (!manualRerun) {
+        await capturePreWorkflowBaseline(targetId);
+        await captureInjectVarBaselineNow(targetId);
       }
       applyAssistantChatTagExtract(targetId, settings, { isRerun });
 
@@ -343,6 +374,7 @@ export async function handleMessageReceived(
         {
           bypassSchedule: options?.bypassSchedule ?? false,
           isRerun,
+          manualRerun,
           signal,
           onProgress,
           taskIdFilter: options?.taskIdFilter,
@@ -376,9 +408,11 @@ export async function handleMessageReceived(
       const aiBlock = await mergeAiFloorInjectBlock(settings, results, targetId);
       await injectToAiFloor(targetId, aiBlock, { isRerun });
 
-      incrementReplicaScheduleWaitCounts(settings, scheduleWaitMemberIds);
-      incrementReplicaOpportunityCounts(settings, opportunityMemberIds);
-      incrementReplicaRunCounts(settings, executedMemberIds);
+      if (!manualRerun && hasReplicaFamilyTasks(settings.tasks)) {
+        incrementReplicaScheduleWaitCounts(settings, scheduleWaitMemberIds);
+        incrementReplicaOpportunityCounts(settings, opportunityMemberIds);
+        incrementReplicaRunCounts(settings, executedMemberIds);
+      }
       await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
 
       if (settings.messageVarRetention?.enabled) {
@@ -388,8 +422,14 @@ export async function handleMessageReceived(
       }
 
       hideTaskProgressToast();
-      await runReplicaFamilyCleanupIfDue(baseSettings, settings, targetId, newlyCreatedReplicaIds);
-      await writeReplicaStateSnapshot(targetId, settings.tasks);
+      const cleanupEffect = await runReplicaFamilyCleanupIfDue(
+        baseSettings,
+        settings,
+        targetId,
+        newlyCreatedReplicaIds,
+        { advanceCycle: !manualRerun },
+      );
+      await writeReplicaStateSnapshot(targetId, settings.tasks, cleanupEffect);
       await notifyChronicleReady();
     } catch (e) {
       const superseded =

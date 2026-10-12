@@ -18,6 +18,8 @@ import { applyPresetFieldsToSettings, resolveEffectiveSettings } from './effecti
 import { emitChatScopeChanged, emitTasksChanged } from './events';
 import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
 import { pruneWorldbookForRemovedReplicas } from './prune-applied-for-replica';
+import { writeReplicaStateSnapshot } from './replica-reconcile';
+import { findLatestAssistantFloorId } from './message-floor';
 import { resolveLastRunStatus, resolveRunStatusForFloor } from './run-status';
 import {
   PostProcessPresetSchema,
@@ -1134,21 +1136,28 @@ export async function applyReplicaFamilyCleanupInStore(
   const baseSettings = loadSettings();
   const effectiveSettings = resolveEffectiveSettings(baseSettings);
   const removedOut: RemovedReplicaCleanupInfo[] = [];
+  const snapshotEffect = { authoritativeRootIds: [] as string[], removedAttrByRoot: {}, clearedSpecs: [] as string[] };
   const next = applyReplicaFamilyCleanup(effectiveSettings, keepBySpec, messageId, {
     persistManualKeepBySpec: keepBySpec,
     removedOut,
+    snapshotEffect,
   });
   Object.assign(effectiveSettings, next);
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
-  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? []);
+  await pruneWorldbookForRemovedReplicas(removedOut, effectiveSettings.chatWorldbookWriteRules ?? [], {
+    clearedSpecs: snapshotEffect.clearedSpecs,
+  });
+  const snapshotFloor = findLatestAssistantFloorId() ?? messageId;
+  await writeReplicaStateSnapshot(snapshotFloor, effectiveSettings.tasks, snapshotEffect);
 }
 
 export async function resetReplicaFamilyCleanupCycleInStore(
   source: TaskWriteSource = 'api',
 ): Promise<void> {
-  const settings = loadSettings();
-  resetReplicaFamilyCleanupCycle(settings);
-  saveSettings(settings);
+  const baseSettings = loadSettings();
+  const effectiveSettings = resolveEffectiveSettings(baseSettings);
+  resetReplicaFamilyCleanupCycle(effectiveSettings);
+  await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
   await emitTasksChanged('update', source);
 }
 

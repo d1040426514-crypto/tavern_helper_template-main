@@ -7,7 +7,9 @@ import {
   buildReplicaStateFromTasks,
   mergeReplicaStateForRerun,
   mergeReplicaStateSnapshots,
+  carryForwardExplicitReplicaRoots,
   normalizeReplicaStateSnapshot,
+  retainExplicitReplicaSnapshot,
 } from './replica-state';
 
 function rootTask(overrides: Partial<PostProcessTask> = {}): PostProcessTask {
@@ -98,10 +100,33 @@ test('applyReplicaStateToTasks empty attrValues preserves members', () => {
   assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 1);
 });
 
+test('applyReplicaStateToTasks explicit empty list removes members', () => {
+  const tasks = [rootTask(), memberTask('剑')];
+  const next = applyReplicaStateToTasks(tasks, { root: { attrValues: [], explicit: true } });
+  assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 0);
+});
+
+test('mergeReplicaStateSnapshots explicit empty overrides earlier members', () => {
+  const merged = mergeReplicaStateSnapshots([
+    { root: { attrValues: ['剑'], lastEnumAttrValues: ['剑'] } },
+    { root: { attrValues: [], explicit: true } },
+  ]);
+  assert.deepEqual(merged.root?.attrValues, []);
+  assert.equal(merged.root?.explicit, true);
+  assert.equal(merged.root?.lastEnumAttrValues, undefined);
+});
+
 test('mergeReplicaStateForRerun ignores history empty attrValues', () => {
   const history = { root: { attrValues: [] as string[] } };
   const merged = mergeReplicaStateForRerun(history, null);
   assert.equal(merged.root, undefined);
+});
+
+test('mergeReplicaStateForRerun keeps explicit empty history', () => {
+  const history = { root: { attrValues: [] as string[], explicit: true } };
+  const merged = mergeReplicaStateForRerun(history, { root: { attrValues: ['剑'] } });
+  assert.deepEqual(merged.root?.attrValues, []);
+  assert.equal(merged.root?.explicit, true);
 });
 
 test('rerun empty history state does not wipe UI world member', () => {
@@ -258,6 +283,35 @@ test('applyLastEnumToReplicaSnapshot keeps existing when pending empty', () => {
 test('normalizeReplicaStateSnapshot returns null for non-object', () => {
   assert.equal(normalizeReplicaStateSnapshot(null), null);
   assert.equal(normalizeReplicaStateSnapshot([1, 2]), null);
+});
+
+test('carryForwardExplicitReplicaRoots keeps omitted explicit roots', () => {
+  const next = carryForwardExplicitReplicaRoots(
+    { kept: { attrValues: ['甲'] } },
+    {
+      kept: { attrValues: ['旧'], explicit: true },
+      gone: { attrValues: [], explicit: true },
+      plain: { attrValues: ['乙'] },
+    },
+  );
+  assert.deepEqual(next.kept?.attrValues, ['甲']);
+  assert.equal(next.kept?.explicit, undefined);
+  assert.deepEqual(next.gone?.attrValues, []);
+  assert.equal(next.gone?.explicit, true);
+  assert.equal(next.plain, undefined);
+});
+
+test('retainExplicitReplicaSnapshot keeps explicit roots including empty lists', () => {
+  const kept = retainExplicitReplicaSnapshot({
+    cleaned: { attrValues: [], explicit: true },
+    partial: { attrValues: ['甲'], lastEnumAttrValues: ['甲'], explicit: true },
+    added: { attrValues: ['乙'] },
+  });
+  assert.deepEqual(Object.keys(kept).sort(), ['cleaned', 'partial']);
+  assert.deepEqual(kept.cleaned?.attrValues, []);
+  assert.equal(kept.cleaned?.explicit, true);
+  assert.deepEqual(kept.partial?.attrValues, ['甲']);
+  assert.equal(kept.added, undefined);
 });
 
 console.log('replica-state.test.ts: all passed');

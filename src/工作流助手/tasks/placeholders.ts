@@ -10,7 +10,6 @@ import { getMemoryRecallContentForPostProcess } from '../worldbook/memory-recall
 import {
   buildCurrentFloorTagMap,
   buildInjectOnlyTagsUnion,
-  buildPreviousFloorTagMap,
   inheritTagVariables,
 } from './tag-variables';
 import { processTemplateText } from './template-process';
@@ -115,9 +114,7 @@ export async function buildSharedContext(
     inheritTagVariables(messageId);
   }
 
-  const messageVarHistoryMap = options?.isRerun
-    ? buildPreviousFloorTagMap(messageId)
-    : buildCurrentFloorTagMap(messageId);
+  const messageVarHistoryMap = buildCurrentFloorTagMap(messageId);
   const injectOnlyTagsUnion = buildInjectOnlyTagsUnion(settings.tasks);
   const replicaState = resolveReplicaStateForMessage(messageId);
 

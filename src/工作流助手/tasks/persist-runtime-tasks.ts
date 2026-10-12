@@ -10,6 +10,10 @@ import { emitChatScopeChanged, emitTasksChanged } from './events';
 import { shouldWriteRuntimeTasksToGlobal } from './persist-runtime-tasks-logic';
 import { isReplicaFamilyMember, stripReplicaFamilyMembers } from './replica-family';
 import {
+  pickReplicaFamilyCleanupRuntime,
+  stripReplicaFamilyCleanupRuntime,
+} from './replica-family-cleanup';
+import {
   ChatTaskScopeStateSchema,
   PostProcessPresetSchema,
   type PostProcessTask,
@@ -109,12 +113,30 @@ function writeBoundGlobalTasksInPlace(
   }
 }
 
+function scopeWithCleanupRuntime(
+  scope: NonNullable<ReturnType<typeof readChatTaskScope>>,
+  effectiveSettings: ScriptSettings,
+) {
+  return {
+    ...scope,
+    replicaFamilyCleanupRuntime: pickReplicaFamilyCleanupRuntime(effectiveSettings.replicaFamilyCleanup),
+  };
+}
+
 /** 将运行时副本同步、launched 等变更写回持久化存储 */
 export async function persistRuntimeTaskChanges(
   baseSettings: ScriptSettings,
   effectiveSettings: ScriptSettings,
 ): Promise<void> {
-  baseSettings.replicaFamilyCleanup = _.cloneDeep(effectiveSettings.replicaFamilyCleanup);
+  if (baseSettings.replicaFamilyCleanup && effectiveSettings.replicaFamilyCleanup) {
+    baseSettings.replicaFamilyCleanup = stripReplicaFamilyCleanupRuntime({
+      ...baseSettings.replicaFamilyCleanup,
+      enabled: effectiveSettings.replicaFamilyCleanup.enabled,
+      cycleRounds: effectiveSettings.replicaFamilyCleanup.cycleRounds,
+      minActivityTries: effectiveSettings.replicaFamilyCleanup.minActivityTries,
+      mode: effectiveSettings.replicaFamilyCleanup.mode,
+    });
+  }
   let scope = readChatTaskScope();
   let chatOverride = isChatOverrideActive(scope) && !!scope?.snapshot;
   const hasMembers = tasksHaveReplicaMembers(effectiveSettings.tasks);
@@ -138,7 +160,7 @@ export async function persistRuntimeTaskChanges(
       const snapshot = buildChatSnapshotFromSettings(effectiveSettings);
       await writeChatTaskScope(
         ChatTaskScopeStateSchema.parse({
-          ...scope!,
+          ...scopeWithCleanupRuntime(scope!, effectiveSettings),
           snapshot,
           originPresetName: boundName,
           activeView: 'snapshot',
@@ -148,9 +170,9 @@ export async function persistRuntimeTaskChanges(
         }),
       );
     } else {
-      // 快照视图：只写 snapshot；写回后保持/切回 snapshot
+      // 快照视图：只写 snapshot 与清理计数；写回后保持/切回 snapshot
       await writeChatTaskScope({
-        ...scope!,
+        ...scopeWithCleanupRuntime(scope!, effectiveSettings),
         snapshot: {
           ...scope!.snapshot!,
           tasks: _.cloneDeep(effectiveSettings.tasks),

@@ -1,6 +1,8 @@
 import { readChatTaskScope, isChatOverrideActive } from './chat-task-scope';
+import { applyReplicaFamilyCleanupRuntime } from './replica-family-cleanup';
 import {
   ScriptSettingsSchema,
+  type ChatTaskScopeState,
   type PostProcessPreset,
   type ScriptSettings,
 } from './schema';
@@ -23,9 +25,20 @@ export function applyPresetFieldsToSettings(target: ScriptSettings, preset: Post
   target.memoryRecallRecentCount = preset.memoryRecallRecentCount ?? 10;
 }
 
+function overlayReplicaFamilyCleanupRuntime(
+  target: ScriptSettings,
+  scope: ChatTaskScopeState | null,
+): void {
+  if (!target.replicaFamilyCleanup) return;
+  const runtime =
+    scope && isChatOverrideActive(scope) ? scope.replicaFamilyCleanupRuntime : undefined;
+  applyReplicaFamilyCleanupRuntime(target.replicaFamilyCleanup, runtime);
+}
+
 export function resolveEffectiveSettings(base: ScriptSettings): ScriptSettings {
   const scope = readChatTaskScope();
   if (!isChatOverrideActive(scope) || !scope?.snapshot) {
+    overlayReplicaFamilyCleanupRuntime(base, null);
     return base;
   }
 
@@ -36,11 +49,13 @@ export function resolveEffectiveSettings(base: ScriptSettings): ScriptSettings {
     const preset = name ? base.presets.find(p => p.name === name) : undefined;
     if (preset) {
       applyPresetFieldsToSettings(s, preset);
+      overlayReplicaFamilyCleanupRuntime(s, scope);
       return ScriptSettingsSchema.parse(s);
     }
     // 绑定预设缺失：回退 snapshot（纠正 scope 由 repairChatScopeBoundPreset / UI 负责）
   }
 
   applyPresetFieldsToSettings(s, scope.snapshot);
+  overlayReplicaFamilyCleanupRuntime(s, scope);
   return ScriptSettingsSchema.parse(s);
 }

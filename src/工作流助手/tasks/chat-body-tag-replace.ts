@@ -272,6 +272,7 @@ export function isBodyReplaceOriginInheritedFromPreviousFloor(
 
 /** 与 inject-variable-update 中 baseline 键一致；继承残留必须一并清除 */
 const INJECT_VAR_BASELINE_KEY = '_post_process_inject_var_baseline';
+const PRE_WORKFLOW_BASELINE_KEY = '_post_process_pre_workflow_baseline';
 
 /**
  * 清除陈旧的 done / inject / body-replace origin / 注入变量 baseline。
@@ -297,6 +298,7 @@ export async function clearStalePostProcessRunMarkers(messageId: number): Promis
   delete data._post_process_inject_block;
   delete data[BODY_REPLACE_ORIGIN_KEY];
   delete data[INJECT_VAR_BASELINE_KEY];
+  delete data[PRE_WORKFLOW_BASELINE_KEY];
 
   await setChatMessages([{ message_id: messageId, data }], { refresh: 'none' });
   return true;
