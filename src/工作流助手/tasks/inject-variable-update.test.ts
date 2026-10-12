@@ -3,7 +3,21 @@ import { test } from 'node:test';
 import {
   collectStageVariableUpdateSources,
   hasUpdateVariableTag,
+  omitMvuBaselineExtras,
 } from './inject-variable-update-logic';
+
+test('omitMvuBaselineExtras drops addon and workflow baseline keys', () => {
+  const next = omitMvuBaselineExtras({
+    stat_data: { hp: 1 },
+    schema: { type: 'object' },
+    addon_data: { 世界: {} },
+    addon_archive: { snapshots: [] },
+    _post_process_inject_var_baseline: { mvu: {} },
+    _post_process_pre_workflow_baseline: { post_process_tags: null },
+  });
+  assert.deepEqual(Object.keys(next).sort(), ['schema', 'stat_data']);
+  assert.deepEqual(next.stat_data, { hp: 1 });
+});
 
 test('hasUpdateVariableTag detects tag case-insensitively', () => {
   assert.equal(hasUpdateVariableTag('<UpdateVariable><JSONPatch>[]</JSONPatch></UpdateVariable>'), true);

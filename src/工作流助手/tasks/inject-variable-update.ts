@@ -2,6 +2,7 @@ import { acuToast } from '../ui/toast';
 import {
   collectStageVariableUpdateSources,
   hasUpdateVariableTag,
+  omitMvuBaselineExtras,
   type StageVariableUpdateResult,
 } from './inject-variable-update-logic';
 import { hasXmlTagBlock, neutralizeOrphanXmlOpens } from '@util/xml-tag-blocks';
@@ -10,6 +11,7 @@ import { resolveAddonApi, invokeClearAddonPatchLog, type ResolvedAddonApi } from
 export {
   collectStageVariableUpdateSources,
   hasUpdateVariableTag,
+  omitMvuBaselineExtras,
   type StageVariableUpdateResult,
 } from './inject-variable-update-logic';
 
@@ -87,6 +89,15 @@ function ensureAddonReady(): ResolvedAddonApi | null {
   return resolveAddonApi();
 }
 
+function cloneMvuBaseline(messageId: number): Mvu.MvuData | undefined {
+  const cloned = omitMvuBaselineExtras(
+    _.cloneDeep(Mvu.getMvuData({ type: 'message', message_id: messageId })) as Record<string, unknown>,
+  );
+  const stat = cloned.stat_data;
+  if (!stat || typeof stat !== 'object') return undefined;
+  return cloned as Mvu.MvuData;
+}
+
 function floorHasObjectVar(messageId: number, key: string): boolean {
   try {
     const vars = getVariables({ type: 'message', message_id: messageId }) ?? {};
@@ -105,7 +116,8 @@ export async function captureInjectVarBaselineNow(messageId: number): Promise<vo
   const next: InjectVarBaseline = {};
   if (typeof Mvu !== 'undefined' && floorHasObjectVar(messageId, 'stat_data')) {
     try {
-      next.mvu = _.cloneDeep(Mvu.getMvuData({ type: 'message', message_id: messageId }));
+      const mvu = cloneMvuBaseline(messageId);
+      if (mvu) next.mvu = mvu;
     } catch (e) {
       console.warn('[工作流助手] 拍摄 MVU 基线失败:', e);
     }
@@ -133,8 +145,11 @@ async function ensureBaselineSides(
   let dirty = !baseline;
 
   if (needMvu && !next.mvu) {
-    next.mvu = _.cloneDeep(Mvu.getMvuData({ type: 'message', message_id: messageId }));
-    dirty = true;
+    const mvu = cloneMvuBaseline(messageId);
+    if (mvu) {
+      next.mvu = mvu;
+      dirty = true;
+    }
   }
   if (needAddon && addonApi && !next.addon) {
     next.addon = _.cloneDeep(addonApi.getAddonData({ type: 'message', message_id: messageId }).addon_data);
