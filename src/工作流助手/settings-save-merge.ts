@@ -1,25 +1,36 @@
-/** 脚本保存：其余字段仍合并。任务列表、摘取标签、预设槽和清理配置整份替换，避免按索引合并把旧副本留在后面。 */
+/**
+ * 脚本保存：标量仍合并。列表、映射和预设文档整份替换。
+ * lodash merge 按索引合并数组、按键合并对象，删掉的规则、预设和绑定会留在旧值里。
+ */
+const WHOLESALE_KEYS = [
+  'replicaFamilyCleanup',
+  'tasks',
+  'chatExtractTags',
+  'presets',
+  'lastRunStatus',
+  'contextExtractRules',
+  'contextExcludeRules',
+  'chatBodyTagReplaceRules',
+  'chatWorldbookWriteRules',
+  'plotWorldbookConfig',
+  'apiPresets',
+  'apiPresetBindingsByChat',
+  'taskApiPresetOverridesById',
+  'scheduleState',
+  'progressHudPosition',
+] as const;
+
 export function mergePersistedScriptSettings<T extends Record<string, unknown>>(
   current: T,
   persisted: T,
 ): T {
   const next = _.merge({}, current, persisted) as T;
-  const cleanup = persisted.replicaFamilyCleanup;
-  if (cleanup && typeof cleanup === 'object') {
-    (next as { replicaFamilyCleanup?: unknown }).replicaFamilyCleanup = _.cloneDeep(cleanup);
-  }
-  if (Array.isArray(persisted.tasks)) {
-    (next as { tasks?: unknown }).tasks = _.cloneDeep(persisted.tasks);
-  }
-  if (persisted.chatExtractTags && typeof persisted.chatExtractTags === 'object') {
-    (next as { chatExtractTags?: unknown }).chatExtractTags = _.cloneDeep(persisted.chatExtractTags);
-  }
-  if (Array.isArray(persisted.presets)) {
-    (next as { presets?: unknown }).presets = _.cloneDeep(persisted.presets);
-  }
-  const runStatus = persisted.lastRunStatus;
-  if (runStatus && typeof runStatus === 'object') {
-    (next as { lastRunStatus?: unknown }).lastRunStatus = _.cloneDeep(runStatus);
+  const target = next as Record<string, unknown>;
+  for (const key of WHOLESALE_KEYS) {
+    if (!Object.prototype.hasOwnProperty.call(persisted, key)) continue;
+    const value = persisted[key];
+    if (value === undefined) continue;
+    target[key] = _.cloneDeep(value);
   }
   return next;
 }

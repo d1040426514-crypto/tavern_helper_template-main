@@ -89,3 +89,56 @@ test('mergePersistedScriptSettings replaces lastRunStatus wholesale', () => {
   );
   assert.equal(next.lastRunStatus.taskResults[0]?.skipped, undefined);
 });
+
+test('mergePersistedScriptSettings drops deleted rules, presets, bindings and hud position', () => {
+  const current = {
+    contextExtractRules: [{ start: '<gametxt', end: '</gametxt>' }],
+    contextExcludeRules: [{ start: '<old', end: '</old>' }, { start: '<keep', end: '</keep>' }],
+    chatBodyTagReplaceRules: [{ id: 'a' }, { id: 'b' }],
+    chatWorldbookWriteRules: [{ id: 'w1' }, { id: 'w2' }],
+    plotWorldbookConfig: {
+      source: 'manual',
+      manualSelection: ['book-a', 'book-b'],
+      enabledEntries: { 'book-a': [1], 'book-b': [2] },
+    },
+    apiPresets: [{ name: '甲' }, { name: '乙' }],
+    apiPresetBindingsByChat: { chat1: { presetName: '甲' }, chat2: { presetName: '乙' } },
+    taskApiPresetOverridesById: { t1: '甲', t2: '乙' },
+    scheduleState: { t1: { lastRunRound: 1 }, t2: { lastRunRound: 2 } },
+    progressHudPosition: { x: 0.2, y: 0.3 },
+    enabled: true,
+  };
+  const persisted = {
+    contextExtractRules: [],
+    contextExcludeRules: [{ start: '<keep', end: '</keep>' }],
+    chatBodyTagReplaceRules: [{ id: 'a' }],
+    chatWorldbookWriteRules: [],
+    plotWorldbookConfig: {
+      source: 'character',
+      manualSelection: [],
+      enabledEntries: {},
+    },
+    apiPresets: [{ name: '甲' }],
+    apiPresetBindingsByChat: { chat1: { presetName: '甲' } },
+    taskApiPresetOverridesById: { t1: '甲' },
+    scheduleState: { t1: { lastRunRound: 3 } },
+    progressHudPosition: null,
+    enabled: true,
+  };
+  const next = mergePersistedScriptSettings(current, persisted);
+  assert.deepEqual(next.contextExtractRules, []);
+  assert.deepEqual(next.contextExcludeRules, [{ start: '<keep', end: '</keep>' }]);
+  assert.deepEqual(next.chatBodyTagReplaceRules, [{ id: 'a' }]);
+  assert.deepEqual(next.chatWorldbookWriteRules, []);
+  assert.deepEqual(next.plotWorldbookConfig, {
+    source: 'character',
+    manualSelection: [],
+    enabledEntries: {},
+  });
+  assert.deepEqual(next.apiPresets, [{ name: '甲' }]);
+  assert.deepEqual(next.apiPresetBindingsByChat, { chat1: { presetName: '甲' } });
+  assert.deepEqual(next.taskApiPresetOverridesById, { t1: '甲' });
+  assert.deepEqual(next.scheduleState, { t1: { lastRunRound: 3 } });
+  assert.equal(next.progressHudPosition, null);
+  assert.equal(next.enabled, true);
+});

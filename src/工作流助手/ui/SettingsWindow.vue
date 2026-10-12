@@ -574,7 +574,7 @@ async function persistPlotWorldbookConfigNow(): Promise<void> {
     await updatePresetFields(patch, 'ui');
     return;
   }
-  store.saveActivePreset();
+  store.commitActivePresetFields(patch);
 }
 
 function onPlotWorldbookConfigUpdate(v: PlotWorldbookConfig): void {
@@ -607,10 +607,19 @@ function schedulePersistPresetFields() {
 watch(
   defaultContextConfigRef,
   v => {
+    if (syncingPresetView || refreshingTaskView) return;
     settings.value.contextTurnCount = v.contextTurnCount;
     settings.value.contextExtractRules = v.contextExtractRules;
     settings.value.contextExcludeRules = v.contextExcludeRules;
-    schedulePersistPresetFields();
+    if (chatScopeActive.value) {
+      schedulePersistPresetFields();
+      return;
+    }
+    store.commitActivePresetFields({
+      contextTurnCount: v.contextTurnCount,
+      contextExtractRules: v.contextExtractRules,
+      contextExcludeRules: v.contextExcludeRules,
+    });
   },
   { deep: true },
 );
@@ -625,7 +634,14 @@ watch(
     chatBodyTagReplaceRules: settings.value.chatBodyTagReplaceRules,
     chatWorldbookWriteRules: settings.value.chatWorldbookWriteRules,
   }),
-  () => schedulePersistPresetFields(),
+  fields => {
+    if (syncingPresetView || refreshingTaskView) return;
+    if (chatScopeActive.value) {
+      schedulePersistPresetFields();
+      return;
+    }
+    store.commitActivePresetFields(fields);
+  },
   { deep: true },
 );
 
@@ -637,7 +653,7 @@ const taskPlotWorldbookOverridesModel = computed({
       void persistPresetFieldsNow();
       return;
     }
-    schedulePersistPresetFields();
+    store.commitActivePresetFields({ taskPlotWorldbookOverridesEnabled: v });
   },
 });
 
@@ -649,7 +665,7 @@ const taskContextOverridesModel = computed({
       void persistPresetFieldsNow();
       return;
     }
-    schedulePersistPresetFields();
+    store.commitActivePresetFields({ taskContextOverridesEnabled: v });
   },
 });
 
@@ -662,7 +678,7 @@ const memoryRecallRecentCountModel = computed({
       void persistPresetFieldsNow();
       return;
     }
-    schedulePersistPresetFields();
+    store.commitActivePresetFields({ memoryRecallRecentCount: n });
   },
 });
 

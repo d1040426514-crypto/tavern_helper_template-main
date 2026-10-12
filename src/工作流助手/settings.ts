@@ -321,6 +321,21 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     return true;
   }
 
+  /** 没有聊天快照时，把刚改过的预设字段写进活动预设槽。只改这些字段，不把工作副本里的任务一并写回。 */
+  function commitActivePresetFields(fields: Partial<PostProcessPreset>): void {
+    if (isChatOverrideActive(readChatTaskScope())) return;
+    const name = settings.value.activePresetName.trim();
+    if (!name) return;
+    const idx = settings.value.presets.findIndex(p => p.name === name);
+    if (idx < 0) return;
+    settings.value.presets[idx] = {
+      ...settings.value.presets[idx]!,
+      ..._.cloneDeep(fields),
+      name,
+    };
+    persist();
+  }
+
   function saveAsNewPreset(newName: string): string | null {
     const name = newName.trim();
     if (!name) return null;
@@ -487,6 +502,7 @@ export const useSettingsStore = defineStore('ai-post-process-settings', () => {
     importPresetFromJson,
     upsertPresetWithoutApply,
     saveActivePreset,
+    commitActivePresetFields,
     saveAsNewPreset,
     createBlankTaskPreset,
     deleteTaskPreset,
