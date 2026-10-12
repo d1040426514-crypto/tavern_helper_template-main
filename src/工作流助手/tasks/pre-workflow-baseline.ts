@@ -8,10 +8,11 @@ import {
   POST_PROCESS_REPLICA_STATE_KEY,
   retainExplicitReplicaSnapshot,
 } from './replica-state';
+import { rememberReplicaSnapshotFloor } from './replica-snapshot-floors';
 
 export const PRE_WORKFLOW_BASELINE_KEY = '_post_process_pre_workflow_baseline';
 
-type PreWorkflowBaseline = {
+export type PreWorkflowBaseline = {
   post_process_tags: unknown;
   worldbookApplied: unknown;
   replicaSnapshot: unknown;
@@ -55,6 +56,10 @@ export async function retainFloorCleanupMarkers(messageId: number): Promise<void
   } else {
     delete data[POST_PROCESS_REPLICA_STATE_KEY];
   }
+  rememberReplicaSnapshotFloor(
+    messageId,
+    Object.keys(explicit).length ? explicit : null,
+  );
 
   await setChatMessages([{ message_id: messageId, data }], { refresh: 'none' });
 }
@@ -96,11 +101,42 @@ export async function capturePreWorkflowBaseline(messageId: number): Promise<voi
   );
 }
 
+export function readPreWorkflowBaseline(messageId: number): PreWorkflowBaseline | null {
+  const data = readMessageData(messageId);
+  if (!data) return null;
+  const baseline = readStoredBaseline(data);
+  return baseline ? _.cloneDeep(baseline) : null;
+}
+
+/** replaceMvuData 会整包换掉楼层变量。只把基线键写回去，不改当前标签和账本。 */
+export function withPreWorkflowBaselineKey(
+  data: Record<string, unknown>,
+  baseline: PreWorkflowBaseline,
+): Record<string, unknown> {
+  return { ...data, [PRE_WORKFLOW_BASELINE_KEY]: _.cloneDeep(baseline) };
+}
+
+export async function keepPreWorkflowBaselineKey(
+  messageId: number,
+  baseline: PreWorkflowBaseline | null,
+): Promise<void> {
+  if (!baseline) return;
+  const data = readMessageData(messageId);
+  if (!data) return;
+  await setChatMessages(
+    [{ message_id: messageId, data: withPreWorkflowBaselineKey(data, baseline) }],
+    { refresh: 'none' },
+  );
+}
+
 /** 手动重跑：把本楼标签、账本和副本快照恢复成工作流开始前的那一份。 */
-export async function restorePreWorkflowBaseline(messageId: number): Promise<boolean> {
+export async function restorePreWorkflowBaseline(
+  messageId: number,
+  held?: PreWorkflowBaseline | null,
+): Promise<boolean> {
   const data = readMessageData(messageId);
   if (!data) return false;
-  const baseline = readStoredBaseline(data);
+  const baseline = held ?? readStoredBaseline(data);
   if (!baseline) return false;
 
   updateVariablesWith(

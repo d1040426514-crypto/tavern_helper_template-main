@@ -34,8 +34,11 @@ import {
 import { captureInjectVarBaselineNow, restoreInjectVarBaselineForRerun } from './inject-variable-update';
 import {
   capturePreWorkflowBaseline,
+  keepPreWorkflowBaselineKey,
+  readPreWorkflowBaseline,
   restorePreWorkflowBaseline,
   retainFloorCleanupMarkers,
+  type PreWorkflowBaseline,
 } from './pre-workflow-baseline';
 import {
   hideTaskProgressToast,
@@ -290,13 +293,16 @@ export async function handleMessageReceived(
     if (!msg || msg.role !== 'assistant') return;
 
     const explicitIsRerun = options?.isRerun === true;
+    const contentRefresh = isContentRefreshMessageType(type);
+    const manualRerun = explicitIsRerun && !contentRefresh;
     const bodyReplaceEnabled = hasConfiguredChatBodyTagReplaceRules(settings);
     // GENERATION_ENDED 兜底触发不是用户刷新生文；MVU 额外模型解析改写正文后 inject 后缀可能丢失，
     // 若仍按「陈旧 done」清理会误判为 rerun，导致额外模型结束后再跑一遍工作流。
+    // 手动重跑要留下本楼基线，不能在恢复前把它清掉。
     const allowStaleClear =
-      !options?.fromGenerationEnded || isContentRefreshMessageType(type);
+      !manualRerun && (!options?.fromGenerationEnded || contentRefresh);
     const clearedStale = allowStaleClear
-      ? await clearStalePostProcessRunMarkers(targetId)
+      ? await clearStalePostProcessRunMarkers(targetId, { explicitIsRerun: manualRerun })
       : false;
     if (clearedStale) {
       msg = getChatMessages(targetId)[0];
@@ -304,11 +310,9 @@ export async function handleMessageReceived(
     }
 
     const hadDoneFlag = !!(msg.data as Record<string, unknown>)?._post_process_done;
-    // 自动重跑仅认 regenerate/swipe/continue 等。
-    // clearedStale 只表示「继承了上一楼的 done/inject」，清理后应视为本楼首次跑，
-    // 不得当成 isRerun（否则会 restore 继承来的空 baseline，清空已继承的 addon_data）。
-    const isRerun = explicitIsRerun || (hadDoneFlag && isContentRefreshMessageType(type));
-    const manualRerun = explicitIsRerun && !isContentRefreshMessageType(type);
+    // 刷新生文直接保留本楼墓碑，不看 done 是否还在。楼已被删时新楼没有墓碑，保留是空操作。
+    // 手动重跑恢复本楼基线，不走保留路径。
+    const isRerun = manualRerun || contentRefresh;
 
     if (!options?.force && hadDoneFlag && !isRerun) return;
 
@@ -331,11 +335,13 @@ export async function handleMessageReceived(
     };
 
     let newlyCreatedReplicaIds: string[] = [];
+    let heldPreWorkflow: PreWorkflowBaseline | null = null;
 
     try {
       if (manualRerun) {
-        await restorePreWorkflowBaseline(targetId);
+        heldPreWorkflow = readPreWorkflowBaseline(targetId);
         await restoreInjectVarBaselineForRerun(targetId);
+        await restorePreWorkflowBaseline(targetId, heldPreWorkflow);
         if (bodyReplaceEnabled) {
           await restoreBodyReplaceOrigin(targetId);
         }
@@ -430,6 +436,9 @@ export async function handleMessageReceived(
         { advanceCycle: !manualRerun },
       );
       await writeReplicaStateSnapshot(targetId, settings.tasks, cleanupEffect);
+      if (manualRerun) {
+        await keepPreWorkflowBaselineKey(targetId, heldPreWorkflow);
+      }
       await notifyChronicleReady();
     } catch (e) {
       const superseded =

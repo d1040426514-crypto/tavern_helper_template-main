@@ -26,6 +26,7 @@ import {
 import { rewriteApiPresetNameInTaskList, rewriteApiPresetReferences } from './api/api-preset-references';
 import { isChatOverrideActive, readChatTaskScope, writeChatTaskScope } from './tasks/chat-task-scope';
 import { applyPresetFieldsToSettings } from './tasks/effective-settings';
+import { mergePersistedScriptSettings } from './settings-save-merge';
 import {
   PostProcessPresetSchema,
   ScriptSettingsSchema,
@@ -157,10 +158,15 @@ export function saveSettings(settings: ScriptSettings): void {
   if (persisted.replicaFamilyCleanup) {
     persisted.replicaFamilyCleanup = stripReplicaFamilyCleanupRuntime(persisted.replicaFamilyCleanup);
   }
-  insertOrAssignVariables(persisted, {
-    type: 'script',
-    script_id: getScriptId(),
-  });
+  const option = { type: 'script' as const, script_id: getScriptId() };
+  if (typeof updateVariablesWith === 'function') {
+    updateVariablesWith(
+      current => mergePersistedScriptSettings(current, persisted as unknown as Record<string, unknown>),
+      option,
+    );
+    return;
+  }
+  insertOrAssignVariables(persisted, option);
 }
 
 /**

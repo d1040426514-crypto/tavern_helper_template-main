@@ -267,6 +267,26 @@ export function remapReplicaRootAttrValueInSnapshot(
   };
 }
 
+/**
+ * 删楼后的重算。剩余楼还有快照时沿用合并结果。
+ * 聊天可读、剩余楼都没有快照、且删掉的楼写过快照时，这些根记成 explicit 空名单。
+ * 聊天未就绪时不动成员。
+ */
+export function resolveSnapshotAfterFloorDelete(
+  merged: ReplicaStateSnapshot,
+  deletedRootIds: string[],
+  chatReadable: boolean,
+): ReplicaStateSnapshot {
+  if (!chatReadable || Object.keys(merged).length > 0 || !deletedRootIds.length) return merged;
+  const next: ReplicaStateSnapshot = {};
+  for (const rootId of deletedRootIds) {
+    const id = rootId.trim();
+    if (!id || next[id]) continue;
+    next[id] = { attrValues: [], explicit: true };
+  }
+  return next;
+}
+
 /** 依据快照期望的 attrValue 列表，将 tasks 中副本成员重放为一致状态 */
 export function applyReplicaStateToTasks(
   tasks: PostProcessTask[],

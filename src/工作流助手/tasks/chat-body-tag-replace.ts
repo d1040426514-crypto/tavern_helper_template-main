@@ -278,7 +278,10 @@ const PRE_WORKFLOW_BASELINE_KEY = '_post_process_pre_workflow_baseline';
  * 清除陈旧的 done / inject / body-replace origin / 注入变量 baseline。
  * 新楼常从上一楼继承这些标记；若不清 baseline，后续误判 isRerun 时会 restore 空骨架并清空 addon_data。
  */
-export async function clearStalePostProcessRunMarkers(messageId: number): Promise<boolean> {
+export async function clearStalePostProcessRunMarkers(
+  messageId: number,
+  options?: { explicitIsRerun?: boolean },
+): Promise<boolean> {
   const msg = getChatMessages(messageId)[0];
   if (!msg || msg.role !== 'assistant') return false;
   const data = { ...((msg.data ?? {}) as Record<string, unknown>) };
@@ -288,7 +291,7 @@ export async function clearStalePostProcessRunMarkers(messageId: number): Promis
       hadDone,
       message: msg.message ?? '',
       inject: data._post_process_inject_block,
-      explicitIsRerun: false,
+      explicitIsRerun: options?.explicitIsRerun === true,
     })
   ) {
     return false;

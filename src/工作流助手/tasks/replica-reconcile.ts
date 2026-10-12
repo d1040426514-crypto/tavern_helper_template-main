@@ -11,9 +11,11 @@ import {
   mergeReplicaStateSnapshots,
   normalizeReplicaStateSnapshot,
   POST_PROCESS_REPLICA_STATE_KEY,
+  resolveSnapshotAfterFloorDelete,
   type ReplicaStateSnapshot,
 } from './replica-state';
 import { takePendingLastEnumAttrValues } from './replica-enum-pending';
+import { rememberReplicaSnapshotFloor, replaceReplicaSnapshotFloorIndex, takeReplicaSnapshotFloorRoots } from './replica-snapshot-floors';
 import type { PostProcessTask } from './schema';
 
 export {
@@ -34,6 +36,41 @@ export type ReconcileReplicaOptions = {
 let reconcileInFlight = false;
 let reconcileTimer: ReturnType<typeof setTimeout> | null = null;
 let pendingReconcile: { reason: string } | null = null;
+let pendingDeletedRoots: string[] = [];
+
+function isReplicaChatReadable(): boolean {
+  const lastId = getLastMessageId();
+  if (lastId < 0) return false;
+  try {
+    getChatMessages(`0-${lastId}`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function indexReplicaSnapshotFloors(): void {
+  const lastId = getLastMessageId();
+  if (lastId < 0) {
+    replaceReplicaSnapshotFloorIndex([]);
+    return;
+  }
+  let msgs;
+  try {
+    msgs = getChatMessages(`0-${lastId}`);
+  } catch {
+    return;
+  }
+  const entries: Array<[number, string[]]> = [];
+  for (const msg of msgs) {
+    if (msg.role !== 'assistant') continue;
+    const snapshot = readReplicaStateFromMessage(msg.message_id);
+    if (!snapshot) continue;
+    const roots = Object.keys(snapshot);
+    if (roots.length) entries.push([msg.message_id, roots]);
+  }
+  replaceReplicaSnapshotFloorIndex(entries);
+}
 
 export function readReplicaStateFromMessage(messageId: number): ReplicaStateSnapshot | null {
   const msg = getChatMessages(messageId)[0];
@@ -95,6 +132,7 @@ export async function writeReplicaStateSnapshot(
     };
   }
   const withCleanup = carryForwardExplicitReplicaRoots(snapshot, existing);
+  rememberReplicaSnapshotFloor(messageId, withCleanup);
   const data = (msg.data ?? {}) as Record<string, unknown>;
   await setChatMessages(
     [
@@ -149,14 +187,26 @@ function hasReplicaFamilyRoot(tasks: PostProcessTask[]): boolean {
 
 /** 按聊天历史重放副本任务列表；快照激活时仅写 chat，否则写回全局 */
 export async function reconcileReplicaTasksFromChat(options: ReconcileReplicaOptions = {}): Promise<void> {
-  if (reconcileInFlight) return;
+  if (reconcileInFlight) {
+    if (options.reason === 'message_deleted') scheduleReplicaReconcile('message_deleted', 600);
+    return;
+  }
   reconcileInFlight = true;
   try {
     const baseSettings = loadSettings();
     const settings = resolveEffectiveSettings(baseSettings);
-    if (!hasReplicaFamilyRoot(settings.tasks)) return;
+    if (!hasReplicaFamilyRoot(settings.tasks)) {
+      if (options.reason === 'message_deleted') pendingDeletedRoots = [];
+      return;
+    }
 
-    const snapshot = collectReplicaStateFromChat(options);
+    const deletedRoots = options.reason === 'message_deleted' ? pendingDeletedRoots.splice(0) : [];
+    indexReplicaSnapshotFloors();
+    const merged = collectReplicaStateFromChat(options);
+    const snapshot =
+      options.reason === 'message_deleted'
+        ? resolveSnapshotAfterFloorDelete(merged, deletedRoots, isReplicaChatReadable())
+        : merged;
     const nextTasks = applyReplicaStateToTasks(settings.tasks, snapshot);
 
     if (_.isEqual(nextTasks, settings.tasks)) return;
@@ -217,10 +267,16 @@ export function stopReplicaReconcileTimers(): void {
 /** 注册 init / MESSAGE_DELETED 时的副本重放（与世界书 reconcile 串联） */
 export function registerReplicaReconcile(): EventOnReturn {
   const runInit = () => void reconcileReplicaTasksFromChat({ reason: 'init' });
+  try {
+    indexReplicaSnapshotFloors();
+  } catch {
+    /* 聊天尚未就绪时等 init 重扫 */
+  }
   setTimeout(runInit, 1400);
   setTimeout(runInit, 3700);
 
-  const offDeleted = eventOn(tavern_events.MESSAGE_DELETED, () => {
+  const offDeleted = eventOn(tavern_events.MESSAGE_DELETED, (messageId: number) => {
+    pendingDeletedRoots.push(...takeReplicaSnapshotFloorRoots(messageId));
     scheduleReplicaReconcile('message_deleted', 600);
   });
 

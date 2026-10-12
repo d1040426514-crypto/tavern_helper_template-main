@@ -9,6 +9,7 @@ import {
   mergeReplicaStateSnapshots,
   carryForwardExplicitReplicaRoots,
   normalizeReplicaStateSnapshot,
+  resolveSnapshotAfterFloorDelete,
   retainExplicitReplicaSnapshot,
 } from './replica-state';
 
@@ -104,6 +105,29 @@ test('applyReplicaStateToTasks explicit empty list removes members', () => {
   const tasks = [rootTask(), memberTask('剑')];
   const next = applyReplicaStateToTasks(tasks, { root: { attrValues: [], explicit: true } });
   assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 0);
+});
+
+test('resolveSnapshotAfterFloorDelete clears only when no earlier snapshot remains', () => {
+  const cleared = resolveSnapshotAfterFloorDelete({}, ['root'], true);
+  assert.equal(cleared.root?.explicit, true);
+  assert.deepEqual(cleared.root?.attrValues, []);
+
+  const kept = resolveSnapshotAfterFloorDelete({ root: { attrValues: ['剑'] } }, ['root'], true);
+  assert.deepEqual(kept.root?.attrValues, ['剑']);
+  assert.equal(kept.root?.explicit, undefined);
+
+  const unread = resolveSnapshotAfterFloorDelete({}, ['root'], false);
+  assert.deepEqual(unread, {});
+
+  const tasks = [
+    rootTask(),
+    memberTask('剑'),
+    rootTask({ id: 'other', name: '其他' }),
+    memberTask('甲', { id: 'member-other', replicaFamilyRootId: 'other' }),
+  ];
+  const next = applyReplicaStateToTasks(tasks, cleared);
+  assert.equal(next.filter(t => t.replicaFamilyRootId === 'root').length, 0);
+  assert.equal(next.filter(t => t.replicaFamilyRootId === 'other').length, 1);
 });
 
 test('mergeReplicaStateSnapshots explicit empty overrides earlier members', () => {
