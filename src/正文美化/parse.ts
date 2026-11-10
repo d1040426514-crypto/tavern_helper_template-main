@@ -1,8 +1,7 @@
 const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\u00AD\u180E]/g;
 
-const PROTECTED_SOURCE =
-  '<char_info\\b[^>]*>[\\s\\S]*?<\\/char_info\\s*>|<item_info\\b[^>]*>[\\s\\S]*?<\\/item_info\\s*>|<inner_voice\\b[^>]*>[\\s\\S]*?<\\/inner_voice\\s*>|<action_info\\b[^>]*>[\\s\\S]*?<\\/action_info\\s*>|<aurelia\\b[^>]*>[\\s\\S]*?<\\/(?:aurelia|a)\\s*>|<venture\\b[^>]*>[\\s\\S]*?<\\/venture\\s*>|<tp\\b[^>]*>[\\s\\S]*?<\\/tp\\s*>|<style\\b[^>]*>[\\s\\S]*?<\\/style\\s*>|```[\\s\\S]*?```';
-
+const INLINE_TAGS = new Set(['span', 'em', 'strong', 'b', 'i', 'q', 'br', 'a']);
+const RAW_TEXT_TAGS = new Set(['style', 'script', 'textarea', 'pre', 'code']);
 const DIALOGUE_RE = /^\{([^{}\n]{1,40})\}\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
 
 export type BeautifyParagraph = {
@@ -33,7 +32,7 @@ export function extractGametxt(raw: string): string | null {
 }
 
 export function normalizeKey(input: string): string {
-  const text = decodeEntities(stripJy(input))
+  const text = decodeEntities(stripInlineWrappers(input))
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]+>/g, '')
     .replace(INVISIBLE_RE, '');
@@ -58,11 +57,114 @@ export function firstGrapheme(name: string): string {
   return Array.from(trimmed)[0] ?? '？';
 }
 
+/**
+ * 剔除自定义标签块 / 围栏 / 注释，只留下可美化的叙述与对白文本。
+ * 行内标签保留；jy-source 丢弃，jy-translation 保留内部。
+ */
+export function stripProtectedBlocks(inner: string): { text: string; protectedText: string } {
+  const protectedParts: string[] = [];
+  let out = '';
+  let i = 0;
+
+  while (i < inner.length) {
+    if (inner.startsWith('```', i)) {
+      const end = inner.indexOf('```', i + 3);
+      const stop = end < 0 ? inner.length : end + 3;
+      protectedParts.push(inner.slice(i, stop));
+      out += '\n\n';
+      i = stop;
+      continue;
+    }
+
+    if (inner.startsWith('<!--', i)) {
+      const end = inner.indexOf('-->', i + 4);
+      const stop = end < 0 ? inner.length : end + 3;
+      protectedParts.push(inner.slice(i, stop));
+      out += '\n\n';
+      i = stop;
+      continue;
+    }
+
+    if (inner[i] === '<') {
+      const tag = readTag(inner, i);
+      if (!tag) {
+        out += inner[i];
+        i += 1;
+        continue;
+      }
+
+      if (tag.kind === 'close') {
+        // 孤立闭标签：丢掉尖括号，避免污染 key
+        i = tag.end;
+        continue;
+      }
+
+      const name = tag.name.toLowerCase();
+      if (INLINE_TAGS.has(name)) {
+        if (tag.selfClosing || tag.kind === 'open') {
+          out += inner.slice(i, tag.end);
+          i = tag.end;
+          continue;
+        }
+      }
+
+      if (name === 'jy-source') {
+        const close = findClose(inner, tag.end, name);
+        const stop = close ? close.end : blankBoundary(inner, tag.end);
+        protectedParts.push(inner.slice(i, stop));
+        out += '\n\n';
+        i = stop;
+        continue;
+      }
+
+      if (name === 'jy-translation') {
+        const close = findClose(inner, tag.end, name);
+        if (close) {
+          // 镜译常嵌套同名标签，保留最内层译文，去掉残留的 jy 标签壳
+          const kept = inner
+            .slice(tag.end, close.start)
+            .replace(/<\/?jy-translation\b[^>]*>/gi, '');
+          out += kept;
+          i = close.end;
+        } else {
+          const stop = blankBoundary(inner, tag.end);
+          out += inner.slice(tag.end, stop).replace(/<\/?jy-translation\b[^>]*>/gi, '');
+          i = stop;
+        }
+        continue;
+      }
+
+      if (tag.selfClosing) {
+        protectedParts.push(inner.slice(i, tag.end));
+        out += '\n\n';
+        i = tag.end;
+        continue;
+      }
+
+      if (RAW_TEXT_TAGS.has(name) || !INLINE_TAGS.has(name)) {
+        const close = findClose(inner, tag.end, name);
+        const stop = close ? close.end : blankBoundary(inner, tag.end);
+        protectedParts.push(inner.slice(i, stop));
+        out += '\n\n';
+        i = stop;
+        continue;
+      }
+    }
+
+    out += inner[i];
+    i += 1;
+  }
+
+  return {
+    text: out,
+    protectedText: protectedParts.map(part => normalizeKey(part)).filter(Boolean).join('\n'),
+  };
+}
+
 export function planBeautify(inner: string): BeautifyPlan {
-  const protectedParts = inner.match(protectedPattern()) ?? [];
-  const textOnly = inner.replace(protectedPattern(), '\n\n');
+  const stripped = stripProtectedBlocks(inner);
   const paragraphs: BeautifyParagraph[] = [];
-  for (const part of textOnly.split(/\n\s*\n/)) {
+  for (const part of stripped.text.split(/\n\s*\n/)) {
     const key = normalizeKey(part);
     if (!key) continue;
     const dialogue = parseDialogue(key);
@@ -74,7 +176,7 @@ export function planBeautify(inner: string): BeautifyPlan {
   }
   return {
     paragraphs,
-    protectedText: protectedParts.map(part => normalizeKey(part)).filter(Boolean).join('\n'),
+    protectedText: stripped.protectedText,
   };
 }
 
@@ -87,18 +189,99 @@ export function classifyParagraph(plain: string, plan: BeautifyPlan): 'dialogue'
   return known.kind;
 }
 
-function protectedPattern(): RegExp {
-  return new RegExp(PROTECTED_SOURCE, 'gi');
+type TagInfo = {
+  kind: 'open' | 'close';
+  name: string;
+  selfClosing: boolean;
+  end: number;
+};
+
+function readTag(input: string, start: number): TagInfo | null {
+  if (input[start] !== '<') return null;
+  if (input.startsWith('<!--', start)) return null;
+
+  const close = input[start + 1] === '/';
+  let i = start + (close ? 2 : 1);
+  if (i >= input.length || !/[A-Za-z_\u4e00-\u9fff]/.test(input[i])) return null;
+
+  const nameStart = i;
+  i += 1;
+  while (i < input.length && /[\w:.\-\u4e00-\u9fff]/u.test(input[i])) i += 1;
+  const name = input.slice(nameStart, i);
+  if (!name) return null;
+
+  if (close) {
+    while (i < input.length && /\s/.test(input[i])) i += 1;
+    if (input[i] !== '>') return null;
+    return { kind: 'close', name, selfClosing: false, end: i + 1 };
+  }
+
+  // 跳过属性，注意引号
+  while (i < input.length) {
+    const ch = input[i];
+    if (ch === '>') break;
+    if (ch === '"' || ch === "'") {
+      const quote = ch;
+      i += 1;
+      while (i < input.length && input[i] !== quote) i += 1;
+      if (i < input.length) i += 1;
+      continue;
+    }
+    i += 1;
+  }
+  if (input[i] !== '>') return null;
+  const selfClosing = input[i - 1] === '/';
+  return { kind: 'open', name, selfClosing, end: i + 1 };
 }
 
-function stripJy(input: string): string {
-  let text = input.replace(/<!--[\s\S]*?-->/g, '');
-  let previous = '';
-  while (text !== previous) {
-    previous = text;
-    text = text.replace(/<jy-source\b[^>]*>[\s\S]*?<\/jy-source>/gi, '');
+function findClose(
+  input: string,
+  from: number,
+  name: string,
+): { start: number; end: number } | null {
+  const lower = name.toLowerCase();
+  let depth = 1;
+  let i = from;
+  while (i < input.length) {
+    if (input.startsWith('```', i)) {
+      const end = input.indexOf('```', i + 3);
+      i = end < 0 ? input.length : end + 3;
+      continue;
+    }
+    if (input.startsWith('<!--', i)) {
+      const end = input.indexOf('-->', i + 4);
+      i = end < 0 ? input.length : end + 3;
+      continue;
+    }
+    if (input[i] !== '<') {
+      i += 1;
+      continue;
+    }
+    const tag = readTag(input, i);
+    if (!tag) {
+      i += 1;
+      continue;
+    }
+    if (tag.name.toLowerCase() === lower) {
+      if (tag.kind === 'open' && !tag.selfClosing) depth += 1;
+      else if (tag.kind === 'close') {
+        depth -= 1;
+        if (depth === 0) return { start: i, end: tag.end };
+      }
+    }
+    i = tag.end;
   }
-  return text.replace(/<\/?jy-translation\b[^>]*>/gi, '').replace(/<\/?say\b[^>]*>/gi, '');
+  return null;
+}
+
+/** 未找到同名闭标签时，保护到下一个空行，避免吞掉后续对白。 */
+function blankBoundary(input: string, from: number): number {
+  const match = /\n\s*\n/.exec(input.slice(from));
+  return match ? from + match.index : input.length;
+}
+
+function stripInlineWrappers(input: string): string {
+  return input.replace(/<\/?say\b[^>]*>/gi, '');
 }
 
 function decodeEntities(input: string): string {

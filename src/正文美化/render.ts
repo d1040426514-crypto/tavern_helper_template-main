@@ -9,10 +9,11 @@ import {
   type BeautifyPlan,
 } from './parse';
 
+/** 结构级安全跳过；业务前端类名不再枚举，正文只取 mes_text 直接子级 p。 */
 const SKIP =
-  '.TH-render, iframe, pre, code, script, style, textarea, .char-info-runtime-host, [data-char-info], [data-char-info-runtime-owned], .custom-au5-wrap, .item-card-letter, .gametxt-dialogue, .mes_reasoning, .mes_reasoning_details, .mes_reasoning_summary';
+  'iframe, pre, code, script, style, textarea, .TH-render, .gametxt-dialogue, .mes_reasoning, .mes_reasoning_details, .mes_reasoning_summary, .mes_reasoning_header, .mes_thoughts';
 
-const INLINE_TAGS = new Set(['SPAN', 'EM', 'STRONG', 'B', 'I', 'Q', 'BR']);
+const INLINE_TAGS = new Set(['SPAN', 'EM', 'STRONG', 'B', 'I', 'Q', 'BR', 'A']);
 const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\u00AD\u180E]/g;
 
 const tokens = new Map<number, number>();
@@ -61,7 +62,10 @@ async function waitForRoot(messageId: number, token: number): Promise<HTMLElemen
 }
 
 function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex): void {
-  const paragraphs = [...root.querySelectorAll('p')];
+  // 脚本跑在 iframe 里，不能用本 realm 的 HTMLParagraphElement 去 instanceof 父页面节点
+  const paragraphs = [...root.children].filter(
+    (node): node is HTMLParagraphElement => node.nodeType === 1 && (node as Element).tagName === 'P',
+  );
   for (const paragraph of paragraphs) {
     if (paragraph.closest(SKIP)) continue;
     if (paragraph.dataset.gametxtBeauty === 'prose') {

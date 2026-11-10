@@ -65,7 +65,12 @@ let cache: { at: number; index: AvatarIndex } | null = null;
 export async function loadAvatarIndex(): Promise<AvatarIndex> {
   if (cache && Date.now() - cache.at < 2000) return cache.index;
   try {
-    const index = await buildAvatarIndex();
+    const index = await Promise.race([
+      buildAvatarIndex(),
+      new Promise<AvatarIndex>(resolve => {
+        setTimeout(() => resolve({ urlFor: () => '' }), 1500);
+      }),
+    ]);
     cache = { at: Date.now(), index };
     return index;
   } catch (error) {
