@@ -1,0 +1,59 @@
+.gametxt-dialogue {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin: 0.65em 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  color: inherit;
+}
+
+.gametxt-avatar {
+  display: grid;
+  flex: 0 0 40px;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border-radius: 8px;
+  background: transparent;
+}
+
+.gametxt-avatar-img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center top;
+}
+
+.gametxt-initial {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.gametxt-content {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+}
+
+.gametxt-name {
+  margin-bottom: 2px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.gametxt-line {
+  line-height: 1.7;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+}
+
+.gametxt-prose {
+  background: transparent;
+  box-shadow: none;
+}

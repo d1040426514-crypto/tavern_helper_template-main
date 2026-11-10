@@ -1,0 +1,7 @@
+{
+  "id": "c3a1e7b2-6f44-4d1a-9b0e-7a6d2f0c8e51",
+  "name": "正文美化",
+  "content": "import 'http://localhost:5500/dist/正文美化/index.js'",
+  "info": "",
+  "buttons": []
+}
