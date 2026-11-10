@@ -1,4 +1,9 @@
-import { absolutizeAvatarUrl, loadAvatarIndex, type AvatarIndex } from './avatar';
+import {
+  absolutizeAvatarUrl,
+  invalidateAvatarCache,
+  loadAvatarIndex,
+  type AvatarIndex,
+} from './avatar';
 import {
   classifyParagraph,
   extractGametxt,
@@ -48,6 +53,22 @@ export async function renderMessage(messageId: number): Promise<void> {
   }
 }
 
+/** 清缓存后重刷当前聊天所有已渲染对白头像（不改叙述结构）。 */
+export async function refreshAllDialogueAvatars(): Promise<void> {
+  invalidateAvatarCache();
+  const avatars = await loadAvatarIndex();
+  let last = -1;
+  try {
+    last = getLastMessageId();
+  } catch {
+    return;
+  }
+  for (let id = 0; id <= last; id += 1) {
+    const root = messageRoot(id);
+    if (root) syncDialogueAvatars(root, avatars);
+  }
+}
+
 function messageRoot(messageId: number): HTMLElement | null {
   const displayed = retrieveDisplayedMessage(messageId).get(0);
   if (!displayed) return null;
@@ -75,6 +96,29 @@ function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex):
     const kind = classifyParagraph(paragraph.textContent ?? '', plan);
     if (kind === 'dialogue') decorateDialogue(paragraph, avatars);
     else if (kind === 'prose') decorateProse(paragraph);
+  }
+  syncDialogueAvatars(root, avatars);
+}
+
+/** 重写已有对白行的头像槽，用于持久补图与状态栏即时同步。 */
+export function syncDialogueAvatars(root: HTMLElement, avatars: AvatarIndex): void {
+  const rows = [...root.querySelectorAll('.gametxt-dialogue')];
+  for (const row of rows) {
+    const name = row.querySelector('.gametxt-name')?.textContent?.trim() || '';
+    const slot = row.querySelector('.gametxt-avatar');
+    if (!name || !slot) continue;
+    const doc = row.ownerDocument;
+    const nextUrl = absolutizeAvatarUrl(avatars.urlFor(name));
+    const currentImg = slot.querySelector('img.gametxt-avatar-img');
+    const currentInitial = slot.querySelector('.gametxt-initial');
+    if (nextUrl) {
+      if (currentImg?.getAttribute('src') === nextUrl) continue;
+      slot.replaceChildren(avatarNode(doc, name, nextUrl));
+      continue;
+    }
+    const initial = firstGrapheme(name);
+    if (currentInitial?.textContent === initial && !currentImg) continue;
+    slot.replaceChildren(initialNode(doc, name));
   }
 }
 

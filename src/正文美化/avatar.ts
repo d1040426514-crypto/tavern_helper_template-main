@@ -9,6 +9,8 @@ type AvatarRecord = {
   owner_name?: string;
   source_type?: string;
   value?: string;
+  updated_at?: number;
+  key?: string;
 };
 
 type PartnerAvatar = {
@@ -62,20 +64,41 @@ export function absolutizeAvatarUrl(url: string): string {
 
 let cache: { at: number; index: AvatarIndex } | null = null;
 
+export function invalidateAvatarCache(): void {
+  cache = null;
+}
+
 export async function loadAvatarIndex(): Promise<AvatarIndex> {
   if (cache && Date.now() - cache.at < 2000) return cache.index;
   try {
-    const index = await Promise.race([
-      buildAvatarIndex(),
-      new Promise<AvatarIndex>(resolve => {
-        setTimeout(() => resolve({ urlFor: () => '' }), 1500);
-      }),
-    ]);
+    const index = await buildAvatarIndex();
     cache = { at: Date.now(), index };
     return index;
   } catch (error) {
     console.error('[正文美化] 读取头像失败', error);
     return { urlFor: () => '' };
+  }
+}
+
+/** 用于轮询侦测状态栏头像库是否变化；不含完整 value，避免大图开销。 */
+export async function avatarFingerprint(): Promise<string> {
+  try {
+    const character = text(getCurrentCharacterName()) || 'unknown-character';
+    const records = await readRecords(`status:${character}`);
+    const parts = records
+      .map(record =>
+        [
+          text(record.owner_type),
+          text(record.owner_name),
+          text(record.source_type),
+          String(record.updated_at ?? 0),
+          String(text(record.value).length),
+        ].join(':'),
+      )
+      .sort();
+    return `${character}|${parts.join('|')}`;
+  } catch {
+    return '';
   }
 }
 
