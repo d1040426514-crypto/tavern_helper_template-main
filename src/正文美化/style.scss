@@ -57,3 +57,219 @@
   background: transparent;
   box-shadow: none;
 }
+
+/*
+ * 内心话：收起时只剩头像与一串思绪泡泡，不占一整条栏；
+ * 正文颜色跟随酒馆主题，角色色只用于头像环、泡泡与细线，深浅背景都可读。
+ */
+.gametxt-iv {
+  --gametxt-iv-accent: var(--SmartThemeQuoteColor, currentColor);
+  --gametxt-iv-soft: color-mix(in srgb, var(--gametxt-iv-accent) 55%, transparent);
+
+  margin: 0.45em 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: inherit;
+  interpolate-size: allow-keywords;
+}
+
+.gametxt-iv-head {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 8px 2px 2px;
+  border-radius: 999px;
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  line-height: 1;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 0.25s ease;
+
+  &::-webkit-details-marker {
+    display: none;
+  }
+
+  &::marker {
+    content: '';
+  }
+
+  &:hover {
+    background: color-mix(in srgb, var(--gametxt-iv-accent) 8%, transparent);
+  }
+
+  &:focus-visible {
+    box-shadow: 0 0 0 1px var(--gametxt-iv-soft);
+  }
+}
+
+.gametxt-avatar.gametxt-iv-avatar {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border: 1.5px solid var(--gametxt-iv-soft);
+  border-radius: 50%;
+  box-shadow: 0 0 0 0 transparent;
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.35s ease,
+    transform 0.25s ease;
+
+  .gametxt-initial {
+    font-size: 14px;
+  }
+
+  .gametxt-iv-head:hover & {
+    transform: scale(1.06);
+  }
+
+  .gametxt-iv[open] & {
+    border-color: var(--gametxt-iv-accent);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--gametxt-iv-accent) 16%, transparent);
+  }
+}
+
+/* 思绪泡泡：由大到小飘向右侧，轻微呼吸提示「这里有话没说出口」 */
+.gametxt-iv-bubbles {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 3px;
+  height: 16px;
+  transition:
+    opacity 0.25s ease,
+    transform 0.3s ease,
+    width 0.3s ease;
+
+  i {
+    display: block;
+    border-radius: 50%;
+    background: var(--gametxt-iv-accent);
+    opacity: 0.55;
+    animation: gametxt-iv-breathe 2.6s ease-in-out infinite;
+  }
+
+  i:nth-child(1) {
+    width: 7px;
+    height: 7px;
+    margin-bottom: 7px;
+  }
+
+  i:nth-child(2) {
+    width: 5px;
+    height: 5px;
+    margin-bottom: 3px;
+    animation-delay: 0.25s;
+  }
+
+  i:nth-child(3) {
+    width: 3.5px;
+    height: 3.5px;
+    animation-delay: 0.5s;
+  }
+
+  .gametxt-iv-head:hover & i {
+    opacity: 0.9;
+  }
+
+  .gametxt-iv[open] & {
+    width: 0;
+    opacity: 0;
+    transform: translateX(6px) scale(0.6);
+  }
+}
+
+.gametxt-iv-name {
+  max-width: 0;
+  overflow: hidden;
+  font-size: 0.82em;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  opacity: 0;
+  transition:
+    max-width 0.35s ease,
+    opacity 0.3s ease;
+
+  .gametxt-iv-head:hover &,
+  .gametxt-iv[open] & {
+    max-width: 16em;
+    opacity: 0.7;
+  }
+}
+
+.gametxt-iv-body {
+  position: relative;
+  margin: 4px 0 2px 17px;
+  padding: 2px 4px 2px 18px;
+  color: color-mix(in srgb, var(--gametxt-iv-accent) 22%, currentColor);
+  font-style: italic;
+  line-height: 1.75;
+  word-break: break-word;
+
+  &::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 4px;
+    left: 0;
+    width: 1px;
+    background: linear-gradient(var(--gametxt-iv-accent), transparent);
+    opacity: 0.5;
+  }
+
+  .gametxt-iv[open] & {
+    animation: gametxt-iv-reveal 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+  }
+}
+
+/* 支持的浏览器里让展开高度平滑过渡，不支持时仍有显现动画 */
+.gametxt-iv::details-content {
+  block-size: 0;
+  overflow: hidden;
+  transition:
+    block-size 0.35s ease,
+    content-visibility 0.35s allow-discrete;
+}
+
+.gametxt-iv[open]::details-content {
+  block-size: auto;
+}
+
+@keyframes gametxt-iv-breathe {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+
+  50% {
+    transform: translateY(-1.5px);
+  }
+}
+
+@keyframes gametxt-iv-reveal {
+  from {
+    opacity: 0;
+    filter: blur(3px);
+    transform: translateY(-4px);
+  }
+
+  to {
+    opacity: 1;
+    filter: none;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gametxt-iv-bubbles i,
+  .gametxt-iv[open] .gametxt-iv-body {
+    animation: none;
+  }
+
+  .gametxt-iv::details-content {
+    transition: none;
+  }
+}

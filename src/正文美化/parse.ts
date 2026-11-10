@@ -13,9 +13,15 @@ export type BeautifyParagraph = {
   line?: string;
 };
 
+export type InnerVoice = {
+  role: string;
+  key: string;
+};
+
 export type BeautifyPlan = {
   paragraphs: BeautifyParagraph[];
   protectedText: string;
+  innerVoices: InnerVoice[];
 };
 
 /** 取 `</think>` 之后的第一段 `<gametxt>`，与角色管理库使用同一段正文。 */
@@ -179,7 +185,57 @@ export function planBeautify(inner: string): BeautifyPlan {
   return {
     paragraphs,
     protectedText: stripped.protectedText,
+    innerVoices: extractInnerVoices(inner),
   };
+}
+
+/**
+ * 内心话在显示层会丢掉 `<inner_voice>` 外壳（role 也一起丢），
+ * 只能从原文取 role，再用译文文本去对页面段落。
+ */
+export function extractInnerVoices(inner: string): InnerVoice[] {
+  const voices: InnerVoice[] = [];
+  const openRe = /<inner_voice\b/gi;
+  let match: RegExpExecArray | null;
+  while ((match = openRe.exec(inner))) {
+    const tag = readTag(inner, match.index);
+    if (!tag || tag.kind !== 'open' || tag.selfClosing) continue;
+    const head = inner.slice(match.index, tag.end);
+    const role = /\brole\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
+    const close = findClose(inner, tag.end, 'inner_voice');
+    if (!close) continue;
+    const body = inner.slice(tag.end, close.start);
+    const translated = body
+      .replace(/<jy-source\b[^>]*>[\s\S]*?<\/jy-source\s*>/gi, '')
+      .replace(/<\/?jy-(?:source|translation)\b[^>]*>/gi, '');
+    const key = voiceKey(translated) || voiceKey(body.replace(/<\/?jy-[\w-]+\b[^>]*>/gi, ''));
+    const name = (role?.[1] ?? role?.[2] ?? '').trim();
+    if (key && name) voices.push({ role: name, key });
+    openRe.lastIndex = close.end;
+  }
+  return voices;
+}
+
+export function matchInnerVoice(plain: string, plan: BeautifyPlan): InnerVoice | null {
+  if (!plan.innerVoices.length) return null;
+  if (parseDialogue(normalizeKey(plain))) return null;
+  const key = voiceKey(plain);
+  if (!key) return null;
+  const exact = plan.innerVoices.find(voice => voice.key === key);
+  if (exact) return exact;
+  if (key.length < 6) return null;
+  return (
+    plan.innerVoices.find(
+      voice => voice.key.includes(key) || (key.includes(voice.key) && key.length - voice.key.length <= 4),
+    ) ?? null
+  );
+}
+
+/** 比较用：去空白、去外层括号（镜译重排会剥掉译文外的（）），只留正文字符。 */
+function voiceKey(input: string): string {
+  return normalizeKey(input.replace(/<!--[\s\S]*?-->/g, ''))
+    .replace(/\s+/g, '')
+    .replace(/^[（(「“"]+|[）)」”"]+$/g, '');
 }
 
 export function classifyParagraph(plain: string, plan: BeautifyPlan): 'dialogue' | 'prose' | null {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { classifyParagraph, extractGametxt, firstGrapheme, planBeautify } from './parse';
+import { classifyParagraph, extractGametxt, firstGrapheme, matchInnerVoice, planBeautify } from './parse';
 
 const raw = `
 <think>草稿里的 <gametxt>{不要}「这句不该出现」</gametxt></think>
@@ -124,5 +124,29 @@ assert.equal(
   mismatched.paragraphs.find(paragraph => paragraph.key === '{丁}「别吞我。」')?.kind,
   'dialogue',
 );
+
+assert.deepEqual(plan.innerVoices, [{ role: '薇奥拉·斯坦因', key: '躲在桌子底下的究竟是谁。' }]);
+assert.equal(matchInnerVoice('\n\n躲在桌子底下的究竟是谁。\n', plan)?.role, '薇奥拉·斯坦因');
+
+const voices = planBeautify(`
+<inner_voice role="波尔特·瓦伦">
+⁣⁠⁣<jy-source><p style="color: #63b3ed;">私の意識の中に……</p></jy-source>
+<jy-translation>（我的意识里居然有人存在？）</jy-translation>
+</inner_voice>
+
+<inner_voice role="阿米娅">
+<p style="color: #E8A87C;font-style: italic;">他会相信我吗</p>
+</inner_voice>
+
+{甲}「我的意识里居然有人存在？」
+`);
+assert.deepEqual(
+  voices.innerVoices.map(voice => `${voice.role}:${voice.key}`),
+  ['波尔特·瓦伦:我的意识里居然有人存在？', '阿米娅:他会相信我吗'],
+);
+assert.equal(matchInnerVoice('我的意识里居然有人存在？', voices)?.role, '波尔特·瓦伦');
+assert.equal(matchInnerVoice('他会相信我吗', voices)?.role, '阿米娅');
+assert.equal(matchInnerVoice('{甲}「我的意识里居然有人存在？」', voices), null);
+assert.equal(matchInnerVoice('无关', voices), null);
 
 console.log('ok gametxt parse');

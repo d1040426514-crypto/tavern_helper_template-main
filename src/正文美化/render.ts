@@ -8,15 +8,18 @@ import {
   classifyParagraph,
   extractGametxt,
   firstGrapheme,
+  matchInnerVoice,
   normalizeKey,
   parseDialogue,
   planBeautify,
   type BeautifyPlan,
+  type InnerVoice,
 } from './parse';
 
 /** 结构级安全跳过；业务前端类名不再枚举，正文只取 mes_text 直接子级 p。 */
 const SKIP =
-  'iframe, pre, code, script, style, textarea, .TH-render, .gametxt-dialogue, .mes_reasoning, .mes_reasoning_details, .mes_reasoning_summary, .mes_reasoning_header, .mes_thoughts';
+  'iframe, pre, code, script, style, textarea, .TH-render, .gametxt-dialogue, .gametxt-iv, .mes_reasoning, .mes_reasoning_details, .mes_reasoning_summary, .mes_reasoning_header, .mes_thoughts';
+const AVATAR_ROWS = '.gametxt-dialogue, .gametxt-iv';
 
 const INLINE_TAGS = new Set(['SPAN', 'EM', 'STRONG', 'B', 'I', 'Q', 'BR', 'A']);
 const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\u00AD\u180E]/g;
@@ -42,7 +45,7 @@ export async function renderMessage(messageId: number): Promise<void> {
     const inner = extractGametxt(raw);
     if (inner == null) return;
     const plan = planBeautify(inner);
-    if (!plan.paragraphs.length) return;
+    if (!plan.paragraphs.length && !plan.innerVoices.length) return;
     const avatars = await loadAvatarIndex();
     if (tokens.get(messageId) !== token) return;
     const root = messageRoot(messageId) ?? (await waitForRoot(messageId, token));
@@ -93,6 +96,11 @@ function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex):
       stripInvisible(paragraph);
       continue;
     }
+    const voice = matchInnerVoice(paragraph.textContent ?? '', plan);
+    if (voice) {
+      decorateInnerVoice(paragraph, voice, avatars);
+      continue;
+    }
     const kind = classifyParagraph(paragraph.textContent ?? '', plan);
     if (kind === 'dialogue') decorateDialogue(paragraph, avatars);
     else if (kind === 'prose') decorateProse(paragraph);
@@ -102,9 +110,9 @@ function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex):
 
 /** 重写已有对白行的头像槽，用于持久补图与状态栏即时同步。 */
 export function syncDialogueAvatars(root: HTMLElement, avatars: AvatarIndex): void {
-  const rows = [...root.querySelectorAll('.gametxt-dialogue')];
+  const rows = [...root.querySelectorAll<HTMLElement>(AVATAR_ROWS)];
   for (const row of rows) {
-    const name = row.querySelector('.gametxt-name')?.textContent?.trim() || '';
+    const name = row.dataset.gametxtName || row.querySelector('.gametxt-name')?.textContent?.trim() || '';
     const slot = row.querySelector('.gametxt-avatar');
     if (!name || !slot) continue;
     const doc = row.ownerDocument;
@@ -153,6 +161,46 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
   content.append(name, line);
   row.append(avatar, content);
   paragraph.replaceWith(row);
+}
+
+/** 原生 details 折叠，不挂事件，脚本重载后旧节点照样能开合。 */
+function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, avatars: AvatarIndex): void {
+  const doc = paragraph.ownerDocument;
+  const card = doc.createElement('details');
+  card.className = 'gametxt-iv';
+  card.dataset.gametxtBeauty = 'inner-voice';
+  card.dataset.gametxtName = voice.role;
+  const accent = paragraph.style.color;
+  if (accent) card.style.setProperty('--gametxt-iv-accent', accent);
+
+  const head = doc.createElement('summary');
+  head.className = 'gametxt-iv-head';
+  head.title = `${voice.role} 的心声`;
+
+  const avatar = doc.createElement('span');
+  avatar.className = 'gametxt-avatar gametxt-iv-avatar';
+  avatar.append(avatarNode(doc, voice.role, avatars.urlFor(voice.role)));
+
+  const name = doc.createElement('span');
+  name.className = 'gametxt-iv-name';
+  name.textContent = voice.role;
+
+  const bubbles = doc.createElement('span');
+  bubbles.className = 'gametxt-iv-bubbles';
+  bubbles.setAttribute('aria-hidden', 'true');
+  bubbles.append(doc.createElement('i'), doc.createElement('i'), doc.createElement('i'));
+
+  head.append(avatar, bubbles, name);
+
+  const body = doc.createElement('div');
+  body.className = 'gametxt-iv-body';
+  const clone = paragraph.cloneNode(true) as HTMLElement;
+  stripInvisible(clone);
+  sanitizeInline(clone);
+  body.innerHTML = clone.innerHTML.trim() || escapeHtml(normalizeKey(paragraph.textContent ?? ''));
+
+  card.append(head, body);
+  paragraph.replaceWith(card);
 }
 
 function avatarNode(doc: Document, name: string, url: string): HTMLElement {
