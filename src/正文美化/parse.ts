@@ -5,6 +5,11 @@ const RAW_TEXT_TAGS = new Set(['style', 'script', 'textarea', 'pre', 'code']);
 /** 半角 {} 与全角 ｛｝ 都认，但要求成对，不认半全角混用。 */
 const DIALOGUE_RE =
   /^(?:\{([^{}\n]{1,40})\}|｛([^｛｝\n]{1,40})｝)\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
+const SPEAKER_HEAD_RE = /^(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*([「“])/;
+/** 引号里出现另一个说话头，说明是多人对白被并到了一行，不能当一句。 */
+const NESTED_SPEAKER_RE = /[」”]\s*(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*[「“]/;
+const CLOSE_QUOTE: Record<string, string> = { '「': '」', '“': '”' };
+const MAX_DIALOGUE_LINES = 8;
 
 export type BeautifyParagraph = {
   kind: 'dialogue' | 'prose';
@@ -14,8 +19,10 @@ export type BeautifyParagraph = {
 };
 
 export type InnerVoice = {
+  index: number;
   role: string;
   key: string;
+  parts: string[];
 };
 
 export type BeautifyPlan = {
@@ -43,7 +50,9 @@ export function normalizeKey(input: string): string {
   const text = decodeEntities(stripInlineWrappers(input))
     .replace(/<br\s*\/?>/gi, ' ')
     .replace(/<[^>]+>/g, '')
-    .replace(INVISIBLE_RE, '');
+    .replace(INVISIBLE_RE, '')
+    // markdown 强调符号在显示层会变成标签，原文与页面两侧都去掉才对得上
+    .replace(/\*+/g, '');
   return text.replace(/\s+/g, ' ').trim();
 }
 
@@ -52,7 +61,37 @@ export function parseDialogue(key: string): { name: string; line: string } | nul
   if (!match) return null;
   const name = (match[1] ?? match[2] ?? '').trim();
   if (!name) return null;
-  return { name, line: (match[3] ?? match[4] ?? '').trim() };
+  const line = (match[3] ?? match[4] ?? '').trim();
+  if (NESTED_SPEAKER_RE.test(line)) return null;
+  return { name, line };
+}
+
+/**
+ * 把逐行 key 分组：以说话头开引号起、本行未闭合的对白向后合并到闭引号行。
+ * 原文与页面（按 <br> 切）共用，保证两侧切法一致。返回闭区间下标。
+ */
+export function groupLineRanges(lines: string[]): Array<[number, number]> {
+  const ranges: Array<[number, number]> = [];
+  let i = 0;
+  while (i < lines.length) {
+    const head = SPEAKER_HEAD_RE.exec(lines[i]);
+    let end = i;
+    if (head) {
+      const close = CLOSE_QUOTE[head[1]];
+      if (!lines[i].endsWith(close)) {
+        for (let j = i + 1; j < lines.length && j - i < MAX_DIALOGUE_LINES; j += 1) {
+          if (SPEAKER_HEAD_RE.test(lines[j])) break;
+          if (lines[j].endsWith(close)) {
+            end = j;
+            break;
+          }
+        }
+      }
+    }
+    ranges.push([i, end]);
+    i = end + 1;
+  }
+  return ranges;
 }
 
 export function firstGrapheme(name: string): string {
@@ -172,15 +211,21 @@ export function stripProtectedBlocks(inner: string): { text: string; protectedTe
 export function planBeautify(inner: string): BeautifyPlan {
   const stripped = stripProtectedBlocks(inner);
   const paragraphs: BeautifyParagraph[] = [];
-  for (const part of stripped.text.split(/\n\s*\n/)) {
-    const key = normalizeKey(part);
-    if (!key) continue;
+  const seen = new Set<string>();
+  const push = (key: string) => {
+    if (!key || seen.has(key)) return;
+    seen.add(key);
     const dialogue = parseDialogue(key);
     if (dialogue) {
       paragraphs.push({ kind: 'dialogue', key, name: dialogue.name, line: dialogue.line });
     } else {
       paragraphs.push({ kind: 'prose', key });
     }
+  };
+  for (const part of stripped.text.split(/\n\s*\n/)) {
+    const lines = part.split('\n').map(normalizeKey).filter(Boolean);
+    for (const [start, end] of groupLineRanges(lines)) push(lines.slice(start, end + 1).join(' '));
+    if (lines.length > 1) push(normalizeKey(part));
   }
   return {
     paragraphs,
@@ -208,9 +253,14 @@ export function extractInnerVoices(inner: string): InnerVoice[] {
     const translated = body
       .replace(/<jy-source\b[^>]*>[\s\S]*?<\/jy-source\s*>/gi, '')
       .replace(/<\/?jy-(?:source|translation)\b[^>]*>/gi, '');
-    const key = voiceKey(translated) || voiceKey(body.replace(/<\/?jy-[\w-]+\b[^>]*>/gi, ''));
+    const source = voiceKey(translated) ? translated : body.replace(/<\/?jy-[\w-]+\b[^>]*>/gi, '');
+    const key = voiceKey(source);
+    const parts = source
+      .split(/<\/p\s*>|<br\s*\/?>|\n/i)
+      .map(voiceKey)
+      .filter(Boolean);
     const name = (role?.[1] ?? role?.[2] ?? '').trim();
-    if (key && name) voices.push({ role: name, key });
+    if (key && name) voices.push({ index: voices.length, role: name, key, parts });
     openRe.lastIndex = close.end;
   }
   return voices;
@@ -223,6 +273,8 @@ export function matchInnerVoice(plain: string, plan: BeautifyPlan): InnerVoice |
   if (!key) return null;
   const exact = plan.innerVoices.find(voice => voice.key === key);
   if (exact) return exact;
+  const part = plan.innerVoices.find(voice => voice.parts.includes(key));
+  if (part) return part;
   if (key.length < 6) return null;
   return (
     plan.innerVoices.find(

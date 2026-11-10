@@ -8,6 +8,7 @@ import {
   classifyParagraph,
   extractGametxt,
   firstGrapheme,
+  groupLineRanges,
   matchInnerVoice,
   normalizeKey,
   parseDialogue,
@@ -85,27 +86,120 @@ async function waitForRoot(messageId: number, token: number): Promise<HTMLElemen
   return messageRoot(messageId);
 }
 
-function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex): void {
+type SegmentKind = 'dialogue' | 'voice' | 'prose' | 'plain';
+
+type Segment = {
+  nodes: Node[];
+  key: string;
+  kind: SegmentKind;
+  voice?: InnerVoice;
+};
+
+export function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: AvatarIndex): void {
+  unwrapInnerVoiceShells(root);
   // 脚本跑在 iframe 里，不能用本 realm 的 HTMLParagraphElement 去 instanceof 父页面节点
   const paragraphs = [...root.children].filter(
     (node): node is HTMLParagraphElement => node.nodeType === 1 && (node as Element).tagName === 'P',
   );
   for (const paragraph of paragraphs) {
-    if (paragraph.closest(SKIP)) continue;
+    if (!paragraph.isConnected || paragraph.closest(SKIP)) continue;
     if (paragraph.dataset.gametxtBeauty === 'prose') {
       stripInvisible(paragraph);
       continue;
     }
-    const voice = matchInnerVoice(paragraph.textContent ?? '', plan);
-    if (voice) {
-      decorateInnerVoice(paragraph, voice, avatars);
-      continue;
-    }
-    const kind = classifyParagraph(paragraph.textContent ?? '', plan);
-    if (kind === 'dialogue') decorateDialogue(paragraph, avatars);
-    else if (kind === 'prose') decorateProse(paragraph);
+    beautifyParagraph(paragraph, plan, avatars);
   }
   syncDialogueAvatars(root, avatars);
+}
+
+/** 个别配置下页面会保留 inner_voice 元素；展开后内部段落才能按直接子级 p 处理。 */
+function unwrapInnerVoiceShells(root: HTMLElement): void {
+  for (const shell of [...root.children].filter(node => node.tagName === 'INNER_VOICE')) {
+    const hasBlock = [...shell.children].some(child => child.tagName === 'P');
+    if (hasBlock) {
+      shell.replaceWith(...shell.childNodes);
+      continue;
+    }
+    const paragraph = shell.ownerDocument.createElement('p');
+    paragraph.append(...shell.childNodes);
+    shell.replaceWith(paragraph);
+  }
+}
+
+/** 无镜译时叙述、对白、内心话常以单换行同处一个 <p>，按 <br> 切行后逐段归类。 */
+function beautifyParagraph(paragraph: HTMLParagraphElement, plan: BeautifyPlan, avatars: AvatarIndex): void {
+  const segments = splitSegments(paragraph, plan);
+  if (segments.length <= 1) {
+    const segment = segments[0];
+    if (!segment) return;
+    if (segment.kind === 'voice' && segment.voice) decorateInnerVoice(paragraph, segment.voice, avatars);
+    else if (segment.kind === 'dialogue') decorateDialogue(paragraph, avatars);
+    else if (segment.kind === 'prose') decorateProse(paragraph);
+    return;
+  }
+
+  if (!segments.some(segment => segment.kind === 'dialogue' || segment.kind === 'voice')) {
+    const whole = classifyParagraph(paragraph.textContent ?? '', plan);
+    if (whole === 'prose' || segments.every(segment => segment.kind === 'prose')) decorateProse(paragraph);
+    return;
+  }
+
+  const doc = paragraph.ownerDocument;
+  const fragment = doc.createDocumentFragment();
+  const accent = paragraph.style.color;
+  let run: HTMLParagraphElement | null = null;
+  let runKind: SegmentKind | null = null;
+  for (const segment of segments) {
+    if (segment.kind === 'prose' || segment.kind === 'plain') {
+      if (!run || runKind !== segment.kind) {
+        run = doc.createElement('p');
+        runKind = segment.kind;
+        fragment.append(run);
+      } else {
+        run.append(doc.createElement('br'));
+      }
+      run.append(...segment.nodes);
+      if (segment.kind === 'prose') decorateProse(run);
+      continue;
+    }
+    run = null;
+    runKind = null;
+    const holder = doc.createElement('p');
+    holder.append(...segment.nodes);
+    fragment.append(holder);
+    if (segment.kind === 'voice' && segment.voice) {
+      if (accent) holder.style.color = accent;
+      decorateInnerVoice(holder, segment.voice, avatars);
+    } else {
+      decorateDialogue(holder, avatars);
+    }
+  }
+  paragraph.replaceWith(fragment);
+}
+
+function splitSegments(paragraph: HTMLParagraphElement, plan: BeautifyPlan): Segment[] {
+  const lines: Node[][] = [[]];
+  for (const node of [...paragraph.childNodes]) {
+    if (node.nodeType === 1 && (node as Element).tagName === 'BR') lines.push([]);
+    else lines[lines.length - 1].push(node);
+  }
+  const filled = lines
+    .map(nodes => ({ nodes, key: normalizeKey(nodes.map(node => node.textContent ?? '').join('')) }))
+    .filter(line => line.key);
+
+  return groupLineRanges(filled.map(line => line.key)).map(([start, end]) => {
+    const group = filled.slice(start, end + 1);
+    const nodes: Node[] = [];
+    group.forEach((line, index) => {
+      if (index > 0) nodes.push(paragraph.ownerDocument.createElement('br'));
+      nodes.push(...line.nodes);
+    });
+    const key = group.map(line => line.key).join(' ');
+    const voice = matchInnerVoice(key, plan);
+    if (voice) return { nodes, key, kind: 'voice' as const, voice };
+    const kind = classifyParagraph(key, plan);
+    return { nodes, key, kind: kind ?? 'plain' };
+  });
 }
 
 /** 重写已有对白行的头像槽，用于持久补图与状态栏即时同步。 */
@@ -166,10 +260,19 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
 /** 原生 details 折叠，不挂事件，脚本重载后旧节点照样能开合。 */
 function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, avatars: AvatarIndex): void {
   const doc = paragraph.ownerDocument;
+  const block = voiceBlock(paragraph);
+  const previous = previousMeaningful(paragraph);
+  if (previous?.classList.contains('gametxt-iv') && previous.dataset.gametxtVoice === String(voice.index)) {
+    previous.querySelector('.gametxt-iv-body')?.append(block);
+    paragraph.remove();
+    return;
+  }
+
   const card = doc.createElement('details');
   card.className = 'gametxt-iv';
   card.dataset.gametxtBeauty = 'inner-voice';
   card.dataset.gametxtName = voice.role;
+  card.dataset.gametxtVoice = String(voice.index);
   const accent = paragraph.style.color;
   if (accent) card.style.setProperty('--gametxt-iv-accent', accent);
 
@@ -194,13 +297,29 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
 
   const body = doc.createElement('div');
   body.className = 'gametxt-iv-body';
-  const clone = paragraph.cloneNode(true) as HTMLElement;
-  stripInvisible(clone);
-  sanitizeInline(clone);
-  body.innerHTML = clone.innerHTML.trim() || escapeHtml(normalizeKey(paragraph.textContent ?? ''));
+  body.append(block);
 
   card.append(head, body);
   paragraph.replaceWith(card);
+}
+
+function voiceBlock(paragraph: HTMLParagraphElement): HTMLParagraphElement {
+  const clone = paragraph.cloneNode(true) as HTMLElement;
+  stripInvisible(clone);
+  sanitizeInline(clone);
+  tidyBreaks(clone);
+  const block = paragraph.ownerDocument.createElement('p');
+  block.innerHTML = clone.innerHTML.trim() || escapeHtml(normalizeKey(paragraph.textContent ?? ''));
+  return block;
+}
+
+/** 跳过酒馆在块级标签间留下的空 <p>，找真正的上一个兄弟。 */
+function previousMeaningful(node: Element): HTMLElement | null {
+  let previous = node.previousElementSibling as HTMLElement | null;
+  while (previous && previous.tagName === 'P' && !normalizeKey(previous.textContent ?? '')) {
+    previous = previous.previousElementSibling as HTMLElement | null;
+  }
+  return previous;
 }
 
 function avatarNode(doc: Document, name: string, url: string): HTMLElement {
@@ -244,13 +363,22 @@ function quoteHtml(source: HTMLElement, name: string, line: string): string {
   const textNodes: Text[] = [];
   const walker = clone.ownerDocument.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
-  const prefix = new RegExp(
-    `^\\s*(?:\\{${escapeRegExp(name)}\\}|｛${escapeRegExp(name)}｝)\\s*[「“]`,
-  );
-  if (textNodes[0]) textNodes[0].data = textNodes[0].data.replace(prefix, '');
-  const last = textNodes[textNodes.length - 1];
-  if (last) last.data = last.data.replace(/[」”]\s*$/, '');
+  const filled = () => textNodes.filter(node => node.data.trim());
+  // 酒馆会把引号部分包进 <q>，说话头与开引号可能分在两个文本节点
+  const head = filled()[0];
+  if (head) {
+    head.data = head.data.replace(
+      new RegExp(`^\\s*(?:\\{${escapeRegExp(name)}\\}|｛${escapeRegExp(name)}｝)\\s*`),
+      '',
+    );
+  }
+  const open = filled()[0];
+  if (open) open.data = open.data.replace(/^\s*[「“]/, '');
+  const tail = filled();
+  const close = tail[tail.length - 1];
+  if (close) close.data = close.data.replace(/[」”]\s*$/, '');
   sanitizeInline(clone);
+  tidyBreaks(clone);
   const left = normalizeKey(clone.textContent ?? '');
   if (!left || left.includes(`{${name}}`) || left.includes(`｛${name}｝`)) return escapeHtml(line);
   return clone.innerHTML.trim() || escapeHtml(line);
@@ -266,6 +394,26 @@ function sanitizeInline(root: HTMLElement): void {
     for (const attr of [...element.attributes]) {
       const name = attr.name.toLowerCase();
       if (name.startsWith('on') || name === 'src' || name === 'href') element.removeAttribute(attr.name);
+    }
+  }
+}
+
+/** 去掉首尾 <br>，连续 <br> 收成一个；酒馆在换行处会留多余的 <br>。 */
+function tidyBreaks(root: HTMLElement): void {
+  const isBreak = (node: Node | null) => node?.nodeType === 1 && (node as Element).tagName === 'BR';
+  const isBlank = (node: Node | null) => node?.nodeType === 3 && !(node.textContent ?? '').trim();
+  const edge = (pick: () => Node | null) => {
+    for (let node = pick(); node && (isBreak(node) || isBlank(node)); node = pick()) node.remove();
+  };
+  edge(() => root.firstChild);
+  edge(() => root.lastChild);
+  for (const br of [...root.querySelectorAll('br')]) {
+    if (!br.parentNode) continue;
+    let next = br.nextSibling;
+    while (next && (isBreak(next) || isBlank(next))) {
+      const after = next.nextSibling;
+      if (isBreak(next)) next.remove();
+      next = after;
     }
   }
 }

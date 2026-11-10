@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { classifyParagraph, extractGametxt, firstGrapheme, matchInnerVoice, planBeautify } from './parse';
+import {
+  classifyParagraph,
+  extractGametxt,
+  firstGrapheme,
+  groupLineRanges,
+  matchInnerVoice,
+  parseDialogue,
+  planBeautify,
+} from './parse';
 
 const raw = `
 <think>草稿里的 <gametxt>{不要}「这句不该出现」</gametxt></think>
@@ -125,7 +133,9 @@ assert.equal(
   'dialogue',
 );
 
-assert.deepEqual(plan.innerVoices, [{ role: '薇奥拉·斯坦因', key: '躲在桌子底下的究竟是谁。' }]);
+assert.deepEqual(plan.innerVoices, [
+  { index: 0, role: '薇奥拉·斯坦因', key: '躲在桌子底下的究竟是谁。', parts: ['躲在桌子底下的究竟是谁。'] },
+]);
 assert.equal(matchInnerVoice('\n\n躲在桌子底下的究竟是谁。\n', plan)?.role, '薇奥拉·斯坦因');
 
 const voices = planBeautify(`
@@ -148,5 +158,62 @@ assert.equal(matchInnerVoice('我的意识里居然有人存在？', voices)?.ro
 assert.equal(matchInnerVoice('他会相信我吗', voices)?.role, '阿米娅');
 assert.equal(matchInnerVoice('{甲}「我的意识里居然有人存在？」', voices), null);
 assert.equal(matchInnerVoice('无关', voices), null);
+
+// 无镜译：单换行混排，逐行识别
+const singleLine = planBeautify(`叙述一。
+{甲}「你好。」
+{乙}「嗯，走吧。」
+叙述二。`);
+assert.equal(classifyParagraph('{甲}「你好。」', singleLine), 'dialogue');
+assert.equal(classifyParagraph('{乙}「嗯，走吧。」', singleLine), 'dialogue');
+assert.equal(classifyParagraph('叙述一。', singleLine), 'prose');
+assert.equal(classifyParagraph('叙述二。', singleLine), 'prose');
+
+// 跨行对白合成一句
+const multiLine = planBeautify(`{甲}「第一句。
+第二句。」
+叙述。`);
+assert.equal(classifyParagraph('{甲}「第一句。 第二句。」', multiLine), 'dialogue');
+assert.equal(multiLine.paragraphs.find(paragraph => paragraph.kind === 'dialogue')?.line, '第一句。 第二句。');
+assert.deepEqual(groupLineRanges(['{甲}「第一句。', '第二句。」', '叙述。']), [
+  [0, 1],
+  [2, 2],
+]);
+// 未闭合时遇到下一个说话头就放弃合并
+assert.deepEqual(groupLineRanges(['{甲}「没闭合', '{乙}「新的一句」']), [
+  [0, 0],
+  [1, 1],
+]);
+
+// 两人的话挤在一行，不能贪婪并成一句
+assert.equal(parseDialogue('{甲}「a」{乙}「b」'), null);
+assert.equal(parseDialogue('{甲}「a」 ｛乙｝“b”'), null);
+assert.equal(parseDialogue('{甲}「他说了「好」。」')?.line, '他说了「好」。');
+
+// markdown 强调：原文带 *，页面不带，两侧 key 要一致
+const emphasis = planBeautify(`{甲}「含*强调*词」`);
+assert.equal(classifyParagraph('{甲}「含强调词」', emphasis), 'dialogue');
+
+// 无镜译内心话：标准、纯文本、多段短句、同角色两段
+const plainVoices = planBeautify(`
+叙述。
+<inner_voice role="甲">
+<p style="color:#E8A87C">短一</p>
+<p style="color:#E8A87C">短二</p>
+</inner_voice>
+
+<inner_voice role="甲">真烦</inner_voice>
+
+{甲}「真烦」
+`);
+assert.deepEqual(
+  plainVoices.innerVoices.map(voice => `${voice.index}:${voice.role}:${voice.parts.join('/')}`),
+  ['0:甲:短一/短二', '1:甲:真烦'],
+);
+assert.equal(matchInnerVoice('短一', plainVoices)?.index, 0);
+assert.equal(matchInnerVoice('短二', plainVoices)?.index, 0);
+assert.equal(matchInnerVoice('真烦', plainVoices)?.index, 1);
+assert.equal(matchInnerVoice('{甲}「真烦」', plainVoices), null);
+assert.equal(classifyParagraph('短一', plainVoices), null);
 
 console.log('ok gametxt parse');

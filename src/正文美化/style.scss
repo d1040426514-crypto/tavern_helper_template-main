@@ -223,6 +223,17 @@
   .gametxt-iv[open] & {
     animation: gametxt-iv-reveal 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   }
+
+  p {
+    margin: 0 0 0.35em;
+    color: inherit;
+    font-style: inherit;
+    text-indent: 0;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
 }
 
 /* 支持的浏览器里让展开高度平滑过渡，不支持时仍有显现动画 */
