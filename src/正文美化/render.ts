@@ -152,13 +152,15 @@ function quoteHtml(source: HTMLElement, name: string, line: string): string {
   const textNodes: Text[] = [];
   const walker = clone.ownerDocument.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
-  const prefix = new RegExp(`^\\s*\\{${escapeRegExp(name)}\\}\\s*[「“]`);
+  const prefix = new RegExp(
+    `^\\s*(?:\\{${escapeRegExp(name)}\\}|｛${escapeRegExp(name)}｝)\\s*[「“]`,
+  );
   if (textNodes[0]) textNodes[0].data = textNodes[0].data.replace(prefix, '');
   const last = textNodes[textNodes.length - 1];
   if (last) last.data = last.data.replace(/[」”]\s*$/, '');
   sanitizeInline(clone);
   const left = normalizeKey(clone.textContent ?? '');
-  if (!left || left.includes(`{${name}}`)) return escapeHtml(line);
+  if (!left || left.includes(`{${name}}`) || left.includes(`｛${name}｝`)) return escapeHtml(line);
   return clone.innerHTML.trim() || escapeHtml(line);
 }
 

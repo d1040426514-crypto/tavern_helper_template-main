@@ -87,6 +87,15 @@ const inline = planBeautify(`{乙}「含<span class="x">强调</span>词」`);
 assert.equal(inline.paragraphs[0]?.kind, 'dialogue');
 assert.equal(inline.paragraphs[0]?.line, '含强调词');
 
+const fullwidth = planBeautify(`｛戊｝「全角花括号。」`);
+assert.equal(fullwidth.paragraphs[0]?.kind, 'dialogue');
+assert.equal(fullwidth.paragraphs[0]?.name, '戊');
+assert.equal(fullwidth.paragraphs[0]?.line, '全角花括号。');
+assert.equal(classifyParagraph('｛戊｝「全角花括号。」', fullwidth), 'dialogue');
+
+const mixedBrace = planBeautify(`｛己}「半全角混用不应认」\n\n{庚｝“另一半混用也不应认”`);
+assert.ok(!mixedBrace.paragraphs.some(paragraph => paragraph.kind === 'dialogue'));
+
 const unclosed = planBeautify(`
 开场。
 

@@ -2,7 +2,9 @@ const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEF
 
 const INLINE_TAGS = new Set(['span', 'em', 'strong', 'b', 'i', 'q', 'br', 'a']);
 const RAW_TEXT_TAGS = new Set(['style', 'script', 'textarea', 'pre', 'code']);
-const DIALOGUE_RE = /^\{([^{}\n]{1,40})\}\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
+/** 半角 {} 与全角 ｛｝ 都认，但要求成对，不认半全角混用。 */
+const DIALOGUE_RE =
+  /^(?:\{([^{}\n]{1,40})\}|｛([^｛｝\n]{1,40})｝)\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
 
 export type BeautifyParagraph = {
   kind: 'dialogue' | 'prose';
@@ -42,9 +44,9 @@ export function normalizeKey(input: string): string {
 export function parseDialogue(key: string): { name: string; line: string } | null {
   const match = DIALOGUE_RE.exec(key);
   if (!match) return null;
-  const name = match[1].trim();
+  const name = (match[1] ?? match[2] ?? '').trim();
   if (!name) return null;
-  return { name, line: (match[2] ?? match[3] ?? '').trim() };
+  return { name, line: (match[3] ?? match[4] ?? '').trim() };
 }
 
 export function firstGrapheme(name: string): string {
