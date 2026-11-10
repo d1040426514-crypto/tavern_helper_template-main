@@ -35,6 +35,8 @@ export function canonicalName(value: string): string {
     .replace(/^[[【]\s*([^\]【】[]+?)\s*[\]】]$/, (_match, inner: string) => inner)
     .replace(/[（(]\s*MC\s*[=＝]\s*\d+(?:\.\d+)?\s*[)）]/gi, '')
     .replace(/[（(]\s*\d+\s*\/\s*\d+\s*[)）]/g, '')
+    // 半角 · / 全角 ・ / 半角片假名 ･ / 项目符号 • 统一，便于对白与状态栏头像匹配
+    .replace(/[·・･•]/g, '·')
     .trim();
 }
 

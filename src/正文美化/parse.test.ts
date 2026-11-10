@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { canonicalName } from './avatar';
 import {
   classifyParagraph,
   extractGametxt,
@@ -215,5 +216,11 @@ assert.equal(matchInnerVoice('短二', plainVoices)?.index, 0);
 assert.equal(matchInnerVoice('真烦', plainVoices)?.index, 1);
 assert.equal(matchInnerVoice('{甲}「真烦」', plainVoices), null);
 assert.equal(classifyParagraph('短一', plainVoices), null);
+
+// 中间点：匹配侧统一，半角/全角/半角片假名等价
+assert.equal(canonicalName('波尔特・瓦伦'), canonicalName('波尔特·瓦伦'));
+assert.equal(canonicalName('ヘンドリック･フォルクマー'), canonicalName('ヘンドリック・フォルクマー'));
+assert.equal(canonicalName('波尔特•瓦伦'), canonicalName('波尔特·瓦伦'));
+assert.equal(canonicalName('阿米娅'), '阿米娅');
 
 console.log('ok gametxt parse');
