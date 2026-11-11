@@ -256,8 +256,27 @@ const namedVoice = planBeautify(`
 </inner_voice>
 `);
 assert.equal(namedVoice.innerVoices[0]?.role, '乙');
+assert.equal(namedVoice.innerVoices[0]?.mood, undefined);
 assert.equal(namedVoice.innerVoices[0]?.key, '心里有数。');
 assert.equal(matchInnerVoice('心里有数。', namedVoice)?.role, '乙');
+
+// 内心话 name + mood；role + mood 兼容
+const moodVoice = planBeautify(`
+<inner_voice name="丙" mood="微笑">
+别露馅。
+</inner_voice>
+`);
+assert.equal(moodVoice.innerVoices[0]?.role, '丙');
+assert.equal(moodVoice.innerVoices[0]?.mood, '微笑');
+assert.equal(matchInnerVoice('别露馅。', moodVoice)?.mood, '微笑');
+
+const roleMoodVoice = planBeautify(`
+<inner_voice role="丁" mood="认真">
+先听完。
+</inner_voice>
+`);
+assert.equal(roleMoodVoice.innerVoices[0]?.role, '丁');
+assert.equal(roleMoodVoice.innerVoices[0]?.mood, '认真');
 
 // 表情 title 规范化
 assert.equal(expressionTitle('微笑'), '表情 微笑');

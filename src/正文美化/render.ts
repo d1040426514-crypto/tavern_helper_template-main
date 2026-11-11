@@ -308,6 +308,7 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
   card.dataset.gametxtBeauty = 'inner-voice';
   card.dataset.gametxtName = voice.role;
   card.dataset.gametxtVoice = String(voice.index);
+  if (voice.mood) card.dataset.gametxtMood = voice.mood;
   const roleColor = avatars.colorFor(voice.role);
   applyRoleColor(card, roleColor);
   const accent = roleColor || paragraph.style.color;
@@ -319,7 +320,7 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
 
   const avatar = doc.createElement('span');
   avatar.className = 'gametxt-avatar gametxt-iv-avatar';
-  avatar.append(avatarNode(doc, voice.role, avatars.urlFor(voice.role)));
+  avatar.append(avatarNode(doc, voice.role, avatars.urlFor(voice.role, voice.mood)));
 
   const name = doc.createElement('span');
   name.className = 'gametxt-iv-name';

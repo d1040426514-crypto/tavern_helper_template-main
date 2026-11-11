@@ -24,6 +24,7 @@ export type BeautifyParagraph = {
 export type InnerVoice = {
   index: number;
   role: string;
+  mood?: string;
   key: string;
   parts: string[];
 };
@@ -261,9 +262,9 @@ export function planBeautify(inner: string): BeautifyPlan {
 }
 
 /**
- * 内心话在显示层会丢掉 `<inner_voice>` 外壳（name/role 也一起丢），
- * 只能从原文取角色名，再用译文文本去对页面段落。
- * 属性优先 name，兼容旧 role。
+ * 内心话在显示层会丢掉 `<inner_voice>` 外壳（name/role/mood 也一起丢），
+ * 只能从原文取角色名与 mood，再用译文文本去对页面段落。
+ * 属性优先 name，兼容旧 role；mood 可选，与对白共用表情图键。
  */
 export function extractInnerVoices(inner: string): InnerVoice[] {
   const voices: InnerVoice[] = [];
@@ -275,6 +276,7 @@ export function extractInnerVoices(inner: string): InnerVoice[] {
     const head = inner.slice(match.index, tag.end);
     const named = /\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
     const role = /\brole\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
+    const moodAttr = /\bmood\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
     const close = findClose(inner, tag.end, 'inner_voice');
     if (!close) continue;
     const body = inner.slice(tag.end, close.start);
@@ -288,7 +290,16 @@ export function extractInnerVoices(inner: string): InnerVoice[] {
       .map(voiceKey)
       .filter(Boolean);
     const name = (named?.[1] ?? named?.[2] ?? role?.[1] ?? role?.[2] ?? '').trim();
-    if (key && name) voices.push({ index: voices.length, role: name, key, parts });
+    const mood = (moodAttr?.[1] ?? moodAttr?.[2] ?? '').trim();
+    if (key && name) {
+      voices.push({
+        index: voices.length,
+        role: name,
+        ...(mood ? { mood } : {}),
+        key,
+        parts,
+      });
+    }
     openRe.lastIndex = close.end;
   }
   return voices;
