@@ -1,4 +1,8 @@
 .gametxt-dialogue {
+  --gametxt-role: currentColor;
+  --gametxt-role-soft: color-mix(in srgb, var(--gametxt-role) 28%, transparent);
+  --gametxt-role-edge: color-mix(in srgb, var(--gametxt-role) 55%, transparent);
+
   display: flex;
   align-items: flex-start;
   gap: 10px;
@@ -16,7 +20,7 @@
   width: 40px;
   height: 40px;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, currentColor 35%, transparent);
+  border: 1px solid var(--gametxt-role-edge, color-mix(in srgb, currentColor 35%, transparent));
   border-radius: 8px;
   background: transparent;
 }
@@ -37,11 +41,16 @@
 .gametxt-content {
   min-width: 0;
   flex: 1;
-  background: transparent;
+  padding: 8px 12px 10px;
+  border: 1px solid var(--gametxt-role-edge);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gametxt-role-soft) 55%, transparent);
+  box-shadow: none;
 }
 
 .gametxt-name {
-  margin-bottom: 2px;
+  margin-bottom: 4px;
+  color: var(--gametxt-role);
   font-weight: 600;
   line-height: 1.4;
 }
@@ -50,6 +59,7 @@
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-word;
+  color: inherit;
   background: transparent;
 }
 
@@ -63,7 +73,8 @@
  * 正文颜色跟随酒馆主题，角色色只用于头像环、泡泡与细线，深浅背景都可读。
  */
 .gametxt-iv {
-  --gametxt-iv-accent: var(--SmartThemeQuoteColor, currentColor);
+  --gametxt-role: var(--SmartThemeQuoteColor, currentColor);
+  --gametxt-iv-accent: var(--gametxt-role, var(--SmartThemeQuoteColor, currentColor));
   --gametxt-iv-soft: color-mix(in srgb, var(--gametxt-iv-accent) 55%, transparent);
 
   margin: 0.45em 0;

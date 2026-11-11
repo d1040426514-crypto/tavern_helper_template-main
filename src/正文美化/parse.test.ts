@@ -1,5 +1,11 @@
 import assert from 'node:assert/strict';
-import { canonicalName } from './avatar';
+import {
+  allowedExternalUrl,
+  canonicalMood,
+  canonicalName,
+  expressionTitle,
+  titlesMatchExpression,
+} from './avatar';
 import {
   classifyParagraph,
   extractGametxt,
@@ -232,5 +238,34 @@ assert.equal(canonicalName('波尔特・瓦伦'), canonicalName('波尔特·瓦�
 assert.equal(canonicalName('ヘンドリック･フォルクマー'), canonicalName('ヘンドリック・フォルクマー'));
 assert.equal(canonicalName('波尔特•瓦伦'), canonicalName('波尔特·瓦伦'));
 assert.equal(canonicalName('阿米娅'), '阿米娅');
+
+// 可选 mood
+assert.deepEqual(parseDialogue('{甲}(微笑)「你好。」'), { name: '甲', mood: '微笑', line: '你好。' });
+assert.deepEqual(parseDialogue('{甲}（微笑）「你好。」'), { name: '甲', mood: '微笑', line: '你好。' });
+assert.deepEqual(parseDialogue('{甲}「你好。」'), { name: '甲', line: '你好。' });
+assert.equal(classifyParagraph('{甲}(微笑)「你好。」', planBeautify(`{甲}(微笑)「你好。」`)), 'dialogue');
+assert.deepEqual(groupLineRanges(['{甲}(微笑)「第一句。', '第二句。」', '叙述。']), [
+  [0, 1],
+  [2, 2],
+]);
+
+// 内心话 name= 与 ${} 占位
+const namedVoice = planBeautify(`
+<inner_voice name="乙">
+\${心里有数。}
+</inner_voice>
+`);
+assert.equal(namedVoice.innerVoices[0]?.role, '乙');
+assert.equal(namedVoice.innerVoices[0]?.key, '心里有数。');
+assert.equal(matchInnerVoice('心里有数。', namedVoice)?.role, '乙');
+
+// 表情 title 规范化
+assert.equal(expressionTitle('微笑'), '表情 微笑');
+assert.equal(canonicalMood('表情：微笑'), '微笑');
+assert.ok(titlesMatchExpression('表情 微笑', '微笑'));
+assert.ok(titlesMatchExpression('表情：微笑', '微笑'));
+assert.ok(!titlesMatchExpression('主立绘', '微笑'));
+assert.equal(allowedExternalUrl('https://files.catbox.moe/x.mp4'), '');
+assert.ok(allowedExternalUrl('https://files.catbox.moe/x.png'));
 
 console.log('ok gametxt parse');

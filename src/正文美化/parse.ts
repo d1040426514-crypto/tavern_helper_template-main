@@ -2,12 +2,14 @@ const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEF
 
 const INLINE_TAGS = new Set(['span', 'em', 'strong', 'b', 'i', 'q', 'br', 'a']);
 const RAW_TEXT_TAGS = new Set(['style', 'script', 'textarea', 'pre', 'code']);
-/** 半角 {} 与全角 ｛｝ 都认，但要求成对，不认半全角混用。 */
+/** 半角 {} 与全角 ｛｝ 都认，但要求成对，不认半全角混用。可选 (mood)/（mood）。 */
 const DIALOGUE_RE =
-  /^(?:\{([^{}\n]{1,40})\}|｛([^｛｝\n]{1,40})｝)\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
-const SPEAKER_HEAD_RE = /^(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*([「“])/;
+  /^(?:\{([^{}\n]{1,40})\}|｛([^｛｝\n]{1,40})｝)\s*(?:\(([^()（）\n]{1,12})\)|（([^()（）\n]{1,12})）)?\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
+const SPEAKER_HEAD_RE =
+  /^(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)?\s*([「“])/;
 /** 引号里出现另一个说话头，说明是多人对白被并到了一行，不能当一句。 */
-const NESTED_SPEAKER_RE = /[」”]\s*(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*[「“]/;
+const NESTED_SPEAKER_RE =
+  /[」”]\s*(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)?\s*[「“]/;
 const CLOSE_QUOTE: Record<string, string> = { '「': '」', '“': '”' };
 const MAX_DIALOGUE_LINES = 8;
 
@@ -15,6 +17,7 @@ export type BeautifyParagraph = {
   kind: 'dialogue' | 'prose';
   key: string;
   name?: string;
+  mood?: string;
   line?: string;
 };
 
@@ -58,14 +61,15 @@ export function normalizeKey(input: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
 
-export function parseDialogue(key: string): { name: string; line: string } | null {
+export function parseDialogue(key: string): { name: string; mood?: string; line: string } | null {
   const match = DIALOGUE_RE.exec(key);
   if (!match) return null;
   const name = (match[1] ?? match[2] ?? '').trim();
   if (!name) return null;
-  const line = (match[3] ?? match[4] ?? '').trim();
+  const mood = (match[3] ?? match[4] ?? '').trim();
+  const line = (match[5] ?? match[6] ?? '').trim();
   if (NESTED_SPEAKER_RE.test(line)) return null;
-  return { name, line };
+  return mood ? { name, mood, line } : { name, line };
 }
 
 /**
@@ -232,7 +236,13 @@ export function planBeautify(inner: string): BeautifyPlan {
     seen.add(key);
     const dialogue = parseDialogue(key);
     if (dialogue) {
-      paragraphs.push({ kind: 'dialogue', key, name: dialogue.name, line: dialogue.line });
+      paragraphs.push({
+        kind: 'dialogue',
+        key,
+        name: dialogue.name,
+        ...(dialogue.mood ? { mood: dialogue.mood } : {}),
+        line: dialogue.line,
+      });
     } else {
       paragraphs.push({ kind: 'prose', key });
     }
@@ -251,8 +261,9 @@ export function planBeautify(inner: string): BeautifyPlan {
 }
 
 /**
- * 内心话在显示层会丢掉 `<inner_voice>` 外壳（role 也一起丢），
- * 只能从原文取 role，再用译文文本去对页面段落。
+ * 内心话在显示层会丢掉 `<inner_voice>` 外壳（name/role 也一起丢），
+ * 只能从原文取角色名，再用译文文本去对页面段落。
+ * 属性优先 name，兼容旧 role。
  */
 export function extractInnerVoices(inner: string): InnerVoice[] {
   const voices: InnerVoice[] = [];
@@ -262,6 +273,7 @@ export function extractInnerVoices(inner: string): InnerVoice[] {
     const tag = readTag(inner, match.index);
     if (!tag || tag.kind !== 'open' || tag.selfClosing) continue;
     const head = inner.slice(match.index, tag.end);
+    const named = /\bname\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
     const role = /\brole\s*=\s*(?:"([^"]*)"|'([^']*)')/i.exec(head);
     const close = findClose(inner, tag.end, 'inner_voice');
     if (!close) continue;
@@ -275,7 +287,7 @@ export function extractInnerVoices(inner: string): InnerVoice[] {
       .split(/<\/p\s*>|<br\s*\/?>|\n/i)
       .map(voiceKey)
       .filter(Boolean);
-    const name = (role?.[1] ?? role?.[2] ?? '').trim();
+    const name = (named?.[1] ?? named?.[2] ?? role?.[1] ?? role?.[2] ?? '').trim();
     if (key && name) voices.push({ index: voices.length, role: name, key, parts });
     openRe.lastIndex = close.end;
   }
@@ -299,9 +311,11 @@ export function matchInnerVoice(plain: string, plan: BeautifyPlan): InnerVoice |
   );
 }
 
-/** 比较用：去空白、去外层括号（镜译重排会剥掉译文外的（）），只留正文字符。 */
+/** 比较用：去空白、去外层括号与协议占位 ${...}，只留正文字符。 */
 function voiceKey(input: string): string {
   return normalizeKey(input.replace(/<!--[\s\S]*?-->/g, ''))
+    .replace(/^\$\{\s*/g, '')
+    .replace(/\s*\}$/g, '')
     .replace(/\s+/g, '')
     .replace(/^[（(「“"]+|[）)」”"]+$/g, '');
 }

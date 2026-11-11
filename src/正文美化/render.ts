@@ -237,10 +237,12 @@ export function syncDialogueAvatars(root: HTMLElement, avatars: AvatarIndex): vo
   const rows = [...root.querySelectorAll<HTMLElement>(AVATAR_ROWS)];
   for (const row of rows) {
     const name = row.dataset.gametxtName || row.querySelector('.gametxt-name')?.textContent?.trim() || '';
+    const mood = row.dataset.gametxtMood || '';
     const slot = row.querySelector('.gametxt-avatar');
     if (!name || !slot) continue;
     const doc = row.ownerDocument;
-    const nextUrl = absolutizeAvatarUrl(avatars.urlFor(name));
+    applyRoleColor(row, avatars.colorFor(name));
+    const nextUrl = absolutizeAvatarUrl(avatars.urlFor(name, mood || undefined));
     const currentImg = slot.querySelector('img.gametxt-avatar-img');
     const currentInitial = slot.querySelector('.gametxt-initial');
     if (nextUrl) {
@@ -268,10 +270,13 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
   const row = doc.createElement('div');
   row.className = 'gametxt-dialogue';
   row.dataset.gametxtBeauty = 'dialogue';
+  row.dataset.gametxtName = dialogue.name;
+  if (dialogue.mood) row.dataset.gametxtMood = dialogue.mood;
+  applyRoleColor(row, avatars.colorFor(dialogue.name));
 
   const avatar = doc.createElement('div');
   avatar.className = 'gametxt-avatar';
-  avatar.append(avatarNode(doc, dialogue.name, avatars.urlFor(dialogue.name)));
+  avatar.append(avatarNode(doc, dialogue.name, avatars.urlFor(dialogue.name, dialogue.mood)));
 
   const content = doc.createElement('div');
   content.className = 'gametxt-content';
@@ -280,7 +285,7 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
   name.textContent = dialogue.name;
   const line = doc.createElement('div');
   line.className = 'gametxt-line';
-  line.innerHTML = quoteHtml(paragraph, dialogue.name, dialogue.line);
+  line.innerHTML = quoteHtml(paragraph, dialogue.name, dialogue.line, dialogue.mood);
 
   content.append(name, line);
   row.append(avatar, content);
@@ -303,7 +308,9 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
   card.dataset.gametxtBeauty = 'inner-voice';
   card.dataset.gametxtName = voice.role;
   card.dataset.gametxtVoice = String(voice.index);
-  const accent = paragraph.style.color;
+  const roleColor = avatars.colorFor(voice.role);
+  applyRoleColor(card, roleColor);
+  const accent = roleColor || paragraph.style.color;
   if (accent) card.style.setProperty('--gametxt-iv-accent', accent);
 
   const head = doc.createElement('summary');
@@ -331,6 +338,14 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
 
   card.append(head, body);
   paragraph.replaceWith(card);
+}
+
+function applyRoleColor(target: HTMLElement, color: string): void {
+  if (!color) {
+    target.style.removeProperty('--gametxt-role');
+    return;
+  }
+  target.style.setProperty('--gametxt-role', color);
 }
 
 function voiceBlock(paragraph: HTMLParagraphElement): HTMLParagraphElement {
@@ -375,7 +390,7 @@ function initialNode(doc: Document, name: string): HTMLSpanElement {
   return initial;
 }
 
-function quoteHtml(source: HTMLElement, name: string, line: string): string {
+function quoteHtml(source: HTMLElement, name: string, line: string, mood?: string): string {
   const clone = source.cloneNode(true) as HTMLElement;
   stripInvisible(clone);
   while (clone.firstChild) {
@@ -394,13 +409,23 @@ function quoteHtml(source: HTMLElement, name: string, line: string): string {
   const walker = clone.ownerDocument.createTreeWalker(clone, NodeFilter.SHOW_TEXT);
   while (walker.nextNode()) textNodes.push(walker.currentNode as Text);
   const filled = () => textNodes.filter(node => node.data.trim());
-  // 酒馆会把引号部分包进 <q>，说话头与开引号可能分在两个文本节点
+  // 酒馆会把引号部分包进 <q>，说话头 / mood / 开引号可能分在多个文本节点
   const head = filled()[0];
   if (head) {
     head.data = head.data.replace(
       new RegExp(`^\\s*(?:\\{${escapeRegExp(name)}\\}|｛${escapeRegExp(name)}｝)\\s*`),
       '',
     );
+  }
+  const afterName = filled()[0];
+  if (afterName) {
+    afterName.data = afterName.data.replace(/^\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)\s*/, '');
+    if (mood) {
+      afterName.data = afterName.data.replace(
+        new RegExp(`^\\s*(?:\\(${escapeRegExp(mood)}\\)|（${escapeRegExp(mood)}）)\\s*`),
+        '',
+      );
+    }
   }
   const open = filled()[0];
   if (open) open.data = open.data.replace(/^\s*[「“]/, '');
