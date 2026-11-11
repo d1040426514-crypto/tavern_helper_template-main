@@ -31,6 +31,9 @@ export const ASSISTANT_BEAUTIFY_LIMIT = DEFAULT_ASSISTANT_BEAUTIFY_LIMIT;
 
 const tokens = new Map<number, number>();
 
+/** 美化节点 → 装饰前各段 outerHTML，供关脚本还原。 */
+const originHtml = new WeakMap<HTMLElement, string[]>();
+
 type RenderHooks = {
   afterApply?: () => void;
 };
@@ -289,6 +292,7 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
 
   content.append(name, line);
   row.append(avatar, content);
+  rememberOrigin(row, paragraph.outerHTML);
   paragraph.replaceWith(row);
 }
 
@@ -298,6 +302,7 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
   const block = voiceBlock(paragraph);
   const previous = previousMeaningful(paragraph);
   if (previous?.classList.contains('gametxt-iv') && previous.dataset.gametxtVoice === String(voice.index)) {
+    rememberOrigin(previous, paragraph.outerHTML);
     previous.querySelector('.gametxt-iv-body')?.append(block);
     paragraph.remove();
     return;
@@ -338,7 +343,92 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
   body.append(block);
 
   card.append(head, body);
+  rememberOrigin(card, paragraph.outerHTML);
   paragraph.replaceWith(card);
+}
+
+function rememberOrigin(target: HTMLElement, html: string): void {
+  if (!html) return;
+  const list = originHtml.get(target);
+  if (list) list.push(html);
+  else originHtml.set(target, [html]);
+}
+
+/** 美化节点所在文档（父页聊天区）；iframe 内 document 找不到楼层。 */
+function hostDocument(): Document {
+  try {
+    const parentDoc = window.parent?.document;
+    if (parentDoc) return parentDoc;
+  } catch {
+    /* cross-origin */
+  }
+  return document;
+}
+
+/**
+ * 关脚本时还原对白 / 内心话 / 叙述标记。
+ * 优先 WeakMap 原文快照；无快照时协议拼装或放出 iv-body 段落。
+ */
+export function restoreBeautifiedDom(root?: ParentNode): void {
+  const scope = root ?? hostDocument();
+  const doc = scope instanceof Document ? scope : (scope.ownerDocument ?? hostDocument());
+
+  const rows = [...scope.querySelectorAll<HTMLElement>('.gametxt-dialogue, .gametxt-iv')];
+  for (const row of rows) {
+    const snapshots = originHtml.get(row);
+    if (snapshots?.length) {
+      const nodes = nodesFromHtml(doc, snapshots);
+      if (nodes.length) {
+        row.replaceWith(...nodes);
+        continue;
+      }
+    }
+    if (row.classList.contains('gametxt-dialogue')) {
+      row.replaceWith(fallbackDialogueParagraph(doc, row));
+      continue;
+    }
+    const restored = fallbackInnerVoiceNodes(doc, row);
+    if (restored.length) row.replaceWith(...restored);
+    else row.remove();
+  }
+
+  for (const prose of [...scope.querySelectorAll<HTMLElement>('[data-gametxt-beauty="prose"]')]) {
+    prose.classList.remove('gametxt-prose');
+    delete prose.dataset.gametxtBeauty;
+  }
+}
+
+function nodesFromHtml(doc: Document, htmls: string[]): Node[] {
+  const nodes: Node[] = [];
+  for (const html of htmls) {
+    const template = doc.createElement('template');
+    template.innerHTML = html.trim();
+    nodes.push(...[...template.content.childNodes]);
+  }
+  return nodes;
+}
+
+function fallbackDialogueParagraph(doc: Document, row: HTMLElement): HTMLParagraphElement {
+  const name = row.dataset.gametxtName || row.querySelector('.gametxt-name')?.textContent?.trim() || '';
+  const mood = row.dataset.gametxtMood || '';
+  const line = row.querySelector('.gametxt-line')?.textContent ?? '';
+  const p = doc.createElement('p');
+  const head = name ? `{${name}}` : '';
+  const moodPart = name && mood ? `(${mood})` : '';
+  p.textContent = `${head}${moodPart}「${line}」`;
+  return p;
+}
+
+function fallbackInnerVoiceNodes(doc: Document, card: HTMLElement): Node[] {
+  const body = card.querySelector('.gametxt-iv-body');
+  if (!body) return [];
+  const parts = [...body.querySelectorAll(':scope > p')];
+  if (parts.length) return parts.map(part => part.cloneNode(true));
+  const text = normalizeKey(body.textContent ?? '');
+  if (!text) return [];
+  const p = doc.createElement('p');
+  p.textContent = text;
+  return [p];
 }
 
 function applyRoleColor(target: HTMLElement, color: string): void {

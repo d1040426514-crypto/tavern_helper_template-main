@@ -6,6 +6,7 @@ import {
   refreshAllDialogueAvatars,
   renderAllMessages,
   renderMessage,
+  restoreBeautifiedDom,
   setRenderHooks,
 } from './render';
 import { closeSettingsPanel, openSettingsPanel } from './settings-panel';
@@ -89,6 +90,12 @@ $(() => {
   scheduleWindowRetries();
 
   $(window).on('pagehide', () => {
+    try {
+      restoreBeautifiedDom();
+    } catch (error) {
+      console.error('[正文美化] 卸载还原失败', error);
+    }
+    invalidateAvatarCache();
     for (const listener of listeners) listener.stop();
     clearRetries();
     closeSettingsPanel();
