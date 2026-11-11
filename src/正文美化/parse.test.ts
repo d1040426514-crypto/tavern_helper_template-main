@@ -8,6 +8,7 @@ import {
 } from './avatar';
 import {
   classifyParagraph,
+  explodeGluedKeys,
   extractGametxt,
   firstGrapheme,
   groupLineRanges,
@@ -286,5 +287,45 @@ assert.ok(titlesMatchExpression('表情：微笑', '微笑'));
 assert.ok(!titlesMatchExpression('主立绘', '微笑'));
 assert.equal(allowedExternalUrl('https://files.catbox.moe/x.mp4'), '');
 assert.ok(allowedExternalUrl('https://files.catbox.moe/x.png'));
+
+// 粘连对白切分
+assert.deepEqual(explodeGluedKeys('{甲}「你好。」'), ['{甲}「你好。」']);
+assert.deepEqual(explodeGluedKeys('纯叙述没有说话头。'), ['纯叙述没有说话头。']);
+assert.deepEqual(
+  explodeGluedKeys('{甲}「第一句。」中间叙述。{乙}「第二句。」'),
+  ['{甲}「第一句。」', '中间叙述。', '{乙}「第二句。」'],
+);
+assert.deepEqual(explodeGluedKeys('{甲}「台词。」后面还粘着叙述。'), [
+  '{甲}「台词。」',
+  '后面还粘着叙述。',
+]);
+assert.deepEqual(explodeGluedKeys('{甲}(微笑)「嗨。」接着说。{乙}（认真）「嗯。」'), [
+  '{甲}(微笑)「嗨。」',
+  '接着说。',
+  '{乙}（认真）「嗯。」',
+]);
+assert.ok(parseDialogue(explodeGluedKeys('{甲}「台词。」后面还粘着叙述。')[0] ?? ''));
+assert.deepEqual(
+  explodeGluedKeys('｛戊｝「全角一句。」中间。｛己｝「全角二句。」'),
+  ['｛戊｝「全角一句。」', '中间。', '｛己｝「全角二句。」'],
+);
+assert.deepEqual(explodeGluedKeys('{甲}“弯引号一句。”接着。{乙}“弯引号二句。”'), [
+  '{甲}“弯引号一句。”',
+  '接着。',
+  '{乙}“弯引号二句。”',
+]);
+assert.deepEqual(explodeGluedKeys('{甲}「未闭合'), ['{甲}「未闭合']);
+
+const gluedPlan = planBeautify('{甲}「一。」中间。{乙}「二。」');
+const gluedKeys = gluedPlan.paragraphs.map(p => p.key);
+assert.ok(gluedPlan.paragraphs.some(p => p.kind === 'dialogue' && p.key === '{甲}「一。」'));
+assert.ok(gluedPlan.paragraphs.some(p => p.kind === 'dialogue' && p.key === '{乙}「二。」'));
+assert.ok(gluedPlan.paragraphs.some(p => p.kind === 'prose' && p.key === '中间。'));
+assert.ok(!gluedKeys.includes('{甲}「一。」中间。{乙}「二。」'));
+
+// 保护整段：classify 仍为 null；explode 可切字符串，展开跳过由 render 的 protectedKeys.has 负责
+assert.equal(classifyParagraph('{乙}「保护块里的对白。」', guarded), null);
+assert.ok(guarded.protectedKeys.has('{乙}「保护块里的对白。」'));
+assert.deepEqual(explodeGluedKeys('{乙}「保护块里的对白。」{丙}「另一句。」').length, 2);
 
 console.log('ok gametxt parse');

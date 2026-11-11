@@ -7,6 +7,9 @@ const DIALOGUE_RE =
   /^(?:\{([^{}\n]{1,40})\}|｛([^｛｝\n]{1,40})｝)\s*(?:\(([^()（）\n]{1,12})\)|（([^()（）\n]{1,12})）)?\s*(?:「([\s\S]*)」|“([\s\S]*)”)$/;
 const SPEAKER_HEAD_RE =
   /^(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)?\s*([「“])/;
+/** 非锚定说话头，用于单段粘连对白切分。 */
+const SPEAKER_HEAD_INLINE_RE =
+  /(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)?\s*([「“])/g;
 /** 引号里出现另一个说话头，说明是多人对白被并到了一行，不能当一句。 */
 const NESTED_SPEAKER_RE =
   /[」”]\s*(?:\{[^{}\n]{1,40}\}|｛[^｛｝\n]{1,40}｝)\s*(?:\([^()（）\n]{1,12}\)|（[^()（）\n]{1,12}）)?\s*[「“]/;
@@ -71,6 +74,46 @@ export function parseDialogue(key: string): { name: string; mood?: string; line:
   const line = (match[5] ?? match[6] ?? '').trim();
   if (NESTED_SPEAKER_RE.test(line)) return null;
   return mood ? { name, mood, line } : { name, line };
+}
+
+/**
+ * 镜译等把多句对白粘进同一段、无 br 时：按说话头切开。
+ * 按「配对闭引号」逐段抠出；只切出一块且无头尾叙述时保持单段。
+ * 注意：parseDialogue 的贪婪引号可能把粘连段误判为单句，故不能仅靠它短路。
+ */
+export function explodeGluedKeys(key: string): string[] {
+  const text = key.trim();
+  if (!text) return [];
+
+  const parts: string[] = [];
+  let cursor = 0;
+  let carved = false;
+  SPEAKER_HEAD_INLINE_RE.lastIndex = 0;
+  let match: RegExpExecArray | null;
+  while ((match = SPEAKER_HEAD_INLINE_RE.exec(text))) {
+    const start = match.index;
+    if (start < cursor) continue;
+    const openQuote = match[1];
+    const closeQuote = CLOSE_QUOTE[openQuote];
+    if (!closeQuote) continue;
+    const closeAt = text.indexOf(closeQuote, start + match[0].length);
+    if (closeAt < 0) {
+      const rest = text.slice(cursor).trim();
+      if (rest) parts.push(rest);
+      return parts.length > 1 ? parts : [text];
+    }
+    const before = text.slice(cursor, start).trim();
+    if (before) parts.push(before);
+    parts.push(text.slice(start, closeAt + closeQuote.length).trim());
+    carved = true;
+    cursor = closeAt + closeQuote.length;
+    SPEAKER_HEAD_INLINE_RE.lastIndex = cursor;
+  }
+
+  if (!carved) return [text];
+  const tail = text.slice(cursor).trim();
+  if (tail) parts.push(tail);
+  return parts.length ? parts : [text];
 }
 
 /**
@@ -234,6 +277,13 @@ export function planBeautify(inner: string): BeautifyPlan {
   const seen = new Set<string>();
   const push = (key: string) => {
     if (!key || seen.has(key)) return;
+    const glued = explodeGluedKeys(key);
+    if (glued.length > 1) {
+      // 整段只作切分入口，不入账；记入 seen 避免同段再炸一次
+      seen.add(key);
+      for (const part of glued) push(part);
+      return;
+    }
     seen.add(key);
     const dialogue = parseDialogue(key);
     if (dialogue) {

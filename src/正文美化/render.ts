@@ -6,6 +6,7 @@ import {
 } from './avatar';
 import {
   classifyParagraph,
+  explodeGluedKeys,
   extractGametxt,
   firstGrapheme,
   groupLineRanges,
@@ -157,7 +158,7 @@ function unwrapInnerVoiceShells(root: HTMLElement): void {
 
 /** 无镜译时叙述、对白、内心话常以单换行同处一个 <p>，按 <br> 切行后逐段归类。 */
 function beautifyParagraph(paragraph: HTMLParagraphElement, plan: BeautifyPlan, avatars: AvatarIndex): void {
-  const segments = splitSegments(paragraph, plan);
+  const segments = expandGluedSegments(splitSegments(paragraph, plan), plan, paragraph.ownerDocument);
   if (segments.length <= 1) {
     const segment = segments[0];
     if (!segment) return;
@@ -228,11 +229,47 @@ function splitSegments(paragraph: HTMLParagraphElement, plan: BeautifyPlan): Seg
       nodes.push(...line.nodes);
     });
     const key = group.map(line => line.key).join(' ');
-    const voice = matchInnerVoice(key, plan);
-    if (voice) return { nodes, key, kind: 'voice' as const, voice };
-    const kind = classifyParagraph(key, plan);
-    return { nodes, key, kind: kind ?? 'plain' };
+    return classifySegment(nodes, key, plan);
   });
+}
+
+/** 单段无 br 却粘了多句协议对白时，按说话头拆成多段（新段用纯文本节点）。 */
+function expandGluedSegments(segments: Segment[], plan: BeautifyPlan, doc: Document): Segment[] {
+  const out: Segment[] = [];
+  for (const segment of segments) {
+    // 保护整段精确命中时不拆，避免子串逃出 protectedKeys
+    if (plan.protectedKeys.has(segment.key)) {
+      out.push(segment);
+      continue;
+    }
+    const parts = explodeGluedKeys(segment.key);
+    if (parts.length <= 1) {
+      out.push(segment);
+      continue;
+    }
+    for (const part of parts) {
+      out.push(classifyExplodedSegment([doc.createTextNode(part)], part, plan));
+    }
+  }
+  return out;
+}
+
+/** 粘连切开后的片段：对白/内心话优先；其余默认 prose（对不上 plan 白名单也能装饰）。 */
+function classifyExplodedSegment(nodes: Node[], key: string, plan: BeautifyPlan): Segment {
+  const voice = matchInnerVoice(key, plan);
+  if (voice) return { nodes, key, kind: 'voice', voice };
+  if (plan.protectedKeys.has(key)) return { nodes, key, kind: 'plain' };
+  if (parseDialogue(key) || classifyParagraph(key, plan) === 'dialogue') {
+    return { nodes, key, kind: 'dialogue' };
+  }
+  return { nodes, key, kind: 'prose' };
+}
+
+function classifySegment(nodes: Node[], key: string, plan: BeautifyPlan): Segment {
+  const voice = matchInnerVoice(key, plan);
+  if (voice) return { nodes, key, kind: 'voice', voice };
+  const kind = classifyParagraph(key, plan);
+  return { nodes, key, kind: kind ?? 'plain' };
 }
 
 /** 重写已有对白行的头像槽，用于持久补图与状态栏即时同步。 */
