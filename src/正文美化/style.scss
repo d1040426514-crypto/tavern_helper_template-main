@@ -1,12 +1,12 @@
 .gametxt-dialogue {
   --gametxt-role: currentColor;
-  --gametxt-role-soft: color-mix(in srgb, var(--gametxt-role) 28%, transparent);
-  --gametxt-role-edge: color-mix(in srgb, var(--gametxt-role) 55%, transparent);
+  --gametxt-role-edge: color-mix(in srgb, var(--gametxt-role) 58%, transparent);
+  --gametxt-role-wash: color-mix(in srgb, var(--gametxt-role) 9%, transparent);
 
   display: flex;
   align-items: flex-start;
-  gap: 10px;
-  margin: 0.65em 0;
+  gap: 14px;
+  margin: 0.9em 0;
   background: transparent;
   border: 0;
   box-shadow: none;
@@ -25,6 +25,21 @@
   background: transparent;
 }
 
+/* 对白头像略放大：与姓名行对齐，成为说话者锚点 */
+.gametxt-dialogue > .gametxt-avatar {
+  flex: 0 0 52px;
+  width: 52px;
+  height: 52px;
+  border-width: 1.5px;
+  border-radius: 11px;
+  background: var(--gametxt-role-wash);
+
+  .gametxt-initial {
+    font-size: 22px;
+    color: var(--gametxt-role);
+  }
+}
+
 .gametxt-avatar-img {
   display: block;
   width: 100%;
@@ -38,25 +53,30 @@
   line-height: 1;
 }
 
+/* 无气泡盒：主题色落在姓名与头像，台词跟正文色 */
 .gametxt-content {
   min-width: 0;
   flex: 1;
-  padding: 8px 12px 10px;
-  border: 1px solid var(--gametxt-role-edge);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--gametxt-role-soft) 55%, transparent);
+  padding: 1px 0 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
   box-shadow: none;
 }
 
 .gametxt-name {
-  margin-bottom: 4px;
+  display: inline-block;
+  max-width: 100%;
+  margin: 0 0 0.35em;
   color: var(--gametxt-role);
   font-weight: 600;
-  line-height: 1.4;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  word-break: break-word;
 }
 
 .gametxt-line {
-  line-height: 1.7;
+  line-height: 1.75;
   white-space: pre-wrap;
   word-break: break-word;
   color: inherit;
@@ -69,15 +89,22 @@
 }
 
 /*
- * 内心话：收起时只剩头像与一串思绪泡泡，不占一整条栏；
- * 正文颜色跟随酒馆主题，角色色只用于头像环、泡泡与细线，深浅背景都可读。
+ * 内心话：收起时只剩头像与思绪泡泡；
+ * 尺寸用变量区分手机 / PC；正文用角色色；姓名跟 SmartTheme 正文色适配浅/深主题。
  */
 .gametxt-iv {
   --gametxt-role: var(--SmartThemeQuoteColor, currentColor);
   --gametxt-iv-accent: var(--gametxt-role, var(--SmartThemeQuoteColor, currentColor));
   --gametxt-iv-soft: color-mix(in srgb, var(--gametxt-iv-accent) 55%, transparent);
+  /* 手机优先：可读但不抢对白 */
+  --gametxt-iv-avatar: 36px;
+  --gametxt-iv-initial: 15px;
+  --gametxt-iv-body-size: 1.02em;
+  --gametxt-iv-name-size: 0.86em;
+  --gametxt-iv-line-inset: calc(var(--gametxt-iv-avatar) / 2);
+  --gametxt-iv-body-pad: 14px;
 
-  margin: 0.45em 0;
+  margin: 0.55em 0;
   padding: 0;
   border: 0;
   background: transparent;
@@ -89,8 +116,9 @@
 .gametxt-iv-head {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 2px 8px 2px 2px;
+  gap: 7px;
+  min-height: 44px; /* 触控热区 */
+  padding: 4px 10px 4px 2px;
   border-radius: 999px;
   list-style: none;
   cursor: pointer;
@@ -118,9 +146,9 @@
 }
 
 .gametxt-avatar.gametxt-iv-avatar {
-  flex: 0 0 32px;
-  width: 32px;
-  height: 32px;
+  flex: 0 0 var(--gametxt-iv-avatar);
+  width: var(--gametxt-iv-avatar);
+  height: var(--gametxt-iv-avatar);
   border: 1.5px solid var(--gametxt-iv-soft);
   border-radius: 50%;
   box-shadow: 0 0 0 0 transparent;
@@ -130,7 +158,8 @@
     transform 0.25s ease;
 
   .gametxt-initial {
-    font-size: 14px;
+    font-size: var(--gametxt-iv-initial);
+    color: var(--gametxt-iv-accent);
   }
 
   .gametxt-iv-head:hover & {
@@ -147,8 +176,8 @@
 .gametxt-iv-bubbles {
   display: inline-flex;
   align-items: flex-end;
-  gap: 3px;
-  height: 16px;
+  gap: 3.5px;
+  height: 18px;
   transition:
     opacity 0.25s ease,
     transform 0.3s ease,
@@ -163,21 +192,21 @@
   }
 
   i:nth-child(1) {
-    width: 7px;
-    height: 7px;
-    margin-bottom: 7px;
+    width: 8px;
+    height: 8px;
+    margin-bottom: 8px;
   }
 
   i:nth-child(2) {
-    width: 5px;
-    height: 5px;
-    margin-bottom: 3px;
+    width: 5.5px;
+    height: 5.5px;
+    margin-bottom: 3.5px;
     animation-delay: 0.25s;
   }
 
   i:nth-child(3) {
-    width: 3.5px;
-    height: 3.5px;
+    width: 4px;
+    height: 4px;
     animation-delay: 0.5s;
   }
 
@@ -192,10 +221,12 @@
   }
 }
 
+/* 姓名：跟酒馆正文色，保证浅/深主题可读；角色色留给正文与装饰 */
 .gametxt-iv-name {
   max-width: 0;
   overflow: hidden;
-  font-size: 0.82em;
+  color: var(--SmartThemeBodyColor, currentColor);
+  font-size: var(--gametxt-iv-name-size);
   font-weight: 600;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -207,17 +238,18 @@
   .gametxt-iv-head:hover &,
   .gametxt-iv[open] & {
     max-width: 16em;
-    opacity: 0.7;
+    opacity: 0.85;
   }
 }
 
 .gametxt-iv-body {
   position: relative;
-  margin: 4px 0 2px 17px;
-  padding: 2px 4px 2px 18px;
-  color: color-mix(in srgb, var(--gametxt-iv-accent) 22%, currentColor);
+  margin: 6px 0 2px var(--gametxt-iv-line-inset);
+  padding: 2px 4px 2px var(--gametxt-iv-body-pad);
+  color: var(--gametxt-iv-accent);
+  font-size: var(--gametxt-iv-body-size);
   font-style: italic;
-  line-height: 1.75;
+  line-height: 1.8;
   word-break: break-word;
 
   &::before {
@@ -226,9 +258,10 @@
     top: 0;
     bottom: 4px;
     left: 0;
-    width: 1px;
+    width: 1.5px;
+    border-radius: 1px;
     background: linear-gradient(var(--gametxt-iv-accent), transparent);
-    opacity: 0.5;
+    opacity: 0.55;
   }
 
   .gametxt-iv[open] & {
@@ -236,13 +269,70 @@
   }
 
   p {
-    margin: 0 0 0.35em;
+    margin: 0 0 0.4em;
     color: inherit;
     font-style: inherit;
     text-indent: 0;
 
     &:last-child {
       margin-bottom: 0;
+    }
+  }
+}
+
+/* PC：头像与正文字号再抬一档，竖线对齐头像中心 */
+@media (min-width: 768px) {
+  .gametxt-iv {
+    --gametxt-iv-avatar: 44px;
+    --gametxt-iv-initial: 18px;
+    --gametxt-iv-body-size: 1.08em;
+    --gametxt-iv-name-size: 0.9em;
+    --gametxt-iv-body-pad: 16px;
+    margin: 0.7em 0;
+  }
+
+  .gametxt-iv-head {
+    min-height: 0;
+    gap: 8px;
+    padding: 2px 10px 2px 2px;
+  }
+
+  .gametxt-iv-bubbles {
+    height: 20px;
+    gap: 4px;
+
+    i:nth-child(1) {
+      width: 9px;
+      height: 9px;
+      margin-bottom: 9px;
+    }
+
+    i:nth-child(2) {
+      width: 6px;
+      height: 6px;
+      margin-bottom: 4px;
+    }
+
+    i:nth-child(3) {
+      width: 4.5px;
+      height: 4.5px;
+    }
+  }
+}
+
+/* 窄屏：略收，避免心声挤占对白宽度 */
+@media (max-width: 480px) {
+  .gametxt-iv {
+    --gametxt-iv-avatar: 34px;
+    --gametxt-iv-initial: 14px;
+    --gametxt-iv-body-size: 1em;
+    --gametxt-iv-body-pad: 12px;
+  }
+
+  .gametxt-iv-name {
+    .gametxt-iv-head:hover &,
+    .gametxt-iv[open] & {
+      max-width: 11em;
     }
   }
 }
