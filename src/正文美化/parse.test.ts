@@ -60,10 +60,14 @@ assert.deepEqual(keys, [
   'dialogue:{维奥拉·斯坦因}“公务期间多有打扰。”',
 ]);
 assert.equal(classifyParagraph('姓名: 薇奥拉·斯坦因 身份: 女仆长', plan), null);
+assert.ok(plan.protectedKeys.has('姓名: 薇奥拉·斯坦因 身份: 女仆长'));
 assert.equal(classifyParagraph('躲在桌子底下的究竟是谁。', plan), null);
 assert.equal(classifyParagraph('复兴纪元488年 10:50', plan), null);
-assert.equal(classifyParagraph('{不要}「这句不该出现」', plan), null);
+// think 段不进计划，但对白按 DOM 结构识别：形态合法即 dialogue
+assert.equal(classifyParagraph('{不要}「这句不该出现」', plan), 'dialogue');
 assert.equal(classifyParagraph('⁣⁣{波尔特·瓦伦}「进来。」⁣⁣', plan), 'dialogue');
+assert.equal(classifyParagraph('{路人}「计划里没有我也行。」', plan), 'dialogue');
+assert.ok(plan.protectedKeys.size > 0);
 assert.equal(firstGrapheme('波尔特·瓦伦'), '波');
 assert.equal(firstGrapheme(''), '？');
 
@@ -216,6 +220,12 @@ assert.equal(matchInnerVoice('短二', plainVoices)?.index, 0);
 assert.equal(matchInnerVoice('真烦', plainVoices)?.index, 1);
 assert.equal(matchInnerVoice('{甲}「真烦」', plainVoices), null);
 assert.equal(classifyParagraph('短一', plainVoices), null);
+
+// 受保护精确键挡住对白形态；子串不再误杀
+const guarded = planBeautify(`{甲}「正文对白。」\n\n<note>{乙}「保护块里的对白。」</note>`);
+assert.equal(classifyParagraph('{甲}「正文对白。」', guarded), 'dialogue');
+assert.ok(guarded.protectedKeys.has('{乙}「保护块里的对白。」'));
+assert.equal(classifyParagraph('{乙}「保护块里的对白。」', guarded), null);
 
 // 中间点：匹配侧统一，半角/全角/半角片假名等价
 assert.equal(canonicalName('波尔特・瓦伦'), canonicalName('波尔特·瓦伦'));

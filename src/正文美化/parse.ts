@@ -28,6 +28,8 @@ export type InnerVoice = {
 export type BeautifyPlan = {
   paragraphs: BeautifyParagraph[];
   protectedText: string;
+  /** 受保护块的精确 normalizeKey，分类时用 has，不用 includes 子串。 */
+  protectedKeys: Set<string>;
   innerVoices: InnerVoice[];
 };
 
@@ -108,7 +110,11 @@ export function firstGrapheme(name: string): string {
  * 剔除自定义标签块 / 围栏 / 注释，只留下可美化的叙述与对白文本。
  * 行内标签保留；jy-source 丢弃，jy-translation 保留内部。
  */
-export function stripProtectedBlocks(inner: string): { text: string; protectedText: string } {
+export function stripProtectedBlocks(inner: string): {
+  text: string;
+  protectedText: string;
+  protectedKeys: Set<string>;
+} {
   const protectedParts: string[] = [];
   let out = '';
   let i = 0;
@@ -202,9 +208,18 @@ export function stripProtectedBlocks(inner: string): { text: string; protectedTe
     i += 1;
   }
 
+  const protectedKeys = new Set<string>();
+  const normalizedParts: string[] = [];
+  for (const part of protectedParts) {
+    const key = normalizeKey(part);
+    if (!key) continue;
+    normalizedParts.push(key);
+    protectedKeys.add(key);
+  }
   return {
     text: out,
-    protectedText: protectedParts.map(part => normalizeKey(part)).filter(Boolean).join('\n'),
+    protectedText: normalizedParts.join('\n'),
+    protectedKeys,
   };
 }
 
@@ -230,6 +245,7 @@ export function planBeautify(inner: string): BeautifyPlan {
   return {
     paragraphs,
     protectedText: stripped.protectedText,
+    protectedKeys: stripped.protectedKeys,
     innerVoices: extractInnerVoices(inner),
   };
 }
@@ -290,13 +306,19 @@ function voiceKey(input: string): string {
     .replace(/^[（(「“"]+|[）)」”"]+$/g, '');
 }
 
+/**
+ * 对白：以页面结构为准（parseDialogue），不要求计划精确命中。
+ * 叙述：仍需计划表白名单，避免把任意段落标成 prose。
+ * 落在受保护精确键上的文本一律不美化。
+ */
 export function classifyParagraph(plain: string, plan: BeautifyPlan): 'dialogue' | 'prose' | null {
   const key = normalizeKey(plain);
   if (!key) return null;
+  if (plan.protectedKeys.has(key)) return null;
+  if (parseDialogue(key)) return 'dialogue';
   const known = plan.paragraphs.find(paragraph => paragraph.key === key);
-  if (!known) return null;
-  if (known.kind === 'dialogue' && plan.protectedText.includes(key)) return null;
-  return known.kind;
+  if (known?.kind === 'prose') return 'prose';
+  return null;
 }
 
 type TagInfo = {

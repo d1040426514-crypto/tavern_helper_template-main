@@ -25,20 +25,44 @@ const AVATAR_ROWS = '.gametxt-dialogue, .gametxt-iv';
 const INLINE_TAGS = new Set(['SPAN', 'EM', 'STRONG', 'B', 'I', 'Q', 'BR', 'A']);
 const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\u00AD\u180E]/g;
 
+/** 只美化最新若干条 assistant 楼层。 */
+export const ASSISTANT_BEAUTIFY_LIMIT = 2;
+
 const tokens = new Map<number, number>();
 
-export async function renderAllMessages(): Promise<void> {
-  let last = -1;
+type RenderHooks = {
+  afterApply?: () => void;
+};
+
+let renderHooks: RenderHooks = {};
+
+export function setRenderHooks(hooks: RenderHooks): void {
+  renderHooks = hooks;
+}
+
+export function latestAssistantIds(limit = ASSISTANT_BEAUTIFY_LIMIT): number[] {
   try {
-    last = getLastMessageId();
+    const messages = getChatMessages('0-{{lastMessageId}}', { role: 'assistant' });
+    if (!messages.length) return [];
+    return messages.slice(-limit).map(message => message.message_id);
   } catch {
-    return;
+    return [];
   }
-  await Promise.all(Array.from({ length: last + 1 }, (_item, id) => renderMessage(id)));
+}
+
+export function isInBeautifyWindow(messageId: number, limit = ASSISTANT_BEAUTIFY_LIMIT): boolean {
+  return latestAssistantIds(limit).includes(messageId);
+}
+
+/** 渲染窗口内（最新 N 条 assistant）楼层。 */
+export async function renderAllMessages(): Promise<void> {
+  const ids = latestAssistantIds();
+  await Promise.all(ids.map(id => renderMessage(id)));
 }
 
 export async function renderMessage(messageId: number): Promise<void> {
   if (!Number.isInteger(messageId) || messageId < 0) return;
+  if (!isInBeautifyWindow(messageId)) return;
   const token = (tokens.get(messageId) ?? 0) + 1;
   tokens.set(messageId, token);
   try {
@@ -52,28 +76,23 @@ export async function renderMessage(messageId: number): Promise<void> {
     const root = messageRoot(messageId) ?? (await waitForRoot(messageId, token));
     if (!root || tokens.get(messageId) !== token) return;
     applyPlan(root, plan, avatars);
+    renderHooks.afterApply?.();
   } catch (error) {
     console.error('[正文美化] 渲染楼层失败', messageId, error);
   }
 }
 
-/** 清缓存后重刷当前聊天所有已渲染对白头像（不改叙述结构）。 */
+/** 清缓存后重刷窗口内已渲染对白头像（不改叙述结构）。 */
 export async function refreshAllDialogueAvatars(): Promise<void> {
   invalidateAvatarCache();
   const avatars = await loadAvatarIndex();
-  let last = -1;
-  try {
-    last = getLastMessageId();
-  } catch {
-    return;
-  }
-  for (let id = 0; id <= last; id += 1) {
+  for (const id of latestAssistantIds()) {
     const root = messageRoot(id);
     if (root) syncDialogueAvatars(root, avatars);
   }
 }
 
-function messageRoot(messageId: number): HTMLElement | null {
+export function messageRoot(messageId: number): HTMLElement | null {
   const displayed = retrieveDisplayedMessage(messageId).get(0);
   if (!displayed) return null;
   if (displayed.classList.contains('mes_text')) return displayed;
@@ -104,8 +123,14 @@ export function applyPlan(root: HTMLElement, plan: BeautifyPlan, avatars: Avatar
   for (const paragraph of paragraphs) {
     if (!paragraph.isConnected || paragraph.closest(SKIP)) continue;
     if (paragraph.dataset.gametxtBeauty === 'prose') {
-      stripInvisible(paragraph);
-      continue;
+      const segments = splitSegments(paragraph, plan);
+      const upgrade = segments.some(segment => segment.kind === 'dialogue' || segment.kind === 'voice');
+      if (!upgrade) {
+        stripInvisible(paragraph);
+        continue;
+      }
+      paragraph.classList.remove('gametxt-prose');
+      delete paragraph.dataset.gametxtBeauty;
     }
     beautifyParagraph(paragraph, plan, avatars);
   }
@@ -140,6 +165,10 @@ function beautifyParagraph(paragraph: HTMLParagraphElement, plan: BeautifyPlan, 
 
   if (!segments.some(segment => segment.kind === 'dialogue' || segment.kind === 'voice')) {
     const whole = classifyParagraph(paragraph.textContent ?? '', plan);
+    if (whole === 'dialogue') {
+      decorateDialogue(paragraph, avatars);
+      return;
+    }
     if (whole === 'prose' || segments.every(segment => segment.kind === 'prose')) decorateProse(paragraph);
     return;
   }
@@ -226,8 +255,8 @@ export function syncDialogueAvatars(root: HTMLElement, avatars: AvatarIndex): vo
 
 function decorateProse(paragraph: HTMLParagraphElement): void {
   stripInvisible(paragraph);
-  paragraph.classList.add('gametxt-prose');
-  paragraph.dataset.gametxtBeauty = 'prose';
+  if (!paragraph.classList.contains('gametxt-prose')) paragraph.classList.add('gametxt-prose');
+  if (paragraph.dataset.gametxtBeauty !== 'prose') paragraph.dataset.gametxtBeauty = 'prose';
 }
 
 function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex): void {
@@ -422,7 +451,10 @@ function stripInvisible(root: HTMLElement): void {
   const walker = root.ownerDocument.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const nodes: Text[] = [];
   while (walker.nextNode()) nodes.push(walker.currentNode as Text);
-  for (const node of nodes) node.data = node.data.replace(INVISIBLE_RE, '');
+  for (const node of nodes) {
+    const next = node.data.replace(INVISIBLE_RE, '');
+    if (next !== node.data) node.data = next;
+  }
 }
 
 function escapeHtml(value: string): string {
