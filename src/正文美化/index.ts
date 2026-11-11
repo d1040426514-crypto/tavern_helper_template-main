@@ -1,6 +1,7 @@
 import { teleportStyle } from '@util/script';
 import './style.scss';
 import { avatarFingerprint, invalidateAvatarCache } from './avatar';
+import { closeAvatarLightbox, openAvatarLightbox } from './avatar-lightbox';
 import {
   isInBeautifyWindow,
   refreshAllDialogueAvatars,
@@ -89,7 +90,11 @@ $(() => {
   void renderAllMessages().then(() => refreshAllDialogueAvatars());
   scheduleWindowRetries();
 
+  const stopAvatarLightbox = startAvatarLightbox();
+
   $(window).on('pagehide', () => {
+    closeAvatarLightbox();
+    stopAvatarLightbox();
     try {
       restoreBeautifiedDom();
     } catch (error) {
@@ -104,6 +109,32 @@ $(() => {
     setRenderHooks({});
     destroy();
   });
+
+  function startAvatarLightbox(): () => void {
+    let doc: Document;
+    try {
+      doc = window.parent.document;
+    } catch {
+      return () => undefined;
+    }
+    const onClick = (event: MouseEvent) => {
+      // 监听挂在父页 document，事件目标是父页节点；不能用 iframe 的 instanceof Element/HTMLImageElement
+      const raw = event.target;
+      if (!raw || typeof raw !== 'object' || !('nodeType' in raw) || (raw as Node).nodeType !== 1) return;
+      const img = (raw as Element).closest('img.gametxt-avatar-img');
+      if (!img || img.tagName !== 'IMG') return;
+      const src = (img as HTMLImageElement).currentSrc || (img as HTMLImageElement).src;
+      if (!src) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openAvatarLightbox(src, (img as HTMLImageElement).alt || '');
+    };
+    doc.addEventListener('click', onClick, true);
+    return () => {
+      doc.removeEventListener('click', onClick, true);
+      closeAvatarLightbox();
+    };
+  }
 
   function startBodyWatch(): { stop: () => void; takeRecords: () => void } {
     let disposed = false;
