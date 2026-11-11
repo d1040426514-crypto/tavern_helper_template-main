@@ -16,6 +16,7 @@ import {
   type BeautifyPlan,
   type InnerVoice,
 } from './parse';
+import { DEFAULT_ASSISTANT_BEAUTIFY_LIMIT, getAssistantBeautifyLimit } from './settings';
 
 /** 结构级安全跳过；业务前端类名不再枚举，正文只取 mes_text 直接子级 p。 */
 const SKIP =
@@ -25,8 +26,8 @@ const AVATAR_ROWS = '.gametxt-dialogue, .gametxt-iv';
 const INLINE_TAGS = new Set(['SPAN', 'EM', 'STRONG', 'B', 'I', 'Q', 'BR', 'A']);
 const INVISIBLE_RE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u206F\uFEFF\u00AD\u180E]/g;
 
-/** 只美化最新若干条 assistant 楼层。 */
-export const ASSISTANT_BEAUTIFY_LIMIT = 2;
+/** 默认条数；实际窗口以脚本设置为准。 */
+export const ASSISTANT_BEAUTIFY_LIMIT = DEFAULT_ASSISTANT_BEAUTIFY_LIMIT;
 
 const tokens = new Map<number, number>();
 
@@ -40,7 +41,7 @@ export function setRenderHooks(hooks: RenderHooks): void {
   renderHooks = hooks;
 }
 
-export function latestAssistantIds(limit = ASSISTANT_BEAUTIFY_LIMIT): number[] {
+export function latestAssistantIds(limit = getAssistantBeautifyLimit()): number[] {
   try {
     const messages = getChatMessages('0-{{lastMessageId}}', { role: 'assistant' });
     if (!messages.length) return [];
@@ -50,7 +51,7 @@ export function latestAssistantIds(limit = ASSISTANT_BEAUTIFY_LIMIT): number[] {
   }
 }
 
-export function isInBeautifyWindow(messageId: number, limit = ASSISTANT_BEAUTIFY_LIMIT): boolean {
+export function isInBeautifyWindow(messageId: number, limit = getAssistantBeautifyLimit()): boolean {
   return latestAssistantIds(limit).includes(messageId);
 }
 

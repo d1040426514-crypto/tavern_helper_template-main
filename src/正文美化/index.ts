@@ -8,9 +8,11 @@ import {
   renderMessage,
   setRenderHooks,
 } from './render';
+import { closeSettingsPanel, openSettingsPanel } from './settings-panel';
 
 const RETRY_DELAYS_MS = [400, 1200];
 const BODY_DEBOUNCE_MS = 300;
+const SETTINGS_BUTTON = '对白美化设置';
 
 $(() => {
   $(`head > div[script_id="${getScriptId()}"]`).remove();
@@ -36,12 +38,22 @@ $(() => {
     );
   };
 
+  const refreshWindow = () => {
+    void renderAllMessages().then(() => refreshAllDialogueAvatars());
+    scheduleWindowRetries();
+  };
+
   const maybeRender = (messageId: number) => {
     if (!isInBeautifyWindow(messageId)) return;
     void renderMessage(messageId);
   };
 
+  appendInexistentScriptButtons([{ name: SETTINGS_BUTTON, visible: true }]);
+
   const listeners = [
+    eventOn(getButtonEvent(SETTINGS_BUTTON), () => {
+      openSettingsPanel({ onSaved: refreshWindow });
+    }),
     eventOn(tavern_events.CHARACTER_MESSAGE_RENDERED, messageId => {
       maybeRender(messageId);
     }),
@@ -79,6 +91,7 @@ $(() => {
   $(window).on('pagehide', () => {
     for (const listener of listeners) listener.stop();
     clearRetries();
+    closeSettingsPanel();
     stopAvatarWatch();
     stopBodyWatch();
     setRenderHooks({});

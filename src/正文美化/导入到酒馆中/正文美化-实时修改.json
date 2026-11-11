@@ -3,5 +3,10 @@
   "name": "正文美化",
   "content": "import 'http://localhost:5500/dist/正文美化/index.js'",
   "info": "",
-  "buttons": []
+  "buttons": [
+    {
+      "name": "对白美化设置",
+      "visible": true
+    }
+  ]
 }
