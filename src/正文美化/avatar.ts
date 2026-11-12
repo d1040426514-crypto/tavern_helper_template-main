@@ -35,10 +35,27 @@ type CharacterProfile = {
 };
 
 export type AvatarIndex = {
-  /** mood 有值时优先表情图，再回退默认头像。 */
-  urlFor(name: string, mood?: string): string;
+  /** mood 有值时优先表情图，再回退默认头像。salt 用于同名表情稳定抽图。 */
+  urlFor(name: string, mood?: string, salt?: string): string;
   colorFor(name: string): string;
 };
+
+/** 简单字符串 hash，供同名表情稳定下标。 */
+export function hashSalt(input: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < input.length; i += 1) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/** 同盐同结果；空列表返回 ''。 */
+export function pickStable(urls: string[], salt: string): string {
+  if (!urls.length) return '';
+  if (urls.length === 1) return urls[0] ?? '';
+  return urls[hashSalt(salt) % urls.length] ?? '';
+}
 
 const text = (value: unknown): string =>
   typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
@@ -301,14 +318,21 @@ async function buildAvatarIndex(): Promise<AvatarIndex> {
     return partner && !bindings[partner.key] ? partner.url : '';
   };
 
-  const galleryUrl = (key: string, matcher: (title: string) => boolean): string => {
+  const galleryUrls = (key: string, matcher: (title: string) => boolean): string[] => {
     const fromProfile = profiles.get(key)?.gallery ?? [];
     const fromExternal = externalGalleries.get(key) ?? [];
+    const seen = new Set<string>();
+    const urls: string[] = [];
     for (const item of [...fromProfile, ...fromExternal]) {
-      if (matcher(item.title)) return item.url;
+      if (!matcher(item.title) || !item.url || seen.has(item.url)) continue;
+      seen.add(item.url);
+      urls.push(item.url);
     }
-    return '';
+    return urls;
   };
+
+  const galleryUrl = (key: string, matcher: (title: string) => boolean): string =>
+    galleryUrls(key, matcher)[0] ?? '';
 
   return {
     colorFor(name: string): string {
@@ -316,12 +340,13 @@ async function buildAvatarIndex(): Promise<AvatarIndex> {
       if (!key) return '';
       return profiles.get(key)?.roleColor ?? '';
     },
-    urlFor(name: string, mood?: string): string {
+    urlFor(name: string, mood?: string, salt?: string): string {
       const key = canonicalName(name);
       if (!key) return '';
       const moodKey = canonicalMood(mood ?? '');
       if (moodKey) {
-        const expr = galleryUrl(key, title => titlesMatchExpression(title, moodKey));
+        const urls = galleryUrls(key, title => titlesMatchExpression(title, moodKey));
+        const expr = pickStable(urls, `${key}\0${moodKey}\0${salt ?? ''}`);
         if (expr) return expr;
       }
       const status = statusOrExternal(key);

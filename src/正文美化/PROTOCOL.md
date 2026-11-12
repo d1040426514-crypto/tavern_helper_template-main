@@ -33,6 +33,8 @@ roleColor: "#RRGGBB",
 gallery: [
   { title: "主立绘", sources: ["https://files.catbox.moe/xxx.png"] },
   { title: "表情 微笑", sources: ["https://files.catbox.moe/yyy.png"] },
+  // 可重复同名「表情 xxx」；脚本按台词盐稳定抽一张（勿把多表情塞进同一条 sources）
+  { title: "表情 微笑", sources: ["https://files.catbox.moe/zzz.png"] },
 ]
 ```
 
@@ -45,5 +47,6 @@ gallery: [
 
 - 正文美化读：`getVariables({ type: 'chat' }).char_info.profiles[名]`
 - 颜色优先 `role_color`，否则软回退 `custom_racecolor`
-- 头像：`(mood)` → `表情 ${mood}` → 状态栏/`externalAvatars` → `主立绘` → 首字
+- 头像：`(mood)` → `表情 ${mood}`（同名多图稳定抽一）→ 状态栏/`externalAvatars` → `主立绘` → 首字
+- `sources[]` 仍是同一张图的镜像回退，不是多表情池
 - 主立绘勿用 mp4/webm 当头像源（脚本会跳过视频）

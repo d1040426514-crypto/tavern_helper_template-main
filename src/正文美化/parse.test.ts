@@ -4,6 +4,7 @@ import {
   canonicalMood,
   canonicalName,
   expressionTitle,
+  pickStable,
   titlesMatchExpression,
 } from './avatar';
 import {
@@ -287,6 +288,20 @@ assert.ok(titlesMatchExpression('表情：微笑', '微笑'));
 assert.ok(!titlesMatchExpression('主立绘', '微笑'));
 assert.equal(allowedExternalUrl('https://files.catbox.moe/x.mp4'), '');
 assert.ok(allowedExternalUrl('https://files.catbox.moe/x.png'));
+
+// 同名表情稳定抽图
+const pool = ['https://a.example/1.png', 'https://a.example/2.png'];
+assert.equal(pickStable(pool, 'salt-a'), pickStable(pool, 'salt-a'));
+assert.equal(pickStable(['https://only.png'], 'any'), 'https://only.png');
+assert.equal(pickStable([], 'x'), '');
+{
+  const a = pickStable(pool, 'line-one');
+  const b = pickStable(pool, 'line-two-different');
+  assert.ok(pool.includes(a) && pool.includes(b));
+  // 固定盐应能落到不同下标（若碰撞则换盐再断言）
+  const distinct = ['s0', 's1', 's2', 's3', 's4', 's5', 's6', 's7'].map(s => pickStable(pool, s));
+  assert.ok(new Set(distinct).size >= 2);
+}
 
 // 粘连对白切分
 assert.deepEqual(explodeGluedKeys('{甲}「你好。」'), ['{甲}「你好。」']);

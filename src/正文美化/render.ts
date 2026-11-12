@@ -278,11 +278,12 @@ export function syncDialogueAvatars(root: HTMLElement, avatars: AvatarIndex): vo
   for (const row of rows) {
     const name = row.dataset.gametxtName || row.querySelector('.gametxt-name')?.textContent?.trim() || '';
     const mood = row.dataset.gametxtMood || '';
+    const salt = row.dataset.gametxtExprSalt ?? '';
     const slot = row.querySelector('.gametxt-avatar');
     if (!name || !slot) continue;
     const doc = row.ownerDocument;
     applyRoleColor(row, avatars.colorFor(name));
-    const nextUrl = absolutizeAvatarUrl(avatars.urlFor(name, mood || undefined));
+    const nextUrl = absolutizeAvatarUrl(avatars.urlFor(name, mood || undefined, salt));
     const currentImg = slot.querySelector('img.gametxt-avatar-img');
     const currentInitial = slot.querySelector('.gametxt-initial');
     if (nextUrl) {
@@ -312,11 +313,13 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
   row.dataset.gametxtBeauty = 'dialogue';
   row.dataset.gametxtName = dialogue.name;
   if (dialogue.mood) row.dataset.gametxtMood = dialogue.mood;
+  const salt = dialogue.line;
+  row.dataset.gametxtExprSalt = salt;
   applyRoleColor(row, avatars.colorFor(dialogue.name));
 
   const avatar = doc.createElement('div');
   avatar.className = 'gametxt-avatar';
-  avatar.append(avatarNode(doc, dialogue.name, avatars.urlFor(dialogue.name, dialogue.mood)));
+  avatar.append(avatarNode(doc, dialogue.name, avatars.urlFor(dialogue.name, dialogue.mood, salt)));
 
   const content = doc.createElement('div');
   content.className = 'gametxt-content';
@@ -351,6 +354,8 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
   card.dataset.gametxtName = voice.role;
   card.dataset.gametxtVoice = String(voice.index);
   if (voice.mood) card.dataset.gametxtMood = voice.mood;
+  const salt = voice.key;
+  card.dataset.gametxtExprSalt = salt;
   const roleColor = avatars.colorFor(voice.role);
   applyRoleColor(card, roleColor);
   const accent = roleColor || paragraph.style.color;
@@ -362,7 +367,7 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
 
   const avatar = doc.createElement('span');
   avatar.className = 'gametxt-avatar gametxt-iv-avatar';
-  avatar.append(avatarNode(doc, voice.role, avatars.urlFor(voice.role, voice.mood)));
+  avatar.append(avatarNode(doc, voice.role, avatars.urlFor(voice.role, voice.mood, salt)));
 
   const name = doc.createElement('span');
   name.className = 'gametxt-iv-name';
