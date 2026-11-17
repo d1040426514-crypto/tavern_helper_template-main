@@ -3,6 +3,7 @@ import {
   allowedExternalUrl,
   canonicalMood,
   canonicalName,
+  displayRoleName,
   expressionTitle,
   pickStable,
   titlesMatchExpression,
@@ -239,7 +240,21 @@ assert.equal(classifyParagraph('{乙}「保护块里的对白。」', guarded), 
 assert.equal(canonicalName('波尔特・瓦伦'), canonicalName('波尔特·瓦伦'));
 assert.equal(canonicalName('ヘンドリック･フォルクマー'), canonicalName('ヘンドリック・フォルクマー'));
 assert.equal(canonicalName('波尔特•瓦伦'), canonicalName('波尔特·瓦伦'));
+assert.equal(canonicalName('波尔特‧瓦伦'), canonicalName('波尔特·瓦伦'));
+assert.equal(canonicalName('波尔特∙瓦伦'), canonicalName('波尔特·瓦伦'));
+assert.equal(canonicalName('波尔特⋅瓦伦'), canonicalName('波尔特·瓦伦'));
 assert.equal(canonicalName('阿米娅'), '阿米娅');
+
+// 西方姓名界面只显示名（首段）；各类中间点与两侧空白等价
+assert.equal(displayRoleName('波尔特·瓦伦'), '波尔特');
+assert.equal(displayRoleName('约翰·迈克尔·史密斯'), '约翰');
+assert.equal(displayRoleName('波尔特・瓦伦'), '波尔特');
+assert.equal(displayRoleName('波尔特･瓦伦'), '波尔特');
+assert.equal(displayRoleName('波尔特•瓦伦'), '波尔特');
+assert.equal(displayRoleName('波尔特 · 瓦伦'), '波尔特');
+assert.equal(displayRoleName('波尔特　・　瓦伦'), '波尔特');
+assert.equal(displayRoleName('阿米娅'), '阿米娅');
+assert.equal(displayRoleName('·瓦伦'), '·瓦伦');
 
 // 可选 mood
 assert.deepEqual(parseDialogue('{甲}(微笑)「你好。」'), { name: '甲', mood: '微笑', line: '你好。' });

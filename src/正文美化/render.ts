@@ -1,5 +1,6 @@
 import {
   absolutizeAvatarUrl,
+  displayRoleName,
   invalidateAvatarCache,
   loadAvatarIndex,
   type AvatarIndex,
@@ -325,7 +326,7 @@ function decorateDialogue(paragraph: HTMLParagraphElement, avatars: AvatarIndex)
   content.className = 'gametxt-content';
   const name = doc.createElement('div');
   name.className = 'gametxt-name';
-  name.textContent = dialogue.name;
+  name.textContent = displayRoleName(dialogue.name);
   const line = doc.createElement('div');
   line.className = 'gametxt-line';
   line.innerHTML = quoteHtml(paragraph, dialogue.name, dialogue.line, dialogue.mood);
@@ -371,7 +372,7 @@ function decorateInnerVoice(paragraph: HTMLParagraphElement, voice: InnerVoice, 
 
   const name = doc.createElement('span');
   name.className = 'gametxt-iv-name';
-  name.textContent = voice.role;
+  name.textContent = displayRoleName(voice.role);
 
   const bubbles = doc.createElement('span');
   bubbles.className = 'gametxt-iv-bubbles';

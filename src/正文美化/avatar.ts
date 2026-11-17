@@ -60,15 +60,37 @@ export function pickStable(urls: string[], salt: string): string {
 const text = (value: unknown): string =>
   typeof value === 'string' || typeof value === 'number' ? String(value).trim() : '';
 
+/** 中文间隔号 / 全角・ / 半角･ / 常见项目符号与乘点；不含 ASCII 句点 */
+const MIDDLE_DOT_RE = /[\u00B7\u2022\u2027\u2219\u22C5\u30FB\uFF65]/g;
+const CANONICAL_MIDDLE_DOT = '\u00B7';
+const DOT_SIDE_SPACE_RE = new RegExp(`\\s*${CANONICAL_MIDDLE_DOT}\\s*`, 'g');
+
+/** 各类中间点统一为 ·，并去掉两侧空白。 */
+function unifyMiddleDots(value: string): string {
+  return value.replace(MIDDLE_DOT_RE, CANONICAL_MIDDLE_DOT).replace(DOT_SIDE_SPACE_RE, CANONICAL_MIDDLE_DOT);
+}
+
 export function canonicalName(value: string): string {
-  return text(value)
-    .replace(/^【\s*(?:蓝方|藍方|红方|紅方)\s*】\s*/, '')
-    .replace(/^[[【]\s*([^\]【】[]+?)\s*[\]】]$/, (_match, inner: string) => inner)
-    .replace(/[（(]\s*MC\s*[=＝]\s*\d+(?:\.\d+)?\s*[)）]/gi, '')
-    .replace(/[（(]\s*\d+\s*\/\s*\d+\s*[)）]/g, '')
-    // 半角 · / 全角 ・ / 半角片假名 ･ / 项目符号 • 统一，便于对白与状态栏头像匹配
-    .replace(/[·・･•]/g, '·')
-    .trim();
+  return unifyMiddleDots(
+    text(value)
+      .replace(/^【\s*(?:蓝方|藍方|红方|紅方)\s*】\s*/, '')
+      .replace(/^[[【]\s*([^\]【】[]+?)\s*[\]】]$/, (_match, inner: string) => inner)
+      .replace(/[（(]\s*MC\s*[=＝]\s*\d+(?:\.\d+)?\s*[)）]/gi, '')
+      .replace(/[（(]\s*\d+\s*\/\s*\d+\s*[)）]/g, ''),
+  ).trim();
+}
+
+/**
+ * 界面姓名标签：带间隔号的西方/外来姓名只显示「名」（首段），
+ * 不含间隔号则原样；匹配/头像仍用全名。
+ */
+export function displayRoleName(name: string): string {
+  const trimmed = text(name);
+  if (!trimmed) return '';
+  const unified = unifyMiddleDots(trimmed);
+  if (!unified.includes(CANONICAL_MIDDLE_DOT)) return trimmed;
+  const given = unified.split(CANONICAL_MIDDLE_DOT)[0]?.trim() ?? '';
+  return given || trimmed;
 }
 
 /** 规范化情绪词，便于与 gallery title「表情 xxx」对齐。 */
