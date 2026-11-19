@@ -442,6 +442,92 @@ async function main() {
     g.eventEmit = prevEmit;
     console.log('ok ensureChatOverride created flag and createTask emits createdSnapshot');
   }
+
+  {
+    // 运行期间用户关闭清理开关：过期的 baseSettings 落盘时不得把开关写回开启
+    resetState();
+    await clearChatTaskScope();
+    const { syncCleanupUserConfigFromDisk } = await import('./persist-runtime-tasks');
+    const root = makeRoot();
+    const seed = loadSettings();
+    seed.tasks = [root];
+    seed.activePresetName = seed.presets[0]?.name || '空模板';
+    if (seed.presets[0]) seed.presets[0] = { ...seed.presets[0], tasks: [root] };
+    seed.replicaFamilyCleanup = {
+      ...seed.replicaFamilyCleanup,
+      enabled: true,
+      mode: 'manual',
+      cycleRounds: 3,
+      defaultsMigrated: true,
+    };
+    saveSettings(seed);
+
+    // 工作流开始时读到的快照（开关为开）
+    const staleBase = loadSettings();
+    const staleEffective = _.cloneDeep(staleBase) as ScriptSettings;
+    assert.equal(staleBase.replicaFamilyCleanup.enabled, true);
+
+    // 运行期间用户在设置里关闭开关，并改了周期
+    const live = loadSettings();
+    live.replicaFamilyCleanup.enabled = false;
+    live.replicaFamilyCleanup.cycleRounds = 7;
+    saveSettings(live);
+
+    // 清理决策前刷新：运行时配置以磁盘为准
+    syncCleanupUserConfigFromDisk(staleEffective);
+    assert.equal(staleEffective.replicaFamilyCleanup.enabled, false);
+    assert.equal(staleEffective.replicaFamilyCleanup.cycleRounds, 7);
+
+    // 过期快照落盘不得覆盖
+    await persistRuntimeTaskChanges(staleBase, staleEffective);
+    const after = loadSettings();
+    assert.equal(after.replicaFamilyCleanup.enabled, false);
+    assert.equal(after.replicaFamilyCleanup.mode, 'manual');
+    assert.equal(after.replicaFamilyCleanup.cycleRounds, 7);
+
+    // 即使 effective 仍是旧值（未刷新），也不能把开关写回开启
+    const staleBase2 = loadSettings();
+    const staleEffective2 = _.cloneDeep(staleBase2) as ScriptSettings;
+    staleEffective2.replicaFamilyCleanup.enabled = true;
+    staleBase2.replicaFamilyCleanup.enabled = true;
+    await persistRuntimeTaskChanges(staleBase2, staleEffective2);
+    assert.equal(loadSettings().replicaFamilyCleanup.enabled, false);
+    console.log('ok persistRuntimeTaskChanges does not write stale cleanup switch back to disk');
+  }
+
+  {
+    // 设置窗口重载前只合并脚本级字段：窗口里过期的 tasks / lastRunStatus 不得冲掉磁盘上运行时的新值
+    resetState();
+    await clearChatTaskScope();
+    const { saveScriptLevelSettingsFrom } = await import('../settings');
+    const root = makeRoot();
+    const seed = loadSettings();
+    seed.tasks = [root];
+    seed.activePresetName = seed.presets[0]?.name || '空模板';
+    if (seed.presets[0]) seed.presets[0] = { ...seed.presets[0], tasks: [root] };
+    seed.replicaFamilyCleanup = { ...seed.replicaFamilyCleanup, enabled: true, defaultsMigrated: true };
+    seed.lastRunStatus = { messageId: 1, at: 1, taskResults: [] };
+    saveSettings(seed);
+
+    // 窗口内存里的状态（此刻已过期）
+    const windowState = loadSettings();
+
+    // 运行时随后落盘了新的 tasks / lastRunStatus
+    const runtime = loadSettings();
+    runtime.tasks = [root, { ...root, id: 'root-2', name: '运行时新增' } as PostProcessTask];
+    runtime.lastRunStatus = { messageId: 9, at: 9, taskResults: [] };
+    saveSettings(runtime);
+
+    // 用户在窗口里刚关了清理开关，随后触发重载前的落盘
+    windowState.replicaFamilyCleanup.enabled = false;
+    saveScriptLevelSettingsFrom(windowState);
+
+    const after = loadSettings();
+    assert.equal(after.replicaFamilyCleanup.enabled, false);
+    assert.equal(after.tasks.length, 2);
+    assert.equal(after.lastRunStatus.messageId, 9);
+    console.log('ok saveScriptLevelSettingsFrom keeps cleanup switch without overwriting runtime fields');
+  }
 }
 
 main().catch(e => {

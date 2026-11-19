@@ -53,6 +53,17 @@ test('computePrunableWorldbookTargets skips rules with mismatched tag', () => {
   assert.deepEqual(targets, []);
 });
 
+test('computePrunableWorldbookTargets matches rule tag/attr case-insensitively against lowercased spec', () => {
+  // removed.spec 经 canonicalSpecKey 已小写；规则里保持用户原写法
+  const targets = computePrunableWorldbookTargets(
+    [removed(['剑'], 'item@name')],
+    [rule({ targetTag: 'Item@Name' }), rule({ id: 'r2', targetTag: 'Skill@Name' })],
+  );
+  assert.equal(targets.length, 1);
+  assert.equal(targets[0]!.bookName, 'BookA');
+  assert.ok(targets[0]!.stableName.endsWith('-剑'));
+});
+
 test('computePrunableWorldbookTargets dedups identical targets', () => {
   const targets = computePrunableWorldbookTargets(
     [removed(['剑']), removed(['剑'])],

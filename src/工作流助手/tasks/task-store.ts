@@ -1132,13 +1132,20 @@ export async function applyReplicaFamilyCleanupInStore(
   keepBySpec: Record<string, string[]>,
   messageId: number,
   _source: TaskWriteSource = 'api',
+  options?: {
+    /** 默认 true：写入「手动确认保留」记忆。用户手动删单个副本时传 false */
+    persistManualKeep?: boolean;
+    /** 默认 true：清理后重置周期计数。用户手动删单个副本时传 false */
+    resetCycle?: boolean;
+  },
 ): Promise<void> {
   const baseSettings = loadSettings();
   const effectiveSettings = resolveEffectiveSettings(baseSettings);
   const removedOut: RemovedReplicaCleanupInfo[] = [];
   const snapshotEffect = { authoritativeRootIds: [] as string[], removedAttrByRoot: {}, clearedSpecs: [] as string[] };
   const next = applyReplicaFamilyCleanup(effectiveSettings, keepBySpec, messageId, {
-    persistManualKeepBySpec: keepBySpec,
+    ...(options?.persistManualKeep === false ? {} : { persistManualKeepBySpec: keepBySpec }),
+    ...(options?.resetCycle === false ? { resetCycle: false } : {}),
     removedOut,
     snapshotEffect,
   });

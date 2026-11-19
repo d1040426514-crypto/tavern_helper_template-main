@@ -464,6 +464,8 @@ export const ScriptSettingsSchema = z
         /** @deprecated 由 ensureReplicaFamilyCleanupDefaults 迁入 minActivityTries 后删除 */
         activityRatio: z.number().min(0).max(1).optional(),
         mode: z.enum(['auto', 'manual']).default('manual'),
+        /** 「有副本族时默认启用+自动」的一次性迁移是否已执行；执行后不再改写用户的开关与模式 */
+        defaultsMigrated: z.boolean().optional(),
         roundsSinceCleanup: z.number().int().min(0).default(0),
         cycleRunCounts: z.record(z.string(), z.number().int().min(0)).default({}),
         /** 本清理周期内调度放行次数（试过）；活跃判定用，须 ≥ cycleRunCounts */

@@ -55,7 +55,11 @@ import {
 } from './trigger-guard';
 import { acuToast } from '../ui/toast';
 import { SCRIPT_LOG_PREFIX } from '../ui/brand';
-import { persistRuntimeTaskChanges } from './persist-runtime-tasks';
+import {
+  persistRuntimeTaskChanges,
+  rebaseScriptLevelSettingsOnDisk,
+  syncCleanupUserConfigFromDisk,
+} from './persist-runtime-tasks';
 import { resetNewlyCreatedReplicaLaunched } from './replica-family';
 import {
   applyReplicaFamilyCleanup,
@@ -64,6 +68,7 @@ import {
   incrementReplicaRunCounts,
   incrementReplicaOpportunityCounts,
   incrementReplicaScheduleWaitCounts,
+  resetReplicaFamilyCleanupCycle,
   shouldTriggerCleanup,
   tickCleanupRound,
   type RemovedReplicaCleanupInfo,
@@ -108,6 +113,8 @@ async function persistRunStatus(
   };
   await writeRunStatusToMessage(messageId, status);
   settings.lastRunStatus = status;
+  // settings 是工作流开始时读到的快照：落盘前以磁盘最新的脚本级设置为准，避免覆盖运行期间用户的改动
+  rebaseScriptLevelSettingsOnDisk(settings);
   saveSettings(settings);
 }
 
@@ -125,6 +132,27 @@ async function finalizeReplicaRuntimeState(
   await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
 }
 
+/** 等一次重绘再弹窗；后台标签页 rAF 不触发，所以带超时兜底，避免该楼处理流程一直挂住 */
+function waitForNextPaint(timeoutMs = 1500): Promise<void> {
+  return new Promise<void>(resolve => {
+    let settled = false;
+    const timer = setTimeout(() => finish(), timeoutMs);
+    function finish(): void {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve();
+    }
+    if (typeof requestAnimationFrame !== 'function') {
+      finish();
+      return;
+    }
+    requestAnimationFrame(() => {
+      requestAnimationFrame(finish);
+    });
+  });
+}
+
 function emptyCleanupSnapshotEffect(): ReplicaCleanupSnapshotEffect {
   return { authoritativeRootIds: [], removedAttrByRoot: {}, clearedSpecs: [] };
 }
@@ -136,6 +164,15 @@ async function runReplicaFamilyCleanupIfDue(
   newlyCreatedReplicaIds: string[] = [],
   options?: { advanceCycle?: boolean },
 ): Promise<ReplicaCleanupSnapshotEffect | undefined> {
+  // 工作流可能跑了很久，期间用户可能关掉了清理开关：以磁盘最新配置为准，不用开跑时的旧快照
+  syncCleanupUserConfigFromDisk(effectiveSettings);
+  if (!effectiveSettings.replicaFamilyCleanup.enabled) {
+    // 关闭时不累计周期；清零后重新开启会从头计数
+    resetReplicaFamilyCleanupCycle(effectiveSettings);
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return undefined;
+  }
+
   const advanceCycle = options?.advanceCycle !== false && hasReplicaFamilyTasks(effectiveSettings.tasks);
   if (advanceCycle) tickCleanupRound(effectiveSettings);
   if (!advanceCycle || !shouldTriggerCleanup(effectiveSettings)) {
@@ -161,20 +198,39 @@ async function runReplicaFamilyCleanupIfDue(
     return snapshotEffect;
   }
 
-  await new Promise<void>(resolve => {
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        resolve();
-      });
-    });
-  });
+  await waitForNextPaint();
 
-  const result = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
-  if (!result) {
-    // 跳过/无候选：仍落盘当前计数，避免下一轮回退；阈值已达则会在下轮再次触发
+  // 等待重绘期间用户也可能关了开关：弹窗前再确认一次
+  syncCleanupUserConfigFromDisk(effectiveSettings);
+  if (!effectiveSettings.replicaFamilyCleanup.enabled) {
+    resetReplicaFamilyCleanupCycle(effectiveSettings);
     await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
     return undefined;
   }
+
+  const outcome = await showReplicaFamilyCleanupDialog(effectiveSettings, newlyCreatedReplicaIds);
+  if (outcome.status === 'busy' || outcome.status === 'empty') {
+    // 已有弹窗 / 无候选：不算用户跳过，不重置周期，只落盘当前计数
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return undefined;
+  }
+
+  // 弹窗期间用户去设置里关掉了开关：丢弃本次结果，不清理
+  syncCleanupUserConfigFromDisk(effectiveSettings);
+  if (!effectiveSettings.replicaFamilyCleanup.enabled) {
+    resetReplicaFamilyCleanupCycle(effectiveSettings);
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return undefined;
+  }
+
+  if (outcome.status === 'skipped') {
+    // 用户主动跳过：本周期结束，重置计数，下个 N 轮再询问
+    resetReplicaFamilyCleanupCycle(effectiveSettings);
+    await persistRuntimeTaskChanges(baseSettings, effectiveSettings);
+    return undefined;
+  }
+
+  const result = outcome;
   const removedOut: RemovedReplicaCleanupInfo[] = [];
   const snapshotEffect = emptyCleanupSnapshotEffect();
   const next = applyReplicaFamilyCleanup(effectiveSettings, result.keepBySpec, messageId, {
@@ -415,9 +471,13 @@ export async function handleMessageReceived(
       await injectToAiFloor(targetId, aiBlock, { isRerun });
 
       if (!manualRerun && hasReplicaFamilyTasks(settings.tasks)) {
-        incrementReplicaScheduleWaitCounts(settings, scheduleWaitMemberIds);
-        incrementReplicaOpportunityCounts(settings, opportunityMemberIds);
-        incrementReplicaRunCounts(settings, executedMemberIds);
+        // 清理开关以磁盘最新值为准；关闭时不累加计数，避免重新开启后带着旧的活跃度数据
+        syncCleanupUserConfigFromDisk(settings);
+        if (settings.replicaFamilyCleanup.enabled) {
+          incrementReplicaScheduleWaitCounts(settings, scheduleWaitMemberIds);
+          incrementReplicaOpportunityCounts(settings, opportunityMemberIds);
+          incrementReplicaRunCounts(settings, executedMemberIds);
+        }
       }
       await finalizeReplicaRuntimeState(baseSettings, settings, newlyCreatedReplicaIds);
 

@@ -38,8 +38,14 @@ export function computePrunableWorldbookTargets(
       const ruleSpec = parseExtractTagSpec(rule.targetTag.trim());
       if (!ruleSpec?.attrName) continue;
       if (rootSpec) {
-        if (ruleSpec.tagName !== rootSpec.tagName) continue;
-        if (rootSpec.attrName && ruleSpec.attrName !== rootSpec.attrName) continue;
+        // removed.spec 经 canonicalSpecKey 已小写，规则里的 tag/attr 保持用户原写法，需不区分大小写比较
+        if (ruleSpec.tagName.toLowerCase() !== rootSpec.tagName.toLowerCase()) continue;
+        if (
+          rootSpec.attrName &&
+          ruleSpec.attrName.toLowerCase() !== rootSpec.attrName.toLowerCase()
+        ) {
+          continue;
+        }
       }
       const bookName = resolveWriteTargetBookName(rule);
       if (!bookName) continue;

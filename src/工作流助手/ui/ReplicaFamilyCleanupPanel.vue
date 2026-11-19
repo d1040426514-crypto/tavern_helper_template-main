@@ -1,7 +1,10 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onMounted, watch } from 'vue';
 import type { ScriptSettings } from '../tasks/schema';
-import { ensureReplicaFamilyCleanupDefaults } from '../tasks/replica-family-cleanup';
+import {
+  ensureReplicaFamilyCleanupDefaults,
+  normalizeReplicaFamilyCleanup,
+} from '../tasks/replica-family-cleanup';
 import AcuToggle from './AcuToggle.vue';
 import AcuHelpPanel from './AcuHelpPanel.vue';
 import AcuHelpIconBtn from './AcuHelpIconBtn.vue';
@@ -10,7 +13,27 @@ const settings = defineModel<ScriptSettings>('settings', { required: true });
 
 const helpOpen = defineModel<boolean>('helpOpen', { default: false });
 
-const cleanup = computed(() => ensureReplicaFamilyCleanupDefaults(settings.value));
+// 面板读取不得有副作用，不得改写用户的开关/模式（否则关闭开关会被弹回）
+const cleanup = computed(() => settings.value.replicaFamilyCleanup);
+
+// 规范化 + 默认升级（有副本族时启用+自动）只在面板首次出现时执行一次，之后以用户选择为准
+onMounted(() => {
+  normalizeReplicaFamilyCleanup(settings.value);
+  ensureReplicaFamilyCleanupDefaults(settings.value);
+});
+
+// 用户改过任一配置即视为已确认，不再做默认升级
+watch(
+  () => [
+    cleanup.value.enabled,
+    cleanup.value.mode,
+    cleanup.value.cycleRounds,
+    cleanup.value.minActivityTries,
+  ],
+  () => {
+    if (!cleanup.value.defaultsMigrated) cleanup.value.defaultsMigrated = true;
+  },
+);
 </script>
 
 <template>

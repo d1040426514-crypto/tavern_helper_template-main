@@ -7,7 +7,9 @@ import {
   computeAutoKeepSet,
   computeManualDialogDefaultSelection,
   createDefaultReplicaFamilyCleanup,
+  applyReplicaFamilyCleanupUserConfig,
   ensureReplicaFamilyCleanupDefaults,
+  updateReplicaFamilyCleanupConfig,
   incrementReplicaOpportunityCounts,
   incrementReplicaRunCounts,
   incrementReplicaScheduleWaitCounts,
@@ -792,3 +794,186 @@ test('incrementReplicaScheduleWaitCounts and apply clears waits', () => {
   });
 });
 
+
+test('ensureReplicaFamilyCleanupDefaults keeps off+manual when defaults already migrated', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: { ...createDefaultReplicaFamilyCleanup(false), defaultsMigrated: true },
+  });
+  ensureReplicaFamilyCleanupDefaults(settings);
+  assert.equal(settings.replicaFamilyCleanup!.enabled, false);
+  assert.equal(settings.replicaFamilyCleanup!.mode, 'manual');
+});
+
+test('ensureReplicaFamilyCleanupDefaults upgrades only once, then respects user turning it off', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: createDefaultReplicaFamilyCleanup(false),
+  });
+  ensureReplicaFamilyCleanupDefaults(settings);
+  assert.equal(settings.replicaFamilyCleanup!.enabled, true);
+  assert.equal(settings.replicaFamilyCleanup!.mode, 'auto');
+  assert.equal(settings.replicaFamilyCleanup!.defaultsMigrated, true);
+
+  // 用户选手动再关闭，数字都没改：此前会被改回「启用+自动」
+  settings.replicaFamilyCleanup!.enabled = false;
+  settings.replicaFamilyCleanup!.mode = 'manual';
+  ensureReplicaFamilyCleanupDefaults(settings);
+  ensureReplicaFamilyCleanupDefaults(settings);
+  assert.equal(settings.replicaFamilyCleanup!.enabled, false);
+  assert.equal(settings.replicaFamilyCleanup!.mode, 'manual');
+});
+
+test('ensureReplicaFamilyCleanupDefaults leaves customized config and does not migrate without replica family', () => {
+  const customized = baseSettings({
+    replicaFamilyCleanup: { ...createDefaultReplicaFamilyCleanup(false), cycleRounds: 5 },
+  });
+  ensureReplicaFamilyCleanupDefaults(customized);
+  assert.equal(customized.replicaFamilyCleanup!.enabled, false);
+  assert.equal(customized.replicaFamilyCleanup!.defaultsMigrated, true);
+
+  const noFamily = baseSettings({
+    tasks: [],
+    replicaFamilyCleanup: createDefaultReplicaFamilyCleanup(false),
+  });
+  ensureReplicaFamilyCleanupDefaults(noFamily);
+  assert.equal(noFamily.replicaFamilyCleanup!.enabled, false);
+  assert.equal(noFamily.replicaFamilyCleanup!.defaultsMigrated, undefined);
+});
+
+test('disabled cleanup never ticks or triggers, even when config looks like factory defaults', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: { ...createDefaultReplicaFamilyCleanup(false), cycleRounds: 1 },
+  });
+  settings.replicaFamilyCleanup!.cycleRounds = 10;
+  for (let i = 0; i < 25; i += 1) {
+    tickCleanupRound(settings);
+    assert.equal(shouldTriggerCleanup(settings), false);
+  }
+  assert.equal(settings.replicaFamilyCleanup!.enabled, false);
+  assert.equal(settings.replicaFamilyCleanup!.mode, 'manual');
+  assert.equal(settings.replicaFamilyCleanup!.roundsSinceCleanup, 0);
+});
+
+test('applyReplicaFamilyCleanupUserConfig overrides user fields but keeps cycle counts', () => {
+  const stale = baseSettings();
+  stale.replicaFamilyCleanup!.roundsSinceCleanup = 3;
+  stale.replicaFamilyCleanup!.cycleRunCounts = { 'rep-1': 2 };
+  const live = {
+    ...stale.replicaFamilyCleanup!,
+    enabled: false,
+    mode: 'manual' as const,
+    cycleRounds: 7,
+    minActivityTries: 0,
+    roundsSinceCleanup: 0,
+    cycleRunCounts: {},
+  };
+  applyReplicaFamilyCleanupUserConfig(stale, live);
+  assert.equal(stale.replicaFamilyCleanup!.enabled, false);
+  assert.equal(stale.replicaFamilyCleanup!.mode, 'manual');
+  assert.equal(stale.replicaFamilyCleanup!.cycleRounds, 7);
+  assert.equal(stale.replicaFamilyCleanup!.minActivityTries, 0);
+  assert.equal(stale.replicaFamilyCleanup!.roundsSinceCleanup, 3);
+  assert.deepEqual(stale.replicaFamilyCleanup!.cycleRunCounts, { 'rep-1': 2 });
+  assert.equal(shouldTriggerCleanup(stale), false);
+});
+
+test('updateReplicaFamilyCleanupConfig validates values and marks defaults as migrated', () => {
+  const settings = baseSettings({
+    replicaFamilyCleanup: createDefaultReplicaFamilyCleanup(false),
+  });
+  const next = updateReplicaFamilyCleanupConfig(settings, {
+    enabled: false,
+    mode: 'manual',
+    cycleRounds: 0,
+    minActivityTries: -3,
+  });
+  assert.equal(next.cycleRounds, 10);
+  assert.equal(next.minActivityTries, 1);
+  assert.equal(next.enabled, false);
+  assert.equal(next.defaultsMigrated, true);
+
+  const next2 = updateReplicaFamilyCleanupConfig(settings, {
+    cycleRounds: 3.9,
+    minActivityTries: 2.2,
+    mode: 'bogus' as unknown as 'auto',
+  });
+  assert.equal(next2.cycleRounds, 3);
+  assert.equal(next2.minActivityTries, 2);
+  assert.equal(next2.mode, 'manual');
+  ensureReplicaFamilyCleanupDefaults(settings);
+  assert.equal(settings.replicaFamilyCleanup!.enabled, false);
+});
+
+test('applyReplicaFamilyCleanup resetCycle=false keeps cycle counters and manual keep memory', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    g.updateVariablesWith = (fn: (v: Record<string, unknown>) => Record<string, unknown>) => fn({});
+    const settings = baseSettings({
+      replicaFamilyCleanup: {
+        ...baseSettings().replicaFamilyCleanup!,
+        roundsSinceCleanup: 3,
+        cycleRunCounts: { 'rep-1': 2, 'rep-2': 1 },
+        cycleOpportunityCounts: { 'rep-1': 2, 'rep-2': 1 },
+        lastManualKeepBySpec: { 'item@id': ['1'] },
+        lastCleanupRound: 5,
+      },
+    });
+    const next = applyReplicaFamilyCleanup(settings, { 'item@id': ['1'] }, 0, { resetCycle: false });
+    assert.equal(next.tasks.some(t => t.id === 'rep-2'), false);
+    assert.equal(next.replicaFamilyCleanup.roundsSinceCleanup, 3);
+    assert.equal(next.replicaFamilyCleanup.lastCleanupRound, 5);
+    assert.deepEqual(next.replicaFamilyCleanup.cycleRunCounts, { 'rep-1': 2 });
+    assert.deepEqual(next.replicaFamilyCleanup.cycleOpportunityCounts, { 'rep-1': 2 });
+    assert.deepEqual(next.replicaFamilyCleanup.lastManualKeepBySpec, { 'item@id': ['1'] });
+  });
+});
+
+test('pruneFloorTagKeysForReplica matches tag/attr case-insensitively (spec is lowercased by canonical key)', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    let vars: Record<string, unknown> = {
+      post_process_tags: {
+        Item_ID: { '1': 'keep-me', '2': 'drop-me' },
+        'Item@ID=1': 'flat-keep',
+        'Item@ID=2': 'flat-drop',
+        'Item@ID=22': 'flat-other',
+      },
+    };
+    g.updateVariablesWith = (
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      _opts: unknown,
+    ) => {
+      vars = fn(vars);
+      return vars;
+    };
+    pruneFloorTagKeysForReplica('item@id', ['2'], 0);
+    const tags = vars.post_process_tags as Record<string, unknown>;
+    assert.deepEqual(tags.Item_ID, { '1': 'keep-me' });
+    assert.equal(tags['Item@ID=1'], 'flat-keep');
+    assert.equal(tags['Item@ID=2'], undefined);
+    assert.equal(tags['Item@ID=22'], 'flat-other');
+  });
+});
+
+test('migrateFloorTagKeysForReplica matches case-insensitively and keeps original key casing', () => {
+  withAccessibleMessageFloor(0, () => {
+    const g = globalThis as Record<string, unknown>;
+    let vars: Record<string, unknown> = {
+      post_process_tags: {
+        Item_ID: { a: 'nested' },
+        'Item@ID=a': 'flat',
+      },
+    };
+    g.updateVariablesWith = (
+      fn: (v: Record<string, unknown>) => Record<string, unknown>,
+      _opts: unknown,
+    ) => {
+      vars = fn(vars);
+      return vars;
+    };
+    assert.equal(migrateFloorTagKeysForReplica('item@id', 'a', 'b', 0), true);
+    const tags = vars.post_process_tags as Record<string, unknown>;
+    assert.deepEqual(tags.Item_ID, { b: 'nested' });
+    assert.equal(tags['Item@ID=b'], 'flat');
+    assert.equal(tags['Item@ID=a'], undefined);
+  });
+});

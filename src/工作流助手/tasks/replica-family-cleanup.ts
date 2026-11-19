@@ -1,4 +1,4 @@
-import { buildAttrGroupKey, buildCompositeKey, parseExtractTagSpec, sortAttrValues } from './tag-extract';
+import { buildAttrGroupKey, parseExtractTagSpec, sortAttrValues } from './tag-extract';
 import {
   getReplicaFamilyEnumSpecKey,
   getReplicaFamilyScheduleMode,
@@ -174,6 +174,7 @@ export function createDefaultReplicaFamilyCleanup(hasReplicaFamily: boolean): Re
     cycleRounds: 10,
     minActivityTries: 1,
     mode: hasReplicaFamily ? 'auto' : 'manual',
+    ...(hasReplicaFamily ? { defaultsMigrated: true } : {}),
     roundsSinceCleanup: 0,
     cycleRunCounts: {},
     cycleOpportunityCounts: {},
@@ -255,8 +256,45 @@ export function migrateLastManualKeepByRootToSpec(settings: ScriptSettings): voi
   delete state.lastManualKeepByRoot;
 }
 
-/** 有副本族任务时默认启用清理周期 + 自动清理；无副本族时保持关闭 + 手动。 */
-export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
+/** 用户可在设置里改的清理配置字段（不含聊天级周期计数） */
+export type ReplicaFamilyCleanupUserConfig = Pick<
+  ReplicaFamilyCleanupConfig,
+  'enabled' | 'mode' | 'cycleRounds' | 'minActivityTries' | 'defaultsMigrated'
+>;
+
+export function pickReplicaFamilyCleanupUserConfig(
+  cleanup: ReplicaFamilyCleanupConfig,
+): ReplicaFamilyCleanupUserConfig {
+  return {
+    enabled: cleanup.enabled,
+    mode: cleanup.mode,
+    cycleRounds: cleanup.cycleRounds,
+    minActivityTries: cleanup.minActivityTries,
+    defaultsMigrated: cleanup.defaultsMigrated,
+  };
+}
+
+/** 把磁盘上最新的用户配置覆盖到运行时 settings 上，计数字段保持不变 */
+export function applyReplicaFamilyCleanupUserConfig(
+  target: ScriptSettings,
+  source: ReplicaFamilyCleanupConfig | undefined,
+): void {
+  if (!source) return;
+  if (!target.replicaFamilyCleanup) {
+    target.replicaFamilyCleanup = {
+      ...createDefaultReplicaFamilyCleanup(false),
+      ...pickReplicaFamilyCleanupUserConfig(source),
+    };
+    return;
+  }
+  Object.assign(target.replicaFamilyCleanup, pickReplicaFamilyCleanupUserConfig(source));
+}
+
+/**
+ * 只做规范化与旧档迁移，不改写用户的开关/模式。
+ * 读路径（触发判定、计数、候选列表）一律走这里，避免读取时悄悄改写配置。
+ */
+export function normalizeReplicaFamilyCleanup(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
   const hasReplica = hasReplicaFamilyTasks(settings.tasks);
   if (!settings.replicaFamilyCleanup) {
     settings.replicaFamilyCleanup = createDefaultReplicaFamilyCleanup(hasReplica);
@@ -274,15 +312,30 @@ export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): Re
     settings.replicaFamilyCleanup.cycleScheduleWaitCounts = {};
   }
   reconcileOpportunityCountsWithRuns(settings.replicaFamilyCleanup);
-  if (hasReplica && isReplicaFamilyCleanupAtFactoryDefaults(settings.replicaFamilyCleanup)) {
-    settings.replicaFamilyCleanup.enabled = true;
-    settings.replicaFamilyCleanup.mode = 'auto';
-  }
   return settings.replicaFamilyCleanup;
 }
 
+/**
+ * 有副本族任务时，对「从未迁移过」的配置做一次性默认升级：
+ * 仍是出厂默认则启用 + 自动；已被用户改过则保持原样。
+ * 升级只执行一次（置 defaultsMigrated），之后用户关闭开关不会被改回。
+ * 无副本族时不迁移，等首次出现副本族再处理。
+ */
+export function ensureReplicaFamilyCleanupDefaults(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
+  const hadState = !!settings.replicaFamilyCleanup;
+  const state = normalizeReplicaFamilyCleanup(settings);
+  if (!hadState) return state;
+  if (state.defaultsMigrated || !hasReplicaFamilyTasks(settings.tasks)) return state;
+  if (isReplicaFamilyCleanupAtFactoryDefaults(state)) {
+    state.enabled = true;
+    state.mode = 'auto';
+  }
+  state.defaultsMigrated = true;
+  return state;
+}
+
 function ensureCleanupState(settings: ScriptSettings): ReplicaFamilyCleanupConfig {
-  return ensureReplicaFamilyCleanupDefaults(settings);
+  return normalizeReplicaFamilyCleanup(settings);
 }
 
 export { hasReplicaFamilyTasks };
@@ -296,7 +349,22 @@ export function updateReplicaFamilyCleanupConfig(
   patch: Partial<ReplicaFamilyCleanupConfig>,
 ): ReplicaFamilyCleanupConfig {
   const state = ensureCleanupState(settings);
-  Object.assign(state, patch);
+  const next: Partial<ReplicaFamilyCleanupConfig> = { ...patch };
+  if (next.cycleRounds !== undefined) {
+    const n = Math.floor(Number(next.cycleRounds));
+    next.cycleRounds = Number.isFinite(n) && n >= 1 ? n : state.cycleRounds;
+  }
+  if (next.minActivityTries !== undefined) {
+    const n = Math.floor(Number(next.minActivityTries));
+    next.minActivityTries = Number.isFinite(n) && n >= 0 ? n : (state.minActivityTries ?? 1);
+  }
+  if (next.mode !== undefined && next.mode !== 'auto' && next.mode !== 'manual') {
+    next.mode = state.mode;
+  }
+  if (next.enabled !== undefined) next.enabled = !!next.enabled;
+  Object.assign(state, next);
+  // 外部显式改过配置，视为用户已确认，不再做默认升级
+  state.defaultsMigrated = true;
   return { ...state };
 }
 
@@ -505,6 +573,25 @@ function readTagContainerRaw(variables: Record<string, unknown>): TagContainerRa
   return { ...(raw as TagContainerRaw) };
 }
 
+/**
+ * post_process_tags 的分组键/扁平键由占位符原大小写写入，而清理侧的 spec 经 canonicalSpecKey 已小写，
+ * 因此按 tag/attr 名大小写不敏感匹配（attrValue 仍区分大小写）。
+ */
+function findMatchingGroupKeys(raw: TagContainerRaw, groupKey: string): string[] {
+  const target = groupKey.toLowerCase();
+  return Object.keys(raw).filter(k => k.toLowerCase() === target);
+}
+
+function findMatchingFlatKeys(
+  raw: TagContainerRaw,
+  tagName: string,
+  attrName: string,
+  attrValue: string,
+): string[] {
+  const prefix = `${tagName}@${attrName}=`.toLowerCase();
+  return Object.keys(raw).filter(k => k.toLowerCase().startsWith(prefix) && k.slice(prefix.length) === attrValue);
+}
+
 export function pruneFloorTagKeysForReplica(
   spec: string,
   attrValuesToRemove: string[],
@@ -520,20 +607,23 @@ export function pruneFloorTagKeysForReplica(
   updateVariablesWith(
     variables => {
       const raw = readTagContainerRaw(variables);
-      const existing = raw[groupKey];
-      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+      for (const key of findMatchingGroupKeys(raw, groupKey)) {
+        const existing = raw[key];
+        if (!existing || typeof existing !== 'object' || Array.isArray(existing)) continue;
         const merged = { ...(existing as Record<string, string>) };
         for (const k of Object.keys(merged)) {
           if (removeSet.has(k)) delete merged[k];
         }
         if (Object.keys(merged).length) {
-          raw[groupKey] = merged;
+          raw[key] = merged;
         } else {
-          delete raw[groupKey];
+          delete raw[key];
         }
       }
       for (const attrValue of attrValuesToRemove) {
-        delete raw[buildCompositeKey(parsed.tagName, parsed.attrName!, attrValue)];
+        for (const flatKey of findMatchingFlatKeys(raw, parsed.tagName, parsed.attrName!, attrValue)) {
+          delete raw[flatKey];
+        }
       }
       variables[TAG_DATA_ROOT_KEY] = raw;
       return variables;
@@ -558,17 +648,22 @@ export function readFloorTagContainerRaw(messageId: number): TagContainerRaw {
 
 function attrValueExistsInTagContainer(
   raw: TagContainerRaw,
-  groupKey: string,
-  flatKey: string,
+  tagName: string,
+  attrName: string,
   attrValue: string,
 ): boolean {
-  const existing = raw[groupKey];
-  if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
-    if (Object.prototype.hasOwnProperty.call(existing as Record<string, string>, attrValue)) {
+  for (const key of findMatchingGroupKeys(raw, buildAttrGroupKey(tagName, attrName))) {
+    const existing = raw[key];
+    if (
+      existing &&
+      typeof existing === 'object' &&
+      !Array.isArray(existing) &&
+      Object.prototype.hasOwnProperty.call(existing as Record<string, string>, attrValue)
+    ) {
       return true;
     }
   }
-  return Object.prototype.hasOwnProperty.call(raw, flatKey);
+  return findMatchingFlatKeys(raw, tagName, attrName, attrValue).length > 0;
 }
 
 /** 只读 preflight：from 存在且 to 已在 nested/flat 任一处存在则不可迁移 */
@@ -586,16 +681,9 @@ export function canMigrateFloorTagKeysForReplica(
   if (!parsed?.attrName) return true;
 
   const raw = readFloorTagContainerRaw(messageId);
-  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
-  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
-  const flatTo = buildCompositeKey(parsed.tagName, parsed.attrName, to);
+  if (!attrValueExistsInTagContainer(raw, parsed.tagName, parsed.attrName, from)) return true;
 
-  const fromExists =
-    attrValueExistsInTagContainer(raw, groupKey, flatFrom, from) ||
-    Object.prototype.hasOwnProperty.call(raw, flatFrom);
-  if (!fromExists) return true;
-
-  return !attrValueExistsInTagContainer(raw, groupKey, flatTo, to) && !Object.prototype.hasOwnProperty.call(raw, flatTo);
+  return !attrValueExistsInTagContainer(raw, parsed.tagName, parsed.attrName, to);
 }
 
 /** 只读：当前楼 post_process_tags 是否含 from 键 */
@@ -609,12 +697,7 @@ export function floorTagFromExistsForReplica(
   const parsed = parseExtractTagSpec(spec);
   if (!parsed?.attrName) return false;
   const raw = readFloorTagContainerRaw(messageId);
-  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
-  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
-  return (
-    attrValueExistsInTagContainer(raw, groupKey, flatFrom, from) ||
-    Object.prototype.hasOwnProperty.call(raw, flatFrom)
-  );
+  return attrValueExistsInTagContainer(raw, parsed.tagName, parsed.attrName, from);
 }
 
 export function migrateFloorTagKeysForReplica(
@@ -629,9 +712,9 @@ export function migrateFloorTagKeysForReplica(
   if (!isAccessibleMessageFloor(messageId)) return false;
   const parsed = parseExtractTagSpec(spec);
   if (!parsed?.attrName) return false;
-  const groupKey = buildAttrGroupKey(parsed.tagName, parsed.attrName);
-  const flatFrom = buildCompositeKey(parsed.tagName, parsed.attrName, from);
-  const flatTo = buildCompositeKey(parsed.tagName, parsed.attrName, to);
+  const tagName = parsed.tagName;
+  const attrName = parsed.attrName;
+  const groupKey = buildAttrGroupKey(tagName, attrName);
   let migrated = false;
 
   updateVariablesWith(
@@ -639,8 +722,9 @@ export function migrateFloorTagKeysForReplica(
       const raw = readTagContainerRaw(variables);
       let changed = false;
 
-      const existing = raw[groupKey];
-      if (existing && typeof existing === 'object' && !Array.isArray(existing)) {
+      for (const key of findMatchingGroupKeys(raw, groupKey)) {
+        const existing = raw[key];
+        if (!existing || typeof existing !== 'object' || Array.isArray(existing)) continue;
         const merged = { ...(existing as Record<string, string>) };
         if (Object.prototype.hasOwnProperty.call(merged, from)) {
           if (!Object.prototype.hasOwnProperty.call(merged, to)) {
@@ -650,18 +734,21 @@ export function migrateFloorTagKeysForReplica(
           }
         }
         if (Object.keys(merged).length) {
-          raw[groupKey] = merged;
+          raw[key] = merged;
         } else {
-          delete raw[groupKey];
+          delete raw[key];
         }
       }
 
-      if (Object.prototype.hasOwnProperty.call(raw, flatFrom)) {
-        if (!Object.prototype.hasOwnProperty.call(raw, flatTo)) {
-          raw[flatTo] = raw[flatFrom];
-          delete raw[flatFrom];
-          changed = true;
-        }
+      const flatToExists = findMatchingFlatKeys(raw, tagName, attrName, to).length > 0;
+      const flatFromKeys = findMatchingFlatKeys(raw, tagName, attrName, from);
+      if (flatFromKeys.length && !flatToExists) {
+        const fromKey = flatFromKeys[0]!;
+        // 保持原键的 tag/attr 大小写，只替换末尾的 attrValue
+        const toKey = `${fromKey.slice(0, fromKey.length - from.length)}${to}`;
+        raw[toKey] = raw[fromKey];
+        for (const k of flatFromKeys) delete raw[k];
+        changed = true;
       }
 
       if (changed) {
@@ -686,7 +773,7 @@ export function remapLastManualKeepAttrValue(
   const from = String(fromAttr ?? '').trim();
   const to = String(toAttr ?? '').trim();
   if (!from || !to || from === to) return;
-  const state = ensureReplicaFamilyCleanupDefaults(settings);
+  const state = normalizeReplicaFamilyCleanup(settings);
   const key = findKeepKeyForSpec(state.lastManualKeepBySpec ?? {}, spec);
   if (!key) return;
   const list = state.lastManualKeepBySpec![key];
@@ -729,6 +816,8 @@ export type ReplicaCleanupSnapshotEffect = {
 
 export type ApplyReplicaFamilyCleanupOptions = {
   persistManualKeepBySpec?: Record<string, string[]>;
+  /** 清理后是否重置清理周期计数；默认 true。用户手动删单个副本时传 false，避免打断周期 */
+  resetCycle?: boolean;
   /** 输出：本次清理实际移除的副本（供世界书条目/账本联动清理） */
   removedOut?: RemovedReplicaCleanupInfo[];
   /** 输出：最新一楼副本快照要盖住旧楼的根与被删属性 */
@@ -830,11 +919,13 @@ export function applyReplicaFamilyCleanup(
     state.lastManualKeepBySpec = canonicalizeLastManualKeepMap(patched);
   }
 
-  state.roundsSinceCleanup = 0;
-  state.cycleRunCounts = {};
-  state.cycleOpportunityCounts = {};
-  state.cycleScheduleWaitCounts = {};
-  state.lastCleanupRound = countAssistantRounds();
+  if (options?.resetCycle !== false) {
+    state.roundsSinceCleanup = 0;
+    state.cycleRunCounts = {};
+    state.cycleOpportunityCounts = {};
+    state.cycleScheduleWaitCounts = {};
+    state.lastCleanupRound = countAssistantRounds();
+  }
 
   return { ...settings, tasks };
 }

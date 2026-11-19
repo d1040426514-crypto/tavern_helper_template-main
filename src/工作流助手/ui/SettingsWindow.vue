@@ -6,7 +6,7 @@ import {
   alignFallbackMaxConcurrencies,
   normalizeRouteMaxConcurrency,
 } from '../api/route-concurrency-limits';
-import { loadSettings, useSettingsStore } from '../settings';
+import { loadSettings, saveScriptLevelSettingsFrom, useSettingsStore } from '../settings';
 import { buildShareablePresetExport } from '../settings-security';
 import { isTagKeyManagedByWorldbookWriteRules } from '../tasks/chat-body-tag-replace';
 import { commaSeparatedListsEqual, formatCommaSeparatedList, parseCommaSeparatedList } from '../tasks/comma-separated';
@@ -1575,7 +1575,12 @@ async function deleteSelectedReplicaMember(): Promise<void> {
 
   try {
     if (chatScopeActive.value) {
-      await runChatScopeStoreMutation(() => applyReplicaFamilyCleanupInStore(keepBySpec, floorId, 'ui'));
+      await runChatScopeStoreMutation(() =>
+        applyReplicaFamilyCleanupInStore(keepBySpec, floorId, 'ui', {
+          persistManualKeep: false,
+          resetCycle: false,
+        }),
+      );
     } else {
       const removedOut: RemovedReplicaCleanupInfo[] = [];
       const snapshotEffect = {
@@ -1583,8 +1588,9 @@ async function deleteSelectedReplicaMember(): Promise<void> {
         removedAttrByRoot: {} as Record<string, string[]>,
         clearedSpecs: [] as string[],
       };
+      // 手动删单个副本：不写「手动确认保留」记忆，也不重置清理周期
       const next = applyReplicaFamilyCleanup(settings.value, keepBySpec, floorId, {
-        persistManualKeepBySpec: keepBySpec,
+        resetCycle: false,
         removedOut,
         snapshotEffect,
       });
@@ -1947,6 +1953,13 @@ onMounted(() => {
     if (persistViewTasksTimer) {
       clearTimeout(persistViewTasksTimer);
       persistViewTasksTimer = null;
+    }
+    // 用户刚改的脚本级设置（如清理开关）还在 300ms debounce 里：先落盘再重载，否则重载会丢掉这次修改。
+    // 只合并脚本级字段：整份保存会把窗口里可能已过期的 tasks / scheduleState / lastRunStatus 写回，冲掉运行时刚落盘的结果
+    if (persistGlobalSettingsTimer) {
+      clearTimeout(persistGlobalSettingsTimer);
+      persistGlobalSettingsTimer = null;
+      saveScriptLevelSettingsFrom(settings.value);
     }
     store.reload();
     void refreshTaskView({ skipTasksFlush: true, skipPresetFlush: true });

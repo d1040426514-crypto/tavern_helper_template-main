@@ -1,4 +1,4 @@
-import { loadSettings, saveSettings } from '../settings';
+import { applyScriptLevelSettings, loadSettings, saveSettings } from '../settings';
 import {
   buildChatSnapshotFromSettings,
   ensureChatOverride,
@@ -10,8 +10,8 @@ import { emitChatScopeChanged, emitTasksChanged } from './events';
 import { shouldWriteRuntimeTasksToGlobal } from './persist-runtime-tasks-logic';
 import { isReplicaFamilyMember, stripReplicaFamilyMembers } from './replica-family';
 import {
+  applyReplicaFamilyCleanupUserConfig,
   pickReplicaFamilyCleanupRuntime,
-  stripReplicaFamilyCleanupRuntime,
 } from './replica-family-cleanup';
 import {
   ChatTaskScopeStateSchema,
@@ -113,6 +113,19 @@ function writeBoundGlobalTasksInPlace(
   }
 }
 
+/**
+ * 落盘前用磁盘最新的脚本级设置覆盖 base 里的同名字段（API 预设、清理开关等），
+ * 只保留本次运行自己产生的字段（tasks、scheduleState、lastRunStatus 等）。
+ */
+export function rebaseScriptLevelSettingsOnDisk(base: ScriptSettings): void {
+  applyScriptLevelSettings(loadSettings(), base);
+}
+
+/** 用磁盘上最新的清理用户配置（开关/模式/周期）刷新运行时 settings，计数保持不变 */
+export function syncCleanupUserConfigFromDisk(target: ScriptSettings): void {
+  applyReplicaFamilyCleanupUserConfig(target, loadSettings().replicaFamilyCleanup);
+}
+
 function scopeWithCleanupRuntime(
   scope: NonNullable<ReturnType<typeof readChatTaskScope>>,
   effectiveSettings: ScriptSettings,
@@ -128,15 +141,9 @@ export async function persistRuntimeTaskChanges(
   baseSettings: ScriptSettings,
   effectiveSettings: ScriptSettings,
 ): Promise<void> {
-  if (baseSettings.replicaFamilyCleanup && effectiveSettings.replicaFamilyCleanup) {
-    baseSettings.replicaFamilyCleanup = stripReplicaFamilyCleanupRuntime({
-      ...baseSettings.replicaFamilyCleanup,
-      enabled: effectiveSettings.replicaFamilyCleanup.enabled,
-      cycleRounds: effectiveSettings.replicaFamilyCleanup.cycleRounds,
-      minActivityTries: effectiveSettings.replicaFamilyCleanup.minActivityTries,
-      mode: effectiveSettings.replicaFamilyCleanup.mode,
-    });
-  }
+  // baseSettings 可能是工作流开始时读到的旧快照：脚本级用户设置（含清理开关）以磁盘最新值为准，
+  // 不能把运行期间用户已改掉的值写回去。
+  rebaseScriptLevelSettingsOnDisk(baseSettings);
   let scope = readChatTaskScope();
   let chatOverride = isChatOverrideActive(scope) && !!scope?.snapshot;
   const hasMembers = tasksHaveReplicaMembers(effectiveSettings.tasks);
