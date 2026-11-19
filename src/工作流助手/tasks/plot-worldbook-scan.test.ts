@@ -33,8 +33,9 @@ test('buildTaskWorldbookTriggerText expands {{item@id}} with full attr tag block
     new Set(['item@id']),
     { historyFallback: 'all-tags' },
   );
-  assert.ok(out.includes('<item id="1">A</item>'));
-  assert.ok(out.includes('<item id="2">B</item>'));
+  // 标签块注入格式为 <tag attr="v">\n内容\n</tag>
+  assert.ok(out.includes('<item id="1">\nA\n</item>'));
+  assert.ok(out.includes('<item id="2">\nB\n</item>'));
   assert.ok(out.startsWith('items:'));
 });
 
@@ -50,7 +51,7 @@ test('buildTaskWorldbookTriggerText expands {{item@id=2}} precisely', () => {
     new Set(['item@id']),
     { historyFallback: 'all-tags' },
   );
-  assert.equal(out, '<item id="2">B</item>');
+  assert.equal(out, '<item id="2">\nB\n</item>');
 });
 
 test('buildTaskWorldbookTriggerText expands {{replica:val}} for replica member', () => {

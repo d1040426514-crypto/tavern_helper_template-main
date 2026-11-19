@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict';
+import lodash from 'lodash';
 import { test } from 'node:test';
-import {
-  appendPromptAutoSegment,
-  sortSegmentsInSlot,
-} from './prompt-auto-segment-ops';
+import { appendPromptAutoSegment, sortSegmentsInSlot } from './prompt-auto-segment-ops';
+
+// 被测代码在调用时才读取全局 _，所以在 import 之后赋值即可
+(globalThis as typeof globalThis & { _: typeof lodash })._ = lodash;
 
 const slotId = 'slot-a';
 

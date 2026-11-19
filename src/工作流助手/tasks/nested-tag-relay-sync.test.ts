@@ -20,7 +20,8 @@ test('nested refresh updates inner bare tag inside outer', () => {
     new Set(['npc']),
     { historyFallback: 'all-tags' },
   );
-  assert.equal(out, '<story><npc>updated</npc></story>');
+  // 标签块注入格式为 <tag>\n内容\n</tag>
+  assert.equal(out, '<story><npc>\nupdated\n</npc></story>');
 });
 
 test('nested refresh updates composite attr tag', () => {
@@ -32,7 +33,7 @@ test('nested refresh updates composite attr tag', () => {
     new Set(['item@id']),
     { historyFallback: 'all-tags' },
   );
-  assert.equal(out, '<wrap><item id="1">new</item></wrap>');
+  assert.equal(out, '<wrap><item id="1">\nnew\n</item></wrap>');
 });
 
 test('nested refresh multi-pass for deep nesting', () => {
@@ -47,7 +48,7 @@ test('nested refresh multi-pass for deep nesting', () => {
     new Set(['inner', 'mid']),
     { historyFallback: 'all-tags' },
   );
-  assert.equal(out, '<outer><mid><inner>deep</inner></mid></outer>');
+  assert.equal(out, '<outer><mid>\n<inner>deep</inner>\n</mid></outer>');
 });
 
 if (process.exitCode) {

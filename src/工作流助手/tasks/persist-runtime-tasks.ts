@@ -121,6 +121,22 @@ export function rebaseScriptLevelSettingsOnDisk(base: ScriptSettings): void {
   applyScriptLevelSettings(loadSettings(), base);
 }
 
+/**
+ * 落盘前在脚本级设置之外，再把运行本身不产生的字段以磁盘最新值为准：
+ * - presets：运行不会改它（活动预设的任务之后仍由 syncActivePresetTasksFromRuntime 从 effective 同步）；
+ * - tasks：仅当 base 不是 effective 本身时才刷新。base === effective（无聊天覆盖）时内存里的 tasks
+ *   带着运行中新建的副本，不能用磁盘值覆盖。
+ * 运行产生的 lastRunStatus / scheduleState 等保持不动。
+ */
+export function rebaseNonRuntimeFieldsOnDisk(base: ScriptSettings, effective: ScriptSettings): void {
+  const disk = loadSettings();
+  applyScriptLevelSettings(disk, base);
+  base.presets = _.cloneDeep(disk.presets);
+  if (base !== effective) {
+    base.tasks = _.cloneDeep(disk.tasks);
+  }
+}
+
 /** 用磁盘上最新的清理用户配置（开关/模式/周期）刷新运行时 settings，计数保持不变 */
 export function syncCleanupUserConfigFromDisk(target: ScriptSettings): void {
   applyReplicaFamilyCleanupUserConfig(target, loadSettings().replicaFamilyCleanup);
@@ -141,9 +157,9 @@ export async function persistRuntimeTaskChanges(
   baseSettings: ScriptSettings,
   effectiveSettings: ScriptSettings,
 ): Promise<void> {
-  // baseSettings 可能是工作流开始时读到的旧快照：脚本级用户设置（含清理开关）以磁盘最新值为准，
-  // 不能把运行期间用户已改掉的值写回去。
-  rebaseScriptLevelSettingsOnDisk(baseSettings);
+  // baseSettings 可能是工作流开始时读到的旧快照：脚本级用户设置（含清理开关）、预设等
+  // 以磁盘最新值为准，不能把运行期间用户已改掉的值写回去。
+  rebaseNonRuntimeFieldsOnDisk(baseSettings, effectiveSettings);
   let scope = readChatTaskScope();
   let chatOverride = isChatOverrideActive(scope) && !!scope?.snapshot;
   const hasMembers = tasksHaveReplicaMembers(effectiveSettings.tasks);

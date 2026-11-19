@@ -2275,8 +2275,9 @@ function downloadTextFile(text: string, filename: string): void {
 }
 
 function sanitizeLogFilenamePart(name: string): string {
-  const cleaned = name
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '_')
+  const cleaned = Array.from(name.replace(/[<>:"/\\|?*]/g, '_'))
+    .map(ch => (ch.charCodeAt(0) < 0x20 ? '_' : ch))
+    .join('')
     .replace(/\s+/g, '_')
     .trim();
   return cleaned || 'task';

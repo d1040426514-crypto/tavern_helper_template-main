@@ -48,5 +48,6 @@ test('mergeTaskExecutionOptions normalizes skipIfTagsFound', () => {
     { maxRetries: 3, minLength: 0 },
     { skipIfTagsFound: ['skip', ' Skip ', ''] },
   );
-  assert.deepEqual(merged.skipIfTagsFound, ['skip', 'Skip']);
+  // 与运行时不区分大小写匹配一致：大小写不同的重复项按小写去重，保留首个写法
+  assert.deepEqual(merged.skipIfTagsFound, ['skip']);
 });

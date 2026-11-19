@@ -496,6 +496,66 @@ async function main() {
   }
 
   {
+    // 运行期间用户新增了全局预设：过期的 base 落盘（无聊天覆盖路径）不得丢掉它
+    resetState();
+    await clearChatTaskScope();
+    const root = makeRoot();
+    const seed = loadSettings();
+    seed.tasks = [root];
+    seed.activePresetName = seed.presets[0]?.name || '空模板';
+    if (seed.presets[0]) seed.presets[0] = { ...seed.presets[0], tasks: [root] };
+    saveSettings(seed);
+
+    const staleBase = loadSettings();
+    staleBase.lastRunStatus = { messageId: 5, at: 5, taskResults: [] };
+    staleBase.scheduleState = { [root.id]: { lastRunRound: 3 } } as ScriptSettings['scheduleState'];
+    const effective = _.cloneDeep(staleBase) as ScriptSettings;
+
+    const live = loadSettings();
+    live.presets.push({ ...live.presets[0]!, name: '运行期间新增的预设', tasks: [] });
+    saveSettings(live);
+
+    await persistRuntimeTaskChanges(staleBase, effective);
+    const after = loadSettings();
+    assert.ok(after.presets.some(p => p.name === '运行期间新增的预设'));
+    assert.equal(after.lastRunStatus.messageId, 5);
+    assert.equal(after.scheduleState[root.id]?.lastRunRound, 3);
+    console.log('ok persistRuntimeTaskChanges keeps presets added during the run (global path)');
+  }
+
+  {
+    // 聊天覆盖路径：base 的 tasks 是过期快照且不会被运行时回写，必须以磁盘为准；运行产物保留
+    resetState();
+    await clearChatTaskScope();
+    const root = makeRoot();
+    const seed = loadSettings();
+    seed.tasks = [root];
+    seed.activePresetName = seed.presets[0]?.name || '空模板';
+    if (seed.presets[0]) seed.presets[0] = { ...seed.presets[0], tasks: [root] };
+    saveSettings(seed);
+
+    const staleBase = loadSettings();
+    staleBase.lastRunStatus = { messageId: 6, at: 6, taskResults: [] };
+    staleBase.scheduleState = { [root.id]: { lastRunRound: 4 } } as ScriptSettings['scheduleState'];
+    const effective = _.cloneDeep(staleBase) as ScriptSettings;
+    effective.tasks = [root, makeMember()];
+
+    const live = loadSettings();
+    live.tasks = [root, { ...root, id: 'root-2', name: '运行期间新增' } as PostProcessTask];
+    live.presets.push({ ...live.presets[0]!, name: '运行期间新增的预设', tasks: [] });
+    saveSettings(live);
+
+    await persistRuntimeTaskChanges(staleBase, effective);
+    const after = loadSettings();
+    assert.ok(after.tasks.some(t => t.id === 'root-2'));
+    assert.ok(after.presets.some(p => p.name === '运行期间新增的预设'));
+    assert.equal(after.lastRunStatus.messageId, 6);
+    assert.equal(after.scheduleState[root.id]?.lastRunRound, 4);
+    assert.equal(readChatTaskScope()?.snapshot?.tasks.filter(t => t.replicaFamilyRootId).length, 1);
+    console.log('ok persistRuntimeTaskChanges rebases tasks/presets on disk under chat override');
+  }
+
+  {
     // 设置窗口重载前只合并脚本级字段：窗口里过期的 tasks / lastRunStatus 不得冲掉磁盘上运行时的新值
     resetState();
     await clearChatTaskScope();

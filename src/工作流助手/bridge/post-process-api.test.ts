@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import lodash from 'lodash';
 
 const expectedMethods = [
   'listTasks',
@@ -84,11 +85,19 @@ async function main(): Promise<void> {
     g.substituteParams = (s: string) => s;
     g.generateRaw = async () => '';
     g.TavernHelper = {};
+    g._ = lodash;
+    // webpack 才有 html/vue/css 的 loader；tsx 下把它们当成空模块，避免传递依赖里的 import 报语法错误
+    const extensions = require.extensions as unknown as Record<string, (m: { exports: unknown }) => void>;
+    for (const ext of ['.html', '.vue', '.css', '.scss']) {
+      extensions[ext] = m => {
+        m.exports = {};
+      };
+    }
 
     const { acuPostProcessTaskApi } = await import('./post-process-api.js');
     const missing = expectedMethods.filter(m => typeof acuPostProcessTaskApi[m] !== 'function');
     assert.deepEqual(missing, []);
-    assert.equal(expectedMethods.length, 61);
+    assert.equal(expectedMethods.length, 63);
 
     const exposed = acuPostProcessTaskApi.getEffectiveSettings();
     assert.equal(exposed.apiConfig.apiKey, '');
